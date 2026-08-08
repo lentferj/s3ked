@@ -218,10 +218,51 @@ records the opcodes and the aksy prior art.
 
 ---
 
+## Parameter scales are unknown -- what a value MEANS (OPEN, tooling built)
+
+**Status: measurement tooling built and tested synthetically; no number has
+been measured.** Blocked on hardware, and behind the offset confirmation:
+every sweep writes offsets that `HW_CHECKLIST.md` step 4 has not yet
+validated.
+
+The tables carry each parameter's *range* and none of its *meaning*.
+`FILFRQ` is "basic filter frequency, 0 to 99" -- not one word about which
+hertz. Same for every rate, level, depth and tuning field. Two consumers want
+the answer: this editor, so a pane can show `FILFRQ 63 (~4.2 kHz)` the way
+`describe_value()` already renders enumerations; and any converter writing
+Akai programs -- the sibling mpc2emu builds S1000/S3000 programs and disk
+images today and has to guess how a cutoff in hertz becomes a 0-99 integer.
+
+What exists now:
+
+- `s3k/measure.py` -- the analysis half. Pure functions, no I/O, so each is
+  tested against a synthesised signal whose answer is known in advance
+  (`tests/test_measure.py`): a 200 ms attack must measure 200 ms, a filter at
+  a known corner must report that corner.
+- `probes/calibrate.py` -- the driving half. Eight sweeps, each carrying the
+  list of parameters it must neutralise first, which is where the real
+  knowledge sits. `--dry-run` drives a synthetic machine end to end and
+  recovers the curve that machine was built with.
+- `docs/re_procedures/calibration.md` -- order, traps, and what each sweep
+  settles. `HW_CALIBRATION.md` (machine-local) is the bench checklist.
+
+**Blocked on more than hardware, in one case:** `lfo-rate` needs the panel
+consulted first. `MODSLFOT`/`MODSLFOL` are sources of modulation *of* LFO1,
+not its destination, and measuring a rate through an unconnected route yields
+a clean and entirely fictitious curve.
+
+**Also blocked on source material.** These sweeps set parameters and play
+notes; they cannot put a sample in memory, and this family has no oscillator.
+Filter calibration needs broadband noise resident on the machine, which is a
+disk-image job -- see the procedure doc.
+
+See RESOLUTION_NOTES §10.
+
 ## Housekeeping
 
-- `HW_CHECKLIST.md` is machine-local, excluded via `.git/info/exclude` rather
-  than `.gitignore`, matching the sibling eosed project.
+- `HW_CHECKLIST.md` and `HW_CALIBRATION.md` are machine-local, excluded via
+  `.git/info/exclude` rather than `.gitignore`, matching the sibling eosed
+  project.
 - The keygroup pane currently shows a placeholder range per keygroup rather
   than reading each keygroup's `LONOTE`/`HINOTE`; it costs one request per
   keygroup and should wait until the offsets are known good.

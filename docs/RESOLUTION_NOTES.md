@@ -366,3 +366,95 @@ Both manuals are worth more than their protocol content suggests: §3 and §4
 were both settled from the addendum and the manual after the SysEx documents
 alone had left them ambiguous. When a spec field is unclear, **check what the
 front panel displays** before assuming it is unknowable.
+
+---
+
+## §10 — Parameter scales: how to measure what a value means (procedure, no results yet)
+
+**Status: tooling built, tested synthetically, never run against a machine.
+No number below is a measurement.**
+
+### The gap
+
+Every continuous field in the tables is a range without a unit. `FILFRQ` is
+"basic filter frequency, 0 to 99"; `ATTAK1` is "attack rate of envelope 1,
+0 to 99"; `PRLOUD` is "basic loudness, 0 to 99". Nothing says which hertz,
+which seconds, which decibels — and the front panel shows the same integers,
+so it cannot settle it either.
+
+Two consumers need the map. This editor wants to render a value the way
+`describe_value()` already renders enumerations. And a converter writing Akai
+programs — the sibling mpc2emu writes S1000/S3000 programs and disk images
+today — has to turn a cutoff in hertz into a 0–99 integer, and currently
+guesses.
+
+### The method, and why it is cheaper here
+
+Set the parameter, play a note, record it, measure the audio, repeat. The
+sibling projects did exactly this for the E-MU E4XT and the Kurzweil K2000R,
+but there each parameter change meant rebuilding a bank and swapping an SD
+card, so their published curves rest on four to six points.
+
+This family takes the parameter over SysEx between one note and the next, so
+a fifty-point sweep is one unattended run. **Sweep the whole range.** A
+procedure copied from the siblings without noticing this would leave most of
+the available accuracy behind.
+
+### What was built
+
+| file | role |
+|------|------|
+| `s3k/measure.py` | analysis: envelope, attack/decay/release, RMS and peak dB, spectrum, −3 dB corner, stereo balance, modulation rate, fundamental, exponential fit |
+| `probes/calibrate.py` | driving: eight sweeps, each with its neutraliser list; `--dry-run` against a synthetic machine |
+| `tests/test_measure.py` | every primitive against a signal whose answer is known in advance |
+| `tests/test_calibrate.py` | every swept and neutralised parameter exists, is writable and is in range; the dry run recovers the fake machine's own curve |
+| `docs/re_procedures/calibration.md` | order, traps, what each sweep settles |
+| `HW_CALIBRATION.md` | bench checklist (machine-local) |
+
+`measure.py` takes arrays and returns numbers — it opens no port and no file
+except `read_wav`. That is what makes it testable with no sampler: a
+synthesised 200 ms attack must measure 200 ms, and noise through a known
+4-pole low-pass must report that corner.
+
+### One defect the synthetic run already caught
+
+The first dry run of the filter sweep reported **"500.6 Hz" for seventeen
+consecutive settings**. The −3 dB search takes its reference level from a band
+(default 100–500 Hz); once the corner falls *below* that band, the reference
+is itself attenuated, the first bin above the band is already 3 dB down, and
+every point returns the same value just above the band edge. A flat run of
+identical numbers reads like a filter that stops moving — the worst kind of
+wrong answer, because it looks like a finding.
+
+`corner_frequency` now checks the reference band is actually flat and returns
+NaN when it is not, and the sweep references at 50–100 Hz. The tolerance is
+half the drop being searched for, not something tighter: fractional-octave
+smoothing averages very few bins down at 40 Hz, and a genuinely flat 40–100 Hz
+band still showed 1.7 dB of apparent tilt on measured noise.
+
+Worth stating plainly: that defect was inherited from the sibling project's
+version of the same function, where every corner measured happened to sit
+above the band. It survived a real bench session there because the material
+never exercised it.
+
+### Two blockers that are not "no hardware"
+
+1. **Source material.** These sweeps set parameters and play notes; they
+   cannot put a sample in memory (transfer is deliberately unimplemented) and
+   the family has no oscillator. Filter calibration needs broadband noise
+   resident on the machine. That is a disk-image job, and mpc2emu already
+   writes S1000/S3000 media — its `tests/re_banks/gen_akai_cal_disc.py` builds
+   the disc.
+2. **The LFO destination.** `MODSLFOT`/`MODSLFOL` are sources of modulation
+   *of* LFO1, not its destination, and the routing prose is not conclusive.
+   Confirm on the panel which destination LFO1 drives before running
+   `lfo-rate`; a rate measured through an unconnected route comes back clean
+   and fictitious.
+
+### When results exist
+
+Record each fitted curve here with the source sample, test note, velocity,
+reference band and r2, and keep the CSV alongside. Then re-run one point per
+curve at a **different note and velocity**: if the number moves, the curve
+describes that note rather than the parameter, which usually means a
+neutraliser was missed.
