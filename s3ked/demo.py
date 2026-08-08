@@ -74,6 +74,9 @@ _DEMO_SAMPLES: List[str] = [
 #: How many keygroups each demo program has, by program index.
 _DEMO_KEYGROUPS: List[int] = [2, 1, 4, 1, 3]
 
+#: Multi parts on the S2000/S3000XL/S3200XL: "Sixteen multi parts are provided."
+MULTI_PARTS = 16
+
 
 def _blank_header(region: str) -> bytearray:
     """A header with every field at a plausible value rather than all zeroes.
@@ -83,7 +86,7 @@ def _blank_header(region: str) -> bytearray:
     same. Seeding each field with its own minimum spreads distinct values
     across the span.
     """
-    raw = bytearray(p.HEADER_SIZE)
+    raw = bytearray(p.region_size(region))
     for param in p.region_params(region):
         if param.kind == "text":
             raw[param.offset : param.end] = bytes(
@@ -147,6 +150,21 @@ class DemoBridge:
             self._write_named(header, "sample", "SHNAME", name)
             self._sample_headers.append(header)
 
+        # Multi mode: one file header plus 16 parts, as on the XL family.
+        self._multi_header = _blank_header("multi")
+        self._write_named(self._multi_header, "multi", "MULTINAME", "DEMO MULTI")
+        self._multi_parts: List[bytearray] = []
+        for part in range(MULTI_PARTS):
+            raw = _blank_header("multipart")
+            self._write_named(
+                raw, "multipart", "PRNAME", self._programs[part % len(self._programs)]
+            )
+            self._write_named(raw, "multipart", "PMCHAN", part)
+            self._write_named(raw, "multipart", "PRIORT", 1)
+            self._write_named(raw, "multipart", "PLAYLO", 21)
+            self._write_named(raw, "multipart", "PLAYHI", 127)
+            self._multi_parts.append(raw)
+
     # -- helpers ------------------------------------------------------------
 
     @staticmethod
@@ -155,6 +173,12 @@ class DemoBridge:
         raw[param.offset : param.end] = p.encode_field(param, value)
 
     def _headers_for(self, region: str, index: int, selector: int) -> bytearray:
+        if region == "multi":
+            return self._multi_header
+        if region == "multipart":
+            if not 0 <= index < len(self._multi_parts):
+                raise DemoError(f"no multi part {index}")
+            return self._multi_parts[index]
         if region == "program":
             store = self._program_headers
         elif region == "sample":
@@ -267,12 +291,14 @@ class DemoBridge:
         timeout: Optional[float] = None,
     ):
         param = param if isinstance(param, p.Parameter) else p.lookup(param, region)
+        from s3k.bridge import _selector_for
+
         raw = self.get_header_bytes(
             param.region,
             index,
             param.offset,
             param.size,
-            selector=keygroup if param.region == "keygroup" else 0,
+            selector=_selector_for(param.region, keygroup),
         )
         return p.decode_field(param, raw)
 
@@ -292,12 +318,14 @@ class DemoBridge:
         if not param.writable:
             why = "read-only" if param.readonly else "an internal block address"
             raise ValueError(f"{param.name} is {why} and must not be written")
+        from s3k.bridge import _selector_for
+
         self.set_header_bytes(
             param.region,
             index,
             param.offset,
             p.encode_field(param, value),
-            selector=keygroup if param.region == "keygroup" else 0,
+            selector=_selector_for(param.region, keygroup),
         )
 
     def get_header(
@@ -310,8 +338,10 @@ class DemoBridge:
     ) -> Dict[str, object]:
         params = p.region_params(region)
         extent = max(x.end for x in params)
+        from s3k.bridge import _selector_for
+
         raw = self.get_header_bytes(
-            region, index, 0, extent, selector=keygroup if region == "keygroup" else 0
+            region, index, 0, extent, selector=_selector_for(region, keygroup)
         )
         return {x.name: p.decode_field(x, raw[x.offset : x.end]) for x in params}
 

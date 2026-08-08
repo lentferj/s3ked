@@ -417,12 +417,34 @@ class DeviceStatus:
         )
 
 
-#: Which extended operation reads each header region, and which writes it.
+#: Which extended operation reads each region, and which writes it.
 _REGION_OPS: Dict[str, Tuple[int, int]] = {
     "program": (m.Command.RPHEADER, m.Command.PHEADER),
     "keygroup": (m.Command.RKHEADER, m.Command.KHEADER),
     "sample": (m.Command.RSHEADER, m.Command.SHEADER),
+    "multi": (m.Command.RMULTIDATA, m.Command.MULTIDATA),
+    "multipart": (m.Command.RMULTIDATA, m.Command.MULTIDATA),
 }
+
+#: Regions whose selector byte is fixed by the region rather than the caller.
+#:
+#: The multi file's two sections share one opcode pair and are told apart by
+#: the selector alone (0 = file header, 1 = part), so the caller must not be
+#: able to pass the wrong one. For ``keygroup`` the selector is the keygroup
+#: number and genuinely belongs to the caller; for ``program`` and ``sample``
+#: the byte is documented as reserved and sent as zero.
+_REGION_SELECTOR: Dict[str, int] = {
+    "program": 0,
+    "sample": 0,
+    "multi": 0,
+    "multipart": 1,
+}
+
+
+def _selector_for(region: str, keygroup: int) -> int:
+    """The selector byte to send for *region*."""
+    fixed = _REGION_SELECTOR.get(region)
+    return keygroup if fixed is None else fixed
 
 
 class S3kBridge:
@@ -833,7 +855,7 @@ class S3kBridge:
             index,
             param.offset,
             param.size,
-            selector=keygroup if param.region == "keygroup" else 0,
+            selector=_selector_for(param.region, keygroup),
             timeout=timeout,
         )
         return p.decode_field(param, raw)
@@ -860,7 +882,7 @@ class S3kBridge:
             index,
             param.offset,
             p.encode_field(param, value),
-            selector=keygroup if param.region == "keygroup" else 0,
+            selector=_selector_for(param.region, keygroup),
             postpone=postpone,
             confirm=confirm,
             timeout=timeout,
@@ -887,7 +909,7 @@ class S3kBridge:
             index,
             0,
             extent,
-            selector=keygroup if region == "keygroup" else 0,
+            selector=_selector_for(region, keygroup),
             timeout=timeout,
         )
         return {

@@ -59,7 +59,10 @@ from typing import Dict, Iterable, List, Optional, Tuple
 __all__ = [
     "Parameter",
     "REGIONS",
+    "PRIMARY_REGIONS",
     "HEADER_SIZE",
+    "REGION_SIZES",
+    "region_size",
     "PARAMETERS",
     "PARAMETERS_BY_NAME",
     "lookup",
@@ -72,11 +75,49 @@ __all__ = [
     "encode_field",
 ]
 
-#: The three byte-addressable header regions, in the order a UI should show them.
-REGIONS: Tuple[str, ...] = ("program", "keygroup", "sample")
+#: The byte-addressable structures, in the order a UI should show them.
+#:
+#: ``multi`` and ``multipart`` come from the *S2000/S3000XL/S3200XL* document
+#: and exist only on that sub-family -- multi mode is the headline feature of
+#: those machines ("a major change over the S3000 family, intended to help
+#: with multi-timbral operation"). On a plain S3000 there is no multi file.
+REGIONS: Tuple[str, ...] = ("program", "keygroup", "sample", "multi", "multipart")
+
+#: The regions a bare parameter name resolves against by default.
+#:
+#: The multi file is a separate address space on a separate structure, and it
+#: reuses a dozen program-header field names (PRIORT, PANPOS, PLAYLO, …)
+#: because a multi part *is* a program header. Treating those as ambiguous
+#: would make ``lookup("PRIORT")`` unusable for the common case; treating the
+#: multi regions as opt-in keeps the guard where it is actually needed --
+#: genuine collisions *within* the primary structures, like RESERVED.
+PRIMARY_REGIONS: Tuple[str, ...] = ("program", "keygroup", "sample")
 
 #: "Program, keygroup and Sample headers have been extended to 192 bytes."
 HEADER_SIZE = 192
+
+#: Byte length of each structure.
+#:
+#: The multi file's two sections are the awkward ones: the S2000 document
+#: gives their field offsets but never states a total size. ``multi`` is
+#: therefore bounded at its own known extent, and ``multipart`` at 192 because
+#: it demonstrably mirrors the program header (see REGION_SIZES' note below
+#: and RESOLUTION_NOTES §8).
+REGION_SIZES: Dict[str, int] = {
+    "program": HEADER_SIZE,
+    "keygroup": HEADER_SIZE,
+    "sample": HEADER_SIZE,
+    "multi": 32,
+    "multipart": HEADER_SIZE,
+}
+
+
+def region_size(region: str) -> int:
+    """Byte length of *region*'s structure."""
+    try:
+        return REGION_SIZES[region]
+    except KeyError:
+        raise KeyError(f"unknown region {region!r}; expected one of {REGIONS}") from None
 
 
 @dataclass(frozen=True)
@@ -108,6 +149,13 @@ class Parameter:
     readonly: bool = False
     desc: Optional[str] = None
     notes: Optional[str] = None
+    models: Optional[str] = None
+    """Which machines have this field, when it is not the whole family.
+
+    Set from the specification's own sub-headings -- a handful of fields are
+    introduced under "S2000/S3000XL/S3200XL Parameters" and do not exist on a
+    plain S2800/S3000/S3200.
+    """
 
     @property
     def key(self) -> Tuple[str, int]:
@@ -140,6 +188,7 @@ def _p(
     readonly: bool = False,
     desc: Optional[str] = None,
     notes: Optional[str] = None,
+    models: Optional[str] = None,
 ) -> Parameter:
     return Parameter(
         region=region,
@@ -156,6 +205,7 @@ def _p(
         readonly=readonly,
         desc=desc,
         notes=notes,
+        models=models,
     )
 
 
@@ -1007,7 +1057,7 @@ _PARAMS: List[Parameter] = [
         "program.portamento",
         0,
         255,
-        desc="PORTAMENTO ON/OFF S2000/S3000XL/S3200XL Parameters",
+        desc="PORTAMENTO ON/OFF",
     ),
     _p(
         "program",
@@ -1018,8 +1068,9 @@ _PARAMS: List[Parameter] = [
         0,
         4,
         desc="Effects Bus Select 0 = OFF 1 = FX1 2 = FX2 3 = RV3 4 = RV4",
+        models="S2000/S3000XL/S3200XL",
     ),
-    _p("program", 114, "PFXSLEV", 1, "program.output", 0, 99, desc="Not used"),
+    _p("program", 114, "PFXSLEV", 1, "program.output", 0, 99, desc="Not used", models="S2000/S3000XL/S3200XL"),
 
     # -- KEYGROUP HEADER ------------------------------------------------------
     _p(
@@ -2397,7 +2448,7 @@ _PARAMS: List[Parameter] = [
         "keygroup.env.3",
         -50,
         50,
-        desc="Scaling of envelope 3 by note-on velocity S2000/S3000XL/S3200XL Common Parameters",
+        desc="Scaling of envelope 3 by note-on velocity",
     ),
 
     # -- SAMPLE HEADER --------------------------------------------------------
@@ -2745,6 +2796,66 @@ _PARAMS: List[Parameter] = [
         50,
         desc="Tuning offset of hold loop Frank Neumann, February 5th, 2002",
     ),
+    # -- MULTI FILE HEADER ----------------------------------------------------
+    # From the S2000/S3000XL/S3200XL document. Selector 0 of RMULTIDATA/
+    # MULTIDATA; the item index is unused (reserved) for this section.
+    # "This header currently holds little useful information" -- the spec's own
+    # assessment, and it is right: a name, four effect assignments, a filename.
+    _p("multi", 3, "MULTINAME", 12, "multi.general", 0, 0, kind="text",
+        models="S2000/S3000XL/S3200XL", desc="The filename of the multi file"),
+    _p("multi", 16, "FX1", 1, "multi.effects", 0, 255, models="S2000/S3000XL/S3200XL",
+        desc="The fx setup assigned to fx channel 1"),
+    _p("multi", 17, "FX2", 1, "multi.effects", 0, 255, models="S2000/S3000XL/S3200XL",
+        desc="The fx setup assigned to fx channel 2"),
+    _p("multi", 18, "FX3", 1, "multi.effects", 0, 255, models="S2000/S3000XL/S3200XL",
+        desc="The fx setup assigned to fx channel 3"),
+    _p("multi", 19, "FX4", 1, "multi.effects", 0, 255, models="S2000/S3000XL/S3200XL",
+        desc="The fx setup assigned to fx channel 4"),
+    _p("multi", 20, "FXFILENAME", 12, "multi.general", 0, 0, kind="text",
+        models="S2000/S3000XL/S3200XL", desc="The filename of the associated fx file"),
+
+    # -- MULTI PART -----------------------------------------------------------
+    # Selector 1; the item index is the multi part number (0-15).
+    #
+    # Every offset here matches the program header's field of the same name --
+    # all twelve of them, across two independently transcribed documents. That
+    # is the strongest cross-check this project has (RESOLUTION_NOTES §8): a
+    # multi part IS a program header, with only a subset of fields meaningful.
+    _p("multipart", 3, "PRNAME", 12, "multipart.general", 0, 0, kind="text",
+        readonly=True, models="S2000/S3000XL/S3200XL",
+        desc="Name of the program used for this multi part. To assign programs "
+             "to parts it is better to use MIDI program change commands",
+        notes="read-only"),
+    _p("multipart", 16, "PMCHAN", 1, "multipart.midi", 0, 255,
+        values={255: "OMNI"}, models="S2000/S3000XL/S3200XL",
+        desc="MIDI channel this part responds to, irrespective of part number",
+        notes='range as written: "255 signifies OMNI, 0 to 15 indicate MIDI channel"'),
+    _p("multipart", 18, "PRIORT", 1, "multipart.midi", 0, 3,
+        values={0: "low", 1: "norm", 2: "high", 3: "hold"}, models="S2000/S3000XL/S3200XL",
+        desc="Priority of voices playing this part"),
+    _p("multipart", 19, "PLAYLO", 1, "multipart.midi", 21, 127, models="S2000/S3000XL/S3200XL",
+        desc="Lower limit of play range"),
+    _p("multipart", 20, "PLAYHI", 1, "multipart.midi", 21, 127, models="S2000/S3000XL/S3200XL",
+        desc="Upper limit of play range"),
+    _p("multipart", 22, "OUTPUT", 1, "multipart.output", 0, 255, models="S2000/S3000XL/S3200XL",
+        desc="Individual output routing",
+        notes="the source leaves this Range field blank (OCR reads \"Rsngs:\"); "
+              "see the program header's OUTPUT for the model-dependent meanings"),
+    _p("multipart", 23, "STEREO", 1, "multipart.output", 0, 99, models="S2000/S3000XL/S3200XL",
+        desc="Left and right output levels"),
+    _p("multipart", 24, "PANPOS", 1, "multipart.output", -50, 50, models="S2000/S3000XL/S3200XL",
+        desc="Balance between left and right outputs"),
+    _p("multipart", 70, "VOSCL", 1, "multipart.output", 0, 99, models="S2000/S3000XL/S3200XL",
+        desc="Level sent to individual outputs"),
+    _p("multipart", 75, "TRANSPOSE", 1, "multipart.midi", -50, 50,
+        unit="semitones", models="S2000/S3000XL/S3200XL", desc="Shift pitch of incoming MIDI"),
+    _p("multipart", 113, "PFXCHAN", 1, "multipart.output", 0, 4,
+        values={0: 'OFF', 1: 'FX1', 2: 'FX2', 3: 'RV3', 4: 'RV4'}, models="S2000/S3000XL/S3200XL", desc="Effects bus select"),
+    _p("multipart", 114, "PFXSLEV", 1, "multipart.output", 0, 99, models="S2000/S3000XL/S3200XL",
+        desc="Effects send level"),
+    _p("multipart", 115, "PTUNOCM", 1, "multipart.pitch", -50, 50, unit="cents",
+        models="S2000/S3000XL/S3200XL", desc="Tune offset in cents, used in MULTI mode only"),
+
 ]
 
 #: Every parameter, keyed by ``(region, offset)``.
@@ -2795,13 +2906,17 @@ def lookup(ref, region: Optional[str] = None) -> Parameter:
     matches = _BY_BARE_NAME.get(name)
     if not matches:
         raise KeyError(f"no parameter named {name!r}")
-    if len(matches) > 1:
-        where = ", ".join(sorted(m.region for m in matches))
+    # Primary structures first; the multi regions are opt-in (see
+    # PRIMARY_REGIONS for why).
+    primary = [x for x in matches if x.region in PRIMARY_REGIONS]
+    candidates = primary or matches
+    if len(candidates) > 1:
+        where = ", ".join(sorted(x.region for x in candidates))
         raise KeyError(
-            f"{name!r} is ambiguous -- it exists in the {where} headers; "
+            f"{name!r} is ambiguous -- it exists in the {where} structures; "
             f"pass region= to choose"
         )
-    return matches[0]
+    return candidates[0]
 
 
 def region_params(region: str) -> List[Parameter]:
@@ -2840,31 +2955,31 @@ _NOTE_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
 #: Parameters whose value is a MIDI note number.
 #:
-#: UNVERIFIED, and the source is self-contradictory. The specification words
-#: these as "21 to 127 represents A1 to G8". Those two ends cannot both be
-#: true: if note 21 is A1 then note 127 is G9, and if note 127 is G8 then note
-#: 21 is A0. There is no octave offset that satisfies both.
+#: RESOLVED from documentation; see RESOLUTION_NOTES §4. The S2800/S3000/S3200
+#: document words these as "21 to 127 represents A1 to G8", which cannot hold
+#: at both ends -- but that is simply a dropped minus sign. The
+#: S2000/S3000XL/S3200XL document writes the same field as **"21 to 127
+#: represents A-1 to G8"**, and the S3000XL owner's manual shows the front
+#: panel rendering keyspans as ``C_0`` … ``G_8``.
 #:
-#: :func:`note_name` anchors to the *low* end -- note 21 renders ``A1`` -- on
-#: the grounds that the low end is the one the range's own start value pins
-#: down, and that an off-by-one-octave label is a display nuisance rather than
-#: a data hazard. The alternative reading, and the resolution, are a TODO item:
-#: one glance at the front panel while a known keygroup is selected settles it.
+#: All three agree on one offset: octave = value // 12 - 2, so note 21 is
+#: ``A-1``, note 24 is ``C0``, middle C (60) is ``C3``, and note 127 is ``G8``.
 _NOTE_VALUED = {
     ("program", "PLAYLO"),
     ("program", "PLAYHI"),
     ("keygroup", "LONOTE"),
     ("keygroup", "HINOTE"),
+    ("multipart", "PLAYLO"),
+    ("multipart", "PLAYHI"),
 }
 
 
 def note_name(value: int) -> str:
-    """MIDI note number to the name the front panel shows, e.g. 21 -> ``A1``.
+    """MIDI note number to the name the front panel shows, e.g. 21 -> ``A-1``.
 
-    See :data:`_NOTE_VALUED` for why the octave offset is what it is, and why
-    it is not yet known to be right.
+    See :data:`_NOTE_VALUED` for the three sources that pin the octave offset.
     """
-    return f"{_NOTE_NAMES[value % 12]}{value // 12}"
+    return f"{_NOTE_NAMES[value % 12]}{value // 12 - 2}"
 
 
 def decode_field(param: Parameter, data: bytes) -> object:

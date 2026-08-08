@@ -7,10 +7,10 @@ SPDX-FileCopyrightText: Copyright (C) 2026  s3ked contributors
 
 *What* is open. `docs/RESOLUTION_NOTES.md` tracks *how* to resolve each item.
 
-## Status, 2026-08-08 (first session)
+## Status, 2026-08-08 (first session, second pass)
 
 The project exists and is complete as a piece of software: protocol codec,
-parameter tables, transport, CLI and TUI, **204 tests, all passing, all
+parameter tables, transport, CLI and TUI, **216 tests, all passing, all
 synthetic**. No hardware was available, and the plan was built so that none
 was needed — every phase is exercised through fakes and `--demo`.
 
@@ -28,9 +28,24 @@ re-deriving it. The family has an editor/librarian protocol only; the panel
 protocol Akai does have arrived a generation later and reads its screen over
 USB, not MIDI.
 
-In rough order of value, the open items are: the live offset diff (everything
-else is downstream of it), the two known judgement calls (§3, §4), the
-throttle floor (§6), and the missing miscellaneous index table (§5).
+A second pass over the source documents — prompted by re-reading the
+S2000/S3000XL/S3200XL spec and the owner's manual — closed two items, fixed a
+bug, and added a feature:
+
+- **§3 resolved**: the keygroup 161/162 double definition is a model split, not
+  a chronology, and the manual confirms the XL enumeration
+  (PRG/OFF/FX1/FX2/RV3/RV4) outright.
+- **§4 resolved, and a bug fixed**: the note-name octave offset was wrong. The
+  S2800 spec's "A1 to G8" drops a minus sign; three sources agree on
+  `// 12 - 2`, so note 21 is `A-1` and middle C is `C3`.
+- **§8 added**: the multi-part structure and the program header agree on all
+  twelve shared offsets, across two separately transcribed documents — the
+  first independent check on §2's central worry.
+- **Multi mode implemented** (opcodes `0x41`/`0x42`, 19 more fields).
+
+In rough order of value, the open items are now: the live offset diff
+(everything else is downstream of it), the throttle floor (§6), and the missing
+miscellaneous index table (§5).
 
 Next time there is hardware, the two cheapest items are the `RSTAT`→`STAT`
 round trip and reading one program header — perhaps ten minutes, and between
@@ -65,33 +80,26 @@ can resolve.
 
 ---
 
-## Keygroup offsets 161/162 are documented twice, incompatibly (OPEN)
+## Keygroup offsets 161/162 — a model split (RESOLVED)
 
-**Status:** resolved by decision, unverified. The later definition
-(`KFXCHAN`/`KFXSLEV`, with a leading `0 = PRG`) is used; the earlier
-(`PFXCHAN`/`PFXSLEV`) is recorded in the entry's notes.
+The two definitions are the base S2800/S3000/S3200 one and the
+S2000/S3000XL/S3200XL one, under the spec's own model heading. The S3000XL
+owner's manual addendum confirms the XL enumeration in words: default **PRG**,
+then OFF, FX1, FX2, RV3, RV4. `s3k/params.py` uses `KFXCHAN`/`KFXSLEV`, correct
+for the machines this project targets.
 
-If the machine follows the earlier enumeration, every value read from these
-two bytes is off by one.
-
-**To close this:** set a keygroup's effects bus from the front panel to a
-known value, read offset 161, see which enumeration matches. One reading.
-
-**Blocked on:** hardware. Full write-up: RESOLUTION_NOTES §3.
+Residual, recorded rather than handled: on a plain S2800/S3000/S3200 the
+earlier five-value enumeration applies and this project would read one value
+high. RESOLUTION_NOTES §3.
 
 ---
 
-## Note-name octave numbering is self-contradictory in the source (OPEN)
+## Note-name octave numbering (RESOLVED — was a bug)
 
-**Status:** anchored to the specification's low end (note 21 → `A1`).
-
-"21 to 127 represents A1 to G8" cannot be true at both ends. This is a display
-concern only — the byte written is the same under either reading.
-
-**To close this:** set a keygroup's low note from the panel and read what the
-panel calls it.
-
-**Blocked on:** hardware. Full write-up: RESOLUTION_NOTES §4.
+`note_name` used `value // 12`, rendering note 21 as `A1`. Wrong. Three sources
+agree on `value // 12 - 2`: the S2000/S3000XL spec writes "A-1 to G8", the
+owner's manual shows panel keyspans as `C_0` … `G_8`, and the S2800 spec's
+"A1" is simply a dropped minus sign. Fixed. RESOLUTION_NOTES §4.
 
 ---
 
@@ -142,6 +150,26 @@ without widening `channels=`, and the error message says so.
 time one full sweep on a host with several interfaces.
 
 **Blocked on:** hardware. RESOLUTION_NOTES §7.
+
+---
+
+## Multi mode — implemented, unverified (BUILT, never run live)
+
+Opcodes `0x41`/`0x42` and both structures (`multi` file header, `multipart`)
+are implemented, with 19 transcribed fields. They reuse the same 12-byte
+extended header as the S3000 block, distinguished by the selector byte
+(0 = file header, 1 = part), which `_REGION_SELECTOR` fixes per region so a
+caller cannot pass the wrong one.
+
+Multi mode exists only on the S2000/S3000XL/S3200XL; every field carries
+`models="S2000/S3000XL/S3200XL"`.
+
+Not yet surfaced in the TUI — the CLI reaches it via `s3kcli header multipart 3`.
+A Multi pane should wait until there is reason to trust the offsets.
+
+**To close this:** read a multi part off a real XL and diff it.
+
+**Blocked on:** hardware.
 
 ---
 

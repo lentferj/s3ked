@@ -196,10 +196,15 @@ class Command(enum.IntEnum):
 
 
 #: Operation codes that use the uniform 12-byte extended header.
+#:
+#: The S2000/S3000XL/S3200XL multi opcodes are in here too: they are numbered
+#: apart from the S3000 block but carry exactly the same header --
+#: ``mm,mm`` multi part number as the item index, ``ss`` selector (0 = multi
+#: file header, 1 = multi part), byte offset, byte count -- so the same two
+#: message classes serve them.
 EXTENDED_COMMANDS = frozenset(
-    c
-    for c in Command
-    if Command.RPHEADER <= c <= Command.HDDIR
+    [c for c in Command if Command.RPHEADER <= c <= Command.HDDIR]
+    + [Command.RMULTIDATA, Command.MULTIDATA]
 )
 
 #: For each extended *request*, the operation code the device answers with.
@@ -213,6 +218,7 @@ EXTENDED_REPLY_FOR: Dict[Command, Command] = {
     Command.RMISCDATA: Command.MISCDATA,
     Command.RVOLLIST: Command.VOLLIST,
     Command.RHDDIR: Command.HDDIR,
+    Command.RMULTIDATA: Command.MULTIDATA,
 }
 
 

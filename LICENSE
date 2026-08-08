@@ -34,6 +34,8 @@ s3k/messages.py, s3k/params.py
       Akai Electric Co. Ltd.
     "S2000/S3000XL/S3200XL MIDI System Exclusive Extensions"
       Akai Electric Co. Ltd.
+      (the source for multi mode: the 0x41/0x42 opcodes and the multi file
+      header / multi part field tables)
 
   Neither document is redistributed with this project. What is taken from
   them is wire-protocol fact used as data — operation codes, byte offsets,

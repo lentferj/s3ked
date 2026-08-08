@@ -104,7 +104,7 @@ So a k2kremote-style mirror needs the USB port this family does not have.
 
 ---
 
-## §2 — Provenance of the parameter tables, and what that costs us (open)
+## §2 — Provenance of the parameter tables, and what that costs us (open, partly mitigated)
 
 `s3k/params.py` is transcribed from the S2800/S3000/S3200 document's 251
 `Parameter:` entries (Offset / Field size / Range / Description) across three
@@ -130,6 +130,13 @@ Where his `FN` marks actually fall matters, and is narrower than feared:
     in the orig docs - typo? - FN". Not currently exercised; s3ked does not
     touch cue lists.
 
+**One independent cross-check now exists**, and it is a good one — see §8: the
+multi-part structure is documented in a *separate* Akai document, transcribed
+separately, and all twelve fields it shares with the program header land on
+identical offsets. That does not prove the program header is right, but two
+independent transcriptions agreeing on twelve offsets is much better evidence
+than one transcription alone.
+
 **To close this:** read a known program header off a real machine and diff it
 against the table. `s3kcli --demo header program 0` shows the shape the code
 expects; the same command without `--demo` gets the real thing. Specifically
@@ -140,58 +147,74 @@ readable, the early offsets are right and confidence in the rest rises sharply.
 
 ---
 
-## §3 — The keygroup header documents offsets 161/162 twice (resolved by decision, unverified)
+## §3 — Keygroup offsets 161/162 documented twice (RESOLVED from the manual)
 
 The keygroup listing defines offsets 161 and 162 **twice**:
 
 - mid-listing as `PFXCHAN` / `PFXSLEV` — the same names the *program* header
-  uses — with enumeration `0 = OFF, 1 = FX1, 2 = FX2, 3 = RV3, 4 = RV4`;
-- again at the very end of the region, *after* `V_ENV3` at offset 191 (so
-  plainly a later addendum), as `KFXCHAN` / `KFXSLEV`, described as "Keygroup
-  override Effects Bus select" with enumeration `0 = PRG (use the global
-  program header selection), 1 = OFF, 2 = FX1, 3 = FX2, 4 = RV3, 5 = RV4`.
+  uses — enumerated `0 = OFF, 1 = FX1, 2 = FX2, 3 = RV3, 4 = RV4`;
+- again under the heading **"S2000/S3000XL/S3200XL Common Parameters"** as
+  `KFXCHAN` / `KFXSLEV`, "Keygroup override Effects Bus select", enumerated
+  `0 = PRG (use the global program header selection), 1 = OFF, 2 = FX1,
+  3 = FX2, 4 = RV3, 5 = RV4`.
 
-Read together these are **one byte documented at two points in the machine's
-life**, not two bytes: the keygroup-level override gained a "use the program's
-setting" option, which was prepended and shifted every later value up by one.
+So this was never a chronological "which came later" question — the heading
+says outright that the second definition is the **XL family's**. The first is
+the base S2800/S3000/S3200 definition of the same byte.
 
-**Decision:** the later definition wins. `s3k/params.py` keeps `KFXCHAN` /
-`KFXSLEV` and records the superseded names in `notes`, flagged `UNVERIFIED`.
-`tests/test_params.py::test_superseded_definition_is_recorded_not_silently_dropped`
-pins that the earlier name is still discoverable rather than quietly deleted.
+**Confirmed against the S3000XL owner's manual addendum** (Japanese;
+`S3000XL_OMadd_djvu.txt`, and the page mock-up reads
+`Override prog FX bus: PRG send: 25`):
 
-**Why this matters:** if the real machine follows the *earlier* enumeration,
-every value read from these two bytes is off by one — displaying "FX2" where
-the panel says "FX1".
+> Override prog FX bus: と send: のパラメータを使うと、…個々のキーグループを
+> エフェクトに送ることができます。**初期設定は PRG**（つまりプログラムの
+> エフェクトバス選択を使ったルーティング）になりますが、**OFF**（選択した
+> キーグループをエフェクトに送らない）、**FX1, FX2, RV3, RV4** のいずれかを
+> 選ぶこともできます。
 
-**To close this:** on hardware, set a keygroup's effects bus from the front
-panel to a known value, read offset 161, and see which enumeration matches.
-One reading settles it.
+— "the default is PRG (routing using the program's effects bus selection), but
+you can also choose OFF, FX1, FX2, RV3 or RV4." That is exactly the six-value
+`KFXCHAN` enumeration, in order.
 
-**Blocked on:** hardware.
+**Resolution:** `s3k/params.py` keeps `KFXCHAN` / `KFXSLEV` for keygroup
+161/162, which is correct for the S2000/S3000XL/S3200XL machines this project
+targets. The superseded names stay in `notes`. On a plain S2800/S3000/S3200
+the earlier five-value enumeration applies and every value read from this byte
+would be one lower — recorded rather than handled, since the project targets
+the XL family.
 
----
+## §4 — Note-name octave offset (RESOLVED from three sources)
 
-## §4 — The note-name octave offset cannot be right as written (open)
+The S2800/S3000/S3200 document words the note-valued fields (`PLAYLO`,
+`PLAYHI`, `LONOTE`, `HINOTE`) as "21 to 127 represents **A1** to G8", which
+cannot hold at both ends: if 21 is A1 then 127 is G9.
 
-The spec words the note-valued fields (`PLAYLO`, `PLAYHI`, `LONOTE`,
-`HINOTE`) as "21 to 127 represents A1 to G8". **Those two ends cannot both be
-true.** If note 21 is A1 then note 127 is G9; if note 127 is G8 then note 21
-is A0. No octave offset satisfies both.
+It is simply a dropped minus sign. Three sources settle it:
 
-`s3k.params.note_name` anchors to the **low** end — note 21 renders `A1` —
-because that is the value the range's own start pins down, and because an
-off-by-one-octave label is a display nuisance rather than a data hazard (the
-byte written is the same either way).
+| source | wording |
+|---|---|
+| S2800/S3000/S3200 SysEx | "21 to 127 represents **A1** to G8" — the typo |
+| S2000/S3000XL/S3200XL SysEx | "21 to 127 represents **A-1** to G8" |
+| S3000XL owner's manual | panel renders keyspans as `C_0` … `G_8`, and splits a keyboard as `C0-B1, C2-B2, C3-B3, C4-B4, C5-G8` |
 
-**To close this:** select a keygroup on the front panel, set its low note to
-the lowest available, and read what the panel calls it.
+All three agree on **octave = value // 12 - 2**:
 
-**Blocked on:** hardware.
+```
+note  21 -> A-1      note  60 -> C3  (middle C)
+note  24 -> C0       note 127 -> G8
+```
 
----
+`s3k.params.note_name` implements that. An earlier revision of this project
+used `// 12` (rendering note 21 as `A1`), which was wrong; it was corrected
+once the XL document and the manual were read.
 
 ## §5 — The miscellaneous data-index table is missing from the source (open)
+
+**Search exhausted on lakai.sourceforge.net (2026-08-08).** The whole site was
+read: the three SysEx pages, `readfloppy.html` (disk format, not protocol),
+the API page (empty, "This is the next thing to fill in"), and the rest. The
+site's own documentation page notes that Akai used to host these documents and
+took them down. Nothing there carries the misc index table.
 
 `RMISCDATA` / `MISCDATA` (`0x33` / `0x34`) address "miscellaneous variables
 and functions" by a 14-bit Data Index, with a bank byte selecting the type
@@ -273,3 +296,73 @@ the box, and time one full sweep.
 
 **Blocked on:** hardware. The multi-machine paths are additionally
 synthetic-only — no two real samplers have ever been connected at once.
+
+---
+
+## §8 — Cross-validation: the multi part IS a program header (resolved, 2026-08-08)
+
+The S2000/S3000XL/S3200XL document defines a "Structure Of Multi Parts" with
+13 fields. Twelve of them share a name with a program-header field — and every
+one lands on the **same byte offset**:
+
+| field | program header | multi part |
+|---|---|---|
+| PRNAME | 3 | 3 |
+| PMCHAN | 16 | 16 |
+| PRIORT | 18 | 18 |
+| PLAYLO | 19 | 19 |
+| PLAYHI | 20 | 20 |
+| OUTPUT | 22 | 22 |
+| STEREO | 23 | 23 |
+| PANPOS | 24 | 24 |
+| VOSCL | 70 | 70 |
+| TRANSPOSE | 75 | 75 |
+| PFXCHAN | 113 | 113 |
+| PFXSLEV | 114 | 114 |
+
+Twelve for twelve, across two documents transcribed separately by different
+hands. The structural reading is that **a multi part is a program header** with
+only a subset of fields meaningful, plus `PTUNOCM` at 115 which exists only in
+multi mode.
+
+Why this matters: §2's central worry is that the program-header offsets are a
+transcription of a transcription with nobody to check them. This is the first
+independent witness, and it agrees completely on every field the two documents
+have in common — including the awkward sparse ones (70, 75, 113, 114) where a
+transposition slip would be most likely and least visible.
+
+It does not validate the ~72 program fields the multi part does not carry, nor
+the keygroup and sample regions. But it materially raises confidence in the
+spine of the program header.
+
+Pinned by `tests/test_params.py::test_multi_part_offsets_mirror_the_program_header`,
+so a future edit to either table that breaks the correspondence fails the build.
+
+---
+
+## §9 — Where the documents live (reference)
+
+Local copies, alongside the user's own scans:
+
+```
+~/Dokumente/SYNTHS/Akai S3000XL/Docs/
+  lakai_s1000_sysex.html                          S1000 protocol
+  lakai_s2000_sysex.html                          S2000/S3000XL/S3200XL: multi mode
+  lakai_s2800_sysex.html                          S2800/S3000/S3200: the parameter tables
+  lakai_readfloppy.html                           disk format (not protocol)
+  S2000S3000xlS3200xl-SysexDocumentation.pdf      Akai scan (+ _djvu.txt)
+  S3000XL_OM.pdf                                  owner's manual (+ _djvu.txt)
+  S3000XL_OMadd.pdf                               addendum: effects/multi (+ _djvu.txt)
+```
+
+The `_djvu.txt` files are the archive.org OCR of the same items
+(`archive.org/download/S3000XLOM/…`) and are what the greps in these notes were
+run against. **The owner's manual and addendum are the Japanese editions**, and
+their OCR is rough — numbers get spurious internal spaces (`1 1 3 bytes` for
+113), and `G` frequently reads as `6` or `S`. Read around any figure taken from
+them.
+
+Both manuals are worth more than their protocol content suggests: §3 and §4
+were both settled from the addendum and the manual after the SysEx documents
+alone had left them ambiguous. When a spec field is unclear, **check what the
+front panel displays** before assuming it is unknowable.

@@ -68,6 +68,7 @@ s3kcli ports                             # what MIDI ports exist here
 s3kcli status                            # autodetect, then RSTAT
 s3kcli programs                          # resident program names
 s3kcli header keygroup 2 --keygroup 0    # a whole header, decoded
+s3kcli header multipart 3                # multi mode (S2000/S3000XL/S3200XL)
 s3kcli get PRIORT 0                      # one parameter
 s3kcli --allow-write set PRIORT 3 0      # write one parameter
 s3kcli params --search LFO               # browse the table, no device needed
@@ -103,7 +104,7 @@ Two packages, mirroring the sibling eosed project's split:
 | module | role |
 |---|---|
 | `s3k/messages.py` | the wire codec — framing, nibbling, opcodes, one class per message |
-| `s3k/params.py` | what the bytes mean — 249 header fields across three regions |
+| `s3k/params.py` | what the bytes mean — 268 fields across five structures |
 | `s3k/bridge.py` | MIDI transport, throttling, port discovery, high-level operations |
 | `s3ked/app.py` | the Textual TUI (`s3ked`) |
 | `s3ked/cli.py` | the CLI (`s3kcli`) |
@@ -118,17 +119,26 @@ Three protocol facts shape most of the design:
    write with `REPLY`. Both are things the sibling eosed project has to work
    around the absence of.
 
+Five byte-addressable structures are covered: `program`, `keygroup`, `sample`,
+and — on the S2000/S3000XL/S3200XL only — the `multi` file header and its 16
+`multipart` entries.
+
 ## Tests
 
 ```sh
 .venv/bin/python -m pytest
 ```
 
-204 tests, all synthetic — no hardware, no MIDI ports, no ALSA sequencer
+216 tests, all synthetic — no hardware, no MIDI ports, no ALSA sequencer
 needed. They cannot tell you an offset is *correct*; what they do check is
 that no two parameters claim the same byte, that no span runs past the end of
-its 192-byte header, that `describe_value` never raises anywhere in any
-parameter's range, and that no single keypress in the TUI can reach a delete.
+its structure, that `describe_value` never raises anywhere in any parameter's
+range, and that no single keypress in the TUI can reach a delete.
+
+One test is worth more than the rest: `test_multi_part_offsets_mirror_the_program_header`
+pins the twelve offsets where two *separately transcribed* Akai documents
+independently agree (RESOLUTION_NOTES §8) — the only external check on the
+parameter table that exists without hardware.
 
 ## Status
 
@@ -143,7 +153,7 @@ GPL-2.0-or-later. Full text in [COPYING](COPYING); attributions in
 
 | component | source | license |
 |---|---|---|
-| `s3k/messages.py`, `s3k/params.py` | Frame layout, operation codes, header offsets/ranges transcribed as data from Akai's *S1000 MIDI Exclusive Communication* and *S2800/S3000/S3200 MIDI System Exclusive Extensions*. Not redistributed. | protocol facts used as data |
+| `s3k/messages.py`, `s3k/params.py` | Frame layout, operation codes, header offsets/ranges transcribed as data from Akai's *S1000 MIDI Exclusive Communication*, *S2800/S3000/S3200 MIDI System Exclusive Extensions* and *S2000/S3000XL/S3200XL MIDI System Exclusive Extensions*. Not redistributed. | protocol facts used as data |
 | `s3k/bridge.py` | Throttled output, `MultiIn`, the ALSA-client leak fix and port enumeration ported from the sibling [eosed](https://github.com/lentferj/eosed), which ports them from [k2kremote](https://github.com/lentferj/k2kremote) and mpc2emu | GPL-2.0-or-later |
 | everything else | original work | GPL-2.0-or-later |
 

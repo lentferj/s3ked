@@ -39,11 +39,11 @@ def test_no_two_parameters_overlap(region):
 
 @pytest.mark.parametrize("region", p.REGIONS)
 def test_every_span_fits_the_header(region):
+    size = p.region_size(region)
     for param in p.region_params(region):
         assert param.offset >= 0
-        assert param.end <= p.HEADER_SIZE, (
-            f"{param.name} runs to {param.end}, past the "
-            f"{p.HEADER_SIZE}-byte header"
+        assert param.end <= size, (
+            f"{param.name} runs to {param.end}, past the {size}-byte {region}"
         )
 
 
@@ -64,6 +64,48 @@ def test_expected_entry_counts():
     assert len(p.region_params("program")) == 84
     assert len(p.region_params("keygroup")) == 130
     assert len(p.region_params("sample")) == 35
+    assert len(p.region_params("multi")) == 6
+    assert len(p.region_params("multipart")) == 13
+
+
+def test_multi_part_offsets_mirror_the_program_header():
+    """The strongest cross-check available without hardware.
+
+    The multi part structure and the program header are documented in two
+    separately transcribed Akai documents, and every field they share lands on
+    the same offset in both. See RESOLUTION_NOTES §8.
+    """
+    shared = [x.name for x in p.region_params("multipart")]
+    checked = 0
+    for name in shared:
+        try:
+            program = p.lookup(("program", name))
+        except KeyError:
+            continue
+        assert p.lookup(("multipart", name)).offset == program.offset, name
+        checked += 1
+    assert checked == 12, f"expected 12 shared fields, compared {checked}"
+
+
+def test_multi_regions_are_marked_as_xl_only():
+    for region in ("multi", "multipart"):
+        for param in p.region_params(region):
+            assert param.models == "S2000/S3000XL/S3200XL", param.name
+
+
+def test_xl_only_program_fields_are_marked():
+    # Introduced under the spec's own "S2000/S3000XL/S3200XL Parameters"
+    # heading; they do not exist on a plain S2800/S3000/S3200.
+    for name in ("PFXCHAN", "PFXSLEV"):
+        assert p.lookup(("program", name)).models == "S2000/S3000XL/S3200XL"
+
+
+def test_section_headings_did_not_leak_into_descriptions():
+    """The transcription's section headings must not end up as field prose."""
+    for param in p._PARAMS:
+        assert "S2000/S3000XL/S3200XL Parameters" not in (param.desc or "")
+        assert "Common Parameters" not in (param.desc or "")
+        assert "Accessing" not in (param.desc or "")
 
 
 def test_sizes_are_positive():
@@ -108,6 +150,22 @@ def test_lookup_by_region_and_name():
 
 def test_lookup_by_bare_name_when_unambiguous():
     assert p.lookup("PRIORT").region == "program"
+
+
+def test_bare_name_prefers_the_primary_structures_over_multi():
+    """A multi part reuses a dozen program-header field names.
+
+    Those are not a collision to refuse -- they are the same field on a
+    different structure -- so a bare name resolves to the primary one and the
+    multi regions are addressed explicitly.
+    """
+    assert p.lookup("PANPOS").region == "program"
+    assert p.lookup(("multipart", "PANPOS")).region == "multipart"
+
+
+def test_bare_name_still_resolves_a_multi_only_field():
+    assert p.lookup("PTUNOCM").region == "multipart"
+    assert p.lookup("MULTINAME").region == "multi"
 
 
 def test_lookup_is_case_insensitive():
@@ -248,13 +306,21 @@ def test_describe_value_appends_units():
 
 
 def test_note_valued_parameters_show_a_note_name():
-    assert p.describe_value(p.lookup(("program", "PLAYLO")), 21) == "21 (A1)"
+    assert p.describe_value(p.lookup(("program", "PLAYLO")), 21) == "21 (A-1)"
+    assert p.describe_value(p.lookup(("multipart", "PLAYHI")), 127) == "127 (G8)"
 
 
-def test_note_name_anchors_to_the_specs_low_end():
-    # The source says "21 to 127 represents A1 to G8", which cannot be
-    # self-consistent; we anchor to the low end. See the note in params.py.
-    assert p.note_name(21) == "A1"
+def test_note_name_matches_the_front_panel():
+    """Settled from three sources; see RESOLUTION_NOTES §4.
+
+    The S2800 document's "A1 to G8" drops a minus sign. The S2000/S3000XL
+    document writes "A-1 to G8", and the owner's manual shows the panel
+    rendering keyspans C_0 .. G_8. All three agree on offset -2.
+    """
+    assert p.note_name(21) == "A-1"
+    assert p.note_name(24) == "C0"
+    assert p.note_name(60) == "C3"
+    assert p.note_name(127) == "G8"
 
 
 def test_writability_flags():
