@@ -74,6 +74,44 @@ everything except `filter`, which genuinely needs broadband material.
 
 ## Order
 
+### Where this sits in the cross-project order
+
+The sweeps are step 7 of seven, and two of the six before them belong to the
+sibling **mpc2emu** rather than to this project. Running s3ked's own checks
+straight through and only then turning to mpc2emu has the dependency
+backwards: **the sweeps need a disc mpc2emu wrote**, for the reason in
+"Prerequisite" above.
+
+| # | what | project |
+|---|------|---------|
+| 1 | `s3kcli ports`, `s3kcli status` — read-only, no media | s3ked |
+| 2 | load a **commercial** disc, then `HW_CHECKLIST.md` steps 3–6 | both |
+| 3 | format a disk on the S3000XL itself, diff against mpc2emu's | mpc2emu |
+| 4 | mpc2emu's own `--hda`: mount, list, load, play | mpc2emu |
+| 5 | **cross-check**: mpc2emu writes known values, s3ked reads that header back | both |
+| 6 | `HW_CHECKLIST.md` step 7 (first write) + throttle floor | s3ked |
+| 7 | the sweeps below | s3ked |
+
+Step 2 uses someone else's disc deliberately, to separate "the drive works"
+from "our image is wrong". Note also that `status` answers on an empty
+machine but `programs`, `samples` and `header` do not — a disc has to go in
+early regardless.
+
+**Step 5 is the one worth planning around.** This project's offsets come from
+Akai's SysEx documents; mpc2emu's come from `akaiutil` plus the disk-format
+documentation. Two independent sources, the same 192-byte program and keygroup
+headers — one as they sit on disk, one as they are addressed over the wire. If
+mpc2emu writes a program with known parameter values and `s3kcli header
+program N` reads those values at those offsets, both projects are confirmed at
+once, which neither can manage alone. Where they disagree, the field is named
+and the front panel settles it. Where both inherited the same Akai numbering,
+agreement is not proof — keep the panel as tiebreaker for anything surprising.
+
+**Batch by the expensive step.** Every operation here is SysEx; only mpc2emu
+needs the SD card out. Run 2–4 back to back rather than alternating.
+
+### The sweeps
+
 Each step assumes the ones above it. The order is by dependency, not by
 interest.
 
