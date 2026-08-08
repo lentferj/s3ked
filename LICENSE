@@ -37,7 +37,7 @@ s3k/messages.py, s3k/params.py
       (the source for multi mode: the 0x41/0x42 opcodes and the multi file
       header / multi part field tables)
 
-  Neither document is redistributed with this project. What is taken from
+  None of these documents is redistributed with this project. What is taken from
   them is wire-protocol fact used as data — operation codes, byte offsets,
   field widths, value ranges — which is the minimum needed to interoperate
   with the hardware.
