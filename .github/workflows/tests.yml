@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026  s3ked contributors
+
+# Every test in this project is synthetic — fake bridges and `--demo`, never a
+# MIDI port — so the whole suite runs on a hosted runner with no hardware and
+# no ALSA sequencer. That is the point of running it here: the drift this
+# project keeps finding by hand (stale key tables, stale "unverified" claims)
+# is exactly what a red build catches on the push that introduced it.
+
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      # python-rtmidi is imported at module scope by `s3k.bridge`, so it has to
+      # be installed even though nothing here opens a port. It ships manylinux
+      # wheels; the ALSA headers are only needed if pip falls back to a source
+      # build on a version with no wheel yet.
+      - name: Install ALSA headers (source-build fallback for python-rtmidi)
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e '.[dev]'
+
+      - name: Run the suite
+        run: python -m pytest -q

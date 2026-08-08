@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+config.toml
+probes/*.png
+
+# Claude Code / AI-assistant working files — kept out of the public repo
+CLAUDE.md
+.claude/
+build/
+dist/
+
+# editor/tooling backups — a stray one was committed once by `git add -A`
+*.backup
+*.bak
+*.orig
+*~

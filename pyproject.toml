@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026  s3ked contributors
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "s3ked"
+version = "0.1.0"
+description = "Terminal editor for the Akai S1000/S3000 sampler family (S2000, S3000XL, S3200XL) over MIDI SysEx"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "GPL-2.0-or-later" }
+authors = [{ name = "Jan Lentfer", email = "jan.lentfer@web.de" }]
+keywords = ["midi", "sysex", "sampler", "akai", "s3000", "s3000xl", "s2000", "tui"]
+# No "License :: OSI Approved :: ..." entry: the `license` field above already
+# carries the SPDX expression, and PEP 639 deprecates stating it twice.
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio :: MIDI",
+    "Topic :: System :: Hardware",
+]
+dependencies = [
+    "textual>=0.80",
+    "python-rtmidi>=1.5",
+]
+
+[project.urls]
+Homepage = "https://github.com/lentferj/s3ked"
+Source = "https://github.com/lentferj/s3ked"
+Issues = "https://github.com/lentferj/s3ked/issues"
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+s3ked = "s3ked.app:main"
+s3kcli = "s3ked.cli:main"
+
+[tool.setuptools]
+packages = ["s3k", "s3ked"]
+# Explicit rather than relying on setuptools' default glob: GPL-2 §1 requires
+# the licence text to travel with the program, so COPYING must never silently
+# drop out of a built distribution.
+license-files = ["LICENSE", "COPYING"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

@@ -1,0 +1,81 @@
+s3ked — Terminal editor for the Akai S1000/S3000 sampler family
+Copyright (C) 2026  s3ked contributors
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+The full, verbatim text of the GNU General Public License version 2 is in
+the file COPYING alongside this one. This file records only the project's
+copyright notice and its third-party attributions.
+
+-------------------------------------------------------------------------------
+Third-party references and their licenses
+-------------------------------------------------------------------------------
+
+s3k/messages.py, s3k/params.py
+  The SysEx frame layout, operation codes, and the Program/Keygroup/Sample
+  header parameter tables (offsets, field sizes, ranges, and the
+  specification's own names for parameters and enumerated values) are
+  transcribed as data from Akai's own protocol specifications:
+
+    "S1000 MIDI Exclusive Communication"
+      Akai Electric Co. Ltd.
+    "S2800/S3000/S3200 MIDI System Exclusive Extensions"
+      Akai Electric Co. Ltd.
+    "S2000/S3000XL/S3200XL MIDI System Exclusive Extensions"
+      Akai Electric Co. Ltd.
+
+  Neither document is redistributed with this project. What is taken from
+  them is wire-protocol fact used as data — operation codes, byte offsets,
+  field widths, value ranges — which is the minimum needed to interoperate
+  with the hardware.
+
+  Two transcription provenance notes that matter for correctness, and are
+  repeated at the point of use in the source:
+
+  * The S2800/S3000/S3200 text this project transcribes from is itself a
+    hand-typed transcription of a printed Akai document, published at
+    <https://lakai.sourceforge.net/docs/s2800_sysex.html>. Its transcriber
+    ("Frank") marked points he believed were wrong with "FN" and disclaimed
+    any warranty of correctness. Those marks fall in the message-format
+    sections, not in the parameter tables — see docs/RESOLUTION_NOTES.md §2
+    for exactly where, and what this project does about each.
+  * A scan of the S2000/S3000XL/S3200XL document is held by the Internet
+    Archive as part of item `S3000XLOM`.
+
+  Everything else here is original work. Released under GPL-2.0-or-later.
+
+s3k/bridge.py
+  The throttled-output queue (ThrottledOut), the MultiIn merged-input facade,
+  the ALSA-client leak fix, and the MIDI port-enumeration helpers are ported
+  from the sibling eosed project (eos/bridge.py), which ports them in turn
+  from k2kremote (k2kremote/midi_bridge.py), which ports them from:
+    mpc2emu (tests/re_banks/krz_sysex_live.py)
+    Copyright (C) 2025-2026  mpc2emu contributors
+    License: GNU General Public License v2.0 or later (GPL-2.0-or-later)
+  All of eosed, k2kremote and mpc2emu are sibling projects by the same
+  author, also released under GPL-2.0-or-later. The rest of this file
+  (S3kBridge, the autodetect strategy, the config.toml read/write helpers)
+  is original work.
+
+All other files (s3k/__init__.py, s3ked/__init__.py, s3ked/app.py,
+s3ked/cli.py, s3ked/demo.py, tests/)
+  Original work. Released under GPL-2.0-or-later.
+
+-------------------------------------------------------------------------------
+Trademarks
+-------------------------------------------------------------------------------
+Akai, S1000, S1100, S2000, S2800, S3000, S3000XL, S3200, S3200XL are
+trademarks of their respective owners. This project is not affiliated with,
+endorsed by, or sponsored by Akai.
+All other trademarks are property of their respective owners.
