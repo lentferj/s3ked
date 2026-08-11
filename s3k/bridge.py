@@ -29,10 +29,17 @@
 
 Three things here are worth reading before trusting them:
 
-**The throttle is a guess.** ``SEND_GAP`` is a conservative default, *not* a
-reverse-engineered value. k2kremote's 120 ms SysEx floor was RE'd against a
-Kurzweil K2000 and says nothing about an Akai. Finding the real floor is a
-TODO item requiring hardware.
+**The throttle is measured, and the two gaps are not the same number.**
+``SEND_GAP`` (10 ms) paces *requests*, which are self-pacing anyway since each
+blocks for its reply. ``WRITE_GAP`` (75 ms) paces *unacknowledged* writes, and
+is the one that matters: the machine consumes writes at ~13.3/s, and a
+fire-and-forget sender faster than that has writes dropped **silently**. Both
+were walked down against an S3000XL -- RESOLUTION_NOTES §6. k2kremote's 120 ms
+was RE'd against a Kurzweil K2000 and never applied here.
+
+The practical advice is to leave ``confirm=True``: an acknowledged write is
+paced by the device at exactly the rate a safe fire-and-forget burst achieves,
+so going unacknowledged buys no throughput and only removes the guarantee.
 
 **Autodetect follows k2kremote's model, not eosed's, because it has to.**
 eosed can probe with a standard Universal Device Inquiry; this protocol has
@@ -64,6 +71,8 @@ from s3k import params as p
 
 __all__ = [
     "SEND_GAP",
+    "WRITE_GAP",
+    "BLOCK_IDENT",
     "DEFAULT_TIMEOUT",
     "AUTODETECT_TIMEOUT",
     "DEFAULT_CONFIG_PATH",
@@ -82,13 +91,33 @@ __all__ = [
 
 # --- defaults --------------------------------------------------------------
 
-#: Gap enforced between outgoing SysEx messages.
+#: Gap enforced between outgoing SysEx *requests*.
 #:
-#: CONSERVATIVE GUESS, NOT REVERSE-ENGINEERED. See the module docstring. The
-#: sibling k2kremote's RE'd 120 ms is a K2000 finding; nothing equivalent
-#: exists for this family yet, and vintage samplers are entirely capable of
-#: hanging when flooded.
-SEND_GAP = 0.05
+#: MEASURED on an S3000XL, 2026-08-10 (RESOLUTION_NOTES §6). A request is
+#: followed by a blocking wait for its reply, so it is self-pacing: single
+#: parameter reads ran 40/40 clean at every gap down to zero, and the rate
+#: saturates at ~94/s (10.6 ms round trip) from 10 ms downward. Anything below
+#: the round trip is free, because the gap is owed *after* a send and overlaps
+#: the wait. 10 ms keeps a little headroom while costing nothing.
+SEND_GAP = 0.010
+
+#: Gap enforced between outgoing SysEx *writes* that are not acknowledged.
+#:
+#: MEASURED, and the only one of the two that bites. The machine consumes
+#: writes at ~13.3/s -- roughly 75 ms each, most of it its own recalculation
+#: and screen redraw -- so a fire-and-forget sender faster than that grows an
+#: unbounded queue and writes are dropped **silently**. A 150-write burst lost
+#: 36 at 50 ms and none at 75 ms.
+#:
+#: The old default was 0.05, which passed a 40-write burst by being short
+#: enough for the buffer to absorb, and would have lost a quarter of a longer
+#: one. It was a guess, and it was wrong in the dangerous direction.
+#:
+#: Prefer ``confirm=True`` and this never matters: an acknowledged write waits
+#: for ``REPLY`` and so runs at the device's own 13.3/s anyway. Fire-and-forget
+#: buys **no** throughput on this family -- pace it safely and it is exactly as
+#: fast -- so its only effect is to trade a guarantee for nothing.
+WRITE_GAP = 0.075
 
 DEFAULT_TIMEOUT = 2.0
 AUTODETECT_TIMEOUT = 1.0
@@ -137,9 +166,11 @@ class AmbiguousDevice(RuntimeError):
 
     def __init__(self, devices):
         self.devices = devices  # [(channel, version, recv_port), ...]
+        # The version field is carried in `devices` but deliberately not
+        # shown: it does not mean what the document says (§10), and channel
+        # plus port already identify which machine to choose.
         listing = "\n".join(
-            f"  exclusive channel {ch}: software {ver} on {port}"
-            for ch, ver, port in devices
+            f"  exclusive channel {ch} on {port}" for ch, _ver, port in devices
         )
         super().__init__(
             f"{len(devices)} samplers answered:\n{listing}\n"
@@ -327,7 +358,11 @@ class ThrottledOut:
     ):
         self._port = port
         self._gap = gap
-        self._write_gap = gap if write_gap is None else write_gap
+        # Falls back to WRITE_GAP, deliberately *not* to `gap`. Since the two
+        # were measured apart (§6) -- 10 ms for a self-pacing request, 75 ms
+        # for an unacknowledged write -- inheriting a small read gap would
+        # silently hand a fire-and-forget caller an unsafe one.
+        self._write_gap = WRITE_GAP if write_gap is None else write_gap
         self._last = 0.0
         self._owed = 0.0
 
@@ -415,6 +450,25 @@ class DeviceStatus:
             f"blocks={self.used_blocks}/{self.max_blocks} "
             f"words={self.used_words}/{self.max_words}>"
         )
+
+
+#: The block-identifier byte every structure carries at offset 0.
+#:
+#: Confirmed on hardware 2026-08-10, and already half-documented in
+#: ``params.py`` as ``KGIDENT``/``SHIDENT`` ("Block identifier"). It is the
+#: cheapest possible defence against §11 Finding A: an out-of-range extended
+#: read returns the *previous* read's buffer rather than an error, so a reply
+#: can be well-formed, plausible, and from an entirely different structure.
+#: Checking one byte catches that.
+#:
+#: ``multipart`` also reads ``0x01``, consistent with a multi part being a
+#: program header, so it cannot be told apart from ``program`` this way and is
+#: deliberately not listed.
+BLOCK_IDENT: Dict[str, int] = {
+    "program": 0x01,
+    "keygroup": 0x02,
+    "sample": 0x03,
+}
 
 
 #: Which extended operation reads each region, and which writes it.
@@ -778,6 +832,25 @@ class S3kBridge:
             raise DeviceError(
                 f"asked for {count} bytes at offset {offset}, got {len(data.data)}"
             )
+        expect = BLOCK_IDENT.get(region)
+        if expect is not None and offset == 0 and data.data:
+            got = data.data[0]
+            if got != expect:
+                # §11 Finding A: this layer answers an out-of-range request
+                # with whatever the last valid read left behind, so a wrong
+                # index or selector comes back as a plausible-looking header
+                # belonging to something else entirely.
+                belongs = next(
+                    (r for r, v in BLOCK_IDENT.items() if v == got), None
+                )
+                raise DeviceError(
+                    f"reading {region} {index}: block identifier is "
+                    f"{got:#04x}, expected {expect:#04x}"
+                    + (f" -- this is a {belongs} block" if belongs else "")
+                    + ". The device answers an out-of-range read with the "
+                    "previous read's buffer instead of an error, so check the "
+                    "index and selector exist (RESOLUTION_NOTES §11 Finding A)."
+                )
         return data.data
 
     def set_header_bytes(

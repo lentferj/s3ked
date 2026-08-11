@@ -28,6 +28,7 @@ from s3k.bridge import (
     MultiIn,
     S3kBridge,
     ThrottledOut,
+    WRITE_GAP,
 )
 
 
@@ -105,8 +106,13 @@ def _sampler(headers=None, *, channel=0, fail=()):
                 m.Command.RKHEADER: "keygroup",
                 m.Command.RSHEADER: "sample",
             }[command]
+            # A real machine stamps a block identifier at offset 0 (0x01
+            # program, 0x02 keygroup, 0x03 sample). The fake must too, or it
+            # is not exercising the check that catches a stale-buffer read.
+            blank = bytearray(p.HEADER_SIZE)
+            blank[0] = bridge_mod.BLOCK_IDENT[region]
             raw = store.setdefault(
-                (region, request.index, request.selector), bytearray(p.HEADER_SIZE)
+                (region, request.index, request.selector), blank
             )
             return m.HeaderData(
                 command=command + 1,
@@ -333,9 +339,28 @@ def test_write_gap_is_separate_from_read_gap():
     assert port.messages[1][0] - port.messages[0][0] >= 0.055
 
 
-def test_write_gap_defaults_to_gap():
-    out = ThrottledOut(_RecordingPort(), gap=0.03)
-    assert out._write_gap == 0.03
+def test_write_gap_does_not_inherit_a_small_read_gap():
+    """The two gaps were measured apart and must not be conflated.
+
+    A request is self-pacing -- it blocks for its reply -- so its gap can be
+    small. An unacknowledged write has nothing pacing it, and going faster
+    than the device consumes drops writes silently (RESOLUTION_NOTES §6).
+    Inheriting `gap` here would hand a fire-and-forget caller an unsafe value
+    every time someone tuned reads down.
+    """
+    out = ThrottledOut(_RecordingPort(), gap=0.001)
+    assert out._write_gap == WRITE_GAP
+    assert out._write_gap > out._gap
+
+
+def test_write_gap_is_still_explicitly_settable():
+    out = ThrottledOut(_RecordingPort(), gap=0.03, write_gap=0.2)
+    assert (out._gap, out._write_gap) == (0.03, 0.2)
+
+
+def test_the_measured_write_floor_is_not_undercut_by_the_default():
+    """75 ms was the fastest gap that lost nothing in a 150-write burst."""
+    assert WRITE_GAP >= 0.075
 
 
 def test_throttle_delegates_unknown_attributes():
