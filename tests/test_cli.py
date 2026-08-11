@@ -17,8 +17,11 @@ def run(capsys, *args):
 
 def test_status(capsys):
     out = run(capsys, "--demo", "status")
-    assert "software version" in out
     assert "exclusive channel" in out
+    assert "sample words" in out
+    # Deliberately absent -- the field does not survive contact with a real
+    # machine (RESOLUTION_NOTES §10).
+    assert "software version" not in out
 
 
 def test_programs_lists_with_indices(capsys):

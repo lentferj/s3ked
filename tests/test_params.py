@@ -61,7 +61,9 @@ def test_keys_and_entries_agree():
 
 def test_expected_entry_counts():
     # Pinned so a regenerated table cannot quietly lose rows.
-    assert len(p.region_params("program")) == 84
+    # 85 not 84 since PRIDENT was added from hardware -- the source document
+    # starts the program header at offset 1 and omits the block identifier.
+    assert len(p.region_params("program")) == 85
     assert len(p.region_params("keygroup")) == 130
     assert len(p.region_params("sample")) == 35
     assert len(p.region_params("multi")) == 6
@@ -348,3 +350,138 @@ def test_text_fields_use_the_device_character_set():
     param = p.lookup(("sample", "SHNAME"))
     assert param.kind == "text"
     assert p.encode_field(param, "A")[0] == m.AKAI_CHARSET.index("A")
+
+
+# --- display offset: stored byte vs the number on the panel -----------------
+# Confirmed on hardware 2026-08-10: the panel shows polyphony 32 where the
+# byte holds 31 (RESOLUTION_NOTES §11 Finding H).
+
+
+def test_polyph_renders_the_number_the_panel_shows():
+    """Through the real path: raw byte -> decode_field -> describe_value.
+
+    describe_value takes a *display* value, because decode_field has already
+    applied the offset. Asserting against a raw byte here would encode the
+    asymmetry the offset exists to remove.
+    """
+    param = p.lookup(("program", "POLYPH"))
+    assert param.display_offset == 1
+    assert p.describe_value(param, p.decode_field(param, bytes([31]))) == "32"
+    assert p.describe_value(param, p.decode_field(param, bytes([0]))) == "1"
+
+
+def test_polyph_accepts_the_number_the_panel_shows():
+    param = p.lookup(("program", "POLYPH"))
+    assert p.encode_field(param, 32) == bytes([31])
+    assert p.encode_field(param, 1) == bytes([0])
+
+
+@pytest.mark.parametrize("value", [0, 33, -1])
+def test_polyph_rejects_values_outside_the_displayed_range(value):
+    """Without the guard, 0 would wrap to 255 rather than being refused."""
+    param = p.lookup(("program", "POLYPH"))
+    with pytest.raises(ValueError):
+        p.encode_field(param, value)
+
+
+def test_display_offset_round_trips():
+    param = p.lookup(("program", "POLYPH"))
+    for shown in range(1, 33):
+        stored = p.encode_field(param, shown)
+        assert p.describe_value(param, p.decode_field(param, stored)) == str(shown)
+
+
+def test_every_other_parameter_is_unaffected():
+    """Exactly one field has a stored-vs-displayed mapping; keep it that way."""
+    offsets = {x.name for x in p._PARAMS if x.display_offset}
+    assert offsets == {"POLYPH"}
+
+
+def test_decode_and_encode_are_inverses_for_every_parameter():
+    """A read-modify-write must be stable.
+
+    An asymmetric decode/encode pair does not merely display the wrong
+    number -- it walks the stored value on every round trip, which a
+    verification sweep performs hundreds of times.
+    """
+    for param in p._PARAMS:
+        if param.kind == "text":
+            continue
+        low = param.minimum + param.display_offset
+        high = param.maximum + param.display_offset
+        for pattern in (0x00, 0x01, 0x7F, 0x80, 0xCE, 0xFF):
+            raw = bytes([pattern] * param.size)
+            value = p.decode_field(param, raw)
+            if not low <= value <= high:
+                continue  # not a byte this field can legally hold
+            assert p.encode_field(param, value) == raw, f"{param.name} {raw.hex()}"
+
+
+def test_encode_then_decode_survives_a_negative_value():
+    """The other direction, which is where the sign extension was missing.
+
+    `encode_field` has always two's-complemented a negative; `decode_field`
+    read it back unsigned, so -50 became 206 and a caller checking the
+    parameter's own range saw every signed field as out of bounds.
+    """
+    for param in p._PARAMS:
+        if param.kind == "text" or param.minimum >= 0:
+            continue
+        for value in (param.minimum, -1, 0, param.maximum):
+            assert p.decode_field(param, p.encode_field(param, value)) == value, (
+                f"{param.name} {value}"
+            )
+
+
+def test_decoded_values_lie_inside_the_declared_range():
+    """A decoded value must be comparable against the range it came with."""
+    param = p.lookup(("program", "PANPOS"))
+    assert param.minimum < 0
+    decoded = p.decode_field(param, p.encode_field(param, param.minimum))
+    assert param.minimum <= decoded <= param.maximum
+
+
+def test_the_machine_managed_sample_fields_are_read_only():
+    """Four fields the S3000XL acknowledges a write to and then ignores.
+
+    Confirmed on hardware 2026-08-10 (RESOLUTION_NOTES §12): each returned
+    REPLY/ok and kept its own value. SLOOPS was probed separately against 0,
+    2, 3 and 4 and held 1 throughout, so it is not a minimum-of-1 constraint.
+    Their own descriptions said "internal use" all along.
+    """
+    for name in ("SLOOPS", "SALOOP", "SHLOOP", "SSPARE"):
+        param = p.lookup(("sample", name))
+        assert param.readonly, name
+        assert not param.writable, name
+
+
+def test_modulation_sources_are_named_not_bare_numbers():
+    """A field whose meaning lives in a separate table gets misread.
+
+    These read as bare integers until 2026-08-10, and `0` was reported to a
+    sibling project as a live routing when it means "no source" -- the slot
+    is off. RESOLUTION_NOTES §15.
+    """
+    assert p.MOD_SOURCES[0] == "no source"
+    wired = [x for x in p._PARAMS if x.values is p.MOD_SOURCES]
+    assert len(wired) == 16, [x.name for x in wired]
+    for param in wired:
+        assert p.describe_value(param, 0) == "no source", param.name
+        assert p.describe_value(param, 8) == "LFO2", param.name
+
+
+def test_the_optional_filter_board_fields_are_marked_as_optional():
+    """Filter 2, TONE and ENV3 need hardware not every machine has.
+
+    The S3200 carries the second LSI as standard; an S3000XL needs the
+    optional IB304F board, and without it the machine answers "2nd filter
+    board IB304F not fitted!" at the panel. The fields exist in the header
+    either way, so nothing on the wire distinguishes them -- which is exactly
+    why the table has to say so. RESOLUTION_NOTES §19.
+    """
+    expected = {"FLT2GAIN", "FLT2MODE", "FLT2Q", "TONEFREQ", "TONESLOP",
+                "FIL2FR", "K_FRQ2"} | {f"ENV3{s}" for s in
+                                       ("R1", "L1", "R2", "L2", "R3", "L3",
+                                        "R4", "L4")}
+    marked = {x.name for x in p._PARAMS if x.models and "IB304F" in x.models}
+    assert marked == expected, marked ^ expected

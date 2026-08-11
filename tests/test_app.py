@@ -60,8 +60,8 @@ async def test_parameters_pane_shows_the_selected_program():
     app = await _app()
     async with app.run_test() as pilot:
         assert await _settled(pilot, app)
-        assert len(app._param_rows) == 84
-        assert app.query_one("#parameters", DataTable).row_count == 84
+        assert len(app._param_rows) == 85   # 85 since PRIDENT was added
+        assert app.query_one("#parameters", DataTable).row_count == 85
 
 
 async def test_keygroup_pane_follows_the_programs_group_count():

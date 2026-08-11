@@ -112,6 +112,36 @@ REGION_SIZES: Dict[str, int] = {
 }
 
 
+#: What a modulation *source* byte means, from the S2800/S3000/S3200 document's
+#: "Values used to represent Modulation Sources".
+#:
+#: Transcribed 2026-08-10 after these fields were read off hardware as bare
+#: numbers and **0 was misread as a live routing** in a handoff to the sibling
+#: mpc2emu project. 0 is "No Source" -- the slot is off. A field whose meaning
+#: lives in a separate table in the source document is exactly the field that
+#: gets misread when the table is not carried with it.
+#:
+#: The "!" sources are the instantaneous value sampled at note-on rather than
+#: tracked continuously.
+MOD_SOURCES: Dict[int, str] = {
+    0: "no source",
+    1: "modwheel",
+    2: "bend",
+    3: "pressure",
+    4: "external",
+    5: "velocity",
+    6: "key",
+    7: "LFO1",
+    8: "LFO2",
+    9: "env1",
+    10: "env2",
+    11: "!modwheel",
+    12: "!bend",
+    13: "!external",
+    14: "env3",
+}
+
+
 def region_size(region: str) -> int:
     """Byte length of *region*'s structure."""
     try:
@@ -147,6 +177,19 @@ class Parameter:
     values: Optional[Dict[int, str]] = None
     default: Optional[int] = None
     readonly: bool = False
+    display_offset: int = 0
+    """Added to the stored byte to get the number the front panel shows.
+
+    A few fields store an index where the panel shows a count, so the two
+    differ by a constant. ``POLYPH`` stores 0-31 for a polyphony the machine
+    displays as 1-32 -- confirmed on hardware 2026-08-10, RESOLUTION_NOTES
+    §11 Finding H.
+
+    :func:`describe_value` adds it and :func:`encode_field` subtracts it, so
+    everything a user reads or types is the panel's number and the stored
+    form never leaves this module. ``minimum``/``maximum`` are always the
+    *stored* range.
+    """
     desc: Optional[str] = None
     notes: Optional[str] = None
     models: Optional[str] = None
@@ -186,6 +229,7 @@ def _p(
     values: Optional[Dict[int, str]] = None,
     default: Optional[int] = None,
     readonly: bool = False,
+    display_offset: int = 0,
     desc: Optional[str] = None,
     notes: Optional[str] = None,
     models: Optional[str] = None,
@@ -203,6 +247,7 @@ def _p(
         values=values,
         default=default,
         readonly=readonly,
+        display_offset=display_offset,
         desc=desc,
         notes=notes,
         models=models,
@@ -211,6 +256,22 @@ def _p(
 
 _PARAMS: List[Parameter] = [
     # -- PROGRAM HEADER -------------------------------------------------------
+    _p(
+        "program",
+        0,
+        "PRIDENT",
+        1,
+        "program.general",
+        1,
+        1,
+        readonly=True,
+        desc="Block identifier",
+        notes="Not in the source document, which starts the program header at "
+              "offset 1. Added from hardware 2026-08-10: every program block "
+              "read from an S3000XL carries 0x01 here, matching the keygroup's "
+              "KGIDENT (0x02) and the sample's SHIDENT (0x03), both of which "
+              "the document does list. See RESOLUTION_NOTES §14.",
+    ),
     _p(
         "program",
         1,
@@ -264,6 +325,7 @@ _PARAMS: List[Parameter] = [
         "program.midi",
         0,
         31,
+        display_offset=1,
         desc="Depth of polyphony",
         notes="range as written: \"0 to 31 (these represent polyphony values of 1 to 32)\"",
     ),
@@ -319,7 +381,8 @@ _PARAMS: List[Parameter] = [
         1,
         "program.output",
         0,
-        7,
+        255,
+        values={255: "off"},
         desc="Individual output routing. This parameter also controls send to effects section.",
         notes="range as written: \"255 indicates OFF On S3200: 0 to 7 indicates outputs 1 to 8, 8 indicates FX, 9 indicates RVB and 10 indicates R+F. On S3000: 0 to 7 indicates outputs 1 to 8, 8 indicates FX. On S2800: 0 and 1 indicates outputs 1 and 2, 2 indicates FX.\"",
     ),
@@ -739,6 +802,7 @@ _PARAMS: List[Parameter] = [
         "program.mods",
         0,
         255,
+        values=MOD_SOURCES,
         desc="First source of assignable modulation of pan position",
         notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
     ),
@@ -750,6 +814,7 @@ _PARAMS: List[Parameter] = [
         "program.mods",
         0,
         255,
+        values=MOD_SOURCES,
         desc="Second source of assignable modulation of pan",
         notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
     ),
@@ -761,6 +826,7 @@ _PARAMS: List[Parameter] = [
         "program.mods",
         0,
         255,
+        values=MOD_SOURCES,
         desc="Third source of assignable modulation of pan",
         notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
     ),
@@ -772,6 +838,7 @@ _PARAMS: List[Parameter] = [
         "program.mods",
         0,
         255,
+        values=MOD_SOURCES,
         desc="First source of assignable modulation of loudness",
         notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
     ),
@@ -783,6 +850,7 @@ _PARAMS: List[Parameter] = [
         "program.mods",
         0,
         255,
+        values=MOD_SOURCES,
         desc="Second source of assignable modulation of loudness",
         notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
     ),
@@ -794,6 +862,7 @@ _PARAMS: List[Parameter] = [
         "program.mods",
         0,
         255,
+        values=MOD_SOURCES,
         desc="Source of assignable modulation of LFO1 speed",
         notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
     ),
@@ -805,6 +874,7 @@ _PARAMS: List[Parameter] = [
         "program.mods",
         0,
         255,
+        values=MOD_SOURCES,
         desc="Source of assignable modulation of LFO1 depth",
         notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
     ),
@@ -816,6 +886,7 @@ _PARAMS: List[Parameter] = [
         "program.mods",
         0,
         255,
+        values=MOD_SOURCES,
         desc="Source of assignable modulation of LFO1 delay",
         notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
     ),
@@ -827,6 +898,7 @@ _PARAMS: List[Parameter] = [
         "program.mods",
         0,
         255,
+        values=MOD_SOURCES,
         desc="First source of assignable modulation of filter frequency",
         notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
     ),
@@ -838,6 +910,7 @@ _PARAMS: List[Parameter] = [
         "program.mods",
         0,
         255,
+        values=MOD_SOURCES,
         desc="Second source of assignable modulation of filter frequency",
         notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
     ),
@@ -849,6 +922,7 @@ _PARAMS: List[Parameter] = [
         "program.mods",
         0,
         255,
+        values=MOD_SOURCES,
         desc="Third source of assignable modulation of filter frequency",
         notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
     ),
@@ -860,6 +934,7 @@ _PARAMS: List[Parameter] = [
         "program.mods",
         0,
         255,
+        values=MOD_SOURCES,
         desc="Source of assignable modulation of pitch",
         notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
     ),
@@ -871,6 +946,7 @@ _PARAMS: List[Parameter] = [
         "program.mods",
         0,
         255,
+        values=MOD_SOURCES,
         desc="Third source of assignable modulation of loudness",
         notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
     ),
@@ -984,6 +1060,7 @@ _PARAMS: List[Parameter] = [
         "program.mods",
         0,
         255,
+        values=MOD_SOURCES,
         desc="First source of assignable modulation of filter 2 frequency (only used on S3200).",
         notes="range as written: \"See \"Values used to represent Modulation sources\" above\"",
     ),
@@ -995,6 +1072,7 @@ _PARAMS: List[Parameter] = [
         "program.mods",
         0,
         255,
+        values=MOD_SOURCES,
         desc="Second source of assignable modulation of filter 2 frequency (only used on S3200).",
         notes="range as written: \"See \"Values used to represent Modulation sources\" above\"",
     ),
@@ -1006,6 +1084,7 @@ _PARAMS: List[Parameter] = [
         "program.mods",
         0,
         255,
+        values=MOD_SOURCES,
         desc="Third source of assignable modulation of filter 2 frequency (only used on S3200).",
         notes="range as written: \"See \"Values used to represent Modulation sources\" above\"",
     ),
@@ -2162,7 +2241,8 @@ _PARAMS: List[Parameter] = [
         1,
         "keygroup.general",
         0,
-        31,
+        255,
+        values={255: "off"},
         desc="Keygroup mute group",
         notes="range as written: \"0ffh = off, mute groups 0 to 31\"",
     ),
@@ -2221,6 +2301,7 @@ _PARAMS: List[Parameter] = [
         values={0: "-6dB", 1: "0dB"},
         desc="Make-up gain of second filter",
         notes="range as written: \"0 = -6dB, 1 = 0dB\"",
+        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
     ),
     _p(
         "keygroup",
@@ -2233,6 +2314,7 @@ _PARAMS: List[Parameter] = [
         values={0: "Low-pass", 1: "Band-pass", 2: "High-pass", 3: "EQ"},
         desc="Mode of second filter",
         notes="range as written: \"0 = Low-pass, 1 = Band-pass, 2 = High-pass, 3 = EQ\"",
+        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
     ),
     _p(
         "keygroup",
@@ -2243,6 +2325,7 @@ _PARAMS: List[Parameter] = [
         0,
         31,
         desc="Resonance of second filter",
+        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
     ),
     _p(
         "keygroup",
@@ -2253,6 +2336,7 @@ _PARAMS: List[Parameter] = [
         0,
         99,
         desc="Center frequency of tone section",
+        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
     ),
     _p(
         "keygroup",
@@ -2263,6 +2347,7 @@ _PARAMS: List[Parameter] = [
         -50,
         50,
         desc="Slope of tone section",
+        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
     ),
     _p(
         "keygroup",
@@ -2303,6 +2388,7 @@ _PARAMS: List[Parameter] = [
         0,
         99,
         desc="Basic second filter frequency",
+        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
     ),
     _p(
         "keygroup",
@@ -2315,6 +2401,7 @@ _PARAMS: List[Parameter] = [
         unit="semitones",
         desc="Second filter key follow",
         notes="range as written: \"-24 to +24 semitones\"",
+        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
     ),
     _p(
         "keygroup",
@@ -2326,6 +2413,7 @@ _PARAMS: List[Parameter] = [
         99,
         desc="Attack rate of envelope 3",
         notes="also called ATTAK3 in later OS versions",
+        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
     ),
     _p(
         "keygroup",
@@ -2336,6 +2424,7 @@ _PARAMS: List[Parameter] = [
         0,
         99,
         desc="Final level of attack phase (phase 1) of envelope 3",
+        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
     ),
     _p(
         "keygroup",
@@ -2346,6 +2435,7 @@ _PARAMS: List[Parameter] = [
         0,
         99,
         desc="Rate of phase 2 of envelope 3",
+        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
     ),
     _p(
         "keygroup",
@@ -2356,6 +2446,7 @@ _PARAMS: List[Parameter] = [
         0,
         99,
         desc="Final level of phase 2 of envelope 3",
+        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
     ),
     _p(
         "keygroup",
@@ -2367,6 +2458,7 @@ _PARAMS: List[Parameter] = [
         99,
         desc="Rate of phase 3 of envelope 3",
         notes="also called DECAY3 in later OS versions",
+        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
     ),
     _p(
         "keygroup",
@@ -2378,6 +2470,7 @@ _PARAMS: List[Parameter] = [
         99,
         desc="Final level of phase 3 of envelope 3",
         notes="also called SUSTN3 in later OS versions",
+        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
     ),
     _p(
         "keygroup",
@@ -2389,6 +2482,7 @@ _PARAMS: List[Parameter] = [
         99,
         desc="Rate of release phase (phase 4) of envelope 3",
         notes="also called RELSE3 in later OS versions",
+        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
     ),
     _p(
         "keygroup",
@@ -2399,6 +2493,7 @@ _PARAMS: List[Parameter] = [
         0,
         99,
         desc="Final target level of envelope 3",
+        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
     ),
     _p(
         "keygroup",
@@ -2507,7 +2602,8 @@ _PARAMS: List[Parameter] = [
         desc="Sample rate validity",
         notes="range as written: \"0 indicates rate is invalid, 128 indicates rate is valid\"",
     ),
-    _p("sample", 16, "SLOOPS", 1, "sample.loop", 0, 255, desc="Number of loops"),
+    _p("sample", 16, "SLOOPS", 1, "sample.loop", 0, 255, readonly=True,
+        desc="Number of loops"),
     _p(
         "sample",
         17,
@@ -2516,6 +2612,7 @@ _PARAMS: List[Parameter] = [
         "sample.loop",
         0,
         255,
+        readonly=True,
         desc="First active loop (internal use)",
     ),
     _p(
@@ -2526,6 +2623,7 @@ _PARAMS: List[Parameter] = [
         "sample.loop",
         0,
         255,
+        readonly=True,
         desc="Highest loop (internal use)",
     ),
     _p(
@@ -2622,10 +2720,10 @@ _PARAMS: List[Parameter] = [
         "LDWELL1",
         2,
         "sample.loop",
-        1,
+        0,
         9999,
         unit="ms",
-        values={9999: "Hold, 1 to 9998 represents Dwell time in milliseconds"},
+        values={0: "no loop", 9999: "hold"},
         desc="Dwell time of first loop ;Second Loop",
         notes="range as written: \"0 represents No Loop, 9999 = Hold, 1 to 9998 represents Dwell time in milliseconds\"",
     ),
@@ -2656,10 +2754,10 @@ _PARAMS: List[Parameter] = [
         "LDWELL2",
         2,
         "sample.loop",
-        1,
+        0,
         9999,
         unit="ms",
-        values={9999: "Hold, 1 to 9998 represents Dwell time in milliseconds"},
+        values={0: "no loop", 9999: "hold"},
         desc="Dwell time of second loop ;Third Loop",
         notes="range as written: \"0 represents No Loop, 9999 = Hold, 1 to 9998 represents Dwell time in milliseconds\"",
     ),
@@ -2690,10 +2788,10 @@ _PARAMS: List[Parameter] = [
         "LDWELL3",
         2,
         "sample.loop",
-        1,
+        0,
         9999,
         unit="ms",
-        values={9999: "Hold, 1 to 9998 represents Dwell time in milliseconds"},
+        values={0: "no loop", 9999: "hold"},
         desc="Dwell time of third loop ;Fourth Loop",
         notes="range as written: \"0 represents No Loop, 9999 = Hold, 1 to 9998 represents Dwell time in milliseconds\"",
     ),
@@ -2724,10 +2822,10 @@ _PARAMS: List[Parameter] = [
         "LDWELL4",
         2,
         "sample.loop",
-        1,
+        0,
         9999,
         unit="ms",
-        values={9999: "Hold, 1 to 9998 represents Dwell time in milliseconds"},
+        values={0: "no loop", 9999: "hold"},
         desc="Dwell time of fourth loop",
         notes="range as written: \"0 represents No Loop, 9999 = Hold, 1 to 9998 represents Dwell time in milliseconds\"",
     ),
@@ -2771,7 +2869,8 @@ _PARAMS: List[Parameter] = [
         4294967295,
         desc="Relative loop factors for loop 4",
     ),
-    _p("sample", 134, "SSPARE", 1, "sample.general", 0, 255, desc="Used internally"),
+    _p("sample", 134, "SSPARE", 1, "sample.general", 0, 255, readonly=True,
+        desc="Used internally"),
     _p("sample", 135, "SWCOMM", 1, "sample.general", 0, 255, desc="Not used"),
     _p(
         "sample",
@@ -2988,6 +3087,18 @@ def decode_field(param: Parameter, data: bytes) -> object:
     Text fields decode through the device's character set; everything else is
     an unsigned little-endian integer of the field's width. Signedness is
     *not* inferred here -- see :func:`describe_value`.
+
+    Sign-extends a field whose stated range goes negative, and applies
+    ``display_offset``, so this is the exact inverse of :func:`encode_field`
+    in both directions. Getting that wrong is not cosmetic: an asymmetric
+    pair walks the value on every read-modify-write, and a caller comparing
+    against the parameter's own range sees every negative field as
+    out-of-bounds.
+
+    The sibling eosed project hit exactly this on its first write test
+    against real hardware -- value and range decoded by different rules, so
+    the two halves of one parameter contradicted each other (its
+    RESOLUTION_NOTES §18). Here it was caught by a rehearsal instead.
     """
     if len(data) != param.size:
         raise ValueError(
@@ -2997,7 +3108,10 @@ def decode_field(param: Parameter, data: bytes) -> object:
         from s3k.messages import decode_name
 
         return decode_name(data)
-    return int.from_bytes(data, "little")
+    number = int.from_bytes(data, "little")
+    if param.minimum < 0 and number >= (1 << (8 * param.size - 1)):
+        number -= 1 << (8 * param.size)
+    return number + param.display_offset
 
 
 def encode_field(param: Parameter, value) -> bytes:
@@ -3006,7 +3120,16 @@ def encode_field(param: Parameter, value) -> bytes:
         from s3k.messages import encode_name
 
         return bytes(encode_name(str(value), param.size))
-    number = int(value)
+    number = int(value) - param.display_offset
+    if param.display_offset and not (param.minimum <= number <= param.maximum):
+        # Caught explicitly: a display-offset field would otherwise wrap a
+        # too-small value into two's complement below and store nonsense.
+        # POLYPH 0 would become 255 rather than being rejected.
+        low = param.minimum + param.display_offset
+        high = param.maximum + param.display_offset
+        raise ValueError(
+            f"{param.name}: {value} is outside {low}..{high}"
+        )
     if number < 0:
         # The headers store small signed quantities (pan, transpose, tuning)
         # as two's complement in the field's own width. The spec states the
@@ -3038,6 +3161,9 @@ def describe_value(param: Parameter, value) -> str:
         if param.minimum < 0 and number >= (1 << (8 * param.size - 1)):
             number -= 1 << (8 * param.size)
 
+        # *value* already carries the display offset -- decode_field applied
+        # it -- so nothing is added here. `values` keys are display values
+        # too, which matters only for a field that has both, and none does.
         if param.values and number in param.values:
             return param.values[number]
 

@@ -65,7 +65,10 @@ def _cmd_ports(_bridge, _args) -> None:
 def _cmd_status(bridge, _args) -> None:
     status = bridge.status()
     print(f"connection          {bridge.description}")
-    print(f"software version    {status.version}")
+    # No software version line: the STAT field the S1000 document calls
+    # "software version VV.vv" does not carry the OS version on a real
+    # S3000XL -- see RESOLUTION_NOTES §10. It is still decoded, just not
+    # shown, because nothing is known about what it actually means.
     print(f"exclusive channel   {status.exclusive_channel}")
     print(
         f"header blocks       {status.used_blocks} used, "
@@ -120,7 +123,10 @@ def _cmd_header(bridge, args) -> None:
 def _cmd_get(bridge, args) -> None:
     param = p.lookup(args.name, args.region)
     value = bridge.get_parameter(param, args.index, keygroup=args.keygroup)
-    print(f"{param.name} = {p.describe_value(param, value)}  (raw {value!r})")
+    # `value` is in display space; show the byte the machine actually holds
+    # alongside it, which differs only where display_offset is set.
+    stored = value - param.display_offset if param.kind != "text" else value
+    print(f"{param.name} = {p.describe_value(param, value)}  (raw {stored!r})")
     if param.notes:
         print(f"  note: {param.notes}")
 
