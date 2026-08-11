@@ -284,3 +284,76 @@ def test_read_wav_round_trip(tmp_path):
 
     mono, _ = ms.read_wav(str(path))
     assert mono.mean() == pytest.approx(0.0, abs=0.001)
+
+
+# --- pitch resolution: the estimator must out-resolve what it measures -------
+
+
+def _tone(hz, sr=48000, seconds=1.2):
+    import numpy as np
+    t = np.arange(int(sr * seconds)) / sr
+    # A few harmonics, like a real sampled waveform rather than a pure sine.
+    return sum(np.sin(2 * np.pi * hz * k * t) / k for k in (1, 2, 3)), sr
+
+
+def test_fundamental_resolves_finer_than_one_lag():
+    """Integer lag quantises to ~9.4 cents at note 60 -- coarser than the
+    parameter it exists to measure. RESOLUTION_NOTES §21."""
+    import math
+
+    base = 261.6
+    a, sr = _tone(base)
+    got = ms.fundamental_hz(a, sr)
+    assert abs(1200 * math.log2(got / base)) < 2.0, f"{got} vs {base}"
+
+    # Two tones a couple of cents apart must come back distinguishable, which
+    # an integer-lag estimator cannot do at this pitch.
+    shifted = base * 2 ** (5 / 1200)
+    b, _sr = _tone(shifted)
+    got_b = ms.fundamental_hz(b, sr)
+    assert got_b > got, f"{got_b} not above {got}"
+    assert abs(1200 * math.log2(got_b / got) - 5) < 3.0
+
+
+def test_fundamental_is_accurate_across_the_range():
+    import math
+
+    for hz in (32.7, 65.4, 130.8, 261.6, 523.2):
+        a, sr = _tone(hz)
+        got = ms.fundamental_hz(a, sr)
+        cents = abs(1200 * math.log2(got / hz))
+        assert cents < 3.0, f"{hz} Hz -> {got} Hz ({cents:.1f} cents off)"
+
+
+def test_a_fundamental_below_the_search_floor_is_not_silently_wrong():
+    """A pitch under `lo` used to come back as the top of the range.
+
+    40 Hz was the old default and 32.7 Hz is what note 24 sounds at, so the
+    filter sweep's own test note fell straight through it and would have
+    reported 2000 Hz. RESOLUTION_NOTES §21.
+    """
+    import math
+
+    a, sr = _tone(32.7)
+    got = ms.fundamental_hz(a, sr)
+    assert abs(1200 * math.log2(got / 32.7)) < 5.0, f"got {got} for 32.7 Hz"
+
+
+def test_a_harmonic_rich_tone_does_not_report_an_octave_low():
+    """Autocorrelation is nearly as strong at twice the true period.
+
+    A real sawtooth put note 60 at 130.8 Hz instead of 261.6 -- an octave out,
+    and invisible against synthetic tones whose harmonics are too clean to make
+    the sub-multiple competitive. RESOLUTION_NOTES §23.
+    """
+    import math
+    import numpy as np
+
+    for hz in (65.4, 130.8, 261.6):
+        sr = 48000
+        t = np.arange(int(sr * 1.2)) / sr
+        saw = sum(np.sin(2 * np.pi * hz * k * t) / k for k in range(1, 41))
+        got = ms.fundamental_hz(saw, sr)
+        cents = 1200 * math.log2(got / hz)
+        assert abs(cents) < 10, f"{hz} Hz -> {got} Hz ({cents:+.0f} cents)"
+        assert got > hz * 0.9, f"{hz} Hz reported an octave low as {got}"

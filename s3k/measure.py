@@ -434,12 +434,31 @@ def corner_frequency(freqs, mag, drop_db: float = 3.0, ref_lo: float = 100.0,
     return float("nan")
 
 
-def fundamental_hz(samples, sr: int, lo: float = 40.0, hi: float = 2000.0) -> float:
+def fundamental_hz(samples, sr: int, lo: float = 20.0, hi: float = 2000.0) -> float:
     """Fundamental frequency by autocorrelation, for tuning calibration.
 
     ``PTUNO``/``KGTUNO``/``STUNO`` are documented as "cent:semi" pairs, and
     what a unit of each is worth on the wire is exactly the kind of claim that
     should be measured rather than assumed.
+
+    **The peak is interpolated, and it has to be.** An integer lag quantises
+    the estimate to ``1200*log2((lag+1)/lag)`` cents -- at note 60 that is a
+    period of ~183 samples and a floor of **9.4 cents**, which is coarser than
+    the parameter being measured. A first tuning sweep duly returned
+    0, 0, 0, 0, 0, 0, 9.486, 19.02 cents: those are lag steps, not parameter
+    steps, and the instrument could not see the thing it was pointed at
+    (RESOLUTION_NOTES §21).
+
+    Parabolic interpolation on the three samples around the peak recovers
+    roughly a fiftieth of a lag, so the same note resolves to ~0.2 cents.
+    Measuring lower helps too -- the period is longer in samples, so each lag
+    is worth fewer cents.
+
+    ``lo`` defaults to 20 Hz rather than 40. The search window is what bounds
+    the answer, and a fundamental below ``lo`` is not merely imprecise, it is
+    reported as something else entirely: at 32.7 Hz -- the pitch the filter
+    sweep now uses at note 24 -- a 40 Hz floor returned **2000 Hz**, the top of
+    the range. Silent, confident and wrong by six octaves.
     """
     np = _np()
     a = np.asarray(samples, dtype="float64")
@@ -452,11 +471,49 @@ def fundamental_hz(samples, sr: int, lo: float = 40.0, hi: float = 2000.0) -> fl
     lo_lag, hi_lag = int(sr / hi), int(sr / lo)
     if hi_lag >= len(corr):
         return float("nan")
-    seg = corr[lo_lag:hi_lag]
+    # Skip the initial decay before looking for a peak. Raw autocorrelation is
+    # maximal at lag 0 and stays high for small lags, because a low-frequency
+    # waveform barely moves over a few samples -- so a plain argmax lands at
+    # the start of the window and reports the top of the search range. That is
+    # how 32.7 Hz came back as 2000 Hz. Start after the first zero crossing,
+    # which is the classic remedy: the true period cannot be inside it.
+    first_neg = np.flatnonzero(corr[:hi_lag] < 0)
+    start = max(lo_lag, int(first_neg[0]) if first_neg.size else lo_lag)
+    if start >= hi_lag:
+        start = lo_lag
+
+    seg = corr[start:hi_lag]
     if not seg.size or seg.max() <= 0:
         return float("nan")
-    lag = int(np.argmax(seg)) + lo_lag
-    return float(sr) / lag
+    lo_lag = start
+    peak = int(np.argmax(seg))
+
+    # Octave protection. Autocorrelation is nearly as strong at 2x, 3x ... the
+    # true period, so a global argmax can land on a multiple and report the
+    # pitch an octave (or a twelfth) low. On a real sawtooth this put note 60
+    # at 130.8 Hz instead of 261.6 -- and it did NOT show up against synthetic
+    # tones, whose harmonics are too clean to make the sub-multiple competitive.
+    # Prefer the SHORTEST period whose correlation is within `tol` of the best.
+    tol = 0.90
+    best = float(seg[peak])
+    for divisor in (5, 4, 3, 2):
+        candidate = int(round((peak + lo_lag) / divisor)) - lo_lag
+        if 0 < candidate < len(seg) and float(seg[candidate]) >= tol * best:
+            peak = candidate
+            break
+
+    lag = float(peak + lo_lag)
+
+    # Parabolic interpolation through the three points around the peak. Guard
+    # the ends and a zero denominator (a flat or single-point maximum).
+    if 0 < peak < len(seg) - 1:
+        y0, y1, y2 = float(seg[peak - 1]), float(seg[peak]), float(seg[peak + 1])
+        denom = y0 - 2.0 * y1 + y2
+        if denom != 0.0:
+            delta = 0.5 * (y0 - y2) / denom
+            if -1.0 < delta < 1.0:          # a sane sub-sample correction only
+                lag += delta
+    return float(sr) / lag if lag > 0 else float("nan")
 
 
 def cents_between(f_measured: float, f_reference: float) -> float:
@@ -518,3 +575,32 @@ def fit_exponential(x: Sequence[float], y: Sequence[float]) -> Tuple[float, floa
     ss_tot = float(((ln - ln.mean()) ** 2).sum())
     r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
     return float(math.exp(ln_a)), float(b), r2
+
+
+def fit_linear(x: Sequence[float], y: Sequence[float]) -> Tuple[float, float, float]:
+    """Least-squares fit of ``y = m * x + c``. Returns ``(m, c, r2)``.
+
+    The counterpart to :func:`fit_exponential`, and needed because not every
+    sampler scale bends. Pitch offset is a straight line in its parameter --
+    ``KGTUNO`` measured at 0.39167 cents per unit with r2 0.9998 -- and forcing
+    an exponential onto it produced a plausible-looking equation that was
+    simply the wrong shape (RESOLUTION_NOTES §21).
+
+    Unlike the exponential fit this keeps **non-positive** points, because a
+    linear quantity legitimately passes through and below zero: tuning offsets
+    and pan positions both do, and discarding them would drop exactly the
+    points that pin the intercept.
+    """
+    np = _np()
+    xs = np.asarray(list(x), dtype="float64")
+    ys = np.asarray(list(y), dtype="float64")
+    ok = np.isfinite(xs) & np.isfinite(ys)
+    if ok.sum() < 3:
+        return float("nan"), float("nan"), float("nan")
+    xs, ys = xs[ok], ys[ok]
+    m, c = np.polyfit(xs, ys, 1)
+    pred = m * xs + c
+    ss_res = float(((ys - pred) ** 2).sum())
+    ss_tot = float(((ys - ys.mean()) ** 2).sum())
+    r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
+    return float(m), float(c), float(r2)
