@@ -563,8 +563,17 @@ See RESOLUTION_NOTES §20-§55.
   law predicts, replicating the same offset measured at a different `FILFRQ`
   -- **which means the `FILFRQ` law itself wants re-deriving from the
   resonance peak.** That is the next open measurement.
-- **Untouched:** `ZPLAY1`, the velocity-crossfade fields, and the envelope-3
-  velocity set (`K_DAR3`, `V_ATT3`, `V_REL3`, `O_REL3`, `V_ENV3`).
+- **Untouched:** `ZPLAY1`, the velocity-crossfade fields, and `V_REL3`/`O_REL3`
+  (both need a post-note-off window: raise `calibrate.TAIL` AND the analysis
+  window, which are two edits).
+- **Envelope 3's scaling set works** (§63). `K_DAR3` scales phase 3 and the
+  release but NOT phase 2, on the family law -- all three envelopes now agree
+  on the key-scaling coefficient within 7%. `V_ENV3` and `V_ATT3` both scale
+  by note-on velocity, bipolar, by factors of 8 and 37.
+- **A null needs the right STAGE, not just the right route** (§63). `K_DAR3`
+  read a clean flat null with the route live and the control flat, because it
+  was tested on a stage its own description does not name. Read the field's
+  description before believing a null.
 - **`K_DAR2` measured** (§61) and predicted from `K_DAR1` to 4% before the run.
   Both envelopes scale with the key by the same law, coefficients 4.5% apart.
   Its note-64 pivot is **taken on trust**, not measured -- see below.
