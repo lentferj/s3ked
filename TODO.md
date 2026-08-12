@@ -446,6 +446,8 @@ Measured (see RESOLUTION_NOTES §20-§26 for each sweep and its bounds):
 | field | law | measured over | r2 |
 |---|---|---|---|
 | `FILFRQ` | `6.4597 * exp(0.07100 v)` Hz | 44..92, 99 = wide open | 0.99984 |
+| `FILQ` | `-20 log10(1 - v/15.84)` dB | 0..15, all values | 0.999975 |
+| `LFODEL` | `0.06905 v / (103.41 - v)` s | 0..99, all values | 0.999555 |
 | `KGTUNO`, `PTUNO` | `0.391667 v` cents | 0..50 | 0.9998 |
 | `PRLOUD` | `0.642719 (v - 99)` dB | 0..99 | 0.9933 |
 | `SUSTN1` | `0.60832 (v - 99)` dB | 10..99 | 0.99995 |
@@ -521,10 +523,10 @@ question immediately. `probes/calibrate.py` now has `replicate()` and
 decay have different exponents (0.11175 vs ~0.0977) and are different kinds of
 quantity. A test pins this because the idea has returned twice.
 
-Still unmeasured: `LFODEL`'s shape, envelope 3, and the ~20 fields the
-document lists as fixed placeholders.
+Still unmeasured: envelope 3, six assignable-matrix sources, and the ~20
+fields the document lists as fixed placeholders.
 
-See RESOLUTION_NOTES §20-§53.
+See RESOLUTION_NOTES §20-§55.
 
 ### Added since, and worth reading before extending any of it
 
@@ -537,9 +539,16 @@ See RESOLUTION_NOTES §20-§53.
   assignable-matrix source 8 and runs at exactly twice LFO1 -- but LFO2 does
   not reach pan. `PANPOS` moves the image 118 dB, so neither end is broken,
   only the connection. The per-zone `VLOUD1` remains inert (§40).
-- **Still provisional:** `LFODEL` alone. Its shape does not fit because the
-  detector conflates delay with fade-in, and it has a stated route to
-  settling. `FILQ` left this list in §53.
+- **Nothing is provisional any more** (§55 took `LFODEL`, §53 took `FILQ`).
+  Neither was settled by fitting harder; each needed a different measurement.
+  The marking mechanism stays and is still tested against an injected scale,
+  because the next half-answered measurement should be marked rather than
+  rounded up into certainty.
+- **`LFODEL` is a pure delay** (§55): `s = 0.06905 * v / (103.41 - v)`, r2
+  0.999555 over the whole field. There is no fade-in -- two estimators that
+  fail differently agree to 0.010 s -- so §31's suspected delay-plus-ramp
+  conflation was not the problem. It runs to a pole past the field's top, the
+  same shape as `FILQ`, with no evidence the two are connected.
 - **`FILQ` is damping, and damping is linear** (§53). One number generates
   all sixteen steps: damping reaches zero at FILQ 15.84, just past the top of
   the field. Q runs 1.07 to ~20; the last three steps are worth more than the
