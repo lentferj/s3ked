@@ -363,59 +363,57 @@ SCALES: Dict[Tuple[str, str], Scale] = {
     # source's own brightness, so it compresses the axis it is supposed to be
     # reading. See RESOLUTION_NOTES §28.
     ("keygroup", "ATTAK2"): Scale(
-        "keygroup", "ATTAK2", "s", "exp", 0.00106695, 0.09966, (55, 85),
-        0.99962,
-        bounds="swept 55..85 at MODVFILT1 18. Below 55 the rise crosses in too\n"
-               "few analysis windows; above 85 it outlasts the capture.",
-        note="A straight ramp in FILFRQ units -- octaves -- at r2 0.9980\n"
-             "against 0.9124 for a ramp linear in hertz, across six values.\n"
-             "So the FILTER attack stays in the log domain and the amplitude\n"
-             "attack is the only stage that does not. That asymmetry is\n"
-             "forced rather than chosen: a ramp linear in decibels starting\n"
-             "from silence would start at minus infinity and never leave,\n"
-             "which the filter attack escapes by starting at the base cutoff\n"
-             "rather than at zero hertz.\n"
-             "It is a DURATION, not a rate: with three captures per depth the\n"
-             "rise moved 3.5% while the span moved 41%, and a constant-rate\n"
-             "model is rejected overwhelmingly (between/within ratio ~30).\n"
-             "Whether a small residual span-dependence survives is NOT\n"
-             "settled -- that separation is 2.68x, which is undecidable at\n"
-             "the 3x bar the project uses elsewhere.\n"
-             "An earlier claim of a threefold depth effect is WITHDRAWN: it\n"
-             "compared an exponential time constant against a 10-90% rise,\n"
-             "which are different quantities.\n"
-             "**Same convention as ATTAK1** (§41): the time to cross the FULL\n"
-             "travel, from the contiguous 10-90% time divided by 0.8.\n"
-             "Two definitions sharing no arithmetic -- that threshold, and\n"
-             "the gradient method ms.ramp_duration -- agree to 6% per point\n"
-             "and to 0.19% on the exponent (0.09966 against 0.09947).\n"
-             "The 33% spread that once kept this provisional was entirely a\n"
-             "selection bug: one implementation took the last sample inside\n"
-             "the 10-90 band rather than the last of the first contiguous\n"
-             "run, so a later sample rejoining the band stretched the window.\n"
-             "The published coefficients were never far wrong -- within 1.3%\n"
-             "across 60..80. What was wrong was the confidence interval, built\n"
-             "by comparing two implementations one of which was broken.\n"
-             "ATTAK2's exponent 0.09966 differs from ATTAK1's 0.10844, so the\n"
-             "two attacks really are different laws.",
-        endpoints={0: "fastest"},
+        "keygroup", "ATTAK2", "s", "exp", 0.001363, 0.09703, (40, 85), 0.999807,
+        bounds="40..85 at two drive levels. Below 40 the rise completes inside\n"
+               "the 0.14 s detector latency; above 85 it outlasts an 8 s\n"
+               "capture -- 99 would need about 30 s.",
+        note="Seconds for the filter envelope to traverse its FULL 0..99 range.\n"
+             "Re-measured 2026-08-12 with the resonance tracker (§58). §28 read\n"
+             "this through a spectral centroid and left it provisional over a\n"
+             "THREEFOLD disagreement between MODVFILT1 18 and 25, recorded as\n"
+             "depth-dependence. It was not: swept at MODVFILT1 5 and 10 the\n"
+             "times agree to 1.00 +/- 0.01 across nine values while the spans\n"
+             "differ by exactly the drive ratio. The depth-dependence was a\n"
+             "CEILING -- the corner saturating at the top of the filter's own\n"
+             "range -- and the provisional mark comes off.\n"
+             "IDENTICAL TO ENV3R1, which is the same measurement over the same\n"
+             "distance: 0.200/0.290/0.560/1.250/3.010 s against\n"
+             "0.200/0.300/0.550/1.250/3.010 at values 40/50/60/70/80. Two\n"
+             "envelopes, one time base.\n"
+             "WHETHER IT IS A RATE OR A DURATION IS NOT SETTLED HERE. §28 read\n"
+             "it as a duration, but an attack always travels 0-to-full, so a\n"
+             "fixed distance cannot tell the two apart. ENV3R1 -- the same law\n"
+             "-- IS a rate, proven by varying its target level (§57), which\n"
+             "makes a rate the better guess. Envelope 2 has its own attack\n"
+             "target in ENV2L1 and the test has not been run.",
     ),
     ("keygroup", "DECAY2"): Scale(
-        "keygroup", "DECAY2", "u/s", "exp", 25200.0, -0.09796, (50, 80),
-        0.99995,
-        bounds="swept 50..80; the ruler bounds the observable travel at both\n"
-               "ends, so these are limits of the detector rather than the\n"
-               "machine.",
-        note="A RATE, not a duration: FILFRQ units per second, which is to say\n"
-             "OCTAVES per second, since FILFRQ is logarithmic in hertz at 9.4\n"
-             "units to the octave. Time taken is span/rate. Confirmed a rate\n"
-             "directly: holding the value fixed and varying the span by 72%\n"
-             "moved the rate 1.9% and the duration 28%.",
+        "keygroup", "DECAY2", "s", "exp", 0.002464, 0.09844, (40, 80), 0.999972,
+        bounds="40..80. Above 80 the fall outlasts the capture; at 90 the span\n"
+               "had already collapsed from 1.63 octaves to 0.97, which is the\n"
+               "truncation showing rather than the machine changing.",
+        note="Seconds to traverse the FULL 0..99 range, so a phase covering\n"
+             "part of it takes  full_time * (distance / 99). About twice\n"
+             "ATTAK2 at the same value.\n"
+             "Re-measured 2026-08-12 with the resonance tracker (§58); the\n"
+             "previous law was 25200 * exp(-0.09796 v) FILFRQ-units/s, read\n"
+             "through a spectral centroid. Its RATE-not-duration finding\n"
+             "survives -- that came from varying the span by 72% and watching\n"
+             "the rate hold to 1.9%, a relative comparison a biased ruler\n"
+             "distorts far less than an absolute one.",
         endpoints={0: "fastest"},
     ),
     ("keygroup", "RELSE2"): Scale(
-        "keygroup", "RELSE2", "u/s", "exp", 61190.0, -0.10123, (58, 76),
-        0.99977,
+        "keygroup", "RELSE2", "u/s", "exp", 61190.0, -0.10123, (58, 76), 0.99977,
+        provisional="NOT re-measured. This is the only envelope-2 law still "
+                    "resting on the spectral centroid, and §54 showed that "
+                    "ruler reads 20-30% high by an amount that grows with "
+                    "frequency. Its three siblings were re-measured with the "
+                    "resonance tracker and SUSTN2's absolute coefficient moved "
+                    "22%, so expect a correction of that order here. The shape "
+                    "-- a rate, exponential in the value -- is not in doubt; "
+                    "the coefficient is. Release happens after note-off, which "
+                    "needs a capture window the envelope-2 run did not have.",
         bounds="swept 58..76; above 76 the fall outlasts the capture tail, the\n"
                "same ceiling that stopped RELSE1.",
         note="A RATE, not a duration: FILFRQ units (octaves) per second. Its\n"
@@ -536,19 +534,22 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "inert.",
     ),
     ("keygroup", "SUSTN2"): Scale(
-        "keygroup", "SUSTN2", "%", "linear", 100.0 / 99.0, 0.0, (0, 70), 0.9908,
-        bounds="above 70 the corner passed the source bandwidth and the ruler had no\nresolution left -- the detector ran out, not the machine.",
+        "keygroup", "SUSTN2", "%", "linear", 100.0 / 99.0, 0.0, (0, 99), 0.99978,
+        bounds="the whole field. §28 stopped at 70 because its centroid ruler\n"
+               "ran out of resolution once the corner passed the source\n"
+               "bandwidth; the resonance tracker has no such limit here.",
         note="Percent of the filter envelope's full amount, and LINEAR in\n"
-             "FILFRQ units -- which is to say linear in OCTAVES, since FILFRQ\n"
-             "is logarithmic in hertz. Its sibling SUSTN1 is linear in dB.\n"
-             "Both envelopes are therefore linear in the log domain, each in\n"
-             "its own: decibels for amplitude, octaves for the filter.\n"
+             "OCTAVES: 0.40, 0.80, 1.21, 1.64, 2.05 octaves at 20, 40, 60, 80,\n"
+             "99 with MODVFILT1 10. Its sibling SUSTN1 is linear in dB, so both\n"
+             "envelopes are linear in the log domain, each in its own.\n"
              "In absolute terms the shift is\n"
-             "  FILFRQ shift = 0.024645 * SUSTN2 * MODVFILT1\n"
-             "which needs the depth as well and so cannot be rendered from\n"
-             "this value alone. Measured over 0..70; above that the corner\n"
-             "left the observable window rather than the machine changing.",
-        endpoints={99: "full envelope amount"},
+             "  octaves = 0.002075 * SUSTN2 * MODVFILT1\n"
+             "which needs the depth as well and so cannot be rendered from this\n"
+             "value alone. §28 gave 0.024645 FILFRQ-units for the same product,\n"
+             "which is 0.002524 octaves -- 22% high, and high in the same\n"
+             "direction as everything else that ruler measured (§54).\n"
+             "Envelope 3 scales differently: 0.002685 octaves per unit of\n"
+             "level x depth against this 0.002075. Measured, not explained.",
     ),
     ("program", "V_LOUD"): Scale(
         "program", "V_LOUD", "dB", "linear", 0.009474 * 63, 0.0, (-50, 50),

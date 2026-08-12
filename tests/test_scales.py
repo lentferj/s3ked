@@ -52,9 +52,9 @@ ANCHORS = [
     # ATTAK2 is anchored at MODVFILT1 18, the depth it was measured at.
     # The same value read 0.38 s at depth 25 -- a 3x disagreement that is
     # the depth-dependence itself, and the reason it stays provisional.
-    ("keygroup", "ATTAK2",     70,    1.169,     0.080, "s"),
-    ("keygroup", "ATTAK2",     55,    0.250,     0.030, "s"),
-    ("keygroup", "DECAY2",     70,    26.26,      1.50, "u/s"),
+    ("keygroup", "ATTAK2",     55,    0.289,     0.030, "s"),
+    ("keygroup", "ATTAK2",     80,    3.190,     0.200, "s"),
+    ("keygroup", "DECAY2",     70,    2.450,     0.150, "s"),
     ("keygroup", "RELSE2",     70,    51.86,      3.00, "u/s"),
     ("keygroup", "SUSTN2",     50,     50.5,       2.0, "%"),
 ]
@@ -101,12 +101,28 @@ def test_the_law_is_monotonic_across_its_measured_range(key):
     )
 
 
-@pytest.mark.parametrize("name", ["DECAY1", "RELSE1", "DECAY2", "RELSE2"])
-def test_a_bigger_value_means_a_slower_stage(name):
+@pytest.mark.parametrize("name", ["DECAY1", "RELSE1", "RELSE2"])
+def test_a_bigger_value_means_a_slower_rate(name):
+    """These are RATES, so slower means a smaller number."""
     scale = scales.SCALES[("keygroup", name)]
     lo, hi = scale.fitted
     assert (scales.to_physical("keygroup", name, hi)[0]
             < scales.to_physical("keygroup", name, lo)[0])
+
+
+@pytest.mark.parametrize("name", ["ATTAK2", "DECAY2", "ENV3R1", "ENV3R3"])
+def test_a_bigger_value_means_a_slower_stage_in_seconds(name):
+    """These report the SECONDS a full traverse takes, so slower means bigger.
+
+    Kept as a separate test from the rates above rather than folded in with a
+    sign flag: a stage getting slower is one fact, and which direction the
+    number moves depends entirely on what the number IS. Conflating them is
+    how a rate gets read as a duration.
+    """
+    scale = scales.SCALES[("keygroup", name)]
+    lo, hi = scale.fitted
+    assert (scales.to_physical("keygroup", name, hi)[0]
+            > scales.to_physical("keygroup", name, lo)[0])
 
 
 # --- honesty about what was and was not measured ---------------------------
@@ -366,8 +382,14 @@ def test_the_decay_rates_share_an_exponent():
     quantity being compared is the right one. RELSE2 is left out: its exponent
     is 0.1012 on the fewest points, and forcing it in would be the same
     over-claim again.
+
+    DECAY2 is compared by MAGNITUDE since §58: it now reports seconds for a
+    full traverse rather than units per second, so its exponent is the same
+    number with the opposite sign. The clustering claim is about how fast the
+    stage scales with the value, which is unchanged by which way the quantity
+    is expressed.
     """
-    exponents = [scales.SCALES[("keygroup", n)].b
+    exponents = [abs(scales.SCALES[("keygroup", n)].b)
                  for n in ("DECAY1", "RELSE1", "DECAY2")]
 
     assert max(exponents) - min(exponents) < 0.002, exponents
@@ -446,20 +468,25 @@ def test_the_tuning_fit_and_the_exact_constant_agree():
 
 
 def test_what_is_still_provisional():
-    """Nothing, now -- and the empty list is the point.
+    """RELSE2, and it went back ON the list rather than off it.
 
-    FILQ left the list in §53, fitted to the DAMPING across the whole transfer
-    function rather than to a peak height a harmonic comb steps past. LFODEL
-    left it in §55, once the onset was timed instead of the moment the vibrato
-    grew large. Neither was settled by fitting harder; each needed a different
+    §58 re-measured three of the four envelope-2 laws with the resonance
+    tracker and left RELSE2 alone -- release happens after note-off and needs
+    a capture window that run did not have. Its siblings moved by up to 22%,
+    so leaving it unmarked while its neighbours were corrected would have made
+    it the most trustworthy-looking law in the group and the least checked.
+
+    FILQ left the list in §53 and LFODEL in §55; ATTAK2's depth-dependence
+    mark came off in §58 once two drive levels showed it was a ceiling.
+    Nothing was settled by fitting harder; each needed a different
     measurement, which is what "provisional" was recording in the first place.
 
-    If this list grows again that is fine and expected. What must not happen
-    is a law being un-marked because the number looked good enough.
+    The list growing is fine and expected. What must not happen is a law being
+    un-marked because the number looked good enough.
     """
     provisional = sorted(n for (_r, n), s in scales.SCALES.items()
                          if s.provisional)
-    assert provisional == []
+    assert provisional == ["RELSE2"]
 
 
 def test_the_attack_and_the_decay_are_different_laws():

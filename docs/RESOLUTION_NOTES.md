@@ -2145,7 +2145,7 @@ velocity-modulation depths.
 
 ---
 
-## §28 — Envelope 2 measured, and one law found underneath all of them (2026-08-11)
+## §28 — SUPERSEDED by §58 (three of four laws; the RATE findings stand) — Envelope 2 measured, and one law found underneath all of them (2026-08-11)
 
 The filter envelope is complete: `ATTAK2` re-measured, `DECAY2`, `SUSTN2` and
 `RELSE2` new. But the numbers are the smaller half of this section. **Six
@@ -4369,3 +4369,98 @@ that changes when the drive changes is not a law.
 **Two runs at different drive levels cost one extra run and expose a whole
 class of ceiling artefact.** An excellent r² does not: it measured how
 consistently the ceiling clipped.
+
+---
+
+## §58 — Envelope 2 re-measured, and `ATTAK2`'s depth-dependence was mine (2026-08-12)
+
+§28 measured all four envelope-2 laws through a spectral centroid. §54 showed
+what that ruler is worth. Three of the four are re-measured here with the
+resonance tracker; the fourth is marked rather than left looking equally solid.
+
+```
+ATTAK2   full 0..99 traverse = 0.001363 * exp(0.09703 * v) s    40..85  r2 0.99981
+DECAY2   full 0..99 traverse = 0.002464 * exp(0.09844 * v) s    40..80  r2 0.99997
+SUSTN2   octaves = 0.002075 * SUSTN2 * MODVFILT1                0..99   r2 0.99978
+RELSE2   NOT re-measured -- now provisional
+```
+
+Envelope 2 is assignable-matrix **source 10** and reaches the filter only when
+routed, the fact §48 had to learn the hard way about envelope 3.
+
+### `ATTAK2` was never depth-dependent
+
+§28 left it provisional over a **threefold** disagreement — 1.169 s at
+`MODVFILT1` 18 against 0.38 s at 25 — recorded as depth-dependence, with the
+domain it ramps in called unsettled.
+
+Swept here at `MODVFILT1` 5 and 10, chosen so neither clips the 2.84-octave
+ceiling:
+
+```
+ATTAK2      40     50     55     60     65     70     75     80     85
+depth 5    0.200  0.290  0.410  0.560  0.810  1.230  1.910  3.020  4.810
+depth 10   0.200  0.290  0.400  0.560  0.810  1.250  1.920  3.010  4.770
+span 5     0.93   1.04   1.08   1.04   1.04   1.04   1.04   1.04   1.04
+span 10    1.95   2.03   2.02   2.06   2.07   2.07   2.07   2.06   2.06
+```
+
+**Times agree to 1.00 ± 0.01 while the spans differ by exactly the drive
+ratio.** The depth-dependence was the ceiling of §57 — the corner saturating
+at the top of the filter's own range — and the provisional mark comes off. A
+threefold error, sitting in the notes for a day as a property of the machine,
+was a property of the ruler.
+
+### One time base across two envelopes
+
+`ATTAK2` and `ENV3R1` are the same measurement over the same distance, and
+they give the same numbers:
+
+```
+value        40     50     60     70     80
+ATTAK2     0.200  0.290  0.560  1.250  3.010 s
+ENV3R1     0.200  0.300  0.550  1.250  3.010 s
+```
+
+Coefficients 0.001363 against 0.001392, exponents 0.35% apart. Two envelopes,
+one time base.
+
+**This unsettles §28's other reading.** It recorded `ATTAK2` as a DURATION
+while `DECAY2` and `RELSE2` are rates. But an attack always travels
+zero-to-full, so a fixed distance **cannot distinguish a rate from a
+duration** — and `ENV3R1`, the same law, is a rate, proven by varying its
+target level (§57). Envelope 2 has its own attack target in `ENV2L1` and the
+test has not been run. Recorded as unsettled rather than quietly flipped.
+
+`DECAY2`'s rate finding does survive: it came from varying the span by 72% and
+watching the rate hold to 1.9%, a **relative** comparison, which a biased ruler
+distorts far less than an absolute one. Which parts of a superseded measurement
+survive is worth deciding one at a time.
+
+### The size of the centroid's error, measured
+
+`SUSTN2` gives a direct check, because §28 published an absolute coefficient:
+
+```
+§28 (centroid)   0.024645 FILFRQ-units per (SUSTN2 x MODVFILT1) = 0.002524 octaves
+§58 (resonance)                                                   0.002075 octaves
+```
+
+**22% high, in the same direction as everything else that ruler measured.**
+§28 also stopped at `SUSTN2` 70 because the corner passed the source bandwidth;
+the tracker has no such limit and the law runs the full range, linear in
+octaves throughout.
+
+Envelope 3 scales differently — 0.002685 octaves per unit of level x depth
+against envelope 2's 0.002075. Measured, not explained.
+
+### `RELSE2` is marked, and the marking is the point
+
+It is the only envelope-2 law still resting on the centroid, because release
+happens after note-off and needs a capture window this run did not have.
+Its three siblings were corrected by up to 22%.
+
+Leaving it unmarked would have made it the **most trustworthy-looking law in
+the group and the least checked** — its r² is 0.99977 and its neighbours now
+carry visible correction history. A law does not become more reliable by
+having been left alone.
