@@ -582,6 +582,45 @@ See RESOLUTION_NOTES §20-§55.
   IS a rate. Envelope 2 has its own attack target in `ENV2L1`; sweeping it
   settles this in one run.
 
+## Is `ATTAK2` a rate or a duration? Two attempts, no answer (OPEN)
+
+**Status:** open. Attempted twice on 2026-08-12 and neither run can support a
+conclusion. **Blocked on** understanding envelope 2's level architecture, not
+on hardware.
+
+Why it matters: §28 called `ATTAK2` a DURATION, but an attack always travels
+zero-to-full, so a fixed distance cannot distinguish a rate from a duration --
+that reading rests on no evidence either way. `ENV3R1` is the same law
+numerically (§59, within 2.2% at value 70) and IS a proven rate, so a rate is
+the better guess and the question is worth closing properly.
+
+**Attempt 1** swept `ENV2L1` with `SUSTN2` pinned at 99. The envelope always
+ended at full, so `ENV2L1` was only an intermediate waypoint and the distance
+never changed: the span column read 2.07 octaves at every setting.
+
+**Attempt 2** set `SUSTN2` to follow `ENV2L1` with `DECAY2` 0. The span still
+did not move -- 1.88..2.07 octaves across `ENV2L1` 20..99. The attack appears
+to reach full regardless, so what the run timed was the rise to full and not
+to `ENV2L1`.
+
+**The tell, both times, was a contradiction rather than a bad number.** The
+same run returned "RATE" at one fixed `ATTAK2` and "DURATION" at another. Two
+incompatible verdicts from one experiment means the experiment is not
+measuring what it names, and neither verdict should be recorded. The readings
+themselves varied cleanly and passed `verify_varies`; it was the *manipulated*
+quantity that was frozen, which is why that check is now applied to both
+columns.
+
+What is known: `t90` does rise with `ENV2L1` (0.52 -> 0.81 s at `ATTAK2` 65)
+while the total excursion stays full, so the field does something -- just not
+the thing this test needed.
+
+Next: work out envelope 2's level architecture first. It carries `ENV2L1`,
+`ENV2R2`, `ENV2L2` and `ENV2L4` alongside the ADSR-named `ATTAK2`/`DECAY2`/
+`SUSTN2`/`RELSE2`, which looks like the envelope-3 rate/level structure layered
+under older names. Until that is mapped, any distance-varying test is guessing
+at which field sets the distance.
+
 ## `TEMPER` is twelve bytes modelled as one number (OPEN)
 
 **Status:** open, found 2026-08-12 while widening the tuning ranges (§56).
