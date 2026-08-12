@@ -563,9 +563,12 @@ See RESOLUTION_NOTES §20-§55.
   law predicts, replicating the same offset measured at a different `FILFRQ`
   -- **which means the `FILFRQ` law itself wants re-deriving from the
   resonance peak.** That is the next open measurement.
-- **Untouched:** `ZPLAY1`, the velocity-crossfade fields, and `V_REL3`/`O_REL3`
-  (both need a post-note-off window: raise `calibrate.TAIL` AND the analysis
-  window, which are two edits).
+- **Untouched:** `ZPLAY1` and the velocity-crossfade fields.
+- **All four of envelope 3's velocity scalers work** (§63, §64) -- `V_ENV3`,
+  `V_ATT3`, `V_REL3`, `O_REL3`. The counter-case to §47's five-of-six inert.
+  `O_REL3` could not have been measured at all before the rig learned to send
+  a note-off velocity, and it is **reachable but rarely driven**: few
+  controllers send one, and 0 is one end of its range rather than an absence.
 - **Envelope 3's scaling set works** (§63). `K_DAR3` scales phase 3 and the
   release but NOT phase 2, on the family law -- all three envelopes now agree
   on the key-scaling coefficient within 7%. `V_ENV3` and `V_ATT3` both scale
