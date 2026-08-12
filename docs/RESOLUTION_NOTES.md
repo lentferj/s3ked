@@ -5153,3 +5153,74 @@ change the ID on the panel and see which index moves. A baseline of 80 items
 (48 byte, 16 word) is captured for exactly that. **Value-matching has been
 wrong in this project before** — §61's pivot looked settled from a
 coefficient and needed a measurement — so it is written down as a candidate.
+
+---
+
+## §69 — The directory record decoded: what a volume costs in RAM (2026-08-12)
+
+A 24-byte harddisk-directory record, decoded and checked against the machine's
+own numbers:
+
+```
+[0:12]    name, in the device charset
+[12:16]   extension -- four spaces on a real entry; anything else means the
+          list has ended (§68)
+[16]      item type: 0x70 program, 0x73 sample
+[17:20]   file size on disk, BYTES, little-endian, THREE bytes
+[20:22]   location, increasing down the listing
+[22:24]   0x1e 0x09 on every entry seen
+```
+
+### The number a bank builder needs
+
+**A sample file is its audio at two bytes per word, plus exactly 150 bytes of
+header.** Measured, not derived: across all 60 samples whose files could be
+compared against their loaded `SLNGTH`, the difference was 150 bytes with no
+exceptions and no other value appearing.
+
+```
+    audio_words = (size_bytes - 150) / 2
+```
+
+So the memory a volume will need is `sum(audio_words)` over its sample
+entries. Programs contribute nothing — their size is header data.
+
+### Checked against something it was not fitted to
+
+Predicting the loaded memory from the directory records alone, and comparing
+against the machine's own `SLNGTH` sum for the 60 samples that did load:
+
+```
+    predicted from directory records   16,424,982 words
+    actual, summed from SLNGTH         16,424,982 words
+    difference                                  0
+```
+
+Exact. The 150 was fitted on the same samples, so the strong part of this is
+the **size field itself**: reading bytes 17–20 as a three-byte little-endian
+size reproduces every length independently.
+
+### The three-byte size is a real ceiling
+
+The field is three bytes, not four — reading it as three is what reproduces
+the lengths. That caps a single file at **16,777,215 bytes**, about 8.39
+million sample words, or 3.2 minutes of mono audio at 44.1 kHz. A volume
+exceeds a machine by having many files, not one enormous one.
+
+### The case that prompted this
+
+A CD-ROM volume reported *"insufficient waveform memory!"* on a 32 MB
+S3000XL, and the machine was not at fault:
+
+```
+    volume needs    30,768,270 words = 58.69 MB   (10 programs, 88 samples)
+    machine has     16,777,216 words = 32.00 MB
+    loaded          16,424,982 words = 31.33 MB   53% of the volume
+    over capacity   13,991,054 words = 26.69 MB
+```
+
+The volume is **183% of what the largest machine of this type can hold**. Ten
+programs loaded — they are small — and 60 of 88 samples, so any keygroup
+pointing at one of the missing 28 plays silence. That is worth knowing before
+building a bank rather than after loading one: the shortfall is computable
+from the directory in about 1.6 seconds, without loading anything.

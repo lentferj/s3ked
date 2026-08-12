@@ -741,3 +741,77 @@ def test_an_unloaded_volume_reads_as_an_empty_directory():
     loaded at the panel first, and the device answers with empty records."""
     bridge = _directory([bytes(24)])
     assert bridge.hd_directory(1) == []
+
+
+def test_a_directory_entry_decodes_its_type_and_size():
+    """The fields VinSamLib needs to know whether a volume fits in RAM."""
+    from s3k import bridge as b, messages as m
+
+    def record(name, kind, size):
+        return (bytes(m.encode_name(name, 12)) + b"\x20\x20\x20\x20"
+                + bytes([kind]) + int(size).to_bytes(3, "little")
+                + b"\x00\x00\x1e\x09")
+
+    entries = _directory([
+        record("A PROGRAM", b.ITEM_PROGRAM, 900),
+        record("A SAMPLE", b.ITEM_SAMPLE, 250_010),
+        bytes(24),
+    ]).hd_directory(1)
+
+    prog, samp = entries
+    assert prog.is_program and not prog.is_sample
+    assert samp.is_sample and not samp.is_program
+    assert samp.size_bytes == 250_010
+
+    # a sample file is its audio at two bytes a word, plus a 150-byte header
+    assert samp.audio_words == (250_010 - b.SAMPLE_FILE_OVERHEAD) // 2
+    assert prog.audio_words == 0, "a program holds no audio"
+
+
+def test_the_overhead_is_the_measured_one_not_a_guess():
+    """150 bytes, from 60 samples compared against their loaded SLNGTH.
+
+    Pinned because the number is the difference between a volume that is
+    reported as fitting and one that is not, and it was measured rather than
+    derived from any document.
+    """
+    from s3k import bridge as b
+    assert b.SAMPLE_FILE_OVERHEAD == 150
+
+
+def test_summing_a_volume_answers_whether_it_fits():
+    """The whole point: sum audio_words and compare against the machine."""
+    from s3k import bridge as b, messages as m
+
+    def sample(name, words):
+        size = words * 2 + b.SAMPLE_FILE_OVERHEAD
+        return (bytes(m.encode_name(name, 12)) + b"\x20\x20\x20\x20"
+                + bytes([b.ITEM_SAMPLE]) + size.to_bytes(3, "little")
+                + b"\x00\x00\x1e\x09")
+
+    # 3 bytes of size caps one FILE at ~16.7 MB; a volume exceeds RAM by
+    # having many, which is exactly how the 58.7 MB volume did it.
+    entries = _directory([sample(f"S{i:02d}", 800_000) for i in range(12)]
+                         + [bytes(24)]).hd_directory(1)
+
+    needed = sum(e.audio_words for e in entries)
+    assert needed == 9_600_000
+    assert needed <= 16_777_216, "this one fits"
+
+    entries = _directory([sample(f"S{i:02d}", 800_000) for i in range(24)]
+                         + [bytes(24)]).hd_directory(1)
+    assert sum(e.audio_words for e in entries) > 16_777_216, "this one does not"
+
+
+def test_the_size_field_is_three_bytes_so_a_file_caps_near_16_MB():
+    """Confirmed against ground truth rather than assumed.
+
+    Reading bytes 17..20 as the size reproduced SLNGTH*2+150 exactly for all
+    60 samples that could be compared, so the field is three bytes and not
+    four. That puts a ceiling of 16,777,215 bytes on any single file -- about
+    8.4 million sample words, or 3.2 minutes of mono audio at 44.1 kHz.
+    """
+    from s3k import bridge as b
+    assert (1 << 24) - 1 == 16_777_215
+    biggest_words = ((1 << 24) - 1 - b.SAMPLE_FILE_OVERHEAD) // 2
+    assert 8_388_000 < biggest_words < 8_389_000

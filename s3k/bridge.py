@@ -521,13 +521,66 @@ DIRECTORY_KINDS = {
 }
 
 
+#: Bytes of file header an Akai sample file carries on disk, on top of its
+#: audio. Measured as exactly 150 on all 60 samples that could be compared
+#: against their loaded `SLNGTH`, with no exceptions (§69).
+SAMPLE_FILE_OVERHEAD = 150
+
+#: `raw[16]` of a directory record.
+ITEM_PROGRAM = 0x70
+ITEM_SAMPLE = 0x73
+
+
 @dataclass(frozen=True)
 class _DirectoryEntry:
-    """One item in the loaded volume's directory."""
+    """One item in the loaded volume's directory.
+
+    The 24 bytes decode as (§69):
+
+    ===========  ====================================================
+    ``[0:12]``   name, in the device's charset
+    ``[12:16]``  extension: four spaces on every real entry, and the
+                 marker that the list has ended when it is not
+    ``[16]``     item type -- 0x70 program, 0x73 sample
+    ``[17:20]``  file size on disk in BYTES, little-endian
+    ``[20:22]``  location, increasing down the listing
+    ``[22:24]``  0x1e 0x09 on every entry seen
+    ===========  ====================================================
+    """
 
     index: int
     name: str
     raw: bytes
+
+    @property
+    def item_type(self) -> int:
+        return self.raw[16]
+
+    @property
+    def is_sample(self) -> bool:
+        return self.item_type == ITEM_SAMPLE
+
+    @property
+    def is_program(self) -> bool:
+        return self.item_type == ITEM_PROGRAM
+
+    @property
+    def size_bytes(self) -> int:
+        """The file's size on disk."""
+        return int.from_bytes(self.raw[17:20], "little")
+
+    @property
+    def audio_words(self) -> int:
+        """Sample words this file will occupy in memory once loaded.
+
+        ``size_bytes`` is the file including its 150-byte header, and the
+        machine reports memory in 16-bit words -- so this is what a bank
+        builder has to sum to know whether a volume fits. Zero for a program,
+        whose size is header data rather than audio.
+        """
+        if not self.is_sample:
+            return 0
+        return max(0, self.size_bytes - SAMPLE_FILE_OVERHEAD) // 2
 
 
 @dataclass(frozen=True)
