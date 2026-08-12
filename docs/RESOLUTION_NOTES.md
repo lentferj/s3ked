@@ -4714,3 +4714,65 @@ number) and holding the first fixed.
 **Before recording a limit as blocking, check whether the constrained variable
 and the studied variable are the same one.** Here they were merely correlated
 by default, and one field broke the correlation.
+
+---
+
+## §63 — Envelope 3's scaling set: all three work, and two nearly did not (2026-08-12)
+
+```
+K_DAR3   phase 3   coefficient 0.0015617 per semitone per unit   pivot 63.5
+         release   coefficient 0.0011903                          pivot 64.0
+         phase 2   coefficient 0.0000451 -- no effect
+V_ENV3   velocity scales the AMOUNT, bipolar: span 0.515 vs 2.242 octaves at +50
+V_ATT3   velocity scales the ATTACK, bipolar: rise 0.160 s vs 5.920 s at +50
+```
+
+`K_DAR3`'s phase-3 coefficient is within 2% of `K_DAR1`'s and 7% of `K_DAR2`'s,
+so **all three envelopes scale with the key by one law**, and its pivots land
+at 63.5 and 64.0 against the family's 64.
+
+### Two verdicts that were nearly recorded and would have been wrong
+
+The first run of this produced one finding and two failures, and both failures
+were the same shape: **the detector was aimed at a phase that could not express
+the field.** The route was live and the detector worked in each case.
+
+**`V_ATT3` read 0.000 s at every velocity and every depth.** `ENV3R1` was 0 —
+an instant attack — so there was no rise for velocity to scale. The only thing
+that stopped "`V_ATT3` does nothing" being written down was that its velocity
+control came back NaN rather than a plausible number. Given a real 1.25 s rise
+it swings **37-fold**.
+
+**`K_DAR3` read 0.660..0.670 s at every note and depth**, a spread of 1.02x
+identical to its own control — a clean, well-behaved, entirely convincing null.
+What was timed was **phase 2**, while the field's description reads
+*"dependence of envelope 3 release and DECAY rate on key"*. Retested against
+the two stages it actually names, it moves both by a factor of 2.6.
+
+The phase-2 reading was **not wrong**. It is a true negative, and it is now
+recorded as one: `K_DAR3` genuinely does not touch phase 2, at a coefficient
+30x smaller than phase 3's and inside its own control. What would have been
+wrong is the sentence it invited — *`K_DAR3` is inert*.
+
+### The rule this adds to §48
+
+§48's lesson was: state what would have to be true for the field to reach the
+detector at all, and check it. That covered routing, drive and timing.
+
+This adds the stage. **A negative needs the right stage as well as the right
+route** — and the failure is invisible from inside the run, because everything
+reports healthy: the route is live, the control is flat, the readings are
+distinct, and the null is clean. The only signal was that a field whose own
+description names two stages had been tested on a third.
+
+**Read the field's description before believing a null.** It is the cheapest
+check available and it is the one that failed here.
+
+### On the velocity control
+
+`V_ATT3`'s depth-0 row gives 1.110 s at velocity 20 and 1.250 s at 120 — a
+ratio of 0.89 rather than 1.00. Within the band the probe would accept, but
+not perfect, so **an effect smaller than about 11% could not be claimed from
+this run**. The measured effects are 30-fold and 42-fold, so nothing here is
+at risk; it is recorded because the next field measured this way might move by
+15%.

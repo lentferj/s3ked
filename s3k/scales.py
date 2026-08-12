@@ -443,6 +443,61 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "It is the ONLY responder among six envelope scaling fields:\n"
              "V_REL1, O_REL1, V_ATT2, V_REL2 and V_ENV2 are all inert (§47).",
     ),
+    ("keygroup", "K_DAR3"): Scale(
+        "keygroup", "K_DAR3", "x per semitone", "exp", 1.0, 0.0015617,
+        (-20, 20), 0.99,
+        bounds="-20..+20, with the SOUND held at note 48 by KGTUNO while the\n"
+               "NOTE swept 48..68 across the pivot (§62). The coefficient here\n"
+               "is phase 3's; the release scales more weakly, at 0.0011903.",
+        note="Key scaling of envelope 3, and it does exactly what its\n"
+             "description says -- 'dependence of envelope 3 release and DECAY\n"
+             "rate on key'. It scales PHASE 3 and the RELEASE, and leaves\n"
+             "PHASE 2 alone:\n"
+             "  phase 3    coefficient 0.0015617   pivot 63.5\n"
+             "  release    coefficient 0.0011903   pivot 64.0\n"
+             "  phase 2    coefficient 0.0000451   no effect -- 30x smaller\n"
+             "             than phase 3's and inside its own control\n"
+             "Phase 3's coefficient is within 2% of K_DAR1's 0.0015286 and 7%\n"
+             "of K_DAR2's 0.0014603, so all three envelopes scale with the key\n"
+             "by one law. The release's is 24% lower, which is a real\n"
+             "difference rather than scatter: both its depths agree on it.\n"
+             "The first attempt at this measured PHASE 2 and found nothing --\n"
+             "route live, detector working, aimed at a stage the field does\n"
+             "not govern. That reading was CORRECT for phase 2 and would have\n"
+             "been recorded as 'K_DAR3 is inert', which is the §48 error one\n"
+             "layer in. A negative needs the right stage as well as the right\n"
+             "route.",
+    ),
+    ("keygroup", "V_ENV3"): Scale(
+        "keygroup", "V_ENV3", "x", "linear", 1.0, 0.0, (-50, 50), 0.99,
+        bounds="tested at -50, 0 and +50 against velocities 20 and 120. The\n"
+               "shape between those depths is not measured -- this entry\n"
+               "records that the field works and in which direction, not a\n"
+               "curve.",
+        note="Note-on velocity scales envelope 3's AMOUNT, bipolar:\n"
+             "  V_ENV3 +50   span 0.515 octaves at velocity 20, 2.242 at 120\n"
+             "  V_ENV3   0   1.674 and 1.684 -- the control, ratio 0.99\n"
+             "  V_ENV3 -50   2.391 and 0.290, the sense inverted\n"
+             "Envelope 3 reaches the filter only as matrix source 14, so this\n"
+             "scales whatever that route is driving.",
+    ),
+    ("keygroup", "V_ATT3"): Scale(
+        "keygroup", "V_ATT3", "x", "linear", 1.0, 0.0, (-50, 50), 0.99,
+        bounds="tested at -50, 0 and +50 against velocities 20 and 120, with\n"
+               "ENV3R1 at 70 so there is about 1.25 s of rise to scale.",
+        note="Note-on velocity scales envelope 3's ATTACK, bipolar and very\n"
+             "strong:\n"
+             "  V_ATT3 +50   rise 0.160 s at velocity 20, 5.920 s at 120\n"
+             "  V_ATT3   0   1.110 and 1.250 -- the control, ratio 0.89\n"
+             "  V_ATT3 -50   5.920 and 0.140, the sense inverted\n"
+             "A 37-fold swing at full depth. The control is 0.89 rather than\n"
+             "1.00, so an effect smaller than about 11% could not be claimed\n"
+             "from this run; the measured effects are 30-fold and 42-fold.\n"
+             "The first attempt read 0.000 s at every velocity and depth,\n"
+             "because ENV3R1 was 0 and there was no rise for velocity to\n"
+             "scale. Its control came back NaN, which is the only reason that\n"
+             "was not written down as an inert field.",
+    ),
     ("keygroup", "K_DAR2"): Scale(
         "keygroup", "K_DAR2", "x per semitone", "exp", 1.0, 0.0014603,
         (-20, 20), 0.99584,

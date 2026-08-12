@@ -944,3 +944,35 @@ def test_key_scaling_is_referenced_to_note_64_by_measurement():
     note = scales.SCALES[("keygroup", "K_DAR2")].note
     assert "MEASURED at note 63.6" in note
     assert "reads the MIDI note" in note
+
+
+def test_all_three_envelopes_scale_with_the_key_by_one_law():
+    """K_DAR1, K_DAR2 and K_DAR3 agree on the coefficient within 7%.
+
+    K_DAR1 was fitted to a RATE and the other two to TIMES, so K_DAR1's
+    exponent carries the opposite sign for the same behaviour.
+    """
+    k1 = abs(scales.SCALES[("keygroup", "K_DAR1")].b)
+    k2 = abs(scales.SCALES[("keygroup", "K_DAR2")].b)
+    k3 = abs(scales.SCALES[("keygroup", "K_DAR3")].b)
+    assert max(k1, k2, k3) / min(k1, k2, k3) < 1.08
+
+
+def test_k_dar3_records_which_stages_it_governs():
+    """It scales phase 3 and the release, and NOT phase 2.
+
+    The phase-2 reading was a true negative that would have been recorded as
+    "K_DAR3 is inert" had the field not been retested against the stages its
+    own description names. Pinned because a negative from the wrong stage is
+    indistinguishable from a dead field.
+    """
+    note = scales.SCALES[("keygroup", "K_DAR3")].note
+    assert "phase 2" in note and "no effect" in note
+    assert "release" in note
+
+
+@pytest.mark.parametrize("name", ["V_ENV3", "V_ATT3"])
+def test_the_velocity_fields_record_their_control(name):
+    """A responds-verdict is only as good as the depth-0 row behind it."""
+    note = scales.SCALES[("keygroup", name)].note
+    assert "the control" in note
