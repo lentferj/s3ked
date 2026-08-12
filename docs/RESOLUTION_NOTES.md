@@ -4263,3 +4263,95 @@ project's table after the range-check commit landed. Its proposed
 discriminator — write raw 5120 and see whether it survives — is exactly the
 measurement above, and its reasoning about which reading the existing
 calibration supported was right before any hardware was involved.
+
+---
+
+## §57 — A corner tracker that is not a centroid, and envelope 3 measured with it (2026-08-12)
+
+### The instrument, validated before it was pointed at anything
+
+§54 established that a spectral centroid is worth little as a corner: 20–30%
+high, wrong by a growing amount, and it folds. Every filter-envelope
+measurement in this project used one.
+
+§53 supplies a replacement. At `FILQ` 15 the filter grows a 25 dB peak **at**
+the corner, visible in a single 40 ms window, so the corner can be read frame
+by frame. Two refinements were needed and both came from failures:
+
+1. **The peak is not the spectrum's maximum.** A sawtooth falls about
+   6 dB/octave, so by 2.9 kHz the source is ~27 dB below its own fundamental
+   and 25 dB of resonance cannot lift it above. Tracking the argmax returned
+   **125 Hz** at the two highest corners — the fundamental, not the filter.
+   Fixed by differencing each frame against the same note at `FILQ` 0, which
+   removes the source's slope exactly.
+2. **The difference of two noise floors is random.** Above a low corner both
+   captures sit at the floor, and the argmax wandered: the right median with
+   **630% frame scatter**, and 3788 Hz at `FILFRQ` 55. Fixed by looking only
+   where the *reference* has signal, within 45 dB of its own peak.
+
+Validated on static corners, where the answer is known from §54:
+
+```
+FILFRQ    §54 says   tracked   error   frame sd
+    55        321       325    +1.3%     22.6%   <- comb quantum 20%, unusable
+    62        527       525    -0.4%      0.6%
+    70        930       925    -0.6%      0.2%
+    78       1642      1650    +0.5%      1.0%
+    86       2897      2875    -0.8%      0.1%
+    92       4436      4525    +2.0%      0.9%
+```
+
+**Accuracy 0.9% mean, 2.0% worst; steadiness 0.1–1.0% on a corner that is not
+moving; resolution set by the harmonic comb** — the peak snaps to the nearest
+harmonic, so the quantum is one harmonic spacing and a low note is the right
+note. Below about 500 Hz the quantum exceeds 13% and the tracker stops being
+usable. Those are three different numbers and none substitutes for another.
+
+Then I parked envelope 3's base corner at `FILFRQ` 55 — **321 Hz, below the
+floor I had just measured** — and its control duly "moved" 2.03 octaves.
+Validating an instrument and then operating it outside the validated range is
+worth nothing.
+
+### Envelope 3
+
+```
+ENV3R1   full 0..99 traverse = 0.001392 * exp(0.09669 * v) s    40..90  r2 0.99994
+ENV3R3   full 0..99 traverse = 0.003815 * exp(0.09258 * v) s    10..85  r2 0.99980
+ENV3L1   corner = 0.002685 * L1 * MODVFILT1  octaves            0..99   r2 0.99972
+```
+
+**The `ENV3R*` fields are rates, and higher is slower.** The table calls
+`ENV3R1` "Attack rate of envelope 3"; a value of 40 gives 0.067 s for a full
+sweep and 99 gives 20 s. Believing the name cost two sweeps: both pinned
+`ENV3R1` 99 thinking it meant instant, so every capture spent its length still
+rising and never reached the phase under test, and both produced flat readings
+that looked like findings.
+
+**A rate rather than a duration**, established by holding `ENV3R1` fixed and
+sweeping the distance: the time tracked the distance 5.05x against 5.39x at
+R1 70, and 4.95x against 5.11x at R1 80, with seconds-per-octave constant to
+3%. A phase therefore takes `full_time * (distance / 99)`.
+
+The two rate fields share a time base — exponents 4.3% apart — and differ by
+2.7x in scale. `ENV3R2` and `ENV3R4` are **not** measured.
+
+`ENV3L1` is linear in octaves, and the excursion is the product of level and
+modulation depth: the slope per unit depth came out 0.00256, 0.00260 and
+0.00269 at depths 50, 25 and 10 — three runs, 5% spread.
+
+### The ceiling that made a perfect fit out of an artefact
+
+At `MODVFILT1` 50 the corner saturated at 6650 Hz. That is **the top of the
+filter's own range** — §54 puts `FILFRQ` 99 at 7291 Hz — not a limit of the
+tracker, and full level at that depth asks for 12.7 octaves.
+
+The timings from the clipped runs fitted an exponential at **r2 0.99999**. They
+were also wrong. The tell was comparing two drive levels: depth 50 and depth 25
+disagreed by a factor approaching **2.0**, which is exactly their depth ratio
+and precisely what a linear ramp read through a ceiling produces — the time to
+cross a fixed fraction of a *truncated* span scales inversely with drive. A law
+that changes when the drive changes is not a law.
+
+**Two runs at different drive levels cost one extra run and expose a whole
+class of ceiling artefact.** An excellent r² does not: it measured how
+consistently the ceiling clipped.

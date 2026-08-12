@@ -501,6 +501,40 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "is the same trap as the first two attempts, and the reason the\n"
              "law is fitted to damping instead of to peak height.",
     ),
+    ("keygroup", "ENV3R1"): Scale(
+        "keygroup", "ENV3R1", "s", "exp", 0.001392, 0.09669, (40, 90), 0.999936,
+        bounds="below 40 the phase completes inside the detector's 0.14 s\n"
+               "latency; above 90 the sweep outruns a 9 s capture (20 s at 99).\n"
+               "Both ends are the rig, not the machine.",
+        note="Seconds for the envelope to traverse its FULL 0..99 level range.\n"
+             "ENV3R1 sets a RATE, not a duration -- measured by holding it fixed\n"
+             "and sweeping the distance (ENV3L1): the time tracked the distance\n"
+             "5.05x against 5.39x at R1 70, and 4.95x against 5.11x at R1 80,\n"
+             "with seconds-per-octave constant to 3% across the sweep. So a\n"
+             "phase takes  full_time * (distance / 99).\n"
+             "HIGHER IS SLOWER, despite the table calling it 'Attack rate':\n"
+             "0.067 s at 40, 0.46 s at 60, 3.2 s at 80, 20 s at 99. The rate\n"
+             "falls 9.2% per step and halves every 7.2 steps.\n"
+             "Envelope 3 has no fixed destination -- it reaches the filter only\n"
+             "as assignable-matrix source 14 (§48). Measured there, with the\n"
+             "corner read from the resonance peak (§57), which is why this is\n"
+             "in seconds rather than in the octaves the old centroid ruler\n"
+             "would have given.",
+    ),
+    ("keygroup", "ENV3R3"): Scale(
+        "keygroup", "ENV3R3", "s", "exp", 0.003815, 0.09258, (10, 85), 0.999802,
+        bounds="above 85 the fall outruns a 9 s capture (36 s at 99). The low\n"
+               "end is fine here because the measured phase was a FALL from a\n"
+               "level already reached, so no attack had to complete first.",
+        note="Seconds to traverse the full 0..99 level range, as ENV3R1.\n"
+             "Also a rate, also higher-is-slower: 0.16 s at 40, 0.99 s at 60,\n"
+             "6.3 s at 80, 36 s at 99 -- about 2.7x slower than ENV3R1 at the\n"
+             "same value, while their exponents agree to 4.3%, so the two\n"
+             "phases share a time base and differ in scale.\n"
+             "ENV3R2 and ENV3R4 are NOT measured. They are presumably the same\n"
+             "family, and presuming is what §48 did about envelope 3 being\n"
+             "inert.",
+    ),
     ("keygroup", "SUSTN2"): Scale(
         "keygroup", "SUSTN2", "%", "linear", 100.0 / 99.0, 0.0, (0, 70), 0.9908,
         bounds="above 70 the corner passed the source bandwidth and the ruler had no\nresolution left -- the detector ran out, not the machine.",

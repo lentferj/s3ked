@@ -556,8 +556,19 @@ See RESOLUTION_NOTES §20-§55.
   law predicts, replicating the same offset measured at a different `FILFRQ`
   -- **which means the `FILFRQ` law itself wants re-deriving from the
   resonance peak.** That is the next open measurement.
-- **Untouched:** `MWLDEP`, `PRSDEP`, `VELDEP`, `LFO1WAVE`, envelope 3, the
-  envelope-2 velocity set, `ZPLAY1`, and the velocity-crossfade fields.
+- **Untouched:** `ZPLAY1` and the velocity-crossfade fields.
+- **Envelope 3 measured** (§57): `ENV3R1` and `ENV3R3` are RATES and higher is
+  SLOWER, despite the table naming `ENV3R1` "Attack rate". `ENV3L1` is linear
+  in octaves and the excursion is level x depth. `ENV3R2` and `ENV3R4` are not
+  measured, and the whole envelope reaches nothing unless routed as
+  assignable-matrix source 14.
+- **A corner tracker exists** (§57) that reads the resonance peak instead of a
+  spectral centroid: 0.9% mean accuracy, 0.1-1.0% frame steadiness, over
+  527..4525 Hz, unusable below ~500 Hz where the harmonic comb quantum exceeds
+  13%. It lives in the scratchpad and **should move into `probes/calibrate.py`**.
+  It supersedes the ruler §28 used for envelope 2, so `DECAY2`, `RELSE2`,
+  `ATTAK2` and `SUSTN2` are all suspect for the same reason the `FILFRQ` law
+  was -- re-measuring them is the strongest open item.
 
 ## `TEMPER` is twelve bytes modelled as one number (OPEN)
 
