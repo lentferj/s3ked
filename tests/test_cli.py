@@ -156,3 +156,22 @@ def test_an_equal_temperament_says_so(capsys):
     out = run(capsys, "--demo", "get", "TEMPER", "0")
     assert "equal temperament" in out
     assert "(raw (0, 0, 0" in out, "the twelve elements are shown as twelve"
+
+
+def test_the_readme_examples_are_real(capsys):
+    """A README with invented output is the staleness it warns about.
+
+    Each of these is copied from the README's units section. If the rendering
+    changes, this fails and the README gets updated with it.
+    """
+    out = run(capsys, "--demo", "get", "TEMPER", "0")
+    assert out.startswith("TEMPER = equal temperament  (raw (0, 0, 0")
+
+    out = run(capsys, "--demo", "get", "FILFRQ", "0")
+    assert out.startswith("FILFRQ = 0 (?~6.46 Hz)  (raw 0)")
+
+    out = run(capsys, "--demo", "--allow-write", "set", "FILFRQ", "500Hz", "0")
+    assert "FILFRQ = 61 (~491 Hz)" in out
+
+    out = run(capsys, "--demo", "--allow-write", "set", "ATTAK1", "250ms", "0")
+    assert "ATTAK1 = 66 (~258 ms)" in out

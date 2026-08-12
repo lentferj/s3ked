@@ -28,25 +28,42 @@ specifications into `s3k/messages.py` / `s3k/params.py`; writing the
 codec, transport, CLI and Textual TUI; and drafting the documentation
 and test suite.
 
-## Nothing here has been verified against hardware yet
+## Some of this is verified against hardware. Much of it is not.
 
-**This is the most important thing on this page, and it is the sharpest
-difference between s3ked and its sibling eosed.**
+**Read which is which before trusting a byte offset.**
 
-At the time of writing, no part of this project has ever exchanged a byte
-with a real Akai sampler. Everything is built and tested synthetically —
-fake bridges in the test suite and a `--demo` mode that never constructs
-a bridge. A green test run means the code agrees with the specification
-**as transcribed**; it does not mean the specification is right, and it
-certainly does not mean the hardware agrees.
+This page said "nothing here has been verified against hardware" until
+2026-08-12, and that was true when it was written. It is no longer. The
+protocol, the write path and a set of physical-unit laws have since been
+exercised at length against a real S3000XL, and `docs/RESOLUTION_NOTES.md`
+records every measurement.
 
-The sibling eosed project is a standing warning here. Its parameter table
+What that does **not** mean:
+
+- **Verified fields are a minority of the table.** Calibration touched the
+  filter, the three envelopes, the LFOs, tuning, loudness, pan and the
+  assignable modulation matrix. Most of the ~300 parameters have still never
+  been written to a machine, and their offsets rest on the transcription
+  alone.
+- **A green test run still proves only self-consistency.** The suite is
+  synthetic by design — fake bridges and a `--demo` mode that never
+  constructs a bridge — so it tells you the code agrees with the table, not
+  that the table is right.
+- **Being measured is not being measured correctly.** Several findings here
+  were published and then retracted after better instruments contradicted
+  them: a filter-frequency law 20-30 % high because it was read through a
+  spectral centroid, five fields called inert that were one dead destination,
+  a tuning range transcribed 256x too narrow, and a threefold
+  "depth-dependence" that was a saturating measurement. Each retraction sits
+  next to what replaced it, deliberately, so the failure modes stay visible.
+
+The sibling eosed project remains the standing warning. Its parameter table
 was transcribed from a manufacturer specification too, and live use still
-found: a twelve-entry range error that only surfaced by writing negative
-values and reading them back; and at least three "number of X" fields that
-read as plain counts in the spec and are not reliable on real hardware.
-Expect the same class of surprise here, and expect more of it — see the
-transcription caveat below.
+found a twelve-entry range error that only surfaced by writing negative
+values and reading them back, and at least three "number of X" fields that
+read as plain counts in the spec and are not reliable on real hardware. Both
+classes have now been found here as well — see the transcription caveat
+below.
 
 ## The parameter tables come from a hand transcription
 

@@ -74,6 +74,45 @@ s3kcli --allow-write set PRIORT 3 0      # write one parameter
 s3kcli params --search LFO               # browse the table, no device needed
 ```
 
+### Values in units you can read
+
+The specification gives every parameter a range and none of its meaning:
+`FILFRQ` is "basic filter frequency, 0 to 99" and not one word about which
+hertz. Those laws were measured on hardware, so s3ked shows both:
+
+```sh
+$ s3kcli get TEMPER 0
+TEMPER = equal temperament  (raw (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+
+$ s3kcli get FILFRQ 0
+FILFRQ = 0 (?~6.46 Hz)  (raw 0)
+```
+
+and takes a quantity where a raw number would go:
+
+```sh
+$ s3kcli --allow-write set FILFRQ 500Hz 0
+FILFRQ = 61 (~491 Hz)
+
+$ s3kcli --allow-write set ATTAK1 250ms 0
+ATTAK1 = 66 (~258 ms)
+```
+
+The parameter is an integer, so 500 Hz lands on the value that gives 491 --
+and the read-back says so rather than echoing what was asked for.
+
+35 laws are measured, in hertz, seconds, decibels, cents, dB/s and a few
+dimensionless ratios. **A rendering carries its own doubt.** The `?` above is
+not noise: `FILFRQ` 0 is below the range the law was measured over, so the
+6.46 Hz is an extrapolation and says so. A law whose meaning is not yet
+settled renders with `!` instead. Neither mark is decoration -- a fit is not a
+specification, and the machine is free to do something else where nobody
+looked.
+
+Where a value is an enumeration from the document rather than a measurement,
+the name wins over the fit. `TEMPER` is twelve independent detunes, one per
+semitone, and reads as notes rather than as twelve numbers.
+
 **Autodetect has to sweep**, because this protocol has no broadcast address:
 a device answers only on its own exclusive channel, and the only message that
 reports that channel can only be sent to the right channel. s3ked probes
@@ -129,11 +168,17 @@ and — on the S2000/S3000XL/S3200XL only — the `multi` file header and its 16
 .venv/bin/python -m pytest
 ```
 
-216 tests, all synthetic — no hardware, no MIDI ports, no ALSA sequencer
+691 tests, all synthetic — no hardware, no MIDI ports, no ALSA sequencer
 needed. They cannot tell you an offset is *correct*; what they do check is
 that no two parameters claim the same byte, that no span runs past the end of
 its structure, that `describe_value` never raises anywhere in any parameter's
 range, and that no single keypress in the TUI can reach a delete.
+
+A second group pins what the hardware taught, so a correction cannot be lost
+by a later edit: every measured law against the parameter range it was fitted
+inside, the failure shapes each probe had to survive (a frozen reading, a
+collapsed span, the difference of two noise floors), and the README's own
+example output.
 
 One test is worth more than the rest: `test_multi_part_offsets_mirror_the_program_header`
 pins the twelve offsets where two *separately transcribed* Akai documents
@@ -142,9 +187,22 @@ parameter table that exists without hardware.
 
 ## Status
 
-See [TODO.md](TODO.md). The short version: complete as software, entirely
-unverified against hardware, and the first ten minutes with a real machine
-would be worth more than any further synthetic work.
+See [TODO.md](TODO.md). The short version: complete as software, and the
+protocol and parameter table are now **calibrated against a real S3000XL**.
+
+The byte offsets, the write path and the physical-unit laws below have been
+exercised on hardware; `docs/RESOLUTION_NOTES.md` records every measurement,
+including the ones that were wrong and had to be retracted. Several were: a
+filter-frequency law that read 20-30 % high because it was fitted through a
+spectral centroid, a "pan LFO does nothing" verdict that turned out to be one
+dead destination rather than five dead fields, and a tuning range transcribed
+256x too narrow. Each retraction is left in place next to what replaced it.
+
+What remains unverified is listed in TODO.md rather than implied here. The
+largest items are the fields only a person at the front panel can confirm
+(`HW_PANEL_CHECKS.md`), two modulation sources whose stimulus is not
+documented anywhere, and the second filter, which needs the optional IB304F
+board this machine does not have.
 
 ## License and third-party sources
 
