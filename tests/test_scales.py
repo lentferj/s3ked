@@ -997,3 +997,29 @@ def test_o_rel3_warns_that_zero_is_a_value_not_an_absence():
     note = scales.SCALES[("keygroup", "O_REL3")].note
     assert "note-off velocity" in note.lower()
     assert "inert" in note
+
+
+def test_attak2_is_a_rate_and_says_how_that_was_settled():
+    """Two failed attempts recorded a distance that never varied.
+
+    §28 called it a duration on a fixed distance, which cannot distinguish the
+    two. Pinned with the mechanism, because the coefficient looks the same
+    either way and only the note says which question was answered.
+    """
+    note = scales.SCALES[("keygroup", "ATTAK2")].note
+    assert "IT IS A RATE" in note
+    assert "distance" in note
+    assert "Both fixed settings agree" in note
+
+
+def test_both_envelopes_are_four_stage_rate_level():
+    """Envelope 2's ADSR names hide the same structure envelope 3 shows.
+
+    ATTAK2/DECAY2/SUSTN2/RELSE2 are R1/R3/L3/R4, and ENV2L1/ENV2R2/ENV2L2/
+    ENV2L4 are the missing L1/R2/L2/L4. Pinned in the parameter table because
+    a converter reading the ADSR names alone will not find the other four.
+    """
+    for name in ("ENV2L1", "ENV2R2", "ENV2L2", "ENV2L4"):
+        notes = p.lookup(("keygroup", name)).notes or ""
+        assert "FOUR-STAGE RATE/LEVEL" in notes, name
+        assert "aliases" in notes, name

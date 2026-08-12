@@ -4965,3 +4965,62 @@ why it was different.
 
 **An exemption is a place where something is known to be unusual.** Writing one
 is worth treating as a prompt rather than a nuisance.
+
+---
+
+## §67 — Envelope 2 is four stages too, and `ATTAK2` is a rate (2026-08-12)
+
+Two attempts at `ATTAK2`'s rate-versus-duration question failed the same way:
+the DISTANCE never varied, so the readings were clean and meant nothing. Both
+were built on a guess about envelope 2's shape. The shape was free to find.
+
+Writing each of the eight fields and reading back all eight shows **no
+aliasing** — only the field written moves — and the factory values line up in
+pairs:
+
+```
+    ATTAK2  = 0     ENV2L1 = 99        rate 1 / level 1
+    ENV2R2  = 50    ENV2L2 = 99        rate 2 / level 2
+    DECAY2  = 50    SUSTN2 = 99        rate 3 / level 3
+    RELSE2  = 45    ENV2L4 =  0        rate 4 / level 4
+```
+
+**Envelope 2 is a four-stage rate/level envelope, exactly like envelope 3.**
+The ADSR-flavoured names cover R1, R3, L3 and R4; the four so-called extension
+fields are the missing L1, R2, L2 and L4 of the same structure. §48 found
+envelope 3's architecture by reading the table; envelope 2's was hidden behind
+familiar names, which is worse than an unfamiliar one.
+
+That is exactly why both earlier attempts failed. Sweeping `ENV2L1` while
+phase 2 ran to `ENV2L2` 99 meant the attack's target was overridden the moment
+it was reached — the level went to L1 and straight back to full, so the
+excursion stayed 2.07 octaves whatever L1 said.
+
+### `ATTAK2` is a rate
+
+With `ENV2L1`, `ENV2L2` and `SUSTN2` swept together, so the envelope rises to
+one level and stays:
+
+```
+    ATTAK2 65:  time spread 4.47x, distance spread 4.76x, s/oct 0.316..0.345
+    ATTAK2 75:  time spread 4.56x, distance spread 4.76x, s/oct 0.861..0.898
+```
+
+Time tracks distance at both fixed settings, and seconds-per-octave holds to
+9% and 4%. **Both settings agree**, which is what the two failed attempts did
+not do — their contradiction was the only signal that the experiment rather
+than the machine was wrong.
+
+So §28's "duration" reading is refuted, and every stage of both envelopes is a
+rate: a phase takes `full_time * (distance / 99)`.
+
+### The pattern in the three attempts
+
+Attempt 1 and attempt 2 were *measurements*. Attempt 3 was preceded by a
+two-minute read-back test that cost no audio and settled the architecture.
+
+The distinguishing feature is not effort. It is that the first two asked the
+machine a question about a parameter, and the third asked it a question about
+the SHAPE the parameter lives in. **When a measurement fails twice for reasons
+that look like bad luck, the next thing to test is the assumed structure, not
+the parameter.**

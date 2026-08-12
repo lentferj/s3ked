@@ -380,12 +380,15 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "distance: 0.200/0.290/0.560/1.250/3.010 s against\n"
              "0.200/0.300/0.550/1.250/3.010 at values 40/50/60/70/80. Two\n"
              "envelopes, one time base.\n"
-             "WHETHER IT IS A RATE OR A DURATION IS NOT SETTLED HERE. §28 read\n"
-             "it as a duration, but an attack always travels 0-to-full, so a\n"
-             "fixed distance cannot tell the two apart. ENV3R1 -- the same law\n"
-             "-- IS a rate, proven by varying its target level (§57), which\n"
-             "makes a rate the better guess. Envelope 2 has its own attack\n"
-             "target in ENV2L1 and the test has not been run.",
+             "IT IS A RATE, settled in §67 by varying the distance: with\n"
+             "ENV2L1, ENV2L2 and SUSTN2 swept together the time tracked the\n"
+             "distance 4.47x against 4.76x at ATTAK2 65, and 4.56x against\n"
+             "4.76x at 75, with seconds-per-octave constant to 9% and 4%.\n"
+             "Both fixed settings agree, which the two failed attempts did\n"
+             "not. §28 had read it as a duration on a fixed distance, which\n"
+             "cannot tell the two apart.\n"
+             "So a phase takes  full_time * (distance / 99), as for every\n"
+             "other stage in both envelopes.",
     ),
     ("keygroup", "DECAY2"): Scale(
         "keygroup", "DECAY2", "s", "exp", 0.002464, 0.09844, (40, 80), 0.999972,

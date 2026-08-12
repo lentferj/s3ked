@@ -2241,6 +2241,7 @@ _PARAMS: List[Parameter] = [
         0,
         99,
         desc="Level of envelope 2 at end attack phase (phase 1)",
+        notes="Level of envelope 2 at the end of phase 1. Envelope 2 is a FOUR-STAGE RATE/LEVEL envelope, exactly like envelope 3 -- the ADSR-flavoured names cover R1 (ATTAK2), R3 (DECAY2), L3 (SUSTN2) and R4 (RELSE2), and these four are the missing L1, R2, L2 and L4 of the same structure. Nothing here aliases anything: writing each of the eight and reading back all eight moves only the one written. RESOLUTION_NOTES §67.",
     ),
     _p(
         "keygroup",
@@ -2251,6 +2252,7 @@ _PARAMS: List[Parameter] = [
         0,
         99,
         desc="Rate during phase 2 of envelope 2",
+        notes="Rate of phase 2 of envelope 2. Envelope 2 is a FOUR-STAGE RATE/LEVEL envelope, exactly like envelope 3 -- the ADSR-flavoured names cover R1 (ATTAK2), R3 (DECAY2), L3 (SUSTN2) and R4 (RELSE2), and these four are the missing L1, R2, L2 and L4 of the same structure. Nothing here aliases anything: writing each of the eight and reading back all eight moves only the one written. RESOLUTION_NOTES §67.",
     ),
     _p(
         "keygroup",
@@ -2261,6 +2263,7 @@ _PARAMS: List[Parameter] = [
         0,
         99,
         desc="Level of envelope 2 at end of phase 1",
+        notes="Level of envelope 2 at the end of phase 2. Envelope 2 is a FOUR-STAGE RATE/LEVEL envelope, exactly like envelope 3 -- the ADSR-flavoured names cover R1 (ATTAK2), R3 (DECAY2), L3 (SUSTN2) and R4 (RELSE2), and these four are the missing L1, R2, L2 and L4 of the same structure. Nothing here aliases anything: writing each of the eight and reading back all eight moves only the one written. RESOLUTION_NOTES §67.",
     ),
     _p(
         "keygroup",
@@ -2271,6 +2274,7 @@ _PARAMS: List[Parameter] = [
         0,
         99,
         desc="Final envelope 2 level",
+        notes="Level of envelope 2 at the end of phase 4. Envelope 2 is a FOUR-STAGE RATE/LEVEL envelope, exactly like envelope 3 -- the ADSR-flavoured names cover R1 (ATTAK2), R3 (DECAY2), L3 (SUSTN2) and R4 (RELSE2), and these four are the missing L1, R2, L2 and L4 of the same structure. Nothing here aliases anything: writing each of the eight and reading back all eight moves only the one written. RESOLUTION_NOTES §67.",
     ),
     _p(
         "keygroup",
