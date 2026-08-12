@@ -524,10 +524,11 @@ class S3kedApp(App):
             table.add_row(f"  {entry.index}", entry.name)
         self._disk_entries = list(entries or [])
         try:
-            status = self.bridge.status()
-            self._words_free = getattr(status, "words_free", None)
-            if self._words_free is None and hasattr(status, "used_words"):
-                self._words_free = 16777216 - status.used_words
+            # DeviceStatus calls it free_words. Asking for words_free got None
+            # and fell through to a hardcoded 16 Mword machine, which is right
+            # only for a fully expanded one -- so a 2 MB S3000XL was told
+            # everything fit.
+            self._words_free = self.bridge.status().free_words
         except Exception:
             self._words_free = None
         where = self._describe_source(source)

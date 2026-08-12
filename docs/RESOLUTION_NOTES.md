@@ -5455,3 +5455,73 @@ volume list. With five discs on the bus at IDs 0-4, sweeping the ID walks
 through five different listings with no reboot. The old conclusion was drawn
 on a bus with one disc, where "switched to an empty ID" and "did not switch"
 look identical.
+
+## §73 — ALL PROGS + SAMPLES *adds*, and the fit check is right for it (2026-08-12)
+
+**Status: settled.** Measured 2026-08-12 by driving the TUI's own key path
+against the machine, with no one at the front panel.
+
+§72 left the load verified but the memory arithmetic untested against a load
+in flight. This run tested it, and the prediction was wrong in the
+informative direction.
+
+The first attempt reloaded the volume that was already resident, which is a
+useless experiment: the volume replaces itself, so free memory ends where it
+started, and `+0 words` is what "loaded correctly" and "did nothing at all"
+both look like. Partition is remotely settable (§70), and each partition on
+this disc carries one volume of its own size, so stepping to a differently
+sized one turns free memory into a reading that can fail.
+
+Prediction, written before the run: loading a 15.30 MB volume leaves
+16,777,216 − 8,020,426 = 8,756,790 words free. What happened:
+
+```
+resident before      1,942,384 words    3.70 MB
+volume audio         8,020,426 words   15.30 MB
+sum                  9,962,810 words   19.00 MB
+actually resident    9,963,440 words   19.00 MB
+excess over sum            630 words
+```
+
+The load did not clear memory first. It **added** to what was resident, and
+landed on the sum to within 630 words — 0.008%, which is the programs' own
+storage, since `audio_words` counts sample data only.
+
+So with load type 1 (ALL PROGS + SAMPLES) the machine accumulates across
+loads. This matters more than it sounds: a bank built by loading three
+volumes in succession needs the *sum* to fit, and the third load is the one
+that fails even though each volume fits on its own.
+
+**The consequence for s3ked's fit check is that it was already correct.** It
+compares the volume against `free_words` read fresh at the time of the check,
+not against total memory, which is exactly the additive semantics. For load
+type 2 (ENTIRE VOLUME) the machine clears first, so checking against current
+free is conservative — it can warn that a volume will not fit when it would.
+Warning about a load that would have worked is the safe direction to be
+wrong, so the check is left as it is.
+
+### The bug this run found in passing
+
+`S3kedApp` asked `DeviceStatus` for `words_free`. The attribute is
+`free_words`. The `getattr` returned `None` every time and fell through to a
+fallback that assumed a 16-Mword machine, so **every** fit check was measured
+against 32 MB regardless of what was installed — a 2 MB S3000XL would have
+been told that everything fits. Fixed, and the fallback deleted rather than
+corrected: the machine reports its own size in the same reply, so there is
+nothing to fall back to. A test now drives the app with a bridge reporting
+1 Mword and asserts the confirmation says 2.00 MB and refuses a 3.56 MB
+volume.
+
+This is the second time in this project a `getattr(..., default)` has hidden
+a name mismatch by succeeding quietly. The pattern is the problem: a default
+turns a typo into a plausible number.
+
+### What was verified, and what was not
+
+Verified: the `d` and `l` keys drive a real load end to end; the
+confirmation's figures are the machine's own; the additive arithmetic above;
+that the machine stays responsive and its directory still reads after the
+load settles.
+
+Not verified: load type 2's clearing behaviour, which was not exercised —
+the panel is set to 1 and nobody was at the machine to change it.

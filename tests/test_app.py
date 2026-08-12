@@ -885,3 +885,30 @@ async def test_the_app_does_not_poll_a_loading_machine():
     assert "self.bridge.hd_directory(" not in src
     assert "self.bridge.volume_list(" not in src
     assert "Press r" in src
+
+
+async def test_free_memory_comes_from_the_machine_not_a_constant():
+    """A 2 MB machine must not be told that 32 MB fits."""
+    from textual.widgets import Static
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    class Small(DemoBridge):
+        def status(self, *, timeout=None):
+            s = super().status(timeout=timeout)
+            s.max_words = s.free_words = 1024 * 1024  # 2 MB, the base machine
+            return s
+
+    app = S3kedApp(Small(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("d")
+        for _ in range(20):
+            await pilot.pause()
+        assert app._words_free == 1024 * 1024
+        await pilot.press("l")
+        await pilot.pause()
+        prompt = str(app.screen_stack[-1].query_one("#confirm-prompt", Static).render())
+
+    assert "2.00 MB" in prompt, prompt
+    assert "DOES NOT FIT" in prompt, "3.56 MB does not fit in 2.00 MB"
