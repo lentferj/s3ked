@@ -912,3 +912,22 @@ async def test_free_memory_comes_from_the_machine_not_a_constant():
 
     assert "2.00 MB" in prompt, prompt
     assert "DOES NOT FIT" in prompt, "3.56 MB does not fit in 2.00 MB"
+
+
+async def test_the_disk_status_line_offers_the_keys_that_exist():
+    """It used to say loading was a front-panel job. It is not, since `l`."""
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("d")
+        for _ in range(20):
+            await pilot.pause()
+        status = app.last_status
+
+    assert "the protocol cannot" not in status
+    assert "press l" in status.lower()
+    # the one part that IS still manual, because there is no volume register
+    assert "panel" in status.lower()

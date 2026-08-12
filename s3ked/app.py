@@ -547,13 +547,14 @@ class S3kedApp(App):
         if entries:
             self.notify_status(
                 f"{len(volumes)} volume(s); {len(entries)} item(s) in the "
-                f"loaded volume. Loading a different one is a front-panel "
-                f"operation — the protocol cannot.{note}"
+                f"loaded volume. Press l to load it; [ and ] step the "
+                f"partition. Choosing a volume is still a panel job.{note}"
             )
         else:
             self.notify_status(
                 f"{len(volumes)} volume(s). Nothing loaded, so the directory "
-                f"is empty; load a volume at the panel and press d again.{note}"
+                f"is empty; select a volume at the panel, then d to read "
+                f"it and l to load it.{note}"
             )
 
     def action_toggle_write(self) -> None:
