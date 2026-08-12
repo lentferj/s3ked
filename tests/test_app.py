@@ -666,7 +666,12 @@ async def test_the_disk_pane_is_empty_until_asked():
         table = app.query_one("#volumes", DataTable)
         assert table.row_count > 0
         assert "volume" in str(app.query_one("#disk-title", Static).render())
-        assert str(table.get_row_at(0)[0]) == "0"
+        # volumes are prefixed "v", the loaded volume's contents are indented,
+        # so one pane can carry both without a second table
+        assert str(table.get_row_at(0)[0]) == "v0"
+        labels = [str(table.get_row_at(i)[0]) for i in range(table.row_count)]
+        assert any(x.startswith("v") for x in labels)
+        assert any(x.startswith(" ") for x in labels), "directory rows too"
 
 
 async def test_the_disk_pane_reports_a_failure_instead_of_crashing():

@@ -679,3 +679,65 @@ def test_volume_indices_are_the_numbers_to_address_a_volume_by():
     volumes = bridge.volume_list()
     assert [v.index for v in volumes] == [0, 1, 2, 3, 4]
     assert [v.name for v in volumes] == ["A", "B", "C", "D", "E"]
+
+
+# --- the loaded volume's directory ------------------------------------------
+
+def _dir_record(name: str, tail: bytes = b"\x73\x96\x60\x10\xb3\x03\x1e\x09") -> bytes:
+    """24 bytes: name, a blank four-byte extension, then eight undocumented."""
+    from s3k import messages as m
+    return bytes(m.encode_name(name, 12)) + b"\x20\x20\x20\x20" + tail
+
+
+def _directory(records):
+    """A device that keeps answering past the end, the way the machine does."""
+    from s3k import bridge as b, messages as m
+
+    class Fake(b.S3kBridge):
+        def __init__(self):
+            self.exclusive_channel = 0
+
+        def send_and_receive(self, frame, timeout=None):
+            entry = frame[5] | (frame[6] << 7)
+            data = records[entry] if entry < len(records) else records[-1]
+            return m.HeaderData(
+                command=m.Command.HDDIR, index=entry, selector=1,
+                offset=0, data=data, exclusive_channel=0,
+            ).encode()
+
+    return Fake()
+
+
+def test_the_directory_stops_at_a_non_blank_extension():
+    """Past the end the extension field stops being four spaces.
+
+    A stop condition of "all bytes zero" never fires -- the device answers
+    forever -- and the first version of this returned 188 entries for a
+    64-entry directory, two thirds of them junk that decoded as plausible
+    names.
+    """
+    junk = bytes(12) + b"\xff\xff\x00\x00" + bytes(8)
+    bridge = _directory([_dir_record("PROG A"), _dir_record("PROG B"), junk])
+
+    entries = bridge.hd_directory(1)
+    assert [e.name for e in entries] == ["PROG A", "PROG B"]
+
+
+def test_the_directory_stops_when_a_record_repeats():
+    """The echo is not always of entry 0.
+
+    On the disk here entry 63 came back byte-identical to entry 13, including
+    the bytes that look like a location, so two real files cannot explain it.
+    """
+    a, bb, c = _dir_record("ONE"), _dir_record("TWO"), _dir_record("THREE")
+    bridge = _directory([a, bb, c, bb])          # the echo repeats entry 1
+
+    entries = bridge.hd_directory(1)
+    assert [e.name for e in entries] == ["ONE", "TWO", "THREE"]
+
+
+def test_an_unloaded_volume_reads_as_an_empty_directory():
+    """Nothing loaded is not an error -- the manual says a volume must be
+    loaded at the panel first, and the device answers with empty records."""
+    bridge = _directory([bytes(24)])
+    assert bridge.hd_directory(1) == []

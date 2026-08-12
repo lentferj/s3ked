@@ -502,6 +502,34 @@ _VOLUME_RECORD = 16
 _VOLUMES_PER_READ = 16
 
 
+#: Bytes per harddisk-directory record, per the S3000 spec.
+_DIRECTORY_RECORD = 24
+
+#: Bytes 12-15 of a real directory record. The device keeps answering past the
+#: end of the list, so this is what separates an entry from an echo.
+_DIRECTORY_BLANK_EXTENSION = b"\x20\x20\x20\x20"
+
+#: `ss` in RHDDIR: which kind of item the listing starts at.
+DIRECTORY_KINDS = {
+    0: "volume data",
+    1: "program",
+    2: "sample",
+    3: "cue list",
+    4: "take list",
+    5: "effects file",
+    6: "drum file",
+}
+
+
+@dataclass(frozen=True)
+class _DirectoryEntry:
+    """One item in the loaded volume's directory."""
+
+    index: int
+    name: str
+    raw: bytes
+
+
 @dataclass(frozen=True)
 class _Volume:
     """One volume on the attached disk."""
@@ -847,6 +875,77 @@ class S3kBridge:
                     kind=record[12],
                 ))
             start += len(data) // _VOLUME_RECORD
+        return out
+
+    DirectoryEntry = _DirectoryEntry
+
+    def hd_directory(self, kind: int = 1, *, limit: int = 512,
+                     timeout: Optional[float] = None) -> List["_DirectoryEntry"]:
+        """RHDDIR -> HDDIR. The directory of the volume the machine has LOADED.
+
+        ``kind`` is the spec's selector -- 0 volume data, 1 program, 2 sample,
+        3 cue list, 4 take list, 5 effects file, 6 drum file -- and behaves as
+        a starting point rather than a filter: selector 1 returns the programs
+        and then continues through the samples.
+
+        **This is not a browser for the disk.** It reads the directory the
+        machine currently holds, which is empty until a volume is loaded from
+        the front panel. The spec is explicit that there is no way to load one
+        over MIDI: *"There are no functions within MIDI system exclusive to
+        provide direct access to and from disk files."* So the sequence is
+        load at the panel, then read here.
+
+        Records are 24 bytes: a 12-character name, a four-byte extension
+        field that reads as spaces on every real entry, and eight more whose
+        meaning is not documented and are returned raw rather than guessed at.
+
+        **The end is marked by that extension field, and getting it wrong is
+        expensive.** Past the last entry this layer keeps answering: first with
+        records whose extension is not spaces, then by repeating entry 0 over
+        and over -- the same out-of-range behaviour §11 Finding A found in the
+        header reads. A stop condition of "all bytes zero" never fires, and
+        the first version of this returned 188 entries for a 64-entry
+        directory, two thirds of them junk that looked like names.
+
+        A record that repeats one already seen ends the list too. The echo is
+        not always of entry 0 -- on the disk here entry 63 came back identical
+        to entry 13, including the eight bytes that look like a location, so
+        two real files cannot account for it.
+
+        One request per entry, deliberately. Asking for a larger ``count``
+        does return more bytes, but they are NOT the following entries: with
+        ``count`` 48 the second record is the first SAMPLE rather than the
+        second program. It looks like paging and produces a different list.
+        """
+        out: List[_DirectoryEntry] = []
+        seen: set = set()
+        for entry in range(limit):
+            frame = m.HeaderRequest(
+                command=m.Command.RHDDIR,
+                index=entry,
+                selector=kind,
+                offset=0,
+                count=_DIRECTORY_RECORD,
+                exclusive_channel=self.exclusive_channel,
+            ).encode()
+            reply = self.send_and_receive(frame, timeout=timeout)
+            _channel, command, _payload = m.parse_frame(reply)
+            if command == m.Command.REPLY:
+                self._raise_for_reply(reply, "reading the disk directory")
+            data = m.HeaderData.decode(reply).data
+            if len(data) < _DIRECTORY_RECORD:
+                break
+            if data[12:16] != _DIRECTORY_BLANK_EXTENSION:
+                break
+            record = bytes(data)
+            if record in seen:
+                break
+            seen.add(record)
+            out.append(_DirectoryEntry(
+                index=entry,
+                name=m.decode_name(data[:12]).rstrip(),
+                raw=bytes(data),
+            ))
         return out
 
     def sample_list(self, *, timeout: Optional[float] = None) -> List[str]:

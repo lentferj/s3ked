@@ -395,23 +395,42 @@ class S3kedApp(App):
         try:
             with self._bridge_lock:
                 volumes = self.bridge.volume_list()
+                try:
+                    entries = self.bridge.hd_directory(1)
+                except Exception:
+                    # A machine with no volume loaded answers with empty
+                    # records rather than an error, but an older one might
+                    # not implement RHDDIR at all -- the volumes are still
+                    # worth showing.
+                    entries = []
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"disk: {exc}")
             return
-        self.call_from_thread(self._show_volumes, volumes)
+        self.call_from_thread(self._show_volumes, volumes, entries)
 
-    def _show_volumes(self, volumes) -> None:
+    def _show_volumes(self, volumes, entries) -> None:
         table = self.query_one("#volumes", DataTable)
         table.clear()
         for volume in volumes:
-            table.add_row(str(volume.index), volume.name)
+            table.add_row(f"v{volume.index}", volume.name)
+        for entry in entries:
+            table.add_row(f"  {entry.index}", entry.name)
+        loaded = f", {len(entries)} in the loaded volume" if entries else ""
         self.query_one("#disk-title", Static).update(
-            f"Disk — {len(volumes)} volume(s)" if volumes else "Disk — empty"
+            f"Disk — {len(volumes)} volume(s){loaded}"
+            if volumes or entries else "Disk — empty"
         )
-        self.notify_status(
-            f"{len(volumes)} volume(s). The protocol can list the disk but not "
-            f"load from it; loading is a front-panel operation."
-        )
+        if entries:
+            self.notify_status(
+                f"{len(volumes)} volume(s); {len(entries)} item(s) in the "
+                f"loaded volume. Loading a different one is a front-panel "
+                f"operation — the protocol cannot."
+            )
+        else:
+            self.notify_status(
+                f"{len(volumes)} volume(s). Nothing loaded, so the directory "
+                f"is empty; load a volume at the panel and press d again."
+            )
 
     def action_toggle_write(self) -> None:
         self.allow_write = not self.allow_write

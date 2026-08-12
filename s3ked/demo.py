@@ -251,6 +251,23 @@ class DemoBridge:
         names += [f"WORK VOL{i:02d}" for i in range(3, 34)]
         return [_Volume(index=i, name=n, kind=3) for i, n in enumerate(names)]
 
+    def hd_directory(self, kind: int = 1, *, limit: int = 512,
+                     timeout: Optional[float] = None):
+        """An invented directory, for the same reason the volumes are invented.
+
+        A real one lists whatever commercial library the disk holds. A fixture
+        needs the SHAPE -- programs first, then the samples they use, with the
+        selector acting as a starting point rather than a filter.
+        """
+        from s3k.bridge import _DirectoryEntry
+
+        programs = ["DEEP BASS", "GLASS PAD", "SOFT KEYS"]
+        samples = [f"BASS C{i}" for i in range(1, 5)]
+        samples += [f"PAD C{i}" for i in range(1, 4)]
+        names = (programs + samples) if kind <= 1 else samples
+        return [_DirectoryEntry(index=i, name=n, raw=bytes(24))
+                for i, n in enumerate(names)]
+
     def keygroup_count(self, program: int) -> int:
         """Not part of the real bridge -- a convenience the demo can answer.
 

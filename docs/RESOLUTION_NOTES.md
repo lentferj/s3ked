@@ -5089,10 +5089,38 @@ nn,nn  Number of bytes of data (24)
 ```
 
 Entries are **24 bytes**, not 64, and the selector chooses the KIND of item.
-Re-probed correctly across all seven selectors, every entry is empty on this
-machine. That is consistent with the sentence above: a directory has to be
-*loaded into* the machine before it can be read, and nothing is loaded. It is
-not a browser for the disk's contents.
+
+Re-probed correctly, every entry was still empty — until the front panel's
+LOAD source was changed from floppy to the hard disk. Then the directory
+filled: 63 entries, six programs followed by their samples. **The manual's
+sentence is exact**: the directory is of the volume the machine has *loaded*,
+not of the disk. Loading a different volume replaced the listing entirely (63
+entries starting `TECHNOTRONIC` became 98 starting `GOOD+BAD`), so it tracks
+the load rather than caching.
+
+The selector is a starting point rather than a filter: selector 1 returns the
+programs and continues through the samples, selector 2 starts at the samples.
+
+### Two ways to read this wrong, both of which I did
+
+**The end of the list is not marked by zeroes.** Past the last entry the
+device keeps answering: first with records whose four-byte extension field is
+no longer four spaces, then by repeating an earlier record. A stop condition
+of "all bytes zero" never fires. The first implementation returned **188
+entries for a 63-entry directory** — two thirds junk that decoded as plausible
+names, which is exactly the kind of output that gets believed.
+
+Two markers are needed together: the extension field ceasing to be `20 20 20
+20`, and a record repeating one already seen. The echo is not always of entry
+0 — here entry 63 came back byte-identical to entry **13**, including the eight
+bytes that look like a location, so two real files cannot account for it.
+
+**`count` does not page.** `RVOLLIST` pages beautifully — 16 records a
+request — so the same was assumed here. It is not the same: asking for 48
+bytes returns the first program and then the first SAMPLE, not the second
+program. The extra bytes are something else, and a paged reader produces a
+plausible, differently-wrong list. One request per entry is the only correct
+shape, and costs 1.6 s for 63 entries.
 
 ### The SCSI ID is not reachable, and here is the state of that
 
