@@ -268,6 +268,39 @@ def test_encode_field_rejects_overflow():
         p.encode_field(p.lookup("PRIORT"), 300)
 
 
+def test_encode_field_rejects_a_value_the_field_does_not_accept():
+    """Fitting in the field's WIDTH is not the same as being in its RANGE.
+
+    MODVFILT1 is -50..+50 in a single byte. 60 fits the byte perfectly and
+    encodes without complaint, so it reached the machine and modulated the
+    filter the wrong way for an entire calibration run. The check used to
+    apply only to display-offset fields, on the reasoning that those wrap
+    into two's complement and store nonsense; the others fail more quietly.
+    """
+    with pytest.raises(ValueError, match="outside"):
+        p.encode_field(p.lookup(("keygroup", "MODVFILT1")), 60)
+    with pytest.raises(ValueError, match="outside"):
+        p.encode_field(p.lookup(("keygroup", "MODVFILT1")), -60)
+    assert p.encode_field(p.lookup(("keygroup", "MODVFILT1")), 50) == bytes([50])
+
+
+def test_encode_field_still_accepts_every_legal_value_of_every_field():
+    """The guard must not reject anything the table itself declares legal.
+
+    Both ends of every numeric field, plus every enumerated value -- an
+    over-tight range check would be a worse bug than the one it replaced,
+    and it would show up as fields that cannot be written at all.
+    """
+    for (region, name), param in p.PARAMETERS.items():
+        if getattr(param, "kind", "") == "text" or not param.writable:
+            continue
+        for value in (param.minimum, param.maximum):
+            p.encode_field(param, value + param.display_offset)
+        for key in (param.values or {}):
+            if isinstance(key, int):
+                p.encode_field(param, key)
+
+
 # --- presentation -----------------------------------------------------------
 
 

@@ -132,9 +132,16 @@ class DemoBridge:
             groups = []
             for kg in range(self._keygroup_counts[index]):
                 kheader = _blank_header("keygroup")
-                span = 127 // max(self._keygroup_counts[index], 1)
-                self._write_named(kheader, "keygroup", "LONOTE", kg * span)
-                self._write_named(kheader, "keygroup", "HINOTE", (kg + 1) * span)
+                # The key range starts at 21 (A1), not 0 -- splitting 0..127
+                # produced a LONOTE the real field cannot hold, which went
+                # unnoticed for as long as encode_field only range-checked
+                # display-offset parameters.
+                count = max(self._keygroup_counts[index], 1)
+                span = max((127 - 21) // count, 1)
+                lo = 21 + kg * span
+                hi = min(21 + (kg + 1) * span, 127) if kg + 1 < count else 127
+                self._write_named(kheader, "keygroup", "LONOTE", min(lo, 127))
+                self._write_named(kheader, "keygroup", "HINOTE", hi)
                 self._write_named(
                     kheader,
                     "keygroup",

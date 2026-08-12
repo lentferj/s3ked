@@ -3121,10 +3121,16 @@ def encode_field(param: Parameter, value) -> bytes:
 
         return bytes(encode_name(str(value), param.size))
     number = int(value) - param.display_offset
-    if param.display_offset and not (param.minimum <= number <= param.maximum):
-        # Caught explicitly: a display-offset field would otherwise wrap a
-        # too-small value into two's complement below and store nonsense.
-        # POLYPH 0 would become 255 rather than being rejected.
+    if not (param.minimum <= number <= param.maximum):
+        # EVERY numeric field is checked, not only the display-offset ones.
+        # This used to guard `display_offset` alone, on the reasoning that
+        # those wrap into two's complement and store nonsense (POLYPH 0
+        # becoming 255). The others do something worse: they encode cleanly
+        # and go to the machine. MODVFILT1 is -50..+50, a calibration probe
+        # asked for 60, the byte 60 was duly sent, and the filter modulated
+        # the wrong way for a whole run before the range was checked by hand.
+        # A value that fits in the field's WIDTH is not the same as a value
+        # the field accepts.
         low = param.minimum + param.display_offset
         high = param.maximum + param.display_offset
         raise ValueError(
