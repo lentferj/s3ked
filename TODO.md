@@ -54,32 +54,39 @@ them they either validate or demolish the foundation everything else rests on.
 
 ---
 
-## Live hardware verification — nothing has ever been run (OPEN)
+## Live hardware verification — done, and here is what it changed (CLOSED 2026-08-12)
 
-**Status:** blocking, in the sense that every other item's answer depends on
-it. No part of this project has exchanged a byte with a real sampler.
+**Status:** closed. This section said "no part of this project has exchanged a
+byte with a real sampler" until 2026-08-12, by which point it had been wrong
+for weeks. Kept rather than deleted, because what it predicted is worth
+comparing against what happened.
 
-To close this, in order, cheapest first:
+The seven steps it listed as the cheapest route in all passed: `RSTAT`
+answered on exclusive channel 0, the name lists came back readable (validating
+the 41-entry non-ASCII character set), and `PRNAME` decoded against the front
+panel.
 
-1. `s3kcli status` — does the machine answer `RSTAT` on exclusive channel 0,
-   and does `STAT` decode to a sane version and memory figures?
-2. `s3kcli programs` / `s3kcli samples` — do the name lists come back
-   readable? This alone validates the 41-entry non-ASCII character set, which
-   is one of the more surprising parts of the protocol.
-3. `s3kcli header program 0` — diff against the front panel. If `PRNAME` reads
-   correctly the early offsets are right and confidence in the rest rises
-   sharply. See RESOLUTION_NOTES §2.
-4. Only then, with something unimportant loaded and after a disk save:
-   one `s3kcli --allow-write set PRIORT 3 0` followed by a read-back.
+**What it did not predict is where the errors actually were.** It expected
+offset errors in the transcription. Those were rare. The errors that mattered
+were:
 
-**Blocked on:** hardware.
+- **Ranges transcribed from the DISPLAY rather than the value**: six tuning
+  fields declared 0..50 where the field holds -12800..12800, a factor of 256
+  (§56).
+- **A field's shape mis-modelled**: `TEMPER` is twelve independent bytes and
+  was one integer, so writing it corrupted eleven semitones (§66).
+- **Measurements wrong because the INSTRUMENT was wrong**, not the table: a
+  filter law 20-30 % high from a spectral centroid (§54), five fields called
+  inert that were one dead destination (§52), a threefold "depth-dependence"
+  that was a saturating detector (§58).
 
-**Known undetectable, do not chase:** two machines left on the same exclusive
-channel are indistinguishable on the wire, exactly as one machine heard on two
-input ports is. That is a user-side misconfiguration, not something autodetect
-can resolve.
+Offsets were the thing this section worried about, and they were mostly right.
+Ranges, shapes and instruments were the thing it did not mention, and they
+were mostly wrong. Worth remembering the next time a plan lists what to check.
 
----
+What remains unverified is now itemised per field rather than blanket: most of
+~300 parameters have still never been written to a machine. See
+`HW_PANEL_CHECKS.md` for what only a person at the LCD can settle.
 
 ## Keygroup offsets 161/162 — a model split (RESOLVED)
 
@@ -194,7 +201,13 @@ stays destructive-until-proven. §13a is not clearance for those.
 
 ---
 
-## Filter calibration: FILFRQ mapped to hertz (CLOSED 2026-08-11)
+## Filter calibration: FILFRQ mapped to hertz (CLOSED 2026-08-11, REDONE §54)
+
+**The law recorded here was replaced on 2026-08-12.** It was fitted by
+inverting a spectral centroid and read 20-30 % high by an amount that grew
+with frequency. The corner is now measured from the resonance peak:
+`Hz = 6.4597 * exp(0.07100 * FILFRQ)`, 44..92, r2 0.99984. The account below
+is the original one and is left for the faults it records, which were real.
 
 **Status:** first sweep attempted 2026-08-10 and produced no curve. Three
 faults, all ours: `jack_rec` never exited so the sweep blocked; the restore
@@ -258,11 +271,20 @@ recorded in §22, neither yet fixed.
 
 ---
 
-## Envelope 2 measured; ENV3 still open (CLOSED 2026-08-11 for env 1 and 2)
+## All three envelopes measured (CLOSED 2026-08-12)
 
-`DECAY2`, `SUSTN2`, `RELSE2` and both attacks are measured -- see
-RESOLUTION_NOTES §28-§32 and §41-§42. Envelope 3 (`ATTAK3`, `DECAY3`,
-`SUSTN3`, `RELSE3`, offsets 178-191) is untouched and its routing is unknown.
+Envelopes 1, 2 and 3 are all measured, and both filter envelopes turned out to
+be four-stage rate/level structures rather than ADSRs (§67, §57).
+
+The ADSR-flavoured names on envelope 2 are R1, R3, L3 and R4 of that
+structure; `ENV2L1`/`ENV2R2`/`ENV2L2`/`ENV2L4` are the missing L1, R2, L2 and
+L4. Envelope 3 was found the same way a section earlier and its names are
+unfamiliar enough to invite reading -- envelope 2's hid behind ATTAK/DECAY/
+SUSTAIN/RELEASE, and stayed hidden two attempts longer for it.
+
+Stages group by TYPE and not by envelope: everything that rises runs at one
+rate and everything that falls at about half of it. See RESOLUTION_NOTES
+§57-§64 and §67.
 
 ## Model selection: comparing candidates cannot say "none of these" (OPEN)
 
