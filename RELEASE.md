@@ -56,10 +56,17 @@ whether someone points s3ked at an irreplaceable sampler.
 
 ## 3. Things a stranger will hit in the first ten minutes
 
-- [ ] **Install from a clean checkout**, in a fresh venv, following only the
-      README. Nobody has done this either — the working venv here has
-      `--system-site-packages` and system `python-rtmidi`.
+- [x] **Install from a clean checkout**, in a fresh venv, following only the
+      README. **Done 2026-08-12, and it found a real bug.** The isolated
+      install ran 512 tests of 698 and reported success — two modules skipped
+      at collection and took 186 tests with them, silently, because
+      `s3k/measure.py` shipped in the wheel and imported numpy. measure.py has
+      moved to `probes/`, numpy is a `bench` extra, and nothing that ships
+      imports it. Re-verified: clean clone, empty venv, no system packages, no
+      numpy, editor fully working.
 - [ ] `s3kcli ports` with no MIDI device attached — does it fail kindly?
+- [x] the built wheel carries both licence files and only the nine modules it
+      should (checked 2026-08-12)
 - [ ] autodetect against a machine on a non-zero exclusive channel
 - [ ] a terminal without truecolour, and one with a light background
 - [ ] `s3ked` with no `config.toml` present
