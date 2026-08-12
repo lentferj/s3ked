@@ -22,12 +22,16 @@ something plausible is the one that quietly wrecks a calibration.
 """
 
 import math
+import sys
+from pathlib import Path
 
 import pytest
 
-np = pytest.importorskip("numpy", reason="s3k.measure is bench tooling")
+np = pytest.importorskip("numpy", reason="measure is bench tooling")
 
-from s3k import measure as ms
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "probes"))
+
+import measure as ms                                       # noqa: E402
 
 
 SR = 44100

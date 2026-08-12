@@ -65,7 +65,7 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from s3k import measure as ms          # noqa: E402
+import measure as ms                   # noqa: E402  (beside this file)
 from s3k import params as p            # noqa: E402
 
 LEAD_IN = 1.5                          # recorder head start before the first note

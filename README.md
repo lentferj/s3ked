@@ -43,11 +43,22 @@ details.)
 ```sh
 git clone https://github.com/lentferj/s3ked
 cd s3ked
-python3 -m venv .venv --system-site-packages
+python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'      # quote it — zsh globs brackets
 ```
 
-Requires Python 3.11+, `python-rtmidi` and `textual`.
+Requires Python 3.11+ and two packages: `textual` and `python-rtmidi`. Both
+come from PyPI as wheels, so nothing needs compiling and no system packages
+are required — tested from a clean checkout into an empty venv.
+
+**No numpy.** The editor does no arithmetic that needs it. The bench tooling
+in `probes/` does — FFTs and curve fits, for calibrating parameters against
+real audio — and that is not part of the distribution. `pip install -e
+'.[dev,bench]'` adds it if you want to run the calibration tests too; without
+it those two modules skip and the rest of the suite runs.
+
+Add `--system-site-packages` to the `venv` line only if you would rather reuse
+a system `python-rtmidi` you already have.
 
 ## What it looks like
 

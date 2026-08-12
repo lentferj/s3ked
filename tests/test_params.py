@@ -629,3 +629,22 @@ def test_the_array_shape_is_declared_consistently():
         assert param.size % param.elements == 0, param.name
         assert param.element_size * param.elements == param.size, param.name
 
+
+
+def test_nothing_that_ships_imports_numpy():
+    """The editor's dependencies are textual and python-rtmidi. That is all.
+
+    `s3k/measure.py` used to live here and pulled numpy into the distribution
+    for code the editor never runs; it now sits in `probes/` with the rest of
+    the bench tooling. The sibling eosed and mpc2emu projects carry no numpy
+    either, and this keeps that true by accident-proofing it.
+    """
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parent.parent
+    offenders = []
+    for pkg in ("s3k", "s3ked"):
+        for src in (root / pkg).glob("*.py"):
+            text = src.read_text()
+            if "import numpy" in text or "import scipy" in text:
+                offenders.append(src.name)
+    assert not offenders, f"shipped modules importing numpy/scipy: {offenders}"

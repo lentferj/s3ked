@@ -84,7 +84,8 @@ def _np():
         import numpy as np
     except ImportError as exc:  # pragma: no cover - environment-dependent
         raise RuntimeError(
-            "s3k.measure needs numpy, which is not a project dependency "
+            "the bench measurement tooling needs numpy, which is deliberately "
+            "not a dependency of the editor "
             "because the editor never uses it. Install it in the venv: "
             "`.venv/bin/pip install numpy`."
         ) from exc

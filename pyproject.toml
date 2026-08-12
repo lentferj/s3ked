@@ -39,6 +39,16 @@ Source = "https://github.com/lentferj/s3ked"
 Issues = "https://github.com/lentferj/s3ked/issues"
 
 [project.optional-dependencies]
+# **The editor does not depend on numpy, and nothing that ships imports it.**
+# Only the bench tooling in `probes/` does -- FFTs, autocorrelation and curve
+# fits, for calibrating parameters against real audio -- and `probes/` is not
+# in the wheel. The sibling eosed and mpc2emu projects carry no numpy either;
+# `s3k/measure.py` used to live in the shipped package and was moved out
+# rather than have the distribution pull in numpy for code it never runs.
+#
+# `dev` therefore gets you the editor's own tests. Add `bench` to run the
+# measurement and calibration suites too, which skip cleanly without it.
+bench = ["numpy>=1.24"]
 dev = ["pytest>=7", "pytest-asyncio>=0.23"]
 
 [project.scripts]
