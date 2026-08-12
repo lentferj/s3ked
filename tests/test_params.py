@@ -252,7 +252,10 @@ def test_negative_values_store_as_twos_complement():
 def test_negative_round_trips_through_describe():
     param = p.lookup("PANPOS")
     raw = p.decode_field(param, p.encode_field(param, -10))
-    assert p.describe_value(param, raw) == "-10"
+    assert raw == -10
+    # PANPOS also carries a measured scale, so the display appends what the
+    # value means; what matters here is that the sign survived the trip.
+    assert p.describe_value(param, raw).startswith("-10")
 
 
 def test_decode_field_rejects_wrong_width():

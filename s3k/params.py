@@ -1039,7 +1039,7 @@ _PARAMS: List[Parameter] = [
         0,
         255,
         desc="LFO1 waveform",
-        notes="range as written: \"0 represents Triangle, 1 represents Sawtooth, 2 represents Square\"",
+        notes="range as written: \"0 represents Triangle, 1 represents Sawtooth, 2 represents Square\". MEASURED and confirmed on hardware (RESOLUTION_NOTES §46) by reading the pitch track, which IS the waveform since LFO1 drives pitch. Value 3 is an undocumented FOURTH shape: symmetric like a triangle but spending half as long near its centre, so neither triangle nor square. Not identified.",
     ),
     _p(
         "program",
@@ -3171,6 +3171,22 @@ def describe_value(param: Parameter, value) -> str:
             if 0 <= number <= 127:
                 return f"{number} ({note_name(number)})"
 
+        # What the value MEANS, where it was measured. The tables carry each
+        # parameter's range and none of its meaning -- FILFRQ is "basic filter
+        # frequency, 0 to 99" and not one word about which hertz -- so this is
+        # the only place a reader learns that 63 is about 4 kHz.
+        physical = ""
+        try:
+            from s3k.scales import describe as _describe
+
+            physical = _describe(param.region, param.name, number)
+        except Exception:                       # never break a display pane
+            physical = ""
+
+        if param.unit and physical:
+            return f"{number} {param.unit} ({physical})"
+        if physical:
+            return f"{number} ({physical})"
         if param.unit:
             return f"{number} {param.unit}"
         return str(number)
