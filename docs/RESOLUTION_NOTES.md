@@ -5224,3 +5224,72 @@ programs loaded — they are small — and 60 of 88 samples, so any keygroup
 pointing at one of the missing 28 plays silence. That is worth knowing before
 building a bank rather than after loading one: the shortfall is computable
 from the directory in about 1.6 seconds, without loading anything.
+
+---
+
+## §70 — The load source, mapped: the partition is remotely settable (2026-08-12)
+
+The front panel's LOAD page lives in the miscellaneous byte bank, and the
+whole of a disk can be enumerated over MIDI without touching the machine.
+Every index below was found by changing the setting on the panel and seeing
+which byte moved, or by writing a distinctive value and reading the panel.
+
+```
+byte[0]    device type -- floppy / hard / flash. The volume list's
+           "BOOT SYSTEM#" and "FLASH VOLnn" belong to the flash device.
+byte[2]    partition, 0-based (0 = A). WRITABLE, and the machine re-reads.
+byte[4]    a hold flag. 1 suppresses the re-read. See below.
+byte[11]   SCSI drive ID    -- writable, confirmed on the panel
+byte[12]   local SCSI ID    -- confirmed on the panel
+byte[49]   volume, 1-based  -- reads the panel; writing does NOT move it
+word[0]    programs in the selected volume  ) cached by the panel,
+word[1]    samples in the selected volume   ) STALE after a remote
+word[6]    total directory entries          ) change -- do not trust
+```
+
+Writing the partition makes the machine re-read from disk: the panel follows
+and the drive's activity light flashes, both confirmed by eye. So the disk
+here enumerates in one pass:
+
+```
+    A   63 items  55.17 MB      E   59 items  59.53 MB
+    B   44        55.38         F   78        53.22
+    C   98        58.69         G   53        59.04
+    D   54        59.24         H   48        58.99      497 items
+```
+
+**Every partition is over the 32 MB the largest machine of this type holds.**
+
+### `byte[4]` is why partition switching "stopped working"
+
+It worked, then stopped, and the difference was a flag left set by an earlier
+panel change. The panel sets `byte[4]` when the selection lands on a volume
+that does not exist -- it displays "INACTIVE" -- and while it is set the
+machine **accepts a partition write and does not re-read**. The directory goes
+on describing the previous partition, which looks exactly like the write
+having failed.
+
+Clearing it first restores the behaviour, and `select_partition` now does.
+A write that is accepted and ignored is a worse failure than one that is
+refused, because the acknowledgement is real.
+
+### Two claims withdrawn before they were committed
+
+**`byte[0]` is not the volume.** Writing 2 made the directory go empty, and
+that was read as the volume moving to an empty one. The panel said otherwise:
+it had switched the device to FLASH, whose first volume is `BOOT SYSTEM#`. An
+empty listing has many causes and was treated as though it had one.
+
+**The volume is not settable.** `byte[49]` tracks the panel exactly -- it moved
+1 → 2 when the volume was changed by hand, which is what identified it -- and
+writing it changes what reads back. But the selection does not follow: a
+partition holding 78 items reports the same 78 at volume 1 and at volume 2.
+
+So remote enumeration reaches **volume 1 of every partition and no further**.
+On this disc that is everything, because each partition holds a single volume.
+On a disc with several volumes per partition it would not be, and how to move
+the volume remotely is unsolved.
+
+Both were caught by the panel contradicting a plausible reading of the data.
+The pattern is the one from §63: a measurement can be correct and still be
+answering a different question than the one asked.

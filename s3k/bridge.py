@@ -932,6 +932,93 @@ class S3kBridge:
 
     DirectoryEntry = _DirectoryEntry
 
+    # -- the load source ----------------------------------------------------
+    #
+    # Miscellaneous BYTE-bank indices, found by changing each on the front
+    # panel and seeing which moved (§70). The spec documents the addressing
+    # and not the meanings, so every one of these is measured.
+    _MISC_DEVICE_TYPE = 0        # floppy / hard / flash
+    _MISC_PARTITION = 2          # 0 = A. Writable, and the machine re-reads.
+    _MISC_SCSI_DRIVE_ID = 11
+    _MISC_SCSI_LOCAL_ID = 12
+    _MISC_VOLUME = 49            # 1-based. Reads the panel; see below.
+    _MISC_SELECTION_HELD = 4     # 1 suppresses the re-read. See below.
+
+    def _misc_byte(self, index: int, value: Optional[int] = None, *,
+                   timeout: Optional[float] = None) -> int:
+        """Read or write one byte of the miscellaneous byte bank."""
+        if value is None:
+            frame = m.HeaderRequest(
+                command=m.Command.RMISCDATA, index=index, selector=1,
+                offset=0, count=1, exclusive_channel=self.exclusive_channel,
+            ).encode()
+            reply = self.send_and_receive(frame, timeout=timeout)
+            _c, command, _p = m.parse_frame(reply)
+            if command == m.Command.REPLY:
+                self._raise_for_reply(reply, f"reading misc byte {index}")
+            return m.HeaderData.decode(reply).data[0]
+        frame = m.HeaderData(
+            command=m.Command.MISCDATA, index=index, selector=1, offset=0,
+            data=bytes([value]), exclusive_channel=self.exclusive_channel,
+        ).encode()
+        self._drain()
+        self._send(frame, write=True)
+        self._raise_for_reply(self._receive(timeout),
+                              f"writing misc byte {index}")
+        return self._misc_byte(index, timeout=timeout)
+
+    def load_source(self, *, timeout: Optional[float] = None) -> Dict[str, int]:
+        """What the front panel's LOAD page currently shows.
+
+        ``partition`` is 0-based (0 = A) and ``volume`` is 1-based, matching
+        the panel's "HARD-:C" and "Volume 001". ``device_type`` selects
+        floppy, hard disk or flash -- the volume list's ``BOOT SYSTEM#`` and
+        ``FLASH VOLnn`` names belong to the flash device.
+        """
+        return {
+            "scsi_drive_id": self._misc_byte(self._MISC_SCSI_DRIVE_ID,
+                                             timeout=timeout),
+            "scsi_local_id": self._misc_byte(self._MISC_SCSI_LOCAL_ID,
+                                             timeout=timeout),
+            "device_type": self._misc_byte(self._MISC_DEVICE_TYPE,
+                                           timeout=timeout),
+            "partition": self._misc_byte(self._MISC_PARTITION, timeout=timeout),
+            "volume": self._misc_byte(self._MISC_VOLUME, timeout=timeout),
+        }
+
+    def select_partition(self, partition: int, *,
+                         timeout: Optional[float] = None) -> Dict[str, int]:
+        """Move the LOAD selection to a partition. **This writes.**
+
+        ``partition`` is 0-based, so 0 is the panel's "A". The machine
+        re-reads the directory from disk: the panel follows and the drive's
+        activity light flashes, both confirmed by eye. So
+        :meth:`hd_directory` afterwards describes the newly selected volume,
+        which is what makes a whole disk enumerable without touching the
+        machine.
+
+        **It does not load anything.** The spec is explicit that no SysEx
+        operation loads from disk. This moves the selection the front panel
+        would act on, and nothing more.
+
+        **The volume cannot be moved this way.** ``load_source()["volume"]``
+        reads back correctly -- it tracks the panel, and writing it changes
+        what reads back -- but the selection does not follow: a partition with
+        78 items reports the same 78 at volume 1 and at volume 2. Only the
+        partition is settable, so remote enumeration reaches volume 1 of every
+        partition and no further. How to move the volume is unsolved (§70).
+        **`byte[4]` has to be clear or nothing happens.** The panel sets it
+        when the selection lands on a volume that does not exist -- it shows
+        "INACTIVE" -- and while it is set the machine accepts a partition
+        write and does not re-read, so the directory silently keeps
+        describing the previous partition. That cost a confusing half hour:
+        partition switching worked, then stopped, and the difference was this
+        flag left set by an earlier panel change. It is cleared here.
+        """
+        self._misc_byte(self._MISC_SELECTION_HELD, 0, timeout=timeout)
+        self._misc_byte(self._MISC_PARTITION, partition, timeout=timeout)
+        return self.load_source(timeout=timeout)
+
     def hd_directory(self, kind: int = 1, *, limit: int = 512,
                      timeout: Optional[float] = None) -> List["_DirectoryEntry"]:
         """RHDDIR -> HDDIR. The directory of the volume the machine has LOADED.

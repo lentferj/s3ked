@@ -815,3 +815,76 @@ def test_the_size_field_is_three_bytes_so_a_file_caps_near_16_MB():
     assert (1 << 24) - 1 == 16_777_215
     biggest_words = ((1 << 24) - 1 - b.SAMPLE_FILE_OVERHEAD) // 2
     assert 8_388_000 < biggest_words < 8_389_000
+
+
+# --- the load source --------------------------------------------------------
+
+def _misc_machine(initial):
+    """A device whose miscellaneous byte bank can be read and written."""
+    from s3k import bridge as b, messages as m
+
+    class Fake(b.S3kBridge):
+        def __init__(self):
+            self.exclusive_channel = 0
+            self.bytes = dict(initial)
+            self.writes = []
+
+        def send_and_receive(self, frame, timeout=None):
+            index = frame[5] | (frame[6] << 7)
+            return m.HeaderData(
+                command=m.Command.MISCDATA, index=index, selector=1, offset=0,
+                data=bytes([self.bytes.get(index, 0)]), exclusive_channel=0,
+            ).encode()
+
+        def _drain(self):
+            pass
+
+        def _send(self, frame, write=False):
+            index = frame[5] | (frame[6] << 7)
+            self.bytes[index] = m.HeaderData.decode(frame).data[0]
+            self.writes.append(index)
+
+        def _receive(self, timeout=None):
+            return m.Reply(code=m.ReplyCode.OK, exclusive_channel=0).encode()
+
+    return Fake()
+
+
+def test_load_source_reads_the_panel_fields():
+    bridge = _misc_machine({0: 1, 2: 2, 11: 4, 12: 6, 49: 1})
+    assert bridge.load_source() == {
+        "scsi_drive_id": 4, "scsi_local_id": 6,
+        "device_type": 1, "partition": 2, "volume": 1,
+    }
+
+
+def test_selecting_a_partition_clears_the_hold_flag_first():
+    """byte[4] set means the machine accepts the write and does NOT re-read.
+
+    The panel sets it when the selection lands on a volume that does not
+    exist. While it is set, a partition change silently leaves the directory
+    describing the previous partition -- which looks exactly like the write
+    having failed, and cost a confusing half hour on hardware.
+    """
+    bridge = _misc_machine({2: 2, 4: 1})
+    bridge.select_partition(5)
+
+    assert bridge.bytes[4] == 0, "the hold flag must be cleared"
+    assert bridge.bytes[2] == 5
+    assert bridge.writes.index(4) < bridge.writes.index(2), "cleared FIRST"
+
+
+def test_the_volume_is_readable_but_not_settable():
+    """Pinned as a limitation, so nobody adds a volume= argument that lies.
+
+    Writing byte[49] changes what reads back and does not move the selection:
+    a partition with 78 items reports 78 at volume 1 and at volume 2. Remote
+    enumeration reaches volume 1 of every partition and no further.
+    """
+    from s3k import bridge as b
+    import inspect
+
+    assert not hasattr(b.S3kBridge, "select_volume")
+    params = inspect.signature(b.S3kBridge.select_partition).parameters
+    assert "volume" not in params
+    assert "not be moved this way" in b.S3kBridge.select_partition.__doc__
