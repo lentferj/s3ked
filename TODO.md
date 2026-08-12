@@ -563,7 +563,17 @@ See RESOLUTION_NOTES §20-§55.
   law predicts, replicating the same offset measured at a different `FILFRQ`
   -- **which means the `FILFRQ` law itself wants re-deriving from the
   resonance peak.** That is the next open measurement.
-- **Untouched:** `ZPLAY1` and the velocity-crossfade fields.
+- **Untouched:** `ZPLAY1`, the velocity-crossfade fields, and the envelope-3
+  velocity set (`K_DAR3`, `V_ATT3`, `V_REL3`, `O_REL3`, `V_ENV3`).
+- **`K_DAR2` measured** (§61) and predicted from `K_DAR1` to 4% before the run.
+  Both envelopes scale with the key by the same law, coefficients 4.5% apart.
+  Its note-64 pivot is **taken on trust**, not measured -- see below.
+- **The corner tracker cannot reach the top of the keyboard.** Its resolution
+  is the harmonic spacing: 3.5% of the corner at note 24, 14% at 48, 56% at 72.
+  Anything read through the FILTER is confined to the bottom two octaves, so
+  key-scaling work on filter fields cannot bracket the note-64 pivot the way
+  §48 did for `K_DAR1` through the amplitude envelope. Closing that needs a
+  different detector for high notes, not a longer run.
 - **Envelope 3 measured** (§57): `ENV3R1` and `ENV3R3` are RATES and higher is
   SLOWER, despite the table naming `ENV3R1` "Attack rate". `ENV3L1` is linear
   in octaves and the excursion is level x depth. `ENV3R2` and `ENV3R4` are not
