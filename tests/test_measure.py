@@ -357,3 +357,216 @@ def test_a_harmonic_rich_tone_does_not_report_an_octave_low():
         cents = 1200 * math.log2(got / hz)
         assert abs(cents) < 10, f"{hz} Hz -> {got} Hz ({cents:+.0f} cents)"
         assert got > hz * 0.9, f"{hz} Hz reported an octave low as {got}"
+
+
+# --- brightness on short windows --------------------------------------------
+
+
+def test_spectral_centroid_works_where_spectrum_returns_nothing():
+    """`spectrum` needs ~590 ms and silently returns empty arrays below it.
+
+    That is why a 40 ms brightness series read as "nothing is moving" when
+    nothing had been measured at all. RESOLUTION_NOTES §26.
+    """
+    import numpy as np
+
+    sr = 48000
+    t = np.arange(int(sr * 0.040)) / sr          # 40 ms
+    tone = np.sin(2 * np.pi * 500 * t)
+
+    freqs, mag = ms.spectrum(tone, sr)
+    assert len(freqs) == 0, "spectrum is expected to give up on a short window"
+
+    got = ms.spectral_centroid(tone, sr)
+    assert abs(got - 500) < 60, got
+
+
+def test_spectral_centroid_rises_with_brightness():
+    import numpy as np
+
+    sr = 48000
+    t = np.arange(int(sr * 0.040)) / sr
+    dull = np.sin(2 * np.pi * 300 * t)
+    bright = dull + np.sin(2 * np.pi * 3000 * t)
+
+    assert ms.spectral_centroid(bright, sr) > ms.spectral_centroid(dull, sr) + 500
+
+
+def test_spectral_centroid_is_nan_on_silence():
+    import numpy as np
+    assert np.isnan(ms.spectral_centroid(np.zeros(2048), 48000))
+
+
+# --- ramp measurement ------------------------------------------------------
+#
+# "Attack time" turned out not to be a well-defined quantity: three fits of
+# ATTAK1 each scored r2 >= 0.9961 and disagreed by 20%, and two implementations
+# of "10-90% rise" differed by 33% on ATTAK2. The decays never had that
+# problem because they were reported as rates. These pin the property that
+# buys: a gradient does not care which part of the line you fit.
+
+
+def _ramp(seconds, hop=0.005, peak=1.0):
+    n = int(seconds / hop)
+    return [peak * i / n for i in range(n)] + [peak] * 40
+
+
+def test_a_ramp_reports_its_gradient():
+    rate, span, r2 = ms.ramp_rate(_ramp(0.5), hop=0.005)
+
+    assert rate == pytest.approx(2.0, rel=0.05), "1.0 over 0.5 s"
+    assert span == pytest.approx(1.0, rel=0.05)
+    assert r2 > 0.999
+
+
+def test_the_gradient_does_not_depend_on_which_segment_is_fitted():
+    """The property the whole change exists to buy."""
+    values = _ramp(0.5)
+    rates = [ms.ramp_rate(values, hop=0.005, lo=lo, hi=hi)[0]
+             for lo, hi in ((0.10, 0.90), (0.20, 0.80), (0.30, 0.70),
+                            (0.40, 0.60))]
+
+    spread = (max(rates) - min(rates)) / sum(rates) * len(rates)
+    assert spread < 0.02, f"gradient moved {spread:.1%} with the window: {rates}"
+
+
+def test_duration_is_span_over_gradient():
+    assert ms.ramp_duration(_ramp(0.5), hop=0.005) == pytest.approx(0.5, rel=0.05)
+    assert ms.ramp_duration(_ramp(2.0), hop=0.005) == pytest.approx(2.0, rel=0.05)
+
+
+def test_a_fall_reports_a_negative_gradient():
+    falling = [1.0 - x for x in _ramp(0.5)]
+    rate, span, _r2 = ms.ramp_rate(falling, hop=0.005)
+
+    assert rate < 0
+    assert ms.ramp_duration(falling, hop=0.005) == pytest.approx(0.5, rel=0.05)
+
+
+def test_a_flat_line_has_no_ramp_to_measure():
+    rate, span, _r2 = ms.ramp_rate([0.5] * 200, hop=0.005)
+    assert rate != rate or span == 0
+
+
+def test_too_few_points_returns_nan_rather_than_a_guess():
+    rate, _s, _r = ms.ramp_rate([0.0, 1.0, 2.0], hop=0.005)
+    assert rate != rate
+
+
+def _ramp_with_wobbly_tail(seconds, hop=0.005, peak=1.0, tail_s=8.0,
+                           wobble=0.05, seed=7):
+    """A short ramp then a long noisy plateau -- the real-capture shape.
+
+    The failure this pins produced 66 seconds for an 0.08 s attack: tail
+    samples dipping back into the fit band joined the regression, so it
+    spanned the whole capture. A synthetic tail that sits exactly on its
+    final value can never exercise it, which is why the first tests passed.
+    """
+    import random
+    rng = random.Random(seed)
+    n = int(seconds / hop)
+    ramp = [peak * i / n for i in range(n)]
+    tail = [peak - rng.random() * wobble for _ in range(int(tail_s / hop))]
+    return ramp + tail
+
+
+def test_a_wobbly_tail_does_not_join_the_fit():
+    values = _ramp_with_wobbly_tail(0.5, hop=0.005, tail_s=8.0)
+
+    assert ms.ramp_duration(values, hop=0.005) == pytest.approx(0.5, rel=0.20)
+
+
+def test_a_short_ramp_under_a_long_tail_is_still_short():
+    """0.08 s of ramp beneath 8 s of plateau -- the case that read 66 s."""
+    values = _ramp_with_wobbly_tail(0.08, hop=0.005, tail_s=8.0)
+
+    got = ms.ramp_duration(values, hop=0.005)
+    assert got < 0.5, f"a short attack must not report {got:.1f} s"
+
+
+def test_the_gradient_survives_a_noisy_tail_across_windows():
+    values = _ramp_with_wobbly_tail(0.5, hop=0.005, tail_s=8.0)
+    rates = [ms.ramp_rate(values, hop=0.005, lo=lo, hi=hi)[0]
+             for lo, hi in ((0.20, 0.80), (0.30, 0.70))]
+
+    assert all(r > 0 for r in rates)
+    spread = abs(rates[0] - rates[1]) / max(rates)
+    assert spread < 0.25, f"gradient moved {spread:.0%}: {rates}"
+
+
+# --- residual structure ----------------------------------------------------
+#
+# Ranking candidate models returns the least wrong one and never evidence a
+# right one was offered. r2 cannot see it: two competing ATTAK1 fits both
+# scored 0.99991 while one was broken. Structure in the residuals can.
+
+
+def test_random_residuals_are_not_structured():
+    import random
+    rng = random.Random(3)
+    x = list(range(40))
+    y = [2.0 * i + 5 + rng.gauss(0, 0.3) for i in x]
+    pred = [2.0 * i + 5 for i in x]
+
+    _run, _exp, _growth, structured = ms.residual_structure(x, y, pred)
+    assert not structured
+
+
+def test_a_bend_shows_up_as_a_long_sign_run():
+    """A straight line through a curve: residuals go +, then -, then +."""
+    x = list(range(40))
+    y = [0.02 * (i - 20) ** 2 for i in x]
+    pred = [float(sum(y) / len(y))] * len(x)
+
+    run, expected, _growth, structured = ms.residual_structure(x, y, pred)
+    assert structured
+    assert run > expected * 2
+
+
+def test_error_growing_along_the_range_is_structured():
+    import random
+    rng = random.Random(5)
+    x = list(range(40))
+    y = [2.0 * i + rng.gauss(0, 0.01 + 0.4 * i) for i in x]
+    pred = [2.0 * i for i in x]
+
+    _run, _exp, growth, structured = ms.residual_structure(x, y, pred)
+    assert structured and growth > 4
+
+
+def test_too_few_points_says_so_rather_than_passing():
+    """None, not False. False reads as "checked and fine".
+
+    The first version returned False below eight points and duly no-opped on
+    a six-point sweep while reporting "random" -- a check that cannot say
+    "I do not know" is the fault this function exists to catch.
+    """
+    _run, _exp, _g, structured = ms.residual_structure(
+        [1, 2, 3], [1, 2, 3], [1, 2, 3])
+    assert structured is None
+    assert structured is not False
+
+
+def test_a_window_too_short_for_lo_is_an_error_not_a_nan():
+    """NaN here is indistinguishable from "no pitch", and cost two runs.
+
+    fundamental_hz needs a lag of 1/lo to exist. At the default lo=20 Hz that
+    is 50 ms, so 60 ms and 50 ms windows returned NaN at every point in two
+    hardware runs and the vibrato depth was blamed twice. An impossible window
+    is a caller error, so it raises.
+    """
+    import numpy as np
+    sr = 48000
+    short = np.sin(2 * np.pi * 261.6 * np.arange(int(0.04 * sr)) / sr)
+
+    with pytest.raises(ValueError, match="cannot resolve"):
+        ms.fundamental_hz(short, sr)
+
+
+def test_raising_lo_makes_a_short_window_legal():
+    import numpy as np
+    sr = 48000
+    n = int(0.04 * sr)
+    sig = np.sin(2 * np.pi * 261.6 * np.arange(n) / sr)
+
+    assert ms.fundamental_hz(sig, sr, lo=100.0) == pytest.approx(261.6, rel=0.02)

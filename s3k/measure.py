@@ -53,6 +53,9 @@ import wave
 from typing import Dict, List, Optional, Sequence, Tuple
 
 __all__ = [
+    "residual_structure",
+    "ramp_rate",
+    "ramp_duration",
     "read_wav",
     "envelope",
     "anchor_offset",
@@ -168,6 +171,140 @@ def attack_time(env, on: float, off: float, frac: float = 0.90,
         return float("nan")
     base = int(np.argmax(seg > pk * 0.02))
     return float((int(np.argmax(seg > pk * frac)) - base) * hop)
+
+
+def residual_structure(x, y, predicted):
+    """Are the residuals random, or do they have a shape? ``r2`` cannot tell.
+
+    Ranking candidate models returns the least wrong candidate and never
+    evidence that a right one was offered. §36 fitted four shapes to a clipped
+    velocity curve: all fitted badly, and the most curved won by bending
+    toward the flat top -- the true piecewise-linear law was not among them.
+    Two competing `ATTAK1` fits both scored **r2 0.99991** while one of them
+    was broken.
+
+    So the guard has to be absolute rather than relative, and an all-bad
+    candidate set announces itself as *structured* residuals: long runs of one
+    sign, a visible bend, error growing with x.
+
+    Returns ``(longest_run, expected_run, growth, structured)``. *growth* is
+    the ratio of mean |residual| in the last third to the first third, so a fit
+    that degrades along the range shows up even when the signs alternate.
+    ``structured`` is True when either test fires, **False when neither does,
+    and None when there are too few points to tell.** The None matters: the
+    first version returned False below eight points, which reads as a pass, and
+    it duly no-opped on a six-point sweep while printing "random". A check that
+    cannot say "I do not know" is the exact fault this function exists to
+    catch, so it says it.
+
+    Credit to mpc2emu, who pointed out that the fix for "none of these" cannot
+    itself be a comparison between candidates.
+    """
+    np = _np()
+    y = np.asarray(y, dtype="float64")
+    pred = np.asarray(predicted, dtype="float64")
+    res = y - pred
+    n = len(res)
+    if n < 8:
+        return 0, 0.0, float("nan"), None
+
+    signs = np.sign(res)
+    signs[signs == 0] = 1
+    longest, run = 1, 1
+    for i in range(1, n):
+        run = run + 1 if signs[i] == signs[i - 1] else 1
+        longest = max(longest, run)
+    # For random signs the longest run is about log2(n); allow generous slack
+    # so this fires on structure rather than on luck.
+    expected = math.log2(n) if n > 1 else 1.0
+    run_bad = longest > max(expected * 2.0, 5)
+
+    third = max(2, n // 3)
+    first = float(np.abs(res[:third]).mean())
+    last = float(np.abs(res[-third:]).mean())
+    growth = last / first if first > 0 else float("inf")
+    growth_bad = growth > 4.0 or growth < 0.25
+
+    return int(longest), float(expected), float(growth), bool(run_bad or growth_bad)
+
+
+def ramp_rate(values, hop: float = DEFAULT_HOP, lo: float = 0.20,
+              hi: float = 0.80):
+    """Slope of a straight ramp, in units per second, and the span it crosses.
+
+    **This exists because "attack time" was not a well-defined quantity here.**
+    Three measurements of `ATTAK1` fitted their own data at r2 >= 0.9961 and
+    disagreed with each other by up to 20%; two implementations of "10-90%
+    rise" differed by 33% on `ATTAK2`. The decays never had that problem,
+    because a decay was reported as a RATE -- decibels per second -- and a
+    rate leaves nothing to choose. A threshold does: where the curve is
+    considered to start, what counts as the peak, which fraction to cross.
+
+    So the attack is measured the same way as the decay. Fit a line through the
+    middle of the ramp and report its gradient; a straight line's gradient does
+    not depend on which segment of it you fit, which is the whole point. The
+    caller converts to a duration by dividing the span it must cross, and that
+    division is then the only judgement left and is made once, in the open.
+
+    *lo* and *hi* bound the fitted portion as fractions of the travel. They
+    move the answer by far less than a threshold does -- that is the property
+    being bought -- but they are parameters rather than constants so the
+    sensitivity can be measured instead of assumed.
+
+    Returns ``(rate, span, r2)``. ``rate`` is positive for a rise and negative
+    for a fall.
+    """
+    np = _np()
+    v = np.asarray(values, dtype="float64")
+    good = np.isfinite(v)
+    if good.sum() < 8:
+        return float("nan"), float("nan"), 0.0
+    idx = np.nonzero(good)[0]
+    v = v[idx[0]:idx[-1] + 1]
+    start, end = float(v[0]), float(np.median(v[int(len(v) * 0.85):]))
+    span = end - start
+    if span == 0:
+        return float("nan"), 0.0, 0.0
+    frac = (v - start) / span
+    inside = np.isfinite(frac) & (frac > lo) & (frac < hi)
+    # The CONTIGUOUS first crossing only. Taking every sample in the band was
+    # the original mistake: a short ramp followed by a long steady tail lets
+    # any tail sample that wobbles back into the band join the fit, so the fit
+    # spans the whole capture, the gradient collapses and an 0.08 s attack
+    # measured 66 s. Noise-free fixtures cannot catch that, because a
+    # synthetic tail sits exactly on its final value for ever.
+    idx_in = np.nonzero(inside)[0]
+    if not len(idx_in):
+        return float("nan"), float(span), 0.0
+    first = int(idx_in[0])
+    run_end = first
+    while run_end + 1 < len(v) and inside[run_end + 1]:
+        run_end += 1
+    sel = np.zeros(len(v), dtype=bool)
+    sel[first:run_end + 1] = True
+    if sel.sum() < 5:
+        return float("nan"), float(span), 0.0
+    x = np.nonzero(sel)[0].astype("float64") * hop
+    y = v[sel]
+    slope, icept = np.polyfit(x, y, 1)
+    pred = slope * x + icept
+    denom = ((y - y.mean()) ** 2).sum()
+    r2 = 1 - ((y - pred) ** 2).sum() / denom if denom else 0.0
+    return float(slope), float(span), float(r2)
+
+
+def ramp_duration(values, hop: float = DEFAULT_HOP, lo: float = 0.20,
+                  hi: float = 0.80) -> float:
+    """Time to cross the whole ramp at its measured gradient, in seconds.
+
+    ``span / rate`` -- the extrapolated duration of the full travel. It is a
+    derived quantity and the derivation is the only choice being made, which is
+    the improvement over a threshold crossing, where the choice is buried.
+    """
+    rate, span, _r2 = ramp_rate(values, hop, lo, hi)
+    if not rate or rate != rate:
+        return float("nan")
+    return abs(span / rate)
 
 
 def _first_persistent(mask, hold: int) -> int:
@@ -460,6 +597,16 @@ def fundamental_hz(samples, sr: int, lo: float = 20.0, hi: float = 2000.0) -> fl
     sweep now uses at note 24 -- a 40 Hz floor returned **2000 Hz**, the top of
     the range. Silent, confident and wrong by six octaves.
     """
+    # A window shorter than one period of `lo` cannot support the search at
+    # all, and returning NaN for it is indistinguishable from "no pitch here".
+    # That cost two hardware runs: 60 ms and then 50 ms windows returned NaN
+    # at every point and the vibrato depth got the blame twice. An impossible
+    # window is a programming error, so it says so.
+    if len(samples) < sr / lo:
+        raise ValueError(
+            f"window of {len(samples)/sr*1000:.0f} ms cannot resolve {lo:.0f} Hz; "
+            f"need at least {1000/lo:.0f} ms, or raise `lo`"
+        )
     np = _np()
     a = np.asarray(samples, dtype="float64")
     if a.ndim > 1:
@@ -604,3 +751,28 @@ def fit_linear(x: Sequence[float], y: Sequence[float]) -> Tuple[float, float, fl
     ss_tot = float(((ys - ys.mean()) ** 2).sum())
     r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
     return float(m), float(c), float(r2)
+
+
+def spectral_centroid(samples, sr: int) -> float:
+    """Brightness of a short window, in hertz.
+
+    :func:`spectrum` cannot do this. It drops ``skip_s`` seconds of attack and
+    needs a full ``n_fft`` frame afterwards -- about 590 ms at 48 kHz -- and
+    returns **empty arrays** below that rather than raising. Feeding it 40 ms
+    windows to track brightness over time therefore yields 0 or NaN for every
+    window, which reads as "nothing is moving" rather than as "nothing was
+    measured" (RESOLUTION_NOTES §26).
+
+    This works on whatever it is given, so a modulated filter can be followed
+    through a note.
+    """
+    np = _np()
+    a = np.asarray(samples, dtype="float64")
+    if a.ndim > 1:
+        a = a.mean(axis=1)
+    if len(a) < 16:
+        return float("nan")
+    mag = np.abs(np.fft.rfft(a * np.hanning(len(a))))
+    freqs = np.fft.rfftfreq(len(a), 1.0 / sr)
+    total = mag.sum()
+    return float((freqs * mag).sum() / total) if total > 0 else float("nan")
