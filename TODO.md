@@ -539,12 +539,13 @@ See RESOLUTION_NOTES §20-§55.
   assignable-matrix source 8 and runs at exactly twice LFO1 -- but LFO2 does
   not reach pan. `PANPOS` moves the image 118 dB, so neither end is broken,
   only the connection. The per-zone `VLOUD1` remains inert (§40).
-- **`RELSE2` is provisional** (§58) -- the only envelope-2 law still resting
-  on the spectral centroid, because release happens after note-off and needs a
-  capture window the re-measurement did not have. Its three siblings moved by
-  up to 22%. **Measuring it is the top open item.**
-- **Nothing else is provisional** (§55 took `LFODEL`, §53 took `FILQ`, §58 took
-  `ATTAK2`'s depth-dependence).
+- **Nothing is provisional** (§53 `FILQ`, §55 `LFODEL`, §58 `ATTAK2`'s
+  depth-dependence, §59 `RELSE2`). Envelope 2 is fully re-measured off the
+  spectral centroid.
+- **One time base across both envelopes** (§59): attack and release agree to
+  2.2% at value 70 -- `ATTAK2`, `RELSE2` and `ENV3R1` are one law -- and the
+  decay stages run at about half that rate. `ENV3R2` and `ENV3R4` are still
+  unmeasured and are the obvious test of whether the pattern holds.
   Neither was settled by fitting harder; each needed a different measurement.
   The marking mechanism stays and is still tested against an injected scale,
   because the next half-answered measurement should be marked rather than
