@@ -28,8 +28,13 @@ from s3k import params as p, scales
 
 ANCHORS = [
     # region      param     value  expected  tolerance  unit
-    ("keygroup", "FILFRQ",     60,    591.0,      30.0, "Hz"),
-    ("keygroup", "FILFRQ",     80,   2568.0,     130.0, "Hz"),
+    # Corners located by the resonance peak (§54). The values these replaced
+    # -- 591 and 2568 Hz -- were spectral centroids, which sit ABOVE the
+    # corner by an amount that depends on the source, so they were readings
+    # of the old ruler rather than of the machine.
+    ("keygroup", "FILFRQ",     62,     531.0,      15.0, "Hz"),
+    ("keygroup", "FILFRQ",     80,    1887.0,      55.0, "Hz"),
+    ("keygroup", "FILFRQ",     92,    4491.0,     140.0, "Hz"),
     ("program",  "LFORAT",     30,     3.52,      0.20, "Hz"),
     ("program",  "LFORAT",     99,    11.71,      0.40, "Hz"),
     ("keygroup", "ATTAK1",     70,    0.387,     0.030, "s"),
@@ -237,7 +242,33 @@ def test_an_impossible_quantity_is_refused():
 
 def test_describe_value_shows_the_physical_meaning():
     param = p.lookup("FILFRQ", "keygroup")
-    assert p.describe_value(param, 80) == "80 (~2.57 kHz)"
+    assert p.describe_value(param, 80) == "80 (~1.89 kHz)"
+
+
+def test_filfrq_comes_from_the_resonance_peak_not_a_centroid():
+    """The law it replaced was 20-30% high, and got worse as the corner rose.
+
+    A spectral centroid averages everything the source contains, so it sits
+    above the corner by a source-dependent amount -- a SLOPE error, not an
+    offset, which is why no single correction factor would have fixed it.
+    """
+    s = scales.SCALES[("keygroup", "FILFRQ")]
+    assert s.a == pytest.approx(6.4597, abs=1e-3)
+    assert s.b == pytest.approx(0.07100, abs=1e-4)
+    old = 6.998 * math.exp(0.07384 * 70)
+    assert s.value_to_physical(70) / old < 0.8, "the old ruler read high"
+    assert "RESONANCE PEAK" in s.note
+
+
+def test_filfrq_and_filq_agree_on_the_corner():
+    """Two runs, two methods of parking it: 919 Hz and 930 Hz at FILFRQ 70.
+
+    The FILQ sweep fitted the corner as a nuisance parameter while measuring
+    damping; the FILFRQ sweep fitted it as the answer. Neither was fitted to
+    the other's data.
+    """
+    corner = scales.SCALES[("keygroup", "FILFRQ")].value_to_physical(70)
+    assert abs(corner / 919.0 - 1) < 0.02
 
 
 def test_describe_value_is_unchanged_where_nothing_was_measured():

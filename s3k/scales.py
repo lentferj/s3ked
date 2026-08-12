@@ -171,9 +171,29 @@ class Scale:
 #: Measured 2026-08-11 on an S3000XL. RESOLUTION_NOTES §20-§26.
 SCALES: Dict[Tuple[str, str], Scale] = {
     ("keygroup", "FILFRQ"): Scale(
-        "keygroup", "FILFRQ", "Hz", "exp", 6.998, 0.07384, (50, 90), 0.9996,
-        bounds="below 50 the nearly shut filter lets the broadband noise floor pull\nthe corner estimate up; above 90 the corner has passed the source\nbandwidth (~14 kHz) and is pulled up toward it. Both ends fail\nUPWARD, for two unrelated physical reasons -- which is a better\nargument for excluding them than the size of their residuals.",
-        note="one octave per ~9.4 units",
+        "keygroup", "FILFRQ", "Hz", "exp", 6.4597, 0.07100, (44, 92), 0.99984,
+        bounds="every corner from 44 to 92 was measured. Below 44 the corner drops\nunder the lowest note's fundamental, so no harmonic sits beneath it\nand the fit becomes one-sided; above 92 the source runs out of\nharmonics above the corner and it becomes one-sided the other way.\nThe limit is where the SOURCE has energy either side of the corner,\nnot where the machine stops -- and it is a limit of this sawtooth,\nnot of the method.",
+        note="One octave per 9.76 units; 7.36% per step, so a step is about\n"
+             "0.81 semitones.\n"
+             "MEASURED FROM THE RESONANCE PEAK, not from a spectral centroid.\n"
+             "Turning FILQ up grows a peak AT the corner; differencing the\n"
+             "spectrum against FILQ 0 at the same FILFRQ cancels the source's\n"
+             "own spectrum and every fixed pole, so what is left locates the\n"
+             "filter and nothing else. See RESOLUTION_NOTES §54.\n"
+             "This REPLACES a law fitted by inverting a spectral centroid,\n"
+             "which read 20-30% high and got worse as the corner rose:\n"
+             "0.28 octaves at FILFRQ 40, 0.40 at 70, 0.52 at 99. A centroid is\n"
+             "an average of everything the source contains, so it sits above\n"
+             "the corner by an amount that depends on the source -- the error\n"
+             "was in the ruler, and it was a slope error, not an offset.\n"
+             "The old ruler also FOLDED (§20): it fell to a minimum and rose\n"
+             "again, so only its rising branch could be inverted and the fold\n"
+             "moved with pitch. A resonance peak does not fold, and the corner\n"
+             "does not move with FILQ (919 Hz at all sixteen settings, §53).\n"
+             "Cross-checks: two independent runs read 919 and 930 Hz at\n"
+             "FILFRQ 70, 1.2% apart. The law was fitted on 62..92 and then\n"
+             "predicted 44, 50 and 56 -- corners it had not seen -- to within\n"
+             "0.2%, 0.5% and 2.2%.",
         endpoints={99: "wide open"},
     ),
     ("keygroup", "KGTUNO"): Scale(

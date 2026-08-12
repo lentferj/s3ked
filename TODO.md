@@ -227,10 +227,12 @@ to 50 and then 945->1813 Hz of brightness from 55 to 85. Keygroup offset 7 is
 the basic filter frequency, confirmed. Filter 2 showed nothing because it needs
 the optional IB304F board.
 
-**Done (§20):** `Hz = 6.998 * exp(0.07384 * FILFRQ)`, valid 50-90, max error
-3.6 %, about one octave per 9.4 units. Below 50 the corner enters the
-reference band and `ref_flat_db` correctly returns NaN; above 90 it saturates
-toward Nyquist.
+**Done (§20), then REPLACED (§54):** the centroid-derived
+`Hz = 6.998 * exp(0.07384 * FILFRQ)` read 20-30% high and its error grew with
+frequency, because a spectral centroid is an average of everything the source
+contains rather than the corner. Now measured from the resonance peak:
+`Hz = 6.4597 * exp(0.07100 * FILFRQ)`, 44..92, r2 0.99984, one octave per 9.76
+units.
 
 The JACK wedging is also fixed: the recorder is now an in-process JACK client
 rather than a `jack_rec` per capture, and ran 19 consecutive captures with no
@@ -443,7 +445,7 @@ Measured (see RESOLUTION_NOTES §20-§26 for each sweep and its bounds):
 
 | field | law | measured over | r2 |
 |---|---|---|---|
-| `FILFRQ` | `6.998 * exp(0.07384 v)` Hz | 50..90, 99 = wide open | 0.9996 |
+| `FILFRQ` | `6.4597 * exp(0.07100 v)` Hz | 44..92, 99 = wide open | 0.99984 |
 | `KGTUNO`, `PTUNO` | `0.391667 v` cents | 0..50 | 0.9998 |
 | `PRLOUD` | `0.642719 (v - 99)` dB | 0..99 | 0.9933 |
 | `SUSTN1` | `0.60832 (v - 99)` dB | 10..99 | 0.99995 |

@@ -1560,7 +1560,7 @@ possible; measure in chunks of under eight points.**
 
 ---
 
-## §20 — `FILFRQ` calibrated: the map from an integer to hertz (2026-08-11)
+## §20 — SUPERSEDED by §54 (the FILFRQ law only; the fold still stands) — `FILFRQ` calibrated: the map from an integer to hertz (2026-08-11)
 
 **The thing the project set out to obtain.** `FILFRQ` is documented as "basic
 filter frequency, 0 to 99" with no unit anywhere; an editor showing a cutoff,
@@ -4037,3 +4037,74 @@ corner. A resonance peak is, and this measurement locates it to about a hertz.
 the centroid ruler** — and would also be free of the fold that makes the
 centroid ruler invertible only on its rising branch (§20). That is the next
 item.
+
+---
+
+## §54 — `FILFRQ` re-derived from the resonance peak (2026-08-12)
+
+§20 fitted `FILFRQ` by inverting a spectral centroid. The law was wrong by
+20–30%, and wrong by a growing amount:
+
+```
+                    resonance peak      §20 centroid      error
+    FILFRQ 40            111 Hz            134 Hz      -0.28 octaves
+    FILFRQ 70            930 Hz           1230 Hz      -0.40 octaves
+    FILFRQ 99           7291 Hz          10465 Hz      -0.52 octaves
+```
+
+The replacement:
+
+```
+    Hz = 6.4597 * exp(0.07100 * FILFRQ)     44..92    r2 0.99984
+    one octave per 9.76 units; 7.36% per step, about 0.81 semitones
+```
+
+### Why the old ruler was wrong, and why the error grew
+
+A spectral centroid is the average frequency of **everything the source
+contains**. It sits above the corner by an amount set by how much energy the
+source has above it — so it is a measurement of the source and the filter
+together, and the mix changes as the corner moves. That is a **slope** error,
+not an offset: no single correction factor would have fixed §20, which is why
+the discrepancy §33 first noticed (0.41 octaves at one `FILFRQ`) could not be
+written off as a calibration constant.
+
+§53's difference measurement has none of that in it. Turning `FILQ` up grows a
+resonant peak AT the corner; differencing the spectrum against `FILQ` 0 at the
+same `FILFRQ` cancels the source's own spectrum, the pitch shift, the rig gain
+and **every fixed pole**, leaving only the pole pair whose damping `FILQ`
+moves. Its frequency is the corner, and nothing about the source enters.
+
+The old ruler also **folded** (§20): it fell to a minimum and rose again, so
+only its rising branch could be inverted, and the fold moved with pitch. That
+too was a property of the centroid, not of the filter. A resonance peak does
+not fold. §20's fold finding stands as a description of the centroid; its
+`FILFRQ` law does not.
+
+### The cross-checks, none of which were fitted to each other
+
+- **§53 predicted the damping at every corner.** It was fitted at 919 Hz
+  alone, and says the damping at `FILQ` 13 is 0.0840. Fitted freely at each of
+  six corners spanning 531–4491 Hz it came out **0.0834 ± 0.0015, −0.7%**.
+- **Two runs agree on the corner itself**: 919 Hz from the `FILQ` sweep, where
+  it was a nuisance parameter, and 930 Hz here, where it was the answer —
+  1.2% apart, separate captures.
+- **The law predicted three corners it was not fitted to.** Fitted on 62..92
+  and then compared against `FILFRQ` 44, 50 and 56: −0.2%, +0.5%, +2.2%. Those
+  three had been excluded as one-sided fits, one of them with 11 dB rms — the
+  fit was poor and the answer was right anyway, so the exclusion cost nothing
+  and the low end is now confirmed rather than assumed.
+
+### What the range means now
+
+44..92 is not where the machine stops. It is where **this sawtooth** has
+harmonics on both sides of the corner: below 44 the corner drops under the
+lowest note's fundamental and no harmonic sits beneath it; above 92 the source
+runs out of harmonics above the corner. Both ends fail by becoming one-sided,
+and both are limits of the source, not of the method — a brighter sample would
+extend the top, a lower note the bottom.
+
+This matters more than it looks. §20's stated bounds were also about the
+source running out, and the honest form of that statement is what the two
+fields' disagreement finally exposed: **a ruler that saturates against its
+source is measuring the source.**
