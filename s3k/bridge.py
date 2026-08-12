@@ -944,6 +944,22 @@ class S3kBridge:
     _MISC_VOLUME = 49            # 1-based. Reads the panel; see below.
     _MISC_SELECTION_HELD = 4     # 1 suppresses the re-read. See below.
 
+    #: Bytes 6-9 are the LOAD TYPE, mirrored -- writing one moves all four.
+    #: The panel's values are 1 (ALL PROGS + SAMPLES) and 2 (ENTIRE VOLUME);
+    #: 0 is the power-on default.
+    #:
+    #: **They are not exposed for writing, and that is deliberate.** Writing
+    #: one while the LOAD page had a partition and volume selected started an
+    #: actual disk load, and the machine then sat at "BUSY" until it was power
+    #: cycled. Whether the load was clean and disrupted by concurrent RSTAT
+    #: probing, or the write left the machine in a bad state, is NOT
+    #: established -- and those have different consequences, so neither is
+    #: assumed. See RESOLUTION_NOTES §71.
+    #:
+    #: A load also CLEARS RAM, so if this is ever exposed it belongs behind
+    #: the arm-then-fire treatment that DELP/DELK/DELS get, not a keypress.
+    _MISC_LOAD_TYPE = (6, 7, 8, 9)
+
     def _misc_byte(self, index: int, value: Optional[int] = None, *,
                    timeout: Optional[float] = None) -> int:
         """Read or write one byte of the miscellaneous byte bank."""

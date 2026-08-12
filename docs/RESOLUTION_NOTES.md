@@ -5293,3 +5293,67 @@ the volume remotely is unsolved.
 Both were caught by the panel contradicting a plausible reading of the data.
 The pattern is the one from §63: a measurement can be correct and still be
 answering a different question than the one asked.
+
+---
+
+## §71 — Writing the load type started a load, and wedged the machine (2026-08-12)
+
+An unplanned finding, from a value sweep that should not have been run.
+
+Bytes 6–9 of the miscellaneous byte bank are the LOAD page's **type of load**,
+mirrored — writing one moves all four. The panel produces 1 (ALL PROGS +
+SAMPLES) and 2 (ENTIRE VOLUME); 0 is the power-on default.
+
+**Writing one of them, while the LOAD page had a partition and volume
+selected, started an actual disk load.** The display showed "Loading
+Sample…" in bursts between "BUSY", and after some minutes sat at "BUSY"
+indefinitely until the machine was power cycled.
+
+### What this does and does not establish
+
+It is **not** established that this is a usable remote load trigger:
+
+- The first value written was 0, which is also the **power-on default**, so
+  "0 means go" is refuted — at boot it sits at 0 and nothing happens. What
+  started the load was writing the byte in that context, and the mechanism is
+  not understood.
+- Throughout the load, a poller was sending `RSTAT` every 8 seconds. That is
+  the hardware rule in this project's own CLAUDE.md broken against itself, and
+  the observed rhythm — 30–50 s of BUSY punctuated by one or two objects
+  loading — is consistent with the load being repeatedly interrupted to
+  service probes. So "the machine wedged" and "the machine was being
+  disrupted" are not separable from this run.
+- The volume was 58.7 MB into a 32 MB machine, so it could never have
+  completed. A failure at the end proves nothing about the mechanism.
+
+A clean test needs a volume that **fits**, nothing else on the bus, and no
+probing at all. Until then this is recorded as a hazard rather than a feature,
+and `s3k.bridge` does not expose it.
+
+### It is a destructive operation
+
+A load clears RAM and replaces the resident programs and samples. If it is
+ever exposed it belongs behind the arm-then-fire flow that `DELP`, `DELK` and
+`DELS` get, not on a keypress.
+
+### The SCSI drive ID does not persist
+
+Separately, and confirmed by the same power cycle: `byte[11]` was set to 4,
+the panel showed 4, and after the reboot it read **5** again. So the write
+changes the running value and the display but does not survive a restart —
+which is also the most likely reason changing it never altered the volume
+list, since a SCSI ID is normally bound when the bus is scanned at boot.
+
+### How it happened, which is the part worth keeping
+
+An hour before this, these notes recorded that blind-probing unknown
+miscellaneous indices needed explicit authorisation, because a wrong index
+could plausibly be a format and the disc images are not covered by "nothing
+volatile on the sampler".
+
+The sweep that triggered this wrote values 0–7 into a byte whose meaning had
+just been identified, inside a loop that read as routine range-checking. It
+was the same act under a different description. **A stated rule did not fire
+because the situation did not look like the one the rule described** — which
+is §63's lesson arriving in a new place: the check has to be attached to the
+action, not to the story about the action.
