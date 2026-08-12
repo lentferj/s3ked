@@ -271,6 +271,46 @@ def test_filfrq_and_filq_agree_on_the_corner():
     assert abs(corner / 919.0 - 1) < 0.02
 
 
+def test_lfodel_is_a_pure_delay_with_no_fade_in():
+    """§31 assumed a delay followed by a ramp, and measured their sum.
+
+    Two estimators that fail differently -- a 5%-of-final threshold, and the
+    rising edge extrapolated back to zero -- agree to -0.010 +/- 0.016 s over
+    thirteen settings. There is no ramp to conflate.
+    """
+    s = scales.SCALES[("program", "LFODEL")]
+    assert not s.provisional
+    assert s.kind == "pole"
+    assert "NO FADE-IN" in s.note
+    assert s.value_to_physical(0) == 0.0
+
+
+def test_lfodel_runs_to_a_pole_past_the_end_of_the_field():
+    """0.065 s at 50, 1.55 s at 99 -- the top steps are worth far more.
+
+    A converter reading this as linear puts 99 at about a third of a second
+    instead of a second and a half.
+    """
+    s = scales.SCALES[("program", "LFODEL")]
+    assert s.b > 99, "the machine never reaches the pole"
+    assert s.value_to_physical(99) / s.value_to_physical(50) > 20
+    with pytest.raises(ValueError):
+        s.value_to_physical(104)
+
+
+def test_the_two_runaway_laws_share_a_shape():
+    """FILQ and LFODEL both run to a pole sited just past their own maximum.
+
+    Recorded because it is the kind of coincidence that invites a unified
+    story, and there is no evidence for one: the poles sit at 15.84 of 15 and
+    103.4 of 99, and nothing measured connects a filter's damping to an LFO's
+    delay. Two fields, same shape, no claim.
+    """
+    filq = scales.SCALES[("keygroup", "FILQ")]
+    lfodel = scales.SCALES[("program", "LFODEL")]
+    assert filq.a > 15 and lfodel.b > 99
+
+
 def test_describe_value_is_unchanged_where_nothing_was_measured():
     param = p.lookup("VFREQ1", "keygroup")
     assert p.describe_value(param, 5) == "5"
@@ -406,15 +446,20 @@ def test_the_tuning_fit_and_the_exact_constant_agree():
 
 
 def test_what_is_still_provisional():
-    """LFODEL: the detector measures delay plus fade-in as their sum.
+    """Nothing, now -- and the empty list is the point.
 
-    FILQ left this list once it was fitted to the DAMPING over the whole
-    transfer function rather than to the height of a peak a harmonic comb
-    steps past.
+    FILQ left the list in §53, fitted to the DAMPING across the whole transfer
+    function rather than to a peak height a harmonic comb steps past. LFODEL
+    left it in §55, once the onset was timed instead of the moment the vibrato
+    grew large. Neither was settled by fitting harder; each needed a different
+    measurement, which is what "provisional" was recording in the first place.
+
+    If this list grows again that is fine and expected. What must not happen
+    is a law being un-marked because the number looked good enough.
     """
     provisional = sorted(n for (_r, n), s in scales.SCALES.items()
                          if s.provisional)
-    assert provisional == ["LFODEL"]
+    assert provisional == []
 
 
 def test_the_attack_and_the_decay_are_different_laws():
@@ -429,11 +474,30 @@ def test_the_attack_and_the_decay_are_different_laws():
     assert abs(attack - abs(decay)) > 0.01
 
 
-def test_a_provisional_value_is_marked_in_the_display():
+@pytest.fixture
+def unsettled(monkeypatch):
+    """A provisional law, injected -- no real one is left to borrow.
+
+    The marking has to keep working for the next half-answered measurement,
+    so it is tested against a scale built for the purpose rather than against
+    whichever law happened to be unfinished on the day.
+    """
+    scale = scales.Scale(
+        "keygroup", "TESTONLY", "Hz", "exp", 1.0, 0.05, (40, 80), 0.5,
+        provisional="measured, but its meaning is not settled",
+    )
+    patched = dict(scales.SCALES)
+    patched[("keygroup", "TESTONLY")] = scale
+    monkeypatch.setattr(scales, "SCALES", patched)
+    return scale
+
+
+def test_a_provisional_value_is_marked_in_the_display(unsettled):
     """A number whose meaning is unsettled must not read like a finished one."""
-    assert scales.describe("program", "LFODEL", 60).startswith("!")
+    assert scales.describe("keygroup", "TESTONLY", 60).startswith("!")
     assert not scales.describe("keygroup", "FILFRQ", 80).startswith("!")
     assert not scales.describe("keygroup", "FILQ", 8).startswith("!")
+    assert not scales.describe("program", "LFODEL", 60).startswith("!")
 
 
 def test_the_settled_laws_are_not_marked_provisional():
@@ -443,9 +507,9 @@ def test_the_settled_laws_are_not_marked_provisional():
         assert not scales.SCALES[(region, name)].provisional
 
 
-def test_provisional_and_extrapolated_marks_stack():
+def test_provisional_and_extrapolated_marks_stack(unsettled):
     """Two different doubts, two different marks; neither hides the other."""
-    text = scales.describe("program", "LFODEL", 20)       # outside 40..99
+    text = scales.describe("keygroup", "TESTONLY", 20)    # outside 40..80
     assert text.startswith("!?")
 
 

@@ -43,9 +43,12 @@ exponential decay: the classic analog pairing, and the two obey different
 exponents (0.11175 against ~0.0977), so they are two laws rather than one law
 applied twice.
 
-``ATTAK2`` remains ``provisional`` and carries a ``!``: the filter attack's
-span *does* vary with the modulation depth, and which domain it ramps in has
-not been settled.
+**No law here is provisional any more.** The mechanism stays -- a law whose
+meaning is unsettled carries ``provisional`` and renders with a ``!`` -- and it
+is still exercised by the tests, because the next measurement that comes back
+half-answered should be marked rather than rounded up into certainty. The last
+two entries to leave that list were ``FILQ`` (§53) and ``LFODEL`` (§55), and
+neither was settled by fitting harder: each needed a different measurement.
 
 **The two ends of a range are not symmetrical.** Sometimes an endpoint is
 independently known even though the curve stops short of it: ``FILFRQ`` 99 is
@@ -97,7 +100,7 @@ class Scale:
     region: str
     param: str
     unit: str
-    kind: str                      # "exp" | "linear" | "pan" | "reso"
+    kind: str                      # "exp" | "linear" | "pan" | "reso" | "pole"
     a: float
     b: float
     fitted: Tuple[int, int]        # the range the law was measured over
@@ -138,6 +141,15 @@ class Scale:
                     f"{self.param} {value} is at or past self-oscillation "
                     f"({self.a:.2f}); the field only reaches 15")
             return -20.0 * math.log10(1.0 - value / self.a)
+        if self.kind == "pole":
+            # A quantity that runs away as the value approaches ``b``, which
+            # lies past the field's own maximum. Zero at value 0 by
+            # construction, so the coefficient is the only free scale.
+            if value >= self.b:
+                raise ValueError(
+                    f"{self.param} {value} is at or past the pole "
+                    f"({self.b:.2f}); the field only reaches 99")
+            return self.a * value / (self.b - value)
         raise ValueError(f"unknown scale kind {self.kind!r}")
 
     def resonance_q(self, value: float) -> float:
@@ -162,6 +174,10 @@ class Scale:
             if physical < 0:
                 raise ValueError(f"{self.param} cannot cut, only boost")
             return self.a * (1.0 - 10.0 ** (-physical / 20.0))
+        if self.kind == "pole":
+            if physical < 0:
+                raise ValueError(f"{self.param} cannot be negative")
+            return self.b * physical / (self.a + physical)
         raise ValueError(f"unknown scale kind {self.kind!r}")
 
     def within(self, value: float) -> bool:
@@ -605,22 +621,26 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "V_ATT1 pivot; VELDEP does not.",
     ),
     ("program", "LFODEL"): Scale(
-        "program", "LFODEL", "s", "exp", 0.018694, 0.04302, (40, 99), 0.7633,
-        provisional="the SHAPE does not fit. r2 0.76 for exponential and 0.60 "
-                    "for linear, and the local exponent varies fourfold "
-                    "across the range (0.026/unit at 40-80 against 0.114 at "
-                    "90-99). The likely cause is that the detector times "
-                    "'until the vibrato exceeds 100 cents', which is the "
-                    "delay PLUS any fade-in of the depth after it -- two "
-                    "quantities measured as their sum. Use it for the order "
-                    "of magnitude only.",
-        bounds="fitted 40..99. Below 40 the delay is under the detector's\n"
-               "0.03 s floor. Two further points, 85 and 92, are excluded as\n"
-               "pitch-tracker octave errors: they reported ~4.8 and ~4.3\n"
-               "octaves of swing against 2.4 everywhere else, and a spurious\n"
-               "octave jump crosses any onset threshold instantly.",
-        note="Delay before LFO1's vibrato begins. Monotonic and strongly\n"
-             "accelerating: ~0.15 s at 40, 0.43 s at 80, 1.99 s at 99.",
+        "program", "LFODEL", "s", "pole", 0.06905, 103.41, (0, 99), 0.999555,
+        bounds="the whole field, all fourteen points measured. Below LFODEL 20\n"
+               "the delay is under the 0.008 s time resolution and reads zero,\n"
+               "which is the right answer to two decimal places.",
+        note="Delay before LFO1's vibrato begins:\n"
+             "  seconds = 0.06905 * LFODEL / (103.41 - LFODEL)\n"
+             "It runs away toward a pole at 103.4 -- past the field's own top,\n"
+             "so the machine never reaches it, but the last few steps are very\n"
+             "much steeper than the first: 0.065 s at 50, 0.24 s at 80, 0.46 s\n"
+             "at 90, 1.55 s at 99. Same shape as FILQ (§53), which also runs\n"
+             "to a pole sited just past the end of its range.\n"
+             "THERE IS NO FADE-IN. §31 assumed the delay was followed by a\n"
+             "ramp and that its detector measured the two as a sum. Measured\n"
+             "two ways here -- a 5%-of-final threshold, and a straight line\n"
+             "fitted to the rising edge and extrapolated back to zero -- the\n"
+             "estimates agree to -0.010 +/- 0.016 s over thirteen settings.\n"
+             "The vibrato starts abruptly, so delay is the whole story.\n"
+             "The 0.187 s the detector reports at LFODEL 0 is its own latency,\n"
+             "not the machine's: it is the swing window, and subtracting it is\n"
+             "justified because fitting the offset freely returns 0.188 s.",
         endpoints={0: "no delay"},
     ),
     ("program", "PANPOS"): Scale(

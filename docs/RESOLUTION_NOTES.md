@@ -2717,6 +2717,10 @@ It is a constant offset and does not affect the ratio.
 
 ## §35 — `LFODEP` and `LFODEL`, and a floor I read as data (2026-08-11)
 
+> **The `LFODEL` half is superseded by §55**, which finds a different law
+> and shows there is no fade-in to conflate. `LFODEP` stands, and §55
+> cross-checks it to 2.4% on independent data.
+
 ```
 LFODEP   vibrato = 19.4932 * LFODEP cents peak-to-peak   0..99   r2 0.99949
 LFODEL   delay   ~ 0.018694 * exp(0.04302 * v) s         40..99  r2 0.7633
@@ -4108,3 +4112,86 @@ This matters more than it looks. §20's stated bounds were also about the
 source running out, and the honest form of that statement is what the two
 fields' disagreement finally exposed: **a ruler that saturates against its
 source is measuring the source.**
+
+---
+
+## §55 — `LFODEL` is a pure delay, and there is no fade-in (2026-08-12)
+
+§31 left `LFODEL` provisional at r2 0.7633 and named its suspect: the detector
+timed "until the vibrato exceeds 100 cents", which is the delay **plus** any
+fade-in after it, two quantities measured as their sum.
+
+The suspect was innocent. There is no fade-in.
+
+```
+    seconds = 0.06905 * LFODEL / (103.41 - LFODEL)      0..99   r2 0.999555
+```
+
+Two parameters, fourteen points, residuals of 0.017 s against a time
+resolution of 0.008 s, sign-runs 7 of 13. The delay runs away toward a pole at
+**103.4** — past the field's own top, so the machine never reaches it — which
+makes the last steps far steeper than the first: 0.065 s at 50, 0.24 s at 80,
+0.46 s at 90, **1.55 s at 99**.
+
+That is the same shape as `FILQ` (§53), whose damping runs to zero at 15.84 of
+a 15-step field. Two fields, same functional form, poles sited just past the
+end of each range. **There is no evidence they are related** and nothing
+measured connects a filter's damping to an LFO's delay; it is recorded because
+the coincidence invites a unified story and none is warranted.
+
+### Two estimators that fail differently
+
+```
+ONSET      first crossing of 5% of the final swing -- times the delay,
+           insensitive to the ramp, sensitive to noise
+INTERCEPT  a line fitted to the RISING edge, extrapolated back to zero --
+           uses the ramp's geometry, insensitive to noise, wrong if the
+           ramp is not straight
+```
+
+They agree to **-0.010 ± 0.016 s over thirteen settings**. Had there been a
+fade-in the intercept would have led the onset by its duration. One estimator
+alone would have produced a number and no way to know this; the disagreement
+between two was the measurement.
+
+### Three detector faults, each caught by a control rather than by inspection
+
+The probe refused to report twice before it produced anything, and both
+refusals were correct.
+
+1. **1242 cents of "vibrato" with the LFO switched off.** That is an octave,
+   and an octave is what an autocorrelation slip looks like: the tracker locks
+   onto a harmonic and a max-minus-min swing reads the jump as modulation.
+   Fixed by searching only 380–760 Hz around note 72's 523 Hz — which
+   **excludes** 262 and 1046, so the octave is not in the tracker's reach —
+   by dropping frames more than 700 cents from the capture's median, and by
+   using a 95th-to-5th percentile spread instead of max minus min.
+2. **325 cents of "vibrato" on a steady note, with every frame tracked and the
+   median pitch dead right.** The capture ran past note-off, and once the
+   release fell into the noise the tracker still returned a number — a number
+   about the noise. Fixed by gating on level and analysing only the held part.
+   The first fault masked the second: both would have been read as "the LFO is
+   doing something".
+3. **A 0.235 s floor that swallowed every delay below `LFODEL` 70.** The swing
+   window has to hold about an LFO cycle, and that window *is* the detector's
+   latency. Raising `LFORAT` to 99 shortened the cycle and cut the latency to
+   0.187 s, and the level gate is what made the shorter pitch window
+   affordable in the first place.
+
+The latency is subtracted, and that is justified rather than assumed: fitting
+the offset as a free parameter returns **0.188 s** against the 0.187 s measured
+at `LFODEL` 0, where the true delay is zero by definition.
+
+### A cross-check that came free
+
+At `LFORAT` 50 the vibrato measured **571 cents** against the 585 that §35's
+`LFODEP` law predicts for depth 30 — 2.4%, on a law fitted from different data
+by a different detector. At `LFORAT` 99 the same setting reads 502 cents, and
+that is the 30 ms pitch window averaging across a faster cycle, not the machine
+disagreeing with itself. Only the slow-LFO figure is a valid check, and the
+difference between them is a reminder that a detector tuned for one quantity
+(onset time) is not automatically trustworthy for another (depth).
+
+**With this, no law in `s3k/scales.py` is provisional.** The marking mechanism
+stays and is still tested, against a scale injected for the purpose — the next
+half-answered measurement should be marked, not rounded up into certainty.
