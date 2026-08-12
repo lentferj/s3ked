@@ -256,21 +256,29 @@ recorded in §22, neither yet fixed.
 
 ---
 
-## The sweep harness fits an exponential to every sweep (OPEN)
+## Envelope 2 measured; ENV3 still open (CLOSED 2026-08-11 for env 1 and 2)
 
-**Status:** `summarise` assumes `a*exp(b*x)` for all eight sweeps. That is
-right for filter frequency and wrong for tuning, which is linear -- the tool
-reported `cents = 1.05*exp(0.067*KGTUNO)` for a relationship measured at
-r2 0.9998 as a straight line (§21).
+`DECAY2`, `SUSTN2`, `RELSE2` and both attacks are measured -- see
+RESOLUTION_NOTES §28-§32 and §41-§42. Envelope 3 (`ATTAK3`, `DECAY3`,
+`SUSTN3`, `RELSE3`, offsets 178-191) is untouched and its routing is unknown.
 
-**To close this:** give `Sweep` a fit model (`"exp"` / `"linear"`) and let
-`summarise` dispatch on it. Amp envelope times are probably exponential;
-loudness and pan are probably linear in dB. Each should say which it is rather
-than inheriting a default that happens to suit the filter.
+## Model selection: comparing candidates cannot say "none of these" (OPEN)
 
-**Blocked on:** nothing. RESOLUTION_NOTES §21.
+The harness picks the best of the shapes it is offered, which is the least
+wrong one, not necessarily a right one. §36 caught it: four candidates were
+fitted to a clipped velocity curve, all fitted badly, and the most curved won
+by bending toward the flat top. The true shape -- piecewise linear -- was not
+among them.
 
----
+Partly mitigated. `beyond_noise()` has an explicit undecidable branch, and
+several probes now report residual halves so a systematic tilt shows up. What
+is still missing is a general "the residuals are not random" test applied to
+every fit rather than to the ones somebody remembered to check.
+
+**The rule that catches it by hand:** look at where the residuals sit, not
+only how large they are. A fit at r2 0.96 whose errors all lie at one end is a
+shape mismatch wearing a good score, and a fit that is equally mediocre at
+every point is bias rather than noise (§29).
 
 ## Sample header bytes 171-191 are undescribed (OPEN, hardware finding)
 
@@ -417,45 +425,145 @@ records the opcodes and the aksy prior art.
 
 ---
 
-## Parameter scales are unknown -- what a value MEANS (OPEN, tooling built)
+## Parameter scales -- what a value MEANS (RESOLVED for 19 fields)
 
-**Status: measurement tooling built and tested synthetically; no number has
-been measured.** Blocked on hardware, and behind the offset confirmation:
-every sweep writes offsets that `HW_CHECKLIST.md` step 4 has not yet
-validated.
+**Status: 19 laws measured on an S3000XL and shipped in `s3k/scales.py`,
+two of them still provisional.**
+The editor now shows `FILFRQ 80 (~2.57 kHz)` and accepts `set FILFRQ 500Hz`.
+Remaining fields are listed at the bottom; the tooling to do them is built and
+proven, so each is a bench session rather than a research problem.
 
-The tables carry each parameter's *range* and none of its *meaning*.
-`FILFRQ` is "basic filter frequency, 0 to 99" -- not one word about which
-hertz. Same for every rate, level, depth and tuning field. Two consumers want
-the answer: this editor, so a pane can show `FILFRQ 63 (~4.2 kHz)` the way
-`describe_value()` already renders enumerations; and any converter writing
-Akai programs -- the sibling mpc2emu builds S1000/S3000 programs and disk
-images today and has to guess how a cutoff in hertz becomes a 0-99 integer.
+The tables carry each parameter's *range* and none of its *meaning*. `FILFRQ`
+is "basic filter frequency, 0 to 99" -- not one word about which hertz. Two
+consumers wanted the answer: this editor, and any converter writing Akai
+programs -- the sibling mpc2emu builds S1000/S3000 programs and disk images
+and had to guess how a cutoff in hertz becomes a 0-99 integer.
 
-What exists now:
+Measured (see RESOLUTION_NOTES §20-§26 for each sweep and its bounds):
 
-- `s3k/measure.py` -- the analysis half. Pure functions, no I/O, so each is
-  tested against a synthesised signal whose answer is known in advance
-  (`tests/test_measure.py`): a 200 ms attack must measure 200 ms, a filter at
-  a known corner must report that corner.
-- `probes/calibrate.py` -- the driving half. Eight sweeps, each carrying the
-  list of parameters it must neutralise first, which is where the real
-  knowledge sits. `--dry-run` drives a synthetic machine end to end and
-  recovers the curve that machine was built with.
-- `docs/re_procedures/calibration.md` -- order, traps, and what each sweep
-  settles. `HW_CALIBRATION.md` (machine-local) is the bench checklist.
+| field | law | measured over | r2 |
+|---|---|---|---|
+| `FILFRQ` | `6.998 * exp(0.07384 v)` Hz | 50..90, 99 = wide open | 0.9996 |
+| `KGTUNO`, `PTUNO` | `0.391667 v` cents | 0..50 | 0.9998 |
+| `PRLOUD` | `0.642719 (v - 99)` dB | 0..99 | 0.9933 |
+| `SUSTN1` | `0.60832 (v - 99)` dB | 10..99 | 0.99995 |
+| `LFORAT` | `0.11867 v - 0.04` Hz | 10..99 | 0.9995 |
+| `ATTAK1` | `0.000150326 * exp(0.11175 v)` s (a real rise time) | 55..90 | 0.99991 |
+| `DECAY1` | `23525.6 * exp(-0.09776 v)` dB/s | 45..85 | 0.99998 |
+| `RELSE1` | `22055.3 * exp(-0.09683 v)` dB/s | 55..70 | 0.99956 |
+| `ATTAK2` | `0.00115864 * exp(0.09850 v)` s **provisional, depth 18 only** | 55..85 | 0.99967 |
+| `DECAY2` | `25200 * exp(-0.09796 v)` octaves/s | 50..80 | 0.99995 |
+| `RELSE2` | `61190 * exp(-0.10123 v)` octaves/s | 58..76 | 0.99977 |
+| `SUSTN2` | `FILFRQ shift = 0.024645 * SUSTN2 * MODVFILT1` | 0..70 | 0.9908 |
+| `PANPOS` | constant-power, `1.2124 * 20log10(tan t) - 0.54` dB | -45..45 | 0.9996 |
 
-**Blocked on more than hardware, in one case:** `lfo-rate` needs the panel
-consulted first. `MODSLFOT`/`MODSLFOL` are sources of modulation *of* LFO1,
-not its destination, and measuring a rate through an unconnected route yields
-a clean and entirely fictitious curve.
+Four things these numbers taught that no document says:
 
-**Also blocked on source material.** These sweeps set parameters and play
-notes; they cannot put a sample in memory, and this family has no oscillator.
-Filter calibration needs broadband noise resident on the machine, which is a
-disk-image job -- see the procedure doc.
+1. **`SUSTN1` is linear in decibels, not in amplitude.** A half-amplitude
+   sustain is 89, not 50. A converter writing `sustain * 99` is wrong by
+   30 dB in the middle of its range, and it never looks wrong.
+2. **`KGTUNO` is 1/256 of a semitone per unit**, not one cent per unit.
+3. **A decay value is a slew RATE, not a duration** -- so its time depends on
+   how far the stage travels (`time = span / rate`). Confirmed by holding the
+   value fixed and varying the distance: the rate held to 0.27% (amplitude)
+   and 1.9% (filter) while the duration moved 19% and 28%. A converter that
+   writes a decay from a target time without knowing the sustain level is
+   wrong by the ratio of the spans. `DECAY1`, `RELSE1` and `DECAY2` share an
+   exponent near 0.0977; the **attacks fit neither model and stay open**.
+4. **Both sustains are linear in the log domain, each in its own.** `SUSTN1`
+   is linear in decibels; `SUSTN2` is linear in FILFRQ units, which is to say
+   in octaves. Same name, same range, different domain.
 
-See RESOLUTION_NOTES §10.
+**A fitted range is not the usable range, and its two ends are not
+symmetrical.** `s3k/scales.py` marks an extrapolated conversion with `?` and
+records separately those endpoints that are independently known -- `FILFRQ` 99
+is *measured* wide open even though the curve stops at 90. This is not
+pedantry: mpc2emu clamped "fully open" to the top of the fitted range and made
+every converted program audibly darker than before the calibration existed.
+Caution made the output worse.
+
+**The prediction that `ATTAK1`/`DECAY1` would move onto 0.098 was tested and
+the test overturned something bigger** -- see §29/§30. `DECAY1` did land on
+0.09776, but the exponential model underneath the whole table was wrong: every
+stage is a straight ramp in the log domain. §28's "one time-constant law" is
+retracted, along with its argument that two detectors sharing no code made it
+independent confirmation (they rule out detector error, not model error).
+
+**The attack shapes are settled (§31), and they differ.** `ATTAK1` is a
+linear ramp in *amplitude* (r2 0.9982 against 0.9343 for linear-in-dB), which
+makes it a genuine rise time -- the amplitude attack always travels zero to
+peak, a fixed distance. `ATTAK2` is a linear ramp in *octaves* (0.9980 against
+0.9124 for hertz). Only the amplitude attack is in the linear domain, and it
+must be: a ramp linear in dB from silence starts at minus infinity.
+
+**`ATTAK2` is a duration** (§32). Replicated three captures per depth: span
+varied 41%, rise time 3.5%, and constant-rate is rejected at a between/within
+ratio near 30. The earlier claim of a threefold depth effect is **withdrawn**
+-- it compared an exponential time constant against a 10-90% rise time, two
+different quantities carrying the same unit.
+
+**Still open, and the reason changed:** `ATTAK2` stays provisional not for
+depth-dependence but because **two implementations of "10-90% rise" in this
+project disagree by 33% on the same condition** (3.060 s against 2.297 s).
+The exponent is trustworthy; the prefactor is not. Whether a small residual
+span-dependence exists is also unsettled -- that separation is 2.68x, below
+the 3x bar.
+
+**The gap behind three inconclusive runs: no sweep had ever replicated.**
+Every condition was measured once, so nothing carried an error bar. Three
+captures per condition gave 0.65% within-condition scatter and settled the
+question immediately. `probes/calibrate.py` now has `replicate()` and
+`beyond_noise()`, the latter with an explicit undecidable branch.
+
+**Retired:** the "one time-constant law" claim, in all its forms. Attack and
+decay have different exponents (0.11175 vs ~0.0977) and are different kinds of
+quantity. A test pins this because the idea has returned twice.
+
+Still unmeasured: `FILQ` resonance, `LFODEP`/`LFODEL`/`LFO2` rate,
+velocity-modulation depths, and the ~20 fields the document lists as fixed
+placeholders.
+
+See RESOLUTION_NOTES §20-§43.
+
+### Added since, and worth reading before extending any of it
+
+- **Everything pivots on 64** (§43). `V_LOUD`, `V_ATT1` and `K_FREQ` are all
+  referenced to the centre of the controller's MIDI range, not to middle C or
+  the sample root. This **predicts** that `MWLDEP`, `PRSDEP`, `VFREQ1` and
+  `VPANO1` pivot there too -- untested, and the cheapest way to refute the rule.
+- **Two inert paths.** Auto-pan (`PANDEP`/`PANRAT`/`PANDEL`/`LFO2WAVE`/
+  `LFO2TRIG`) and the per-zone `VLOUD1` move nothing measurable, while
+  `PANPOS` and the program-wide `V_LOUD` work fully (§39, §40). Recorded as
+  "nothing reachable from these fields moves the output", not as
+  "unimplemented" -- whether they need the IB304F board is not established.
+- **Still provisional:** `FILQ` is a lower bound (harmonic-comb resolution)
+  and `LFODEL`'s shape does not fit (the detector conflates delay with
+  fade-in). Both have a stated route to settling them.
+- **Untouched:** `MWLDEP`, `PRSDEP`, `VELDEP`, `LFO1WAVE`, envelope 3, the
+  envelope-2 velocity set, `ZPLAY1`, and the velocity-crossfade fields.
+
+## Panel confirmation — what only the LCD can settle (OPEN, needs a person)
+
+**`HW_PANEL_CHECKS.md`** (machine-local, excluded via `.git/info/exclude`)
+lists every question that cannot be answered over SysEx, ordered by value.
+
+Two classes, both structural rather than incidental:
+
+1. **Offset identity.** Every byte offset here is an unverified transcription
+   (§2). A write that changes the sound proves *some* parameter moved, not the
+   one named. The machine repaints the page it is displaying, so showing a page
+   and writing its field is a direct test of the mapping -- and the only one
+   available, since this family has no screen-mirror protocol (§1).
+2. **Stored versus displayed.** `POLYPH` holds 31 where the panel shows 32.
+   Any field whose panel reading is computed can be wrong the same way, and
+   `VTUNO1`/`KGTUNO`/`PTUNO` are the obvious candidates -- 1/256ths in the byte,
+   semitones and cents on the display.
+
+Highest value: envelope 3 at offsets 179-186, on which §50 rests entirely and
+which the owner's manual says should not work at all without the IB304F; the
+IB304F's own presence, which one page settles and which mpc2emu also carries;
+and whether the ten inert fields (§39, §47) have pages at all or merely have no
+effect.
 
 ## Housekeeping
 
