@@ -603,3 +603,79 @@ def test_multi_in_requires_a_match(monkeypatch):
     _install(monkeypatch, type("P", (_FakePort,), {}), ["Something"])
     with pytest.raises(RuntimeError, match="no input port matching"):
         MultiIn("Nothing")
+
+
+# --- the disk's volume list -------------------------------------------------
+
+def _volume_record(name: str, kind: int = 3) -> bytes:
+    """One 16-byte VOLLIST record: 12 charset bytes, then the type and pad."""
+    from s3k import messages as m
+    return bytes(m.encode_name(name, 12)) + bytes([kind, 0, 0, 0])
+
+
+def _requested_index(frame: bytes) -> int:
+    """The item index out of an extended request: 14 bits, low 7 first."""
+    return frame[5] | (frame[6] << 7)
+
+
+def _disk(names, per_read=16):
+    """A stand-in device that pages a volume list the way the machine does."""
+    from s3k import bridge as b, messages as m
+
+    records = [_volume_record(n) for n in names]
+
+    class Fake(b.S3kBridge):
+        def __init__(self):
+            self.exclusive_channel = 0
+            self.reads = 0
+
+        def send_and_receive(self, frame, timeout=None):
+            self.reads += 1
+            start = _requested_index(frame)
+            page = records[start:start + per_read]
+            page += [bytes(16)] * (per_read - len(page))   # zeros past the end
+            return m.HeaderData(
+                command=m.Command.VOLLIST, index=start, selector=0,
+                offset=0, data=b"".join(page), exclusive_channel=0,
+            ).encode()
+
+    return Fake()
+
+
+def test_volume_list_stops_on_the_type_byte_not_a_blank_name():
+    """Past the last volume every byte is zero -- and a zero NAME is not blank.
+
+    Index 0 of the Akai charset is the character "0", so an empty record
+    decodes to "000000000000". Stopping on a falsy name would never stop, and
+    stopping on that literal string would truncate a disk that has a volume
+    genuinely called that. The type byte is the marker, and this fixture
+    includes such a volume so the wrong rule fails here.
+    """
+    bridge = _disk(["BOOT", "WORK 01", "000000000000"])
+    volumes = bridge.volume_list()
+
+    assert [v.name for v in volumes] == ["BOOT", "WORK 01", "000000000000"]
+    assert [v.index for v in volumes] == [0, 1, 2]
+    assert all(v.kind == 3 for v in volumes)
+
+
+def test_volume_list_pages_rather_than_asking_one_at_a_time():
+    """100 volumes took 7 round trips on hardware, not 100."""
+    bridge = _disk([f"VOL {i:02d}" for i in range(100)])
+    volumes = bridge.volume_list()
+
+    assert len(volumes) == 100
+    assert bridge.reads <= 8, f"{bridge.reads} round trips for 100 volumes"
+
+
+def test_an_empty_disk_reads_as_no_volumes():
+    bridge = _disk([])
+    assert bridge.volume_list() == []
+
+
+def test_volume_indices_are_the_numbers_to_address_a_volume_by():
+    """The index is the position in the list, as for programs and samples."""
+    bridge = _disk(["A", "B", "C", "D", "E"], per_read=2)
+    volumes = bridge.volume_list()
+    assert [v.index for v in volumes] == [0, 1, 2, 3, 4]
+    assert [v.name for v in volumes] == ["A", "B", "C", "D", "E"]

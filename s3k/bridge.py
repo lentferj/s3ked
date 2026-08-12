@@ -62,6 +62,7 @@ returns ok/error. :meth:`S3kBridge.set_header_bytes` waits for it by default.
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import rtmidi  # noqa: E402
@@ -495,6 +496,21 @@ _REGION_SELECTOR: Dict[str, int] = {
 }
 
 
+#: Bytes per volume-list record: 12 of name, then type and three reserved.
+_VOLUME_RECORD = 16
+#: Records to ask for per round trip. 16 is the most the device answered with.
+_VOLUMES_PER_READ = 16
+
+
+@dataclass(frozen=True)
+class _Volume:
+    """One volume on the attached disk."""
+
+    index: int
+    name: str
+    kind: int
+
+
 def _selector_for(region: str, keygroup: int) -> int:
     """The selector byte to send for *region*."""
     fixed = _REGION_SELECTOR.get(region)
@@ -778,6 +794,60 @@ class S3kBridge:
             timeout=timeout,
         )
         return m.ProgramList.decode(reply).names
+
+    #: One entry of the disk's volume list. ``kind`` is the record's type byte;
+    #: every volume on the machine measured so far reports 3.
+    Volume = _Volume
+
+    def volume_list(self, *, limit: int = 512,
+                    timeout: Optional[float] = None) -> List["_Volume"]:
+        """RVOLLIST -> VOLLIST. The volumes on the attached SCSI disk.
+
+        The reply is a run of **16-byte records**: a 12-character name in the
+        device's own charset, then a 4-byte tail whose first byte is the
+        volume type. ``index`` is the volume to start at and ``count`` decides
+        how many records come back, so this pages rather than asking one at a
+        time -- 100 volumes take 7 round trips at 16 records each, about 1.2 s.
+
+        **The end is marked by the TYPE byte, not by an empty name.** Past the
+        last volume the record is all zeroes, and an all-zero name decodes to
+        ``000000000000`` rather than to blank, because index 0 of the Akai
+        charset is the character ``0``. Stopping on a blank name would run
+        forever; stopping on a name of zeros would truncate a disk that
+        happens to have a volume called that.
+
+        Read-only. There is no counterpart operation that loads a volume: the
+        documented protocol can enumerate the disk and nothing more, so this
+        shows what is there and the front panel still has to load it.
+        """
+        out: List[_Volume] = []
+        start = 0
+        while start < limit:
+            frame = m.HeaderRequest(
+                command=m.Command.RVOLLIST,
+                index=start,
+                offset=0,
+                count=_VOLUME_RECORD * _VOLUMES_PER_READ,
+                exclusive_channel=self.exclusive_channel,
+            ).encode()
+            reply = self.send_and_receive(frame, timeout=timeout)
+            _channel, command, _payload = m.parse_frame(reply)
+            if command == m.Command.REPLY:
+                self._raise_for_reply(reply, "reading the volume list")
+            data = m.HeaderData.decode(reply).data
+            if not data:
+                break
+            for at in range(0, len(data) - _VOLUME_RECORD + 1, _VOLUME_RECORD):
+                record = data[at:at + _VOLUME_RECORD]
+                if record[12] == 0:
+                    return out
+                out.append(_Volume(
+                    index=start + at // _VOLUME_RECORD,
+                    name=m.decode_name(record[:12]).rstrip(),
+                    kind=record[12],
+                ))
+            start += len(data) // _VOLUME_RECORD
+        return out
 
     def sample_list(self, *, timeout: Optional[float] = None) -> List[str]:
         """RSLIST -> SLIST. Index in this list is the sample number to use."""

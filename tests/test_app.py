@@ -641,3 +641,64 @@ async def test_the_armed_header_is_red_and_the_locked_one_is_not(tmp_path):
     assert any(red_dominance(c) > 40 for c in introduced), (
         f"arming introduced {sorted(introduced)}, none of which reads as red"
     )
+
+
+async def test_the_disk_pane_is_empty_until_asked():
+    """Reading the disk is 7 round trips, so it is not part of startup.
+
+    A machine with no disk attached would otherwise turn a failure into a
+    startup failure rather than a message.
+    """
+    from textual.widgets import DataTable, Static
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        assert app.query_one("#volumes", DataTable).row_count == 0
+        assert "Disk" in str(app.query_one("#disk-title", Static).render())
+
+        await pilot.press("d")
+        for _ in range(15):
+            await pilot.pause()
+
+        table = app.query_one("#volumes", DataTable)
+        assert table.row_count > 0
+        assert "volume" in str(app.query_one("#disk-title", Static).render())
+        assert str(table.get_row_at(0)[0]) == "0"
+
+
+async def test_the_disk_pane_reports_a_failure_instead_of_crashing():
+    """No disk, or a device that refuses, must not take the app down."""
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    class NoDisk(DemoBridge):
+        def volume_list(self, *, limit=512, timeout=None):
+            raise RuntimeError("no disk attached")
+
+    app = S3kedApp(NoDisk(), allow_write=False)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press("d")
+        for _ in range(15):
+            await pilot.pause()
+        assert "no disk attached" in app.last_status
+        assert len(app.screen_stack) == 1
+
+
+async def test_reading_the_disk_needs_no_write_gate():
+    """It is a read. Arming the gate must not be a precondition."""
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press("d")
+        for _ in range(15):
+            await pilot.pause()
+        assert app.query_one("#volumes", DataTable).row_count > 0
+        assert app.allow_write is False

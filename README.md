@@ -74,6 +74,17 @@ it, so a value can be checked against the document without leaving the screen:
 
 <img src="docs/screenshots/edit.svg" alt="editing PRIORT, showing range 0..3 and the transcription note" width="100%">
 
+`d` reads the volume list off the attached SCSI disk — a ZuluSCSI, a real
+drive, whatever is bolted on:
+
+<img src="docs/screenshots/disk.svg" alt="the disk pane listing volumes read from the attached SCSI disk" width="100%">
+
+**Listing is all the protocol offers.** `RVOLLIST` enumerates volumes and
+`RHDDIR` the hard-disk directory, and both are reply-only: there is no
+documented operation that loads one. Loading stays a front-panel job. The read
+is 7 round trips for a 100-volume disk, about 1.3 seconds, which is why it
+happens on `d` rather than at startup.
+
 Deleting anything lives behind a separate screen that has to be armed and then
 fired, because the protocol offers no device-side confirmation and no undo:
 
@@ -161,6 +172,7 @@ pass `--exclusive-channel N`. The port pair that answers is remembered in
 | `w` | toggle the write gate (shown in the header when armed) |
 | `z` | undo the last write |
 | `r` | re-read the catalog |
+| `d` | read the volume list off the disk |
 | `m` | Master — the destructive operations |
 | `q` | quit |
 

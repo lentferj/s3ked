@@ -204,6 +204,9 @@ class S3kedApp(App):
     Screen { layout: vertical; }
     #panes { height: 1fr; }
     #left { width: 40%; }
+    /* Four stacked tables in the left column. The disk is the one that is
+       empty until asked for, so it gets the smallest share. */
+    #volumes { height: 1fr; }
     #right { width: 60%; }
     DataTable { height: 1fr; }
     .pane-title { background: $panel; padding: 0 1; }
@@ -229,6 +232,7 @@ class S3kedApp(App):
         Binding("w", "toggle_write", "Write gate"),
         Binding("z", "undo", "Undo"),
         Binding("m", "master", "Master"),
+        Binding("d", "disk", "Read disk"),
         Binding("tab", "focus_next", "Next pane", show=False),
     ]
 
@@ -257,6 +261,8 @@ class S3kedApp(App):
                 yield DataTable(id="keygroups", cursor_type="row")
                 yield Static("Samples", classes="pane-title")
                 yield DataTable(id="samples", cursor_type="row")
+                yield Static("Disk", classes="pane-title", id="disk-title")
+                yield DataTable(id="volumes", cursor_type="row")
             with Vertical(id="right"):
                 yield Static("Parameters", classes="pane-title", id="param-title")
                 yield DataTable(id="parameters", cursor_type="row")
@@ -270,6 +276,7 @@ class S3kedApp(App):
             ("programs", ("num", "name")),
             ("keygroups", ("kg", "range")),
             ("samples", ("num", "name")),
+            ("volumes", ("vol", "name")),
             ("parameters", ("off", "name", "value")),
         ):
             table = self.query_one(f"#{table_id}", DataTable)
@@ -372,6 +379,39 @@ class S3kedApp(App):
     def action_refresh(self) -> None:
         self.notify_status("reading catalog...")
         self._load_catalog()
+
+    def action_disk(self) -> None:
+        """Read the volume list off the attached disk.
+
+        Deliberately not part of the startup catalog. It is 7 round trips and
+        about 1.2 s for a full disk, and a machine with no disk attached would
+        make that a failure on every launch rather than on request.
+        """
+        self.notify_status("reading the disk…")
+        self._read_disk_worker()
+
+    @work(thread=True)
+    def _read_disk_worker(self) -> None:
+        try:
+            with self._bridge_lock:
+                volumes = self.bridge.volume_list()
+        except Exception as exc:
+            self.call_from_thread(self.notify_status, f"disk: {exc}")
+            return
+        self.call_from_thread(self._show_volumes, volumes)
+
+    def _show_volumes(self, volumes) -> None:
+        table = self.query_one("#volumes", DataTable)
+        table.clear()
+        for volume in volumes:
+            table.add_row(str(volume.index), volume.name)
+        self.query_one("#disk-title", Static).update(
+            f"Disk — {len(volumes)} volume(s)" if volumes else "Disk — empty"
+        )
+        self.notify_status(
+            f"{len(volumes)} volume(s). The protocol can list the disk but not "
+            f"load from it; loading is a front-panel operation."
+        )
 
     def action_toggle_write(self) -> None:
         self.allow_write = not self.allow_write

@@ -235,6 +235,22 @@ class DemoBridge:
     def sample_list(self, *, timeout: Optional[float] = None) -> List[str]:
         return list(self._samples)
 
+    def volume_list(self, *, limit: int = 512,
+                    timeout: Optional[float] = None):
+        """A disk that looks like a disk, without being anyone's disk.
+
+        Invented names, deliberately: a real machine's volume list carries the
+        titles of whatever commercial library was loaded onto it, and those do
+        not belong in a fixture. What a demo needs is the SHAPE -- a boot
+        volume, a run of numbered ones, enough of them to make the pane scroll
+        -- and none of that requires a real title.
+        """
+        from s3k.bridge import _Volume
+
+        names = ["BOOT SYSTEM", "STARTUP 01", "STARTUP 02"]
+        names += [f"WORK VOL{i:02d}" for i in range(3, 34)]
+        return [_Volume(index=i, name=n, kind=3) for i, n in enumerate(names)]
+
     def keygroup_count(self, program: int) -> int:
         """Not part of the real bridge -- a convenience the demo can answer.
 

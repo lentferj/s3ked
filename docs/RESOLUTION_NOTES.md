@@ -5024,3 +5024,62 @@ machine a question about a parameter, and the third asked it a question about
 the SHAPE the parameter lives in. **When a measurement fails twice for reasons
 that look like bad luck, the next thing to test is the assumed structure, not
 the parameter.**
+
+---
+
+## §68 — The disk is readable over MIDI. It is not loadable (2026-08-12)
+
+`RVOLLIST` (`0x35`) answers with the volumes on the attached SCSI disk, and
+the reply's shape was not documented anywhere this project has:
+
+```
+16-byte records: 12 bytes of name in the Akai charset, then
+                 a type byte (3 for every volume seen) and three zero bytes
+index          : the volume to start at -- a sliding window, not one item
+count          : how many bytes of records to return; 256 gives 16 records
+```
+
+A 100-volume disk reads in **7 round trips, 1.2 s**. On the machine here that
+is a ZuluSCSI carrying 100 volumes, and all 100 come back correctly decoded.
+
+### The end marker is the type byte, and this matters
+
+Past the last volume the record is all zeroes. **An all-zero name does not
+decode to blank** — index 0 of the Akai charset is the character `0`, so it
+reads as `000000000000`.
+
+So a reader that stops on a falsy name never stops, and a reader that stops on
+the literal string `000000000000` truncates a disk that happens to contain a
+volume called that. The type byte is the only sound marker. The test fixture
+includes a volume genuinely named `000000000000` so the wrong rule fails.
+
+### What is not there
+
+**There is no load operation.** The S1000 layer ends at `SETEX`/`REPLY`/
+`CASPACK`, the S3000 extensions `0x27`–`0x38` are all reads, and the
+S3000XL layer adds only multi data. `RVOLLIST` and `RHDDIR` are both marked
+reply-only, and neither has a counterpart that acts on a volume.
+
+23 opcodes are unassigned in this project's table — `0x17`–`0x1C`,
+`0x1E`–`0x26`, `0x39`–`0x40` — so a load command could exist and be
+untranscribed. **Probing them blindly is not sensible**: `DELP`, `DELK` and
+`DELS` sit at `0x12`–`0x14` with no device-side confirmation, and an unknown
+opcode aimed at a machine full of someone's samples is not a cheap experiment.
+The sane order is to re-read the manual scan for a disk section first.
+
+`RHDDIR` (`0x37`) answers, but returned `ff`-filled records here — most likely
+no hard-disk directory in the current mode rather than a broken operation.
+Untested against a machine that has one.
+
+### The SCSI ID is not reachable, and here is the state of that
+
+Not in any transcribed table: the parameter table covers program, keygroup,
+sample and multi, with no system or global region. The plausible home is
+miscellaneous data, and **the miscellaneous data-index table is missing from
+the source** (an open TODO since §5).
+
+`RMDATA` returns a 96-byte block and `RMISCDATA` answers on every selector
+0–31, but without the index table none of it is identifiable. The way to find
+it is differential: snapshot, change the setting on the panel, snapshot again,
+diff. A baseline of all 33 readable blocks is captured; the change has not
+been made yet.

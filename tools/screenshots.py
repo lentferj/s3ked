@@ -65,6 +65,7 @@ SHOTS = {
     "write-gate": (("w",), False, None, "write ARMED"),
     "edit": (("w", "e"), False, "PRIORT", "range:"),
     "master": (("m",), True, None, "Destructive operations"),
+    "disk": (("d",), False, None, "volume"),
 }
 
 
