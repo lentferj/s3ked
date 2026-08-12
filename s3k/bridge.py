@@ -952,20 +952,24 @@ class S3kBridge:
     _MISC_MODE = 91
     _MISC_SELECTION_HELD = 4     # 1 suppresses the re-read. See below.
 
-    #: Bytes 6-9 are the LOAD TYPE, mirrored -- writing one moves all four.
-    #: The panel's values are 1 (ALL PROGS + SAMPLES) and 2 (ENTIRE VOLUME);
-    #: 0 is the power-on default.
+    #: Bytes 6-9 mirror one another -- writing any one moves all four, and
+    #: writing **1** starts a load of the selected volume. That value is the
+    #: whole of it: 0 and 2-7 were each written and waited out, and every one
+    #: stored cleanly and did nothing at all (§74).
     #:
-    #: **They are not exposed for writing, and that is deliberate.** Writing
-    #: one while the LOAD page had a partition and volume selected started an
-    #: actual disk load, and the machine then sat at "BUSY" until it was power
-    #: cycled. Whether the load was clean and disrupted by concurrent RSTAT
-    #: probing, or the write left the machine in a bad state, is NOT
-    #: established -- and those have different consequences, so neither is
-    #: assumed. See RESOLUTION_NOTES §71.
+    #: So this is a trigger that happens to keep its last value, not a "load
+    #: type" selector. It was called one here for a while, on the strength of
+    #: the LOAD page having a type setting on screen; the register does not
+    #: reach it.
     #:
-    #: A load also CLEARS RAM, so if this is ever exposed it belongs behind
-    #: the arm-then-fire treatment that DELP/DELK/DELS get, not a keypress.
+    #: The load **appends**. §73 loaded a 15.30 MB volume onto 3.70 MB of
+    #: resident data and finished with 19.00 MB, the sum to within 630 words,
+    #: and §74 repeated it at 3.62 MB onto 19.00 MB for a miss of 120.
+    #:
+    #: **The panel's CLR softkey has no remote equivalent.** CLR erases
+    #: waveform memory and then loads; nothing in 0-7 does that. Memory can
+    #: only be reclaimed remotely by deleting what is resident, or not
+    #: remotely at all.
     _MISC_LOAD_TYPE = (6, 7, 8, 9)
 
     def _misc_byte(self, index: int, value: Optional[int] = None, *,
@@ -1025,21 +1029,31 @@ class S3kBridge:
                      timeout: Optional[float] = None) -> None:
         """Load the selected volume into the machine. **This writes and acts.**
 
-        ``load_type`` is the LOAD page's own setting: 1 is ALL PROGS +
-        SAMPLES, which pulls each program together with the samples it uses,
-        and 2 is ENTIRE VOLUME.
+        ``load_type`` is the value written to the trigger register, and 1 is
+        the only value that does anything. It is exposed at all so that a
+        caller can pass a value found later; passing anything else today
+        stores it and loads nothing.
 
-        The machine goes busy and stops answering while it works -- seconds
-        for a few megabytes. **Do not poll it.** A 58.7 MB load that was
-        probed every 8 seconds ran in stop-start bursts and eventually sat at
-        BUSY until it was power cycled; the same trigger on a volume that fits,
-        with a quiet bus, completed in seconds (§72).
+        The load **appends** to what is already in memory. That is not the
+        safe-and-boring option it sounds like: a bank built from several
+        volumes needs the SUM to fit, so three 12 MB volumes each fit a 32 MB
+        machine and the third load is the one that fails. And the failure is
+        quiet -- the machine says "insufficient waveform memory" once and
+        then carries on, leaving programs whose samples never arrived
+        resident, selectable, and silent. Check the directory's
+        ``audio_words`` against ``status().free_words`` first.
 
-        A load ADDS to what is resident rather than replacing it, so it is not
-        destructive in the way DELP/DELK/DELS are -- but it will fill memory
-        and stop with "insufficient waveform memory" if the volume is larger
-        than the free space, leaving programs whose samples never arrived.
-        Compare the directory's ``audio_words`` against free memory first.
+        There is no remote way to clear memory first; the panel's CLR softkey
+        is not reachable through this register (§74).
+
+        **Do not poll the machine while it loads.** A 58.7 MB load probed
+        with ``RSTAT`` every 8 seconds ran in stop-start bursts and finally
+        sat at "BUSY" until it was power cycled; the same trigger on a quiet
+        bus finished in seconds. Whether the probing caused it or merely
+        coincided with it is NOT established -- but the two have different
+        consequences and neither is worth assuming, so this fires and returns
+        and leaves the machine alone. Read it again when the display settles
+        (§71, §72).
         """
         for index in self._MISC_LOAD_TYPE[:1]:
             frame = m.HeaderData(
@@ -1106,6 +1120,47 @@ class S3kBridge:
         self._misc_byte(self._MISC_PARTITION, partition, timeout=timeout)
         return self.load_source(timeout=timeout)
 
+    #: What ``byte[0]`` means. Only HARD and FLASH are confirmed: the machine
+    #: read 1 sitting on HARD, and writing 2 put the panel on FLASH -- seen by
+    #: eye, and the directory emptied because nothing is mounted there. FLOPPY
+    #: is 0 by elimination and has NOT been observed, so it is named but not
+    #: claimed.
+    DEVICE_TYPES = {0: "FLOPPY", 1: "HARD", 2: "FLASH"}
+
+    def select_device(self, kind: int, *,
+                      timeout: Optional[float] = None) -> Dict[str, int]:
+        """Choose floppy / hard / flash. **This writes.**
+
+        Changing the device changes what the directory describes, and if
+        nothing is mounted on the new device the directory reads empty. That
+        is a correct answer and not a failure -- it cost a wrong conclusion
+        once, when an empty listing was read as a broken partition write
+        rather than as a switch to a device with no media (§70).
+        """
+        self._misc_byte(self._MISC_SELECTION_HELD, 0, timeout=timeout)
+        self._misc_byte(self._MISC_DEVICE_TYPE, kind, timeout=timeout)
+        return self.load_source(timeout=timeout)
+
+    def select_drive(self, scsi_id: int, *,
+                     timeout: Optional[float] = None) -> Dict[str, int]:
+        """Point the LOAD page at another SCSI device. **This writes.**
+
+        Takes effect immediately -- no reboot. §71 concluded the opposite,
+        that the ID bound at boot, because changing it never altered the
+        volume list; that was measured on a bus carrying a single disc, where
+        "switched to an empty ID" and "did not switch" produce the same empty
+        listing. With five discs at IDs 0-4 the same write walks through five
+        different volume lists (§72).
+
+        The machine's own ID is a different register (``byte[12]``, read as
+        ``scsi_local_id``) and is not written here -- changing what the
+        sampler answers to, over the bus it is answering on, is not something
+        this offers.
+        """
+        self._misc_byte(self._MISC_SELECTION_HELD, 0, timeout=timeout)
+        self._misc_byte(self._MISC_SCSI_DRIVE_ID, scsi_id, timeout=timeout)
+        return self.load_source(timeout=timeout)
+
     def hd_directory(self, kind: int = 1, *, limit: int = 512,
                      timeout: Optional[float] = None) -> List["_DirectoryEntry"]:
         """RHDDIR -> HDDIR. The directory of the volume the machine has LOADED.
@@ -1115,12 +1170,18 @@ class S3kBridge:
         a starting point rather than a filter: selector 1 returns the programs
         and then continues through the samples.
 
-        **This is not a browser for the disk.** It reads the directory the
-        machine currently holds, which is empty until a volume is loaded from
-        the front panel. The spec is explicit that there is no way to load one
-        over MIDI: *"There are no functions within MIDI system exclusive to
-        provide direct access to and from disk files."* So the sequence is
-        load at the panel, then read here.
+        **This is not a browser for the disk.** It reads the directory of
+        whichever volume the LOAD page has selected -- which is why
+        :meth:`select_drive`, :meth:`select_device` and :meth:`select_partition`
+        make a whole disk enumerable without touching the machine, and why the
+        volume, having no register, does not.
+
+        The spec says *"There are no functions within MIDI system exclusive to
+        provide direct access to and from disk files."* That is true as
+        written and was read too broadly here for a while: there is no
+        file-transfer operation, but the LOAD page's own controls are
+        miscellaneous-data registers like any other, so the selection and the
+        trigger are both writable. See :meth:`trigger_load`.
 
         Records are 24 bytes: a 12-character name, a four-byte extension
         field that reads as spaces on every real entry, and eight more whose

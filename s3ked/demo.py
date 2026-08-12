@@ -255,8 +255,36 @@ class DemoBridge:
         """The demo loads instantly and adds, as the machine does."""
         self._loaded = True
 
+    #: Mirrors of the real bridge's tables. The app reads these off whichever
+    #: bridge it was handed, so the demo has to carry them too -- app.py must
+    #: not import s3k.bridge, which pulls in rtmidi.
+    DEVICE_TYPES = {0: "FLOPPY", 1: "HARD", 2: "FLASH"}
+    MODES = {0: "SINGLE", 8: "GLOBAL", 10: "LOAD"}
+
+    #: SINGLE, which is where the machine comes up.
+    _mode = 0
+
+    def mode(self, *, timeout: Optional[float] = None) -> int:
+        return self._mode
+
+    def select_mode(self, mode: int, *, timeout: Optional[float] = None) -> int:
+        self._mode = mode
+        return self._mode
+
+    _scsi_drive_id = 4
+    _device_type = 1
+
+    def select_drive(self, scsi_id: int, *, timeout: Optional[float] = None):
+        self._scsi_drive_id = scsi_id
+        return self.load_source()
+
+    def select_device(self, kind: int, *, timeout: Optional[float] = None):
+        self._device_type = kind
+        return self.load_source()
+
     def load_source(self, *, timeout: Optional[float] = None):
-        return {"scsi_drive_id": 4, "scsi_local_id": 6, "device_type": 1,
+        return {"scsi_drive_id": self._scsi_drive_id, "scsi_local_id": 6,
+                "device_type": self._device_type,
                 "partition": getattr(self, "_partition", 0), "volume": 1}
 
     def select_partition(self, partition: int, *, timeout: Optional[float] = None):

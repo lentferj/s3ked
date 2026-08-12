@@ -161,6 +161,111 @@ class MasterScreen(ModalScreen[Optional[str]]):
         self.dismiss(None)
 
 
+class SourceScreen(ModalScreen[Optional[Tuple[str, int]]]):
+    """Pick what the LOAD page points at: SCSI device, media, partition.
+
+    Every row here is a miscellaneous-data byte found by changing it on the
+    front panel and seeing which one moved -- the specification documents the
+    addressing and not the meanings. The volume is listed and cannot be set,
+    which is not an omission: there is no volume register. `byte[49]` reads
+    like one because it carries whatever field the cursor sits on, and writing
+    it moves nothing (§72).
+    """
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    def __init__(self, source: Dict[str, int],
+                 device_types: Dict[int, str]) -> None:
+        super().__init__()
+        self.source = source or {}
+        # passed in rather than imported: app.py must not import s3k.bridge,
+        # which pulls in rtmidi, or --demo stops working without it
+        self.device_types = device_types
+
+    def compose(self) -> ComposeResult:
+        src = self.source
+        drive = src.get("scsi_drive_id", "?")
+        kind = src.get("device_type")
+        part = src.get("partition")
+        kind_name = self.device_types.get(kind, f"? ({kind})")
+        with Vertical(id="source-box"):
+            yield Label("[b]Load source[/b]", id="source-title")
+            yield Label(f"  SCSI drive      [b]{drive}[/b]"
+                        "        press [b]0[/b]-[b]7[/b]")
+            yield Label(f"  Device          [b]{kind_name}[/b]"
+                        "     [b]f[/b] floppy   [b]h[/b] hard   [b]x[/b] flash")
+            yield Label("  Partition       "
+                        f"[b]{chr(65 + part) if isinstance(part, int) else '?'}[/b]"
+                        "        [b][[/b] and [b]][/b], or here too")
+            yield Label("  Volume          [dim]panel only — no register "
+                        "exists for it[/dim]")
+            yield Label("")
+            yield Label("[dim]Each of these writes to the machine and "
+                        "re-reads the directory.[/dim]")
+            yield Label("[b]Esc[/b] close")
+
+    def on_key(self, event) -> None:
+        key = event.key
+        if key in "01234567":
+            self.dismiss(("drive", int(key)))
+        elif key in ("f", "h", "x"):
+            self.dismiss(("device", {"f": 0, "h": 1, "x": 2}[key]))
+        elif key in ("[", "]"):
+            self.dismiss(("partition", -1 if key == "[" else +1))
+        else:
+            return
+        event.stop()
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class MenuScreen(ModalScreen[Optional[int]]):
+    """Jump the machine to one of its eight main-menu pages.
+
+    This is not button injection -- there is no keypress message anywhere in
+    this protocol. The current page is a variable, `byte[91]`, and writing it
+    moves the machine.
+
+    Three of the eight values are named. The rest were never observed, because
+    naming one requires somebody at the machine to read the display while the
+    probe runs, and the enumeration has gaps that rule out guessing: GLOBAL is
+    the second button of the second row and reads 8, where its position would
+    make it 5.
+    """
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    def __init__(self, current: Optional[int], modes: Dict[int, str]) -> None:
+        super().__init__()
+        self.current = current
+        self.modes = modes
+
+    def compose(self) -> ComposeResult:
+        here = self.modes.get(self.current, f"unnamed ({self.current})")
+        with Vertical(id="menu-box"):
+            yield Label("[b]Main menu[/b]", id="menu-title")
+            yield Label(f"  now showing: [b]{here}[/b]")
+            yield Label("")
+            for key, (value, name) in self._CHOICES.items():
+                yield Label(f"  [b]{key}[/b]  {name}  [dim]({value})[/dim]")
+            yield Label("")
+            yield Label("[dim]The other five buttons have no known value — "
+                        "naming one needs\n  somebody reading the display "
+                        "while the register is swept.[/dim]")
+            yield Label("[b]Esc[/b] close")
+
+    _CHOICES = {"1": (0, "SINGLE"), "2": (8, "GLOBAL"), "3": (10, "LOAD")}
+
+    def on_key(self, event) -> None:
+        if event.key in self._CHOICES:
+            self.dismiss(self._CHOICES[event.key][0])
+            event.stop()
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
 class EditValueScreen(ModalScreen[Optional[str]]):
     """Prompt for a new parameter value."""
 
@@ -236,6 +341,8 @@ class S3kedApp(App):
         Binding("[", "partition_prev", "Prev partition", show=False),
         Binding("]", "partition_next", "Next partition", show=False),
         Binding("l", "load_volume", "Load volume"),
+        Binding("s", "source", "Load source"),
+        Binding("g", "menu", "Main menu"),
         Binding("tab", "focus_next", "Next pane", show=False),
     ]
 
@@ -249,6 +356,7 @@ class S3kedApp(App):
         self._keygroups: int = 0
         self._disk_entries: List[object] = []
         self._words_free: Optional[int] = None
+        self._total_words: Optional[int] = None
         self._param_values: Dict[str, object] = {}
         self._param_rows: List[p.Parameter] = []
         self._undo: List[_Change] = []
@@ -464,15 +572,100 @@ class S3kedApp(App):
             return
         self.call_from_thread(self.action_disk)
 
+    def action_source(self) -> None:
+        """Show the load source and let it be changed."""
+        try:
+            with self._bridge_lock:
+                source = self.bridge.load_source()
+        except Exception as exc:
+            self.notify_status(f"load source unavailable: {exc}")
+            return
+
+        def chosen(result) -> None:
+            if result is None:
+                return
+            what, value = result
+            if not self.allow_write:
+                self.notify_status("write gate is locked — press w to arm it")
+                return
+            if what == "partition":
+                self._step_partition_worker(value)
+            else:
+                self._select_source_worker(what, value)
+
+        self.push_screen(
+            SourceScreen(source, self.bridge.DEVICE_TYPES), chosen
+        )
+
+    @work(thread=True)
+    def _select_source_worker(self, what: str, value: int) -> None:
+        try:
+            with self._bridge_lock:
+                if what == "drive":
+                    source = self.bridge.select_drive(value)
+                else:
+                    source = self.bridge.select_device(value)
+        except Exception as exc:
+            self.call_from_thread(self.notify_status, f"{what}: {exc}")
+            return
+        got = source.get("scsi_drive_id" if what == "drive" else "device_type")
+        if got != value:
+            # the machine is the authority, not the acknowledgement -- writing
+            # byte[4] is acked and ignored, and writing mode 0 errors and works
+            self.call_from_thread(
+                self.notify_status,
+                f"{what}: asked for {value}, machine reads {got}")
+            return
+        self.call_from_thread(self.action_disk)
+
+    def action_menu(self) -> None:
+        """Move the machine to another main-menu page."""
+        try:
+            with self._bridge_lock:
+                current = self.bridge.mode()
+        except Exception as exc:
+            self.notify_status(f"main menu unavailable: {exc}")
+            return
+
+        def chosen(value: Optional[int]) -> None:
+            if value is None:
+                return
+            if not self.allow_write:
+                self.notify_status("write gate is locked — press w to arm it")
+                return
+            self._select_mode_worker(value)
+
+        self.push_screen(MenuScreen(current, self.bridge.MODES), chosen)
+
+    @work(thread=True)
+    def _select_mode_worker(self, value: int) -> None:
+        try:
+            with self._bridge_lock:
+                got = self.bridge.select_mode(value)
+        except Exception as exc:
+            self.call_from_thread(self.notify_status, f"main menu: {exc}")
+            return
+        name = self.bridge.MODES.get(got, str(got))
+        self.call_from_thread(
+            self.notify_status,
+            f"main menu: {name}" if got == value
+            else f"main menu: asked for {value}, machine shows {name}")
+
     def action_load_volume(self) -> None:
         """Load the selected volume into the machine. **This writes.**
 
-        Not a delete, so not the Master screen's arm-then-fire: a load ADDS
-        to what is resident and can be undone by deleting. But it moves
-        megabytes, takes seconds to minutes, and fails messily when the volume
-        is larger than free memory -- so it confirms, and the confirmation
-        shows whether it fits, which is the one thing the machine will not
-        tell you until it has already half-loaded.
+        This is the panel's LOAD softkey and only that one. It APPENDS to
+        what is already resident; the panel's other softkey, CLR, erases
+        memory first and **has no remote equivalent** -- the trigger register
+        acts on the value 1 and stores every other value without doing
+        anything (§74). To start from empty, clear at the panel or delete
+        what is resident.
+
+        Not the Master screen's arm-then-fire: it adds, and what it adds can
+        be deleted again. But it moves megabytes, takes seconds to minutes,
+        and fails messily when the volume is larger than free memory -- so it
+        confirms, and the confirmation shows whether it fits, which is the one
+        thing the machine will not tell you until it has already half-loaded.
         """
         if not self.allow_write:
             self.notify_status("write gate is locked — press w to arm it")
@@ -484,6 +677,8 @@ class S3kedApp(App):
         needed = sum(getattr(e, "audio_words", 0) for e in self._disk_entries)
         free = self._words_free
         mb = lambda w: f"{w * 2 / 1024 / 1024:.2f} MB"
+        # the load appends, so the budget is what is free right now and not
+        # the size of the machine
         fits = free is None or needed <= free
         headline = (f"Load {len(self._disk_entries)} item(s), {mb(needed)}?"
                     if fits else
@@ -502,10 +697,10 @@ class S3kedApp(App):
         self.push_screen(ConfirmScreen(headline + detail), go)
 
     @work(thread=True)
-    def _load_worker(self) -> None:
+    def _load_worker(self, load_type: int = 1) -> None:
         try:
             with self._bridge_lock:
-                self.bridge.trigger_load()
+                self.bridge.trigger_load(load_type)
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"load: {exc}")
             return
@@ -528,9 +723,12 @@ class S3kedApp(App):
             # and fell through to a hardcoded 16 Mword machine, which is right
             # only for a fully expanded one -- so a 2 MB S3000XL was told
             # everything fit.
-            self._words_free = self.bridge.status().free_words
+            status = self.bridge.status()
+            self._words_free = status.free_words
+            self._total_words = status.max_words
         except Exception:
             self._words_free = None
+            self._total_words = None
         where = self._describe_source(source)
         loaded = f", {len(entries)} items" if entries else ""
         cost = ""

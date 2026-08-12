@@ -5525,3 +5525,78 @@ load settles.
 
 Not verified: load type 2's clearing behaviour, which was not exercised —
 the panel is set to 1 and nobody was at the machine to change it.
+
+## §74 — The load trigger has one value, and CLR is not remote (2026-08-12)
+
+**Status: settled.** Measured 2026-08-12, RAM only, nothing written to disc.
+
+The panel's LOAD page has two softkeys: **LOAD**, which appends to what is
+already in memory, and **CLR**, which erases waveform memory and then loads.
+§73 measured value 1 in the trigger register and found it appends, so the
+obvious reading was 1 = LOAD, 2 = CLR.
+
+That reading was wrong, and it is worth naming why it was tempting: it was
+arrived at by elimination from a two-item list, which is the same move that
+produced the wrong `byte[0]` and `byte[49]` conclusions earlier in this
+sequence. Two candidates and one measurement does not determine the mapping;
+it determines one entry and leaves the other a guess.
+
+### What the register actually does
+
+Writing 2 stored perfectly — all four of bytes 6-9 read 2 afterwards, so the
+mirroring is confirmed — and moved memory by **exactly zero words**. Then
+every remaining value in the byte's low range was written and waited out, one
+at a time, 90 s each, with nothing else on the bus:
+
+```
+ value   resident after      MB   verdict
+     0       11,861,952   22.62   inert
+     3       11,861,952   22.62   inert
+     4       11,861,952   22.62   inert
+     5       11,861,952   22.62   inert
+     6       11,861,952   22.62   inert
+     7       11,861,952   22.62   inert
+```
+
+Not one of them moved a single word. Writing **1** from that same state
+appended the selected volume immediately:
+
+```
+resident before      9,963,440 words   19.00 MB
+volume               1,898,392 words    3.62 MB
+resident after      11,861,952 words   22.62 MB
+miss from the sum         +120 words
+```
+
+So bytes 6-9 are **a trigger that keeps its last value**, not a load-type
+selector. The value 1 acts; every other value in 0-7 is stored and inert.
+Values above 7 are untested.
+
+The +120 words is program storage, consistent with §73's +630 across 49
+items against +120 across 10 here.
+
+### Consequences
+
+1. **There is no remote CLR.** Memory can be reclaimed remotely only by
+   deleting resident items, or not remotely at all. Since the load appends,
+   a machine driven purely over MIDI fills up and stays full.
+2. **The TUI must not offer one.** It briefly did — CLR was added to the
+   Master screen with arm-then-fire, correctly treated as destructive, and
+   built entirely on the guess above. Removed. A test now asserts the
+   destructive menu offers no load at all, so the option cannot come back
+   without the measurement that would justify it.
+3. **§71's account is revised but not contradicted.** That sweep wrote 0-7
+   into this register and a real load started; the load was value 1's doing,
+   and the other seven writes did nothing. The wedge that followed remains
+   attributed to the concurrent RSTAT probing, which is the part not repeated
+   here — this sweep is the same shape on a quiet bus and the machine stayed
+   responsive throughout.
+
+### Method note
+
+The reading that settled this was memory arithmetic, not the display. With
+19.00 MB resident and a 3.62 MB volume selected, "clears then loads" and
+"appends" differ by 19 MB, so the two are impossible to confuse and no one
+needs to be at the machine. Choosing the resident state to make the two
+predictions far apart is what made the experiment work; running it against
+an empty machine would have made CLR and LOAD indistinguishable.

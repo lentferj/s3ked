@@ -931,3 +931,113 @@ async def test_the_disk_status_line_offers_the_keys_that_exist():
     assert "press l" in status.lower()
     # the one part that IS still manual, because there is no volume register
     assert "panel" in status.lower()
+
+
+async def test_the_source_screen_shows_what_can_and_cannot_be_set():
+    """The volume is listed precisely because it CANNOT be set."""
+    from s3ked.app import S3kedApp, SourceScreen
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("s")
+        await pilot.pause()
+        assert isinstance(app.screen_stack[-1], SourceScreen)
+        text = " ".join(str(w.render()) for w in app.screen_stack[-1].query("Label"))
+
+    assert "SCSI drive" in text and "HARD" in text
+    assert "Volume" in text and "panel only" in text
+
+
+async def test_the_source_screen_writes_only_through_the_gate():
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    seen = []
+
+    class Watch(DemoBridge):
+        def select_drive(self, scsi_id, *, timeout=None):
+            seen.append(scsi_id)
+            return super().select_drive(scsi_id, timeout=timeout)
+
+    app = S3kedApp(Watch(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("s")
+        await pilot.pause()
+        await pilot.press("3")
+        for _ in range(10):
+            await pilot.pause()
+        assert seen == [], "locked gate must not reach the machine"
+        assert "write gate is locked" in app.last_status
+
+        app.allow_write = True
+        await pilot.press("s")
+        await pilot.pause()
+        await pilot.press("3")
+        for _ in range(30):
+            await pilot.pause()
+
+    assert seen == [3]
+
+
+async def test_the_menu_screen_names_only_the_pages_that_were_observed():
+    """Three of eight. The enumeration has gaps, so the rest are not guessed."""
+    from s3ked.app import S3kedApp, MenuScreen
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("g")
+        await pilot.pause()
+        screen = app.screen_stack[-1]
+        assert isinstance(screen, MenuScreen)
+        text = " ".join(str(w.render()) for w in screen.query("Label"))
+        await pilot.press("2")
+        for _ in range(20):
+            await pilot.pause()
+
+    assert "SINGLE" in text and "GLOBAL" in text and "LOAD" in text
+    assert "no known value" in text
+    assert app.bridge.mode() == 8, "GLOBAL is 8, not its button position 5"
+
+
+async def test_no_clr_is_offered_because_the_machine_has_none_to_offer():
+    """The panel's CLR softkey is not reachable, so the TUI must not imply it.
+
+    It was offered here briefly, armed like a delete, on the reasoning that
+    the trigger register's value picked the softkey. Measurement killed that:
+    writing 1 loads, and 0 and 2-7 store cleanly and do nothing (§74).
+    """
+    from s3ked.app import MasterScreen
+
+    offered = " ".join(d for _a, d in MasterScreen._ACTIONS.values())
+    assert "CLR" not in offered
+    assert all("load" not in a for a, _d in MasterScreen._ACTIONS.values())
+
+
+async def test_plain_load_stays_at_the_appending_value():
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    fired = []
+
+    class Watch(DemoBridge):
+        def trigger_load(self, load_type=1, *, timeout=None):
+            fired.append(load_type)
+
+    app = S3kedApp(Watch(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("d")
+        for _ in range(20):
+            await pilot.pause()
+        await pilot.press("l")
+        await pilot.pause()
+        await pilot.press("y")
+        for _ in range(20):
+            await pilot.pause()
+
+    assert fired == [1], "LOAD appends and is value 1"
