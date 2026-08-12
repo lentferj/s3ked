@@ -76,6 +76,29 @@ TAIL = 2.0                             # recording tail after the last note-off
 # The rig
 # ==========================================================================
 
+
+def _stack_blocks(np, blocks, nports):
+    """Turn JACK's per-period blocks into one (frames, channels) array.
+
+    Pulled out of `record()` and given a snapshot of the block list because
+    the naive version raced its own process callback. It concatenated channel
+    0 across the blocks it could see, then channel 1 across the blocks it
+    could see *by then* -- and a callback landing between the two left the
+    channels a period apart. `np.stack` then refused the ragged result and
+    took the sweep down four takes in.
+
+    Two rules follow, and both are about cutting every channel at the same
+    place: work from one snapshot, and drop a trailing block that does not
+    carry every channel rather than padding it.
+    """
+    usable = [blk for blk in blocks if len(blk) == nports]
+    if not usable:
+        return np.zeros((0, nports), dtype="float32")
+    chans = [np.concatenate([blk[i] for blk in usable]) for i in range(nports)]
+    shortest = min(len(c) for c in chans)
+    return np.stack([c[:shortest] for c in chans], axis=1)
+
+
 class _InProcessRecorder:
     """One JACK client for the whole session, instead of one per capture.
 
@@ -136,12 +159,10 @@ class _InProcessRecorder:
                 time.sleep(max(seconds - 0.15, 0.0))
         finally:
             self._armed = False
-        np = self._np
-        if not self._frames:
-            return np.zeros((0, len(self.ports)), dtype="float32")
-        chans = [np.concatenate([blk[i] for blk in self._frames])
-                 for i in range(len(self.ports))]
-        return np.stack(chans, axis=1)
+        # A callback that already passed its `_armed` check is still going to
+        # append, so give one in flight time to land rather than truncating it.
+        time.sleep(0.05)
+        return _stack_blocks(self._np, self._frames[:], len(self.ports))
 
     def write_wav(self, path: str, data) -> None:
         np = self._np
@@ -667,6 +688,15 @@ def verify_isolation(bridge, rig, program: int, keygroup: int, note: int,
     note* -- which is most of them. The sibling mpc2emu project reports the
     same check was missing from its E4XT and MPC calibrations too.
 
+    **Call this AFTER neutralising, not before.** The check asks whether
+    silencing the keygroup changes the recording, and a keygroup that is
+    already inaudible answers "no" for a reason that has nothing to do with
+    isolation: a nearly shut filter, a zero sustain or a zero output all make
+    it fail identically. It did exactly that at `FILFRQ` 40, reporting
+    -44.54 dB against -44.54 dB -- a genuine silence misread as a collision.
+    A failure here means "these two recordings match", which is evidence of
+    *either* fault; the message names the likelier one, not the only one.
+
     Returns the drop in dB. Raises :class:`RuntimeError` below *min_drop_db*.
     """
     lo = p.lookup(("keygroup", "LONOTE"))
@@ -706,6 +736,201 @@ def verify_isolation(bridge, rig, program: int, keygroup: int, note: int,
             f"uses (PMCHAN, program offset 16). See RESOLUTION_NOTES §18."
         )
     return drop
+
+
+@dataclass
+class Replicated:
+    """A measurement taken more than once, so it carries its own uncertainty."""
+
+    values: List[float]
+
+    @property
+    def mean(self) -> float:
+        good = [v for v in self.values if v == v]      # drop NaN
+        return sum(good) / len(good) if good else float("nan")
+
+    @property
+    def sd(self) -> float:
+        good = [v for v in self.values if v == v]
+        if len(good) < 2:
+            return float("nan")
+        m = sum(good) / len(good)
+        return (sum((v - m) ** 2 for v in good) / (len(good) - 1)) ** 0.5
+
+    @property
+    def relative_sd(self) -> float:
+        m, s = self.mean, self.sd
+        return abs(s / m) if m else float("nan")
+
+    def __len__(self) -> int:
+        return len([v for v in self.values if v == v])
+
+
+def replicate(measure, repeats: int = 3) -> Replicated:
+    """Take the same measurement *repeats* times.
+
+    **Every sweep in this project measured each condition exactly once**, which
+    meant no result ever had an error bar and no disagreement could be told
+    from noise. Three separate runs at one question came back "inconclusive"
+    for that reason alone; three captures per condition answered it
+    immediately, the within-condition scatter turning out to be 0.65 %.
+
+    It is one line at the call site and it retires a category of argument, so
+    prefer it to a single reading anywhere a decision hangs on the result.
+
+    **But replication only measures the noise sources the repeat actually
+    re-runs, and a too-small error bar is worse than none** -- it makes every
+    difference look significant. A `FILQ` sweep here returned sd = 0.000 dB on
+    fifteen of sixteen conditions, because the chain had nothing left to
+    resample: a fixed digital sample, unchanged settings between repeats, and
+    a recorder that aligns to its own schedule. The comparison downstream duly
+    reported a ratio of 3645 and "varies", which was true of the arithmetic
+    and worthless as evidence.
+
+    So make *measure* re-run everything that could vary -- write the parameter
+    again, retrigger the note, re-slice the capture -- not just the last step.
+    A repeat that shares state with its predecessor is not a repeat.
+    """
+    return Replicated([measure() for _ in range(repeats)])
+
+
+def beyond_noise(groups, factor: float = 3.0):
+    """Does the spread BETWEEN conditions exceed the scatter WITHIN them?
+
+    *groups* is a sequence of :class:`Replicated`, one per condition. Returns
+    ``(between_sd, pooled_within_sd, ratio, verdict)`` where verdict is one of
+    ``"varies"``, ``"within noise"`` or ``"undecidable"``.
+
+    **The 3x bar is an EFFECT SIZE, not a significance test.** Measured by
+    mpc2emu over 1500 trials per point with a true effect of 2.0 sd, the ratio
+    converges rather than growing: 2.31 at n=3, 2.17 at n=5, 2.10 at n=8,
+    2.03 at n=20, 2.01 at n=80. So **adding replicates will not resolve an
+    "undecidable"** -- it will return the same number more precisely. To settle
+    one, change the measurement: lower the noise, lengthen the capture, or
+    space the conditions wider so the effect itself is larger.
+
+    At n=3 the estimate is biased upward (2.31 for a true 2.0), so a bare
+    crossing at n=3 is thin. The bar is conservative in the other direction
+    too: pure noise reached "varies" 0 times in 4000 trials, and detection at
+    n=3 runs 2% at 1 sd, 18% at 2 sd, 57% at 3 sd, 88% at 4 sd. When it says
+    varies, believe it; when it does not, the effect may be real and merely
+    under the bar.
+
+    The verdict has an undecidable branch on purpose. An earlier rule in this
+    project picked whichever of two spreads was smaller and announced it, so a
+    72.2 % against 71.9 % tie was reported as a finding -- the same fault as an
+    isolation check that can only say "collision". A comparison that cannot
+    abstain will label noise.
+    """
+    usable = [g for g in groups if len(g) >= 2]
+    # PER CONDITION, not pooled. A pooled floor is not a guard: with fifteen
+    # frozen conditions and one genuine, the single genuine condition keeps
+    # the pool above zero and the frozen ones sail through. mpc2emu fed this
+    # exact shape -- the §33 FILQ sweep -- to their version and got "differ"
+    # at a ratio of 952; mine returned "varies" at 276. A repeat that shares
+    # state with its predecessor is not a repeat, and one that re-analyses a
+    # cached recording is not a measurement.
+    frozen = [i for i, g in enumerate(usable)
+              if max(g.values) == min(g.values)]
+    if frozen:
+        raise ValueError(
+            f"conditions {frozen} have identical replicates -- `measure` must "
+            f"RE-CAPTURE, not re-analyse a cached recording. A zero error bar "
+            f"makes every difference infinitely significant."
+        )
+    means = [g.mean for g in usable]
+    sds = [g.sd for g in usable]
+    if len(means) < 2 or not sds:
+        return float("nan"), float("nan"), float("nan"), "undecidable"
+    m = sum(means) / len(means)
+    between = (sum((x - m) ** 2 for x in means) / (len(means) - 1)) ** 0.5
+    pooled = (sum(s * s for s in sds) / len(sds)) ** 0.5
+    if pooled == 0:
+        return between, pooled, float("inf"), (
+            "varies" if between > 0 else "undecidable")
+    ratio = between / pooled
+    if ratio >= factor:
+        return between, pooled, ratio, "varies"
+    if ratio * factor <= 1.0:
+        return between, pooled, ratio, "within noise"
+    return between, pooled, ratio, "undecidable"
+
+
+def write_snapshot(path: str, saved: dict, *, note: str = "") -> str:
+    """Put a snapshot on disk before touching the machine.
+
+    `snapshot_prepare` keeps the original values in memory, which is enough
+    right up until the process does not reach its `finally` -- and then the
+    only record of what the program used to be dies with it. A machine left
+    half-restored can at least be put back by hand from a file; from a dead
+    process it cannot be put back at all.
+
+    Written atomically, because a snapshot truncated by the same crash it
+    exists to survive is worse than none: it looks authoritative.
+    """
+    payload = {
+        "written": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "note": note,
+        "values": [
+            {"region": region, "name": name, "value": value}
+            for (region, name), value in sorted(saved.items(), key=str)
+        ],
+    }
+    tmp = f"{path}.partial"
+    with open(tmp, "w") as fh:
+        json.dump(payload, fh, indent=1)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+    return path
+
+
+def read_snapshot(path: str) -> dict:
+    """Load a snapshot written by `write_snapshot`, keyed as `saved` was."""
+    with open(path) as fh:
+        payload = json.load(fh)
+    return {(row["region"], row["name"]): row["value"]
+            for row in payload["values"]}
+
+
+def verify_responds(measure, low_value, high_value, apply_value, *,
+                    label: str = "the parameter", min_change: float = 0.0,
+                    unit: str = "") -> float:
+    """Refuse to sweep a parameter the detector cannot see move.
+
+    Sets *apply_value* to each end of the range, measures with *measure*, and
+    returns the difference. Raises :class:`RuntimeError` if it is not at least
+    *min_change* -- because a sweep of something that does not reach the sound
+    produces a full set of clean, flat, entirely fictitious numbers.
+
+    **The companion to `verify_isolation`, and it exists for the same reason
+    one iteration later.** Isolation asks "is this the program I am hearing?".
+    This asks "is this parameter connected to what I am measuring?" -- and the
+    second question has bitten just as hard: an envelope-2 sweep dropped a
+    single routing line (`MODSFILT1`, the modulation *source*), so the depth
+    parameter applied to whatever source the program already held. Eleven
+    SUSTN2 values came back within 1 Hz of each other, and two further sweeps
+    produced nothing, because the route under test was never connected.
+
+    Two ends and a threshold, rather than a single reading, because "the
+    number looks plausible" is not evidence: the flat result was perfectly
+    plausible and perfectly meaningless.
+    """
+    apply_value(low_value)
+    low = measure()
+    apply_value(high_value)
+    high = measure()
+    change = abs(high - low)
+    if not (change >= min_change):
+        raise RuntimeError(
+            f"response check FAILED: moving {label} from {low_value} to "
+            f"{high_value} changed the measurement by {change:.4g}{unit}, "
+            f"below the {min_change:.4g}{unit} required. The parameter is "
+            f"not reaching the sound -- check the modulation SOURCE is routed, "
+            f"not just its depth. Sweeping now would produce clean numbers "
+            f"that describe nothing."
+        )
+    return change
 
 
 def snapshot_prepare(bridge, sweep: Sweep, program: int, keygroup: int) -> dict:
@@ -768,10 +993,23 @@ def run_sweep(bridge, rig, sweep: Sweep, program: int = 0, keygroup: int = 0,
     # how this probe left a program with OUTPUT=0, ATTAK1=0 and a mid-sweep
     # FILFRQ on 2026-08-10. Turning the signal into an exception lets the
     # `finally` below do its job.
+    # And the handler must be ONE-SHOT. A second signal arriving while the
+    # restore is running raises again from inside the `finally`, and the
+    # restore stops wherever it had got to -- which is worse than no handler,
+    # because it half-restores and reports nothing. That is not hypothetical
+    # either: `pkill -TERM` matched both a sweep and the `timeout` wrapper
+    # around it, the wrapper forwarded a second SIGTERM, and a program was
+    # left with fourteen fields at sweep values and two restored.
+    previous = {}
+
     def _bail(signum, _frame):
+        for s, h in previous.items():
+            try:
+                signal.signal(s, h)
+            except (ValueError, OSError):
+                pass
         raise KeyboardInterrupt(f"signal {signum}")
 
-    previous = {}
     for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
         try:
             previous[sig] = signal.signal(sig, _bail)

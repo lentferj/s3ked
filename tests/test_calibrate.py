@@ -16,6 +16,8 @@ hardware can. What it can do is make sure that when hardware finally arrives,
 the evening is not spent finding typos.
 """
 
+import inspect
+import json
 import math
 import os
 import sys
@@ -558,3 +560,331 @@ def test_a_killed_recorder_does_not_leave_its_temp_file_behind():
     assert created, "the test must have exercised the mkstemp path"
     for path in created:
         assert not os.path.exists(path), f"leaked {path}"
+
+
+# --- the recorder's block assembly -----------------------------------------
+#
+# These exist because the naive assembly raced JACK's own process callback and
+# took a sweep down four takes in: it counted blocks once per channel, so a
+# callback landing between channel 0 and channel 1 left them a period apart.
+
+
+def test_blocks_become_one_array_per_channel():
+    import numpy as np
+
+    blocks = [[np.ones(4), np.zeros(4)] for _ in range(3)]
+    data = cal._stack_blocks(np, blocks, 2)
+
+    assert data.shape == (12, 2)
+    assert (data[:, 0] == 1).all() and (data[:, 1] == 0).all()
+
+
+def test_a_trailing_block_missing_a_channel_is_dropped_not_padded():
+    """The exact shape of the race: a partial append seen mid-read."""
+    import numpy as np
+
+    blocks = [[np.ones(4), np.zeros(4)], [np.ones(4)]]
+    data = cal._stack_blocks(np, blocks, 2)
+
+    assert data.shape == (4, 2), "the half-written block must not reach the wav"
+
+
+def test_every_channel_is_cut_at_the_same_place():
+    import numpy as np
+
+    blocks = [[np.ones(4), np.zeros(4)], [np.ones(4), np.zeros(2)]]
+    data = cal._stack_blocks(np, blocks, 2)
+
+    assert data.shape[0] == 6
+    assert data.shape == (6, 2)
+
+
+def test_no_blocks_at_all_is_an_empty_capture_not_a_crash():
+    import numpy as np
+
+    data = cal._stack_blocks(np, [], 2)
+    assert data.shape == (0, 2)
+
+
+# --- the response check ----------------------------------------------------
+#
+# verify_isolation asks "is this the program I am hearing?"; this asks "is this
+# parameter connected to what I am measuring?". The second question cost three
+# sweeps: a dropped MODSFILT1 line meant the depth parameter modulated whatever
+# source the program already held, and eleven SUSTN2 values came back within
+# 1 Hz of each other.
+
+
+def test_a_connected_parameter_passes_and_reports_its_swing():
+    seen = {}
+    change = cal.verify_responds(
+        lambda: seen["v"] * 10.0, 0, 99, lambda v: seen.__setitem__("v", v),
+        min_change=100.0,
+    )
+    assert change == 990.0
+
+
+def test_a_parameter_that_does_not_move_the_measurement_is_refused():
+    with pytest.raises(RuntimeError, match="response check FAILED"):
+        cal.verify_responds(lambda: 1141.0, 0, 99, lambda _v: None,
+                            label="SUSTN2", min_change=100.0)
+
+
+def test_the_refusal_names_the_routing_as_the_thing_to_check():
+    """The failure is almost never the depth; it is the unrouted source."""
+    with pytest.raises(RuntimeError, match="modulation SOURCE is routed"):
+        cal.verify_responds(lambda: 0.0, 0, 99, lambda _v: None,
+                            min_change=1.0)
+
+
+def test_a_change_exactly_at_the_threshold_passes():
+    vals = iter([0.0, 5.0])
+    assert cal.verify_responds(lambda: next(vals), 0, 99, lambda _v: None,
+                               min_change=5.0) == 5.0
+
+
+def test_a_nan_measurement_is_a_failure_not_a_pass():
+    """`not (nan >= x)` is True; that is deliberate, and worth pinning."""
+    with pytest.raises(RuntimeError):
+        cal.verify_responds(lambda: float("nan"), 0, 99, lambda _v: None,
+                            min_change=1.0)
+
+
+def test_the_direction_of_the_change_does_not_matter():
+    vals = iter([900.0, 100.0])
+    assert cal.verify_responds(lambda: next(vals), 0, 99, lambda _v: None,
+                               min_change=500.0) == 800.0
+
+
+# --- the snapshot on disk --------------------------------------------------
+#
+# snapshot_prepare keeps originals in memory, which is enough until the process
+# does not reach its finally -- and then the only record of what the program
+# used to be dies with it. That happened: a second SIGTERM interrupted a
+# restore, and fourteen fields could not be put back because nothing outside
+# the process knew what they had been.
+
+
+def test_a_snapshot_survives_the_process(tmp_path):
+    saved = {("keygroup", "FILFRQ"): 63, ("program", "PMCHAN"): 0}
+    path = cal.write_snapshot(str(tmp_path / "snap.json"), saved,
+                              note="before the filter sweep")
+
+    assert cal.read_snapshot(path) == saved
+
+
+def test_a_snapshot_records_when_and_why(tmp_path):
+    path = cal.write_snapshot(str(tmp_path / "s.json"), {("program", "X"): 1},
+                              note="before the filter sweep")
+    payload = json.loads(Path(path).read_text())
+
+    assert payload["note"] == "before the filter sweep"
+    assert payload["written"]
+
+
+def test_text_values_survive_the_round_trip(tmp_path):
+    """Sample names are the one non-numeric thing a sweep moves."""
+    saved = {("keygroup", "SNAME1"): "SINE"}
+    path = cal.write_snapshot(str(tmp_path / "s.json"), saved)
+
+    assert cal.read_snapshot(path) == saved
+
+
+def test_no_partial_file_is_left_behind(tmp_path):
+    cal.write_snapshot(str(tmp_path / "s.json"), {("program", "X"): 1})
+
+    assert [f.name for f in tmp_path.iterdir()] == ["s.json"], (
+        "a truncated snapshot looks authoritative and is worse than none"
+    )
+
+
+def test_writing_over_an_old_snapshot_replaces_it(tmp_path):
+    path = str(tmp_path / "s.json")
+    cal.write_snapshot(path, {("program", "X"): 1})
+    cal.write_snapshot(path, {("program", "Y"): 2})
+
+    assert cal.read_snapshot(path) == {("program", "Y"): 2}
+
+
+def test_the_isolation_failure_message_does_not_claim_a_single_cause():
+    """Two recordings matching means either a collision OR a silent keygroup.
+
+    The check cannot tell them apart, and once said the wrong thing with
+    total confidence: a genuinely inaudible keygroup at FILFRQ 40 was
+    reported as something else sounding on the channel.
+    """
+    source = inspect.getdoc(cal.verify_isolation)
+    assert "AFTER neutralising" in source
+    assert "already inaudible" in source
+
+
+# --- replication -----------------------------------------------------------
+#
+# Every sweep in this project measured each condition once, so no result ever
+# carried an error bar. Three separate runs at one question returned
+# "inconclusive" for that reason alone; three captures per condition settled
+# it, the within-condition scatter proving to be 0.65%.
+
+
+def test_a_replicated_measurement_carries_its_own_scatter():
+    r = cal.replicate(iter([2.215, 2.210, 2.230]).__next__, repeats=3)
+
+    assert len(r) == 3
+    assert r.mean == pytest.approx(2.2183, abs=1e-3)
+    assert 0.005 < r.sd < 0.015
+    assert r.relative_sd < 0.01
+
+
+def test_a_single_reading_has_no_uncertainty_to_report():
+    """One measurement is a number, not a measurement with an error bar."""
+    r = cal.replicate(lambda: 1.0, repeats=1)
+
+    assert r.mean == 1.0
+    assert r.sd != r.sd, "sd of one sample must be NaN, not zero"
+
+
+def test_nan_readings_are_dropped_rather_than_poisoning_the_mean():
+    r = cal.replicate(iter([2.0, float("nan"), 2.2]).__next__, repeats=3)
+
+    assert len(r) == 2
+    assert r.mean == pytest.approx(2.1)
+
+
+# --- telling signal from noise ---------------------------------------------
+
+
+def _group(*values):
+    return cal.Replicated(list(values))
+
+
+def test_a_real_difference_is_called_a_difference():
+    groups = [_group(10.0, 10.1, 9.9),
+              _group(20.0, 20.1, 19.9),
+              _group(30.0, 30.1, 29.9)]
+
+    _between, _pooled, ratio, verdict = cal.beyond_noise(groups)
+
+    assert verdict == "varies"
+    assert ratio > 3
+
+
+def test_the_attak2_depth_residual_is_marginal_not_established():
+    """The real ATTAK2 data, and it does NOT clear a 3x bar.
+
+    Written expecting "varies" -- the run that produced it used F > 4, i.e.
+    a ratio above 2, and reported the residual span-dependence as real. At a
+    3x bar the same data is undecidable at 2.68.
+
+    Kept as a test because the finding was committed before this tool existed
+    to check it: the rejection of constant-RATE is overwhelming (ratio ~30),
+    but the small residual that survives is not itself established.
+    """
+    groups = [_group(2.215, 2.210, 2.230),
+              _group(2.280, 2.245, 2.240),
+              _group(2.305, 2.290, 2.295)]
+
+    _between, _pooled, ratio, verdict = cal.beyond_noise(groups)
+
+    assert verdict == "undecidable"
+    assert 2.0 < ratio < 3.0
+
+
+def test_scatter_smaller_than_the_noise_is_called_noise():
+    groups = [_group(1.00, 1.30, 0.70),
+              _group(1.02, 0.72, 1.28),
+              _group(0.98, 1.31, 0.69)]
+
+    _b, _p, _r, verdict = cal.beyond_noise(groups)
+
+    assert verdict == "within noise"
+
+
+def test_the_middle_ground_is_undecidable_rather_than_decided():
+    """The fault this replaces: a rule that always produced a verdict.
+
+    An earlier version picked whichever spread was smaller and announced it,
+    so 72.2% against 71.9% was reported as a finding.
+    """
+    groups = [_group(1.00, 1.10, 0.90),
+              _group(1.15, 1.25, 1.05),
+              _group(1.30, 1.40, 1.20)]
+
+    _b, _p, ratio, verdict = cal.beyond_noise(groups)
+
+    assert verdict == "undecidable"
+    assert 1 / 3 < ratio < 3
+
+
+def test_one_condition_cannot_be_compared_with_itself():
+    _b, _p, _r, verdict = cal.beyond_noise([_group(1.0, 1.1, 0.9)])
+    assert verdict == "undecidable"
+
+
+def test_unreplicated_groups_cannot_settle_anything():
+    """Single readings give no within-condition scatter, so no yardstick."""
+    _b, _p, _r, verdict = cal.beyond_noise([_group(1.0), _group(2.0)])
+    assert verdict == "undecidable"
+
+
+def test_a_degenerate_repeat_is_documented_as_a_trap():
+    """sd=0 means the repeat resampled nothing, not that the rig is perfect.
+
+    A FILQ sweep returned sd = 0.000 dB on fifteen of sixteen conditions --
+    a fixed digital sample, unchanged settings, an aligned recorder. The
+    comparison then called a ratio of 3645 "varies", which was arithmetic
+    rather than evidence.
+    """
+    doc = " ".join(inspect.getdoc(cal.replicate).split())
+    assert "only measures the noise sources the repeat actually re-runs" in doc
+    assert "worse than none" in doc
+
+
+def test_identical_repeats_are_now_refused_rather_than_believed():
+    """This used to assert the failure; now it asserts the guard.
+
+    A zero error bar makes any difference infinitely significant, so the
+    comparison refuses the input instead of returning a verdict on it. The
+    replicated value itself still reports sd 0.0 -- that is a true statement
+    about the numbers it was given, and the refusal belongs at the point of
+    comparison, where the consequence is.
+    """
+    r = cal.replicate(lambda: 42.0, repeats=3)
+    assert r.sd == 0.0
+
+    with pytest.raises(ValueError, match="identical replicates"):
+        cal.beyond_noise([cal.Replicated([1.0, 1.0, 1.0]),
+                          cal.Replicated([1.1, 1.1, 1.1])])
+
+
+def test_one_frozen_condition_is_refused_even_when_the_pool_is_healthy():
+    """A pooled floor is not a guard.
+
+    mpc2emu fed the §33 FILQ shape -- fifteen frozen conditions and one
+    genuine -- to their version of this and got "differ" at a ratio of 952.
+    Mine returned "varies" at 276. The single genuine condition keeps the
+    pooled scatter above zero, so a pooled check never fires.
+    """
+    groups = [cal.Replicated([1.0 + i * 0.3] * 3) for i in range(15)]
+    groups.append(cal.Replicated([5.0, 5.02, 4.98]))
+
+    with pytest.raises(ValueError, match="identical replicates"):
+        cal.beyond_noise(groups)
+
+
+def test_the_refusal_says_to_re_capture_not_to_re_analyse():
+    with pytest.raises(ValueError, match="RE-CAPTURE"):
+        cal.beyond_noise([cal.Replicated([1.0, 1.0, 1.0]),
+                          cal.Replicated([2.0, 2.1, 1.9])])
+
+
+def test_genuine_replicates_still_pass():
+    groups = [cal.Replicated([1.0, 1.1, 0.9]), cal.Replicated([5.0, 5.1, 4.9])]
+    _b, _p, ratio, verdict = cal.beyond_noise(groups)
+    assert verdict == "varies" and ratio > 3
+
+
+def test_the_bar_is_documented_as_an_effect_size():
+    """It converges with n, so more replicates cannot resolve an undecidable."""
+    doc = " ".join(inspect.getdoc(cal.beyond_noise).split())
+    assert "EFFECT SIZE, not a significance test" in doc
+    assert "adding replicates will not resolve" in doc
