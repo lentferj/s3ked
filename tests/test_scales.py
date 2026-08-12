@@ -789,3 +789,64 @@ def test_panrat_is_lfo2_not_a_pan_only_control():
 def test_zero_lfo2_rate_at_zero():
     hz, _u, _e = scales.to_physical("program", "PANRAT", 0)
     assert hz == pytest.approx(0.0, abs=1e-9)
+
+
+# --- the two files must agree with each other -------------------------------
+#
+# Both of this project's worst table errors were a number contradicting another
+# number IN THE SAME REPOSITORY, and in one case in the same file: KGTUNO was
+# fitted at 100/256 cents per unit while its parameter was declared 0..50,
+# which caps the field at 19.5 cents. Neither was missing and neither needed
+# hardware to spot. What was missing was ever putting the two beside each other
+# and asking whether they agree.
+#
+# These are the checks that can be made mechanically. They are cheap, they run
+# without a sampler, and they would have failed on the tuning fields the day
+# the law was measured.
+
+def test_every_scale_names_a_parameter_that_exists():
+    """A renamed or retyped field must not leave a law pointing at nothing."""
+    for region, name in scales.SCALES:
+        p.lookup((region, name))
+
+
+def test_no_law_is_fitted_outside_its_parameters_declared_range():
+    """The check that ties scales.py to params.py.
+
+    A law fitted over values the table says are illegal means one of the two is
+    wrong, and which one it is takes a measurement -- but noticing costs
+    nothing. Against the old 0..50 tuning range, KGTUNO's confirmed
+    +/-5120 fails this immediately.
+    """
+    for (region, name), scale in scales.SCALES.items():
+        param = p.lookup((region, name))
+        lo, hi = scale.fitted
+        assert param.minimum <= lo <= param.maximum, (
+            f"{name} fitted from {lo}, outside the declared "
+            f"{param.minimum}..{param.maximum}")
+        assert param.minimum <= hi <= param.maximum, (
+            f"{name} fitted to {hi}, outside the declared "
+            f"{param.minimum}..{param.maximum}")
+
+
+def test_every_named_endpoint_is_a_value_the_field_can_hold():
+    for (region, name), scale in scales.SCALES.items():
+        param = p.lookup((region, name))
+        for value in scale.endpoints or {}:
+            assert param.minimum <= value <= param.maximum, (
+                f"{name} names an endpoint at {value}, outside "
+                f"{param.minimum}..{param.maximum}")
+
+
+def test_describe_survives_every_value_of_every_law():
+    """A physical rendering must not raise anywhere in the declared range.
+
+    The laws that run to a pole -- FILQ and LFODEL -- refuse past it by design,
+    and describe() has to turn that refusal into "" rather than propagating it.
+    """
+    for (region, name), scale in scales.SCALES.items():
+        param = p.lookup((region, name))
+        span = param.maximum - param.minimum
+        step = max(1, span // 200)
+        for value in range(param.minimum, param.maximum + 1, step):
+            scales.describe(region, name, value)
