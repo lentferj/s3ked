@@ -31,6 +31,7 @@ import sys
 from typing import Callable, Dict, List, Optional
 
 from s3k import params as p
+from s3k import scales
 
 __all__ = ["main", "build_parser"]
 
@@ -131,6 +132,36 @@ def _cmd_get(bridge, args) -> None:
         print(f"  note: {param.notes}")
 
 
+def _value_from_quantity(param, text: str) -> int:
+    """`set FILFRQ 500Hz` -> the value that produces 500 Hz on the hardware.
+
+    Whether the request landed inside the range the law was measured over is
+    said out loud rather than swallowed: outside it the number is an
+    extrapolation, and a caller deserves to know which kind of answer it got.
+    """
+    try:
+        value, exact = scales.value_from_quantity(param.region, param.name, text)
+    except ValueError as exc:
+        raise ValueError(
+            f"{param.name} is numeric; {text!r} is not a number ({exc})"
+        ) from None
+
+    clamped = max(param.minimum, min(param.maximum, value))
+    if clamped != value:
+        print(
+            f"note: {text} works out to {param.name} {value}, outside "
+            f"{param.minimum}..{param.maximum}; clamped to {clamped}"
+        )
+    elif not exact:
+        scale = scales.scale_for(param.region, param.name)
+        print(
+            f"note: {text} is outside the range {param.name} was measured "
+            f"over ({scale.fitted[0]}..{scale.fitted[1]}); {clamped} is "
+            f"extrapolated, not measured"
+        )
+    return clamped
+
+
 def _cmd_set(bridge, args) -> None:
     if not args.allow_write:
         raise ValueError(
@@ -144,9 +175,11 @@ def _cmd_set(bridge, args) -> None:
         try:
             value = int(args.value, 0)
         except ValueError:
-            raise ValueError(
-                f"{param.name} is numeric; {args.value!r} is not a number"
-            ) from None
+            # Not a number -- it may still be a physical quantity, if this
+            # parameter is one of the ones whose scale was measured. A plain
+            # number never takes this path, so `50` and `50Hz` cannot be
+            # confused for each other.
+            value = _value_from_quantity(param, args.value)
     bridge.set_parameter(param, args.index, value, keygroup=args.keygroup)
     read_back = bridge.get_parameter(param, args.index, keygroup=args.keygroup)
     print(f"{param.name} = {p.describe_value(param, read_back)}")
