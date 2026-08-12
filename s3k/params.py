@@ -192,6 +192,22 @@ class Parameter:
     """
     desc: Optional[str] = None
     notes: Optional[str] = None
+    elements: int = 1
+    """How many independent values the span holds, when it is an ARRAY.
+
+    ``TEMPER`` is twelve bytes -- one per semitone of the octave, each a
+    detune in cents -- and modelling it as a single twelve-byte integer is not
+    merely imprecise, it corrupts. ``encode_field`` would write one number
+    across the whole span, so a temperament of -5 cents on C became
+    ``FB FF FF FF FF FF FF FF FF FF FF FF``: C at -5 and **every other note at
+    -1**. Reading it back gave one meaningless large integer.
+
+    With ``elements`` set, the span is ``elements`` values of
+    ``size // elements`` bytes each, ``minimum``/``maximum`` apply to each
+    ELEMENT, and encode/decode work in sequences. A scalar passed to an array
+    field is refused rather than broadcast, because broadcasting is exactly
+    the behaviour that made this a silent corruption instead of an error.
+    """
     models: Optional[str] = None
     """Which machines have this field, when it is not the whole family.
 
@@ -209,6 +225,15 @@ class Parameter:
     def end(self) -> int:
         """One past the last byte this parameter occupies."""
         return self.offset + self.size
+
+    @property
+    def element_size(self) -> int:
+        """Bytes per element. Equals ``size`` for an ordinary scalar field."""
+        return self.size // self.elements
+
+    @property
+    def is_array(self) -> bool:
+        return self.elements > 1
 
     @property
     def writable(self) -> bool:
@@ -230,10 +255,15 @@ def _p(
     default: Optional[int] = None,
     readonly: bool = False,
     display_offset: int = 0,
+    elements: int = 1,
     desc: Optional[str] = None,
     notes: Optional[str] = None,
     models: Optional[str] = None,
 ) -> Parameter:
+    if size % elements:
+        raise ValueError(
+            f"{name}: {size} bytes does not divide into {elements} elements"
+        )
     return Parameter(
         region=region,
         offset=offset,
@@ -248,6 +278,7 @@ def _p(
         default=default,
         readonly=readonly,
         display_offset=display_offset,
+        elements=elements,
         desc=desc,
         notes=notes,
         models=models,
@@ -580,8 +611,15 @@ _PARAMS: List[Parameter] = [
         -50,
         50,
         unit="cents",
+        elements=12,
         desc="Key temperament C, C#, D, D# etc.",
-        notes="range as written: \"-50 to +50 cents\"",
+        notes="range as written: \"-50 to +50 cents\" -- and that range is PER "
+              "SEMITONE. Twelve independent signed bytes, one for each note of "
+              "the octave starting at C, not one twelve-byte number. Modelled "
+              "as a scalar until 2026-08-12, which meant writing -5 cents "
+              "stored FB FF FF FF FF FF FF FF FF FF FF FF: C at -5 and every "
+              "other note at -1. The only field in this table with this shape. "
+              "RESOLUTION_NOTES §66.",
     ),
     _p(
         "program",
@@ -3108,9 +3146,19 @@ def decode_field(param: Parameter, data: bytes) -> object:
         from s3k.messages import decode_name
 
         return decode_name(data)
+    if param.is_array:
+        width = param.element_size
+        return tuple(
+            _decode_one(param, data[i * width:(i + 1) * width], width)
+            for i in range(param.elements)
+        )
+    return _decode_one(param, data, param.size)
+
+
+def _decode_one(param: Parameter, data: bytes, width: int) -> int:
     number = int.from_bytes(data, "little")
-    if param.minimum < 0 and number >= (1 << (8 * param.size - 1)):
-        number -= 1 << (8 * param.size)
+    if param.minimum < 0 and number >= (1 << (8 * width - 1)):
+        number -= 1 << (8 * width)
     return number + param.display_offset
 
 
@@ -3120,6 +3168,25 @@ def encode_field(param: Parameter, value) -> bytes:
         from s3k.messages import encode_name
 
         return bytes(encode_name(str(value), param.size))
+    if param.is_array:
+        if isinstance(value, (str, bytes)) or not hasattr(value, "__len__"):
+            raise TypeError(
+                f"{param.name} holds {param.elements} independent values; "
+                f"pass a sequence of that length rather than {value!r}. A "
+                f"scalar is refused rather than broadcast -- broadcasting is "
+                f"what silently corrupted the other {param.elements - 1}."
+            )
+        if len(value) != param.elements:
+            raise ValueError(
+                f"{param.name}: expected {param.elements} values, "
+                f"got {len(value)}"
+            )
+        return b"".join(_encode_one(param, v, param.element_size)
+                        for v in value)
+    return _encode_one(param, value, param.size)
+
+
+def _encode_one(param: Parameter, value, width: int) -> bytes:
     number = int(value) - param.display_offset
     if not (param.minimum <= number <= param.maximum):
         # EVERY numeric field is checked, not only the display-offset ones.
@@ -3141,12 +3208,12 @@ def encode_field(param: Parameter, value) -> bytes:
         # as two's complement in the field's own width. The spec states the
         # display range, not the storage form, so this is the one place the
         # transcription is being interpreted rather than copied.
-        number += 1 << (8 * param.size)
-    if not 0 <= number < (1 << (8 * param.size)):
+        number += 1 << (8 * width)
+    if not 0 <= number < (1 << (8 * width)):
         raise ValueError(
-            f"{param.name}: value {value} does not fit in {param.size} byte(s)"
+            f"{param.name}: value {value} does not fit in {width} byte(s)"
         )
-    return number.to_bytes(param.size, "little")
+    return number.to_bytes(width, "little")
 
 
 def describe_value(param: Parameter, value) -> str:
@@ -3157,6 +3224,19 @@ def describe_value(param: Parameter, value) -> str:
     and a display helper is the wrong place to discover that -- so an
     unmappable value is shown as itself rather than blowing up a whole pane.
     """
+    if param.is_array and isinstance(value, (tuple, list)):
+        # Twelve detunes read as twelve numbers and nothing else. Naming the
+        # notes is what makes a temperament legible at a glance, and the
+        # non-zero ones are the whole content -- an equal-tempered program is
+        # all zeros and should say so in three words rather than twelve.
+        names = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+        if len(value) == len(names):
+            moved = [f"{names[i]} {v:+d}" for i, v in enumerate(value) if v]
+            if not moved:
+                return "equal temperament"
+            unit = f" {param.unit}" if param.unit else ""
+            return ", ".join(moved) + unit
+        return ", ".join(str(v) for v in value)
     try:
         if param.kind == "text":
             return str(value)

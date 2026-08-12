@@ -336,11 +336,13 @@ def test_encode_field_still_accepts_every_legal_value_of_every_field():
     for (region, name), param in p.PARAMETERS.items():
         if getattr(param, "kind", "") == "text" or not param.writable:
             continue
+        wrap = ((lambda v: [v] * param.elements) if param.is_array
+                else (lambda v: v))
         for value in (param.minimum, param.maximum):
-            p.encode_field(param, value + param.display_offset)
+            p.encode_field(param, wrap(value + param.display_offset))
         for key in (param.values or {}):
             if isinstance(key, int):
-                p.encode_field(param, key)
+                p.encode_field(param, wrap(key))
 
 
 # --- presentation -----------------------------------------------------------
@@ -490,7 +492,10 @@ def test_decode_and_encode_are_inverses_for_every_parameter():
         for pattern in (0x00, 0x01, 0x7F, 0x80, 0xCE, 0xFF):
             raw = bytes([pattern] * param.size)
             value = p.decode_field(param, raw)
-            if not low <= value <= high:
+            # An array decodes to a tuple, and every element has to be legal
+            # for the pattern to be one the field could hold.
+            each = value if param.is_array else (value,)
+            if not all(low <= v <= high for v in each):
                 continue  # not a byte this field can legally hold
             assert p.encode_field(param, value) == raw, f"{param.name} {raw.hex()}"
 
@@ -506,7 +511,9 @@ def test_encode_then_decode_survives_a_negative_value():
         if param.kind == "text" or param.minimum >= 0:
             continue
         for value in (param.minimum, -1, 0, param.maximum):
-            assert p.decode_field(param, p.encode_field(param, value)) == value, (
+            sent = [value] * param.elements if param.is_array else value
+            want = tuple(sent) if param.is_array else value
+            assert p.decode_field(param, p.encode_field(param, sent)) == want, (
                 f"{param.name} {value}"
             )
 
@@ -563,3 +570,62 @@ def test_the_optional_filter_board_fields_are_marked_as_optional():
                                         "R4", "L4")}
     marked = {x.name for x in p._PARAMS if x.models and "IB304F" in x.models}
     assert marked == expected, marked ^ expected
+
+
+# --- TEMPER is twelve values, not one --------------------------------------
+
+def test_temper_is_twelve_independent_signed_bytes():
+    param = p.lookup(("program", "TEMPER"))
+    assert param.is_array and param.elements == 12
+    assert param.element_size == 1
+    assert param.minimum == -50 and param.maximum == 50
+
+
+def test_a_temperament_no_longer_corrupts_eleven_semitones():
+    """The bug, pinned by its own byte pattern.
+
+    Modelled as one twelve-byte integer, -5 cents on C encoded as
+    FB FF FF FF FF FF FF FF FF FF FF FF -- C at -5 and every other note at -1.
+    A converter writing a single detune silently retuned the whole octave.
+    """
+    param = p.lookup(("program", "TEMPER"))
+    raw = p.encode_field(param, [-5] + [0] * 11)
+
+    assert raw == bytes([0xFB]) + bytes(11), raw.hex(" ")
+    assert raw != bytes([0xFB]) + bytes([0xFF]) * 11, "the old corruption"
+    assert p.decode_field(param, raw) == (-5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+
+
+def test_a_scalar_written_to_an_array_field_is_refused_not_broadcast():
+    """Broadcasting is what made this a silent corruption instead of an error."""
+    param = p.lookup(("program", "TEMPER"))
+    with pytest.raises(TypeError, match="12 independent values"):
+        p.encode_field(param, -5)
+    with pytest.raises(ValueError, match="expected 12 values"):
+        p.encode_field(param, [0] * 11)
+    with pytest.raises(ValueError, match="outside"):
+        p.encode_field(param, [99] + [0] * 11)
+
+
+def test_every_element_of_an_array_is_range_checked_independently():
+    param = p.lookup(("program", "TEMPER"))
+    p.encode_field(param, [-50, 50] + [0] * 10)
+    with pytest.raises(ValueError):
+        p.encode_field(param, [0] * 11 + [51])
+
+
+def test_a_temperament_reads_as_notes_rather_than_numbers():
+    param = p.lookup(("program", "TEMPER"))
+    assert p.describe_value(param, tuple([0] * 12)) == "equal temperament"
+    assert p.describe_value(param, tuple([-5] + [0] * 11)) == "C -5 cents"
+    text = p.describe_value(param, (0, -14, 0, -2, 16, 0, -12, 2, -10, 0, -6, 14))
+    assert text.startswith("C# -14, D# -2, E +16")
+    assert text.endswith("cents")
+
+
+def test_the_array_shape_is_declared_consistently():
+    """size must divide into elements, or the span is mis-modelled."""
+    for param in p._PARAMS:
+        assert param.size % param.elements == 0, param.name
+        assert param.element_size * param.elements == param.size, param.name
+

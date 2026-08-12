@@ -96,9 +96,14 @@ def _blank_header(region: str) -> bytearray:
         value = param.default if param.default is not None else param.minimum
         if value < 0:
             value = 0
+        if param.is_array:
+            # An array field needs one value per element, not one value. The
+            # refusal in encode_field caught this the moment TEMPER stopped
+            # being modelled as a scalar -- which is what it is for.
+            value = [value] * param.elements
         try:
             raw[param.offset : param.end] = p.encode_field(param, value)
-        except ValueError:
+        except (ValueError, TypeError):
             pass  # a range the table cannot represent; leave the zeroes
     return raw
 

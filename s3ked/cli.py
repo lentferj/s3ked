@@ -126,7 +126,12 @@ def _cmd_get(bridge, args) -> None:
     value = bridge.get_parameter(param, args.index, keygroup=args.keygroup)
     # `value` is in display space; show the byte the machine actually holds
     # alongside it, which differs only where display_offset is set.
-    stored = value - param.display_offset if param.kind != "text" else value
+    if param.kind == "text":
+        stored = value
+    elif param.is_array:
+        stored = tuple(v - param.display_offset for v in value)
+    else:
+        stored = value - param.display_offset
     print(f"{param.name} = {p.describe_value(param, value)}  (raw {stored!r})")
     if param.notes:
         print(f"  note: {param.notes}")
@@ -171,7 +176,22 @@ def _cmd_set(bridge, args) -> None:
         )
     param = p.lookup(args.name, args.region)
     value: object = args.value
-    if param.kind != "text":
+    if param.is_array:
+        # An array field takes one value per element, comma-separated. Writing
+        # a single number here used to broadcast it across the whole span:
+        # `set TEMPER 0 -5` put C at -5 cents and every other note at -1.
+        parts = [x for x in str(args.value).replace(" ", ",").split(",") if x]
+        if len(parts) != param.elements:
+            raise SystemExit(
+                f"{param.name} holds {param.elements} values, one per "
+                f"element; got {len(parts)}. Pass them comma-separated, e.g. "
+                f"--  0,-14,0,-2,16,0,-12,2,-10,0,-6,14"
+            )
+        try:
+            value = [int(x, 0) for x in parts]
+        except ValueError:
+            raise SystemExit(f"{param.name}: every value must be a number")
+    elif param.kind != "text":
         try:
             value = int(args.value, 0)
         except ValueError:

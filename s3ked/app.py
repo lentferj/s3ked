@@ -428,11 +428,31 @@ class S3kedApp(App):
         if index is None:
             self.notify_status("no program selected")
             return
-        try:
-            value = raw if param.kind == "text" else int(raw, 0)
-        except ValueError:
-            self.notify_status(f"{raw!r} is not a number")
-            return
+        if param.is_array:
+            # One value per element, comma-separated. Without this the field
+            # is only reachable through an error message: int() rejects the
+            # list and a bare number is refused by encode_field, which is
+            # correct but leaves TEMPER uneditable.
+            parts = [x for x in raw.replace(" ", ",").split(",") if x]
+            if len(parts) != param.elements:
+                self.notify_status(
+                    f"{param.name} needs {param.elements} values, got "
+                    f"{len(parts)}"
+                )
+                return
+            try:
+                value = [int(x, 0) for x in parts]
+            except ValueError:
+                self.notify_status(f"{raw!r} is not {param.elements} numbers")
+                return
+        elif param.kind == "text":
+            value = raw
+        else:
+            try:
+                value = int(raw, 0)
+            except ValueError:
+                self.notify_status(f"{raw!r} is not a number")
+                return
         self._write_param_worker(param, index, value, current)
 
     def _after_write(

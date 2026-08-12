@@ -4899,3 +4899,69 @@ The first run used `MODVFILT1` 40 and read +2.98 octaves for every source
 against a ceiling of +2.84 (§57) — all four saturated, all four identical, and
 the identity meant nothing. Rerun at depth 10 the identity persisted, which is
 what makes it reportable. Two runs at different drive levels, again.
+
+---
+
+## §66 — `TEMPER` was twelve bytes modelled as one number (2026-08-12)
+
+A data-corruption bug in the editor itself rather than a calibration finding,
+open since it was noticed during §56's range audit.
+
+`TEMPER` is program offset 44: **twelve independent signed bytes**, one per
+semitone of the octave starting at C, each a detune in cents. The table
+modelled it as a single twelve-byte integer, so `encode_field` wrote one number
+across the whole span:
+
+```
+    set TEMPER -5   ->   FB FF FF FF FF FF FF FF FF FF FF FF
+                         C at -5 cents, and EVERY OTHER NOTE AT -1
+```
+
+Reading it back gave one meaningless large integer. A user or converter setting
+a single detune silently retuned the whole octave.
+
+### The fix, and why it is a model change rather than a patch
+
+`Parameter` gains `elements`. Where it is greater than 1 the span is
+`elements` values of `size // elements` bytes, `minimum`/`maximum` apply to
+each ELEMENT, and encode/decode work in sequences.
+
+**A scalar passed to an array field is refused, not broadcast.** That is the
+whole point: broadcasting is what made this a silent corruption rather than an
+error, and the refusal immediately caught two more places doing it — the demo
+machine's header seeding, and three whole-table tests that assumed every field
+was scalar.
+
+```
+    encode [-5, 0 x11]   ->   FB 00 00 00 00 00 00 00 00 00 00 00
+    decode                ->   (-5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    encode -5             ->   TypeError: TEMPER holds 12 independent values
+    encode [0] * 11       ->   ValueError: expected 12 values, got 11
+    encode [99] + [0]*11  ->   ValueError: 99 is outside -50..50
+```
+
+### It is now editable rather than merely safe
+
+Refusing the write makes the field safe and leaves it **unreachable**, which is
+not a fix. Both entry points take one value per element, comma-separated:
+
+```
+    s3kcli set TEMPER 0,-14,0,-2,16,0,-12,2,-10,0,-6,14 0
+    TEMPER = C# -14, D# -2, E +16, F# -12, G +2, G# -10, A# -6, B +14 cents
+```
+
+and `describe_value` names the notes, because twelve bare numbers are not a
+temperament anyone can read. An untouched program says **"equal temperament"**
+in two words rather than twelve zeros.
+
+### The check that would have found it
+
+A test now asserts `size % elements == 0` for every parameter, which is
+trivially true today but pins the shape. The thing that actually found the bug
+was §56's audit for **two-byte fields declaring a one-byte range** — `TEMPER`
+was the one entry that tripped it and was *not* a display-range error, so it
+had to be exempted from that test, and the exemption is what made me look at
+why it was different.
+
+**An exemption is a place where something is known to be unusual.** Writing one
+is worth treating as a prompt rather than a nuisance.

@@ -129,3 +129,30 @@ def test_demo_bridge_is_closed_even_on_error(monkeypatch):
     with pytest.raises(SystemExit):
         cli.main(["--demo", "get", "NOSUCH", "0"])
     assert closed.get("yes")
+
+
+def test_set_writes_a_whole_temperament(capsys):
+    """Twelve values, comma-separated, one per semitone.
+
+    `set TEMPER -5` used to broadcast: C at -5 cents and every other note at
+    -1, silently. It is now refused, and the list form is how the field is
+    actually written.
+    """
+    # `set` prints its own read-back, which is the round trip. A separate
+    # `get` would start a fresh demo machine and see the defaults.
+    out = run(capsys, "--demo", "--allow-write", "set", "TEMPER",
+              "0,-14,0,-2,16,0,-12,2,-10,0,-6,14", "0")
+    assert "C# -14" in out and "B +14" in out and "cents" in out
+    assert "E +16" in out and "G# -10" in out
+
+
+def test_set_refuses_a_single_number_for_a_twelve_value_field(capsys):
+    with pytest.raises(SystemExit) as caught:
+        cli.main(["--demo", "--allow-write", "set", "TEMPER", "-5", "0"])
+    assert "12 values" in str(caught.value)
+
+
+def test_an_equal_temperament_says_so(capsys):
+    out = run(capsys, "--demo", "get", "TEMPER", "0")
+    assert "equal temperament" in out
+    assert "(raw (0, 0, 0" in out, "the twelve elements are shown as twelve"

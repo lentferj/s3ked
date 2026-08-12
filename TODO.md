@@ -564,6 +564,9 @@ See RESOLUTION_NOTES §20-§55.
   -- **which means the `FILFRQ` law itself wants re-deriving from the
   resonance peak.** That is the next open measurement.
 - **Untouched:** `ZPLAY1` and the velocity-crossfade fields.
+- **`TEMPER` is fixed** (§66). It is twelve independent signed bytes and the
+  parameter model now supports arrays; a scalar is refused rather than
+  broadcast, and both the CLI and the TUI take a comma-separated list.
 - **Only matrix slot 1 modulates the filter** (§65). `MODSFILT2` and
   `MODSFILT3` move the corner by 0.00-0.01 octaves where slot 1 moves it 2.08,
   with the writes read back and verified. A converter should route everything
@@ -656,30 +659,6 @@ Next: work out envelope 2's level architecture first. It carries `ENV2L1`,
 `SUSTN2`/`RELSE2`, which looks like the envelope-3 rate/level structure layered
 under older names. Until that is mapped, any distance-varying test is guessing
 at which field sets the distance.
-
-## `TEMPER` is twelve bytes modelled as one number (OPEN)
-
-**Status:** open, found 2026-08-12 while widening the tuning ranges (§56).
-**Blocked on:** a decision about array parameters, not on hardware.
-
-`TEMPER` is program offset 44, twelve bytes, one per semitone of the octave,
-each -50..+50 cents. The table models it as a single twelve-byte integer, so
-`encode_field` writes one number across all twelve: -5 encodes as
-`FB FF FF FF FF FF FF FF FF FF FF FF`, which is C at -5 cents and **every other
-note at -1**. Writing it through `set_parameter` therefore corrupts eleven
-semitones of the temperament.
-
-It is the only field in the table with this shape, which is why it is exempt
-from the "no multi-byte field declares a single-byte range" test -- its
--50..+50 is per element and correct as such.
-
-Fixing it means the parameter model has to represent an array: a `count` and an
-element size, with `encode_field`/`decode_field` handling sequences, and the
-app needing a way to edit one element. That is a design change and it should
-not be smuggled in as part of a range fix.
-
-Until then: **do not write `TEMPER`.** Reading it is equally wrong but harmless
--- it decodes as one meaningless large integer rather than twelve offsets.
 
 ## Panel confirmation — what only the LCD can settle (OPEN, needs a person)
 
