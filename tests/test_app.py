@@ -601,3 +601,43 @@ async def test_the_whole_delete_path_does_nothing_with_the_gate_locked():
             for _ in range(3):
                 await pilot.pause()
         assert len(app.bridge.program_list()) == before
+
+
+async def test_the_armed_header_is_red_and_the_locked_one_is_not(tmp_path):
+    """The armed gate is the one state where a keypress reaches the hardware.
+
+    It used to use $accent, which is also ordinary emphasis elsewhere -- a
+    warning that looks like decoration is not a warning. Asserted by rendering
+    both states and diffing the colours rather than by reading the stylesheet,
+    because what matters is what appears on the screen.
+    """
+    import re
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    async def render(name, keys):
+        app = S3kedApp(DemoBridge(), allow_write=False)
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            for key in keys:
+                await pilot.press(key)
+                await pilot.pause()
+            out = tmp_path / f"{name}.svg"
+            app.save_screenshot(str(out))
+        return set(re.findall(r'fill="(#[0-9a-fA-F]{6})"', out.read_text()))
+
+    locked = await render("locked", ())
+    armed = await render("armed", ("w",))
+
+    introduced = armed - locked
+    assert introduced, "arming the gate changed no colour at all"
+
+    def red_dominance(hexcolour: str) -> int:
+        r = int(hexcolour[1:3], 16)
+        g = int(hexcolour[3:5], 16)
+        b = int(hexcolour[5:7], 16)
+        return r - max(g, b)
+
+    assert any(red_dominance(c) > 40 for c in introduced), (
+        f"arming introduced {sorted(introduced)}, none of which reads as red"
+    )

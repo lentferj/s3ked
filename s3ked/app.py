@@ -208,7 +208,11 @@ class S3kedApp(App):
     DataTable { height: 1fr; }
     .pane-title { background: $panel; padding: 0 1; }
     #status { height: 1; padding: 0 1; }
-    Header.-write-armed { background: $accent; }
+    /* Red, not the accent colour. The armed gate is the one state where a
+       keypress reaches the hardware, and $accent is also used for ordinary
+       emphasis elsewhere -- a warning that looks like decoration is not a
+       warning. $error is the theme's red and stays red across themes. */
+    Header.-write-armed { background: $error; color: $text; text-style: bold; }
     #confirm-box, #master-box, #edit-box {
         width: 70; padding: 1 2; border: thick $panel; background: $surface;
     }
