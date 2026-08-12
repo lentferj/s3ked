@@ -897,3 +897,23 @@ def test_the_attack_and_the_release_are_one_law_across_both_envelopes():
 
     dec = scales.SCALES[("keygroup", "DECAY2")].value_to_physical(70)
     assert 1.7 < dec / at70 < 2.3, "the decay runs at about half the rate"
+
+
+def test_the_envelope_stages_group_by_type_not_by_envelope():
+    """Seven fields, two envelopes, two rates -- and two of them were predicted.
+
+    §59 assembled this from five fields. §60 measured the remaining two
+    against it before fitting them: ENV3R4 was predicted at 1.20 s for value
+    70 and measured 1.21, ENV3R2 predicted at 2.22 and measured 2.38. A law
+    earns trust by predicting a measurement it was not fitted to, and this is
+    the strongest such test in the calibration.
+    """
+    fast = ("ATTAK2", "RELSE2", "ENV3R1", "ENV3R4")
+    slow = ("DECAY2", "ENV3R2", "ENV3R3")
+    at70 = lambda n: scales.SCALES[("keygroup", n)].value_to_physical(70)
+
+    f = [at70(n) for n in fast]
+    s = [at70(n) for n in slow]
+    assert max(f) / min(f) < 1.06, "attack and release are one rate"
+    assert max(s) / min(s) < 1.10, "the falling stages are one rate"
+    assert min(s) > max(f) * 1.7, "the falling stages run at about half rate"

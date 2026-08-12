@@ -4533,3 +4533,65 @@ standards but it is not obviously broken.
 comparable than before, not more, and any ratio between them is meaningless.
 `RELSE1` has not been re-examined and does not depend on the filter ruler, so
 nothing here casts doubt on it.
+
+---
+
+## §60 — The structure predicted the two fields it had never seen (2026-08-12)
+
+§59 assembled a claim from five measured fields: attack and release share one
+rate across both envelopes, the falling stages run at about half of it. Two
+fields of the family had never been measured, which makes them a test.
+
+**The predictions were written into the probe before it took a reading**, so
+they could not be adjusted afterwards:
+
+```
+                    predicted at value 70      measured      miss
+    ENV3R4               1.20 s                 1.21 s        1%
+    ENV3R2               2.22 s                 2.38 s        7%
+```
+
+```
+ENV3R2   full 0..99 traverse = 0.002565 * exp(0.09762 * v) s   40..80  r2 0.99983
+ENV3R4   full 0..99 traverse = 0.001515 * exp(0.09549 * v) s   40..80  r2 0.99997
+```
+
+The whole family, at value 70:
+
+```
+    attack / release    ATTAK2  RELSE2  ENV3R1  ENV3R4     1.19 .. 1.21 s
+    falling             DECAY2  ENV3R2  ENV3R3             2.38 .. 2.49 s
+```
+
+**The grouping is by stage type, not by envelope.** Seven fields, two
+envelopes, two rates, and the two newest were predicted before measurement.
+
+### Both detector faults announced themselves
+
+Neither was found by inspection, and neither would have been visible in the
+fitted numbers alone.
+
+**Frozen.** `ENV3R2`'s fall time read **0.020 s at every setting** — the first
+frame — while the spans moved 2.01 to 2.64. The minimum was taken over the
+whole track, and with an instant attack that minimum is the base corner in the
+opening frame, so "90% below the peak" was satisfied before the fall started.
+This is the third frozen series in this calibration and the first one caught by
+`verify_varies` rather than by hand.
+
+**Collapsing span.** With the estimator fixed, the fit came back r² 0.65 and
+the spans fell 2.10 → 1.40 → 0.56 across the slow settings. Phase 2 happens
+DURING the note, and the note was 1.5 s — inherited from the release probe,
+where 1.5 s was correct. **A collapsing span is truncation showing**, the same
+tell as §57's clipped envelope-3 timings, and it is visible in the span column
+without looking at the fit at all.
+
+### One reading excluded, and named
+
+At `ENV3R2` 70 the run returned 0.010 s between neighbours at 1.04 and 2.80,
+with the largest span in the set. It is excluded as a single bad take and said
+so in the table's `bounds`, rather than dropped quietly — an outlier removed
+without a note is indistinguishable from one that was never measured.
+
+Its exclusion does not carry the result: the remaining seven points fit at
+r² 0.99983 and the prediction test used value 70 only through the fitted law,
+not through that reading.

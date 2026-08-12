@@ -521,6 +521,42 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "in seconds rather than in the octaves the old centroid ruler\n"
              "would have given.",
     ),
+    ("keygroup", "ENV3R2"): Scale(
+        "keygroup", "ENV3R2", "s", "exp", 0.002565, 0.09762, (40, 80), 0.999833,
+        bounds="40..80, with value 70 excluded as a single bad take -- it read\n"
+               "0.010 s between neighbours at 1.04 and 2.80, with the largest\n"
+               "span in the set. Excluded as an outlier and named as one\n"
+               "rather than quietly dropped.",
+        note="Seconds for a full 0..99 traverse, phase 2 of envelope 3.\n"
+             "PREDICTED BEFORE IT WAS MEASURED (§60): §59's structure said a\n"
+             "falling stage should join the decays at about 2.22 s at value\n"
+             "70, and it measured 2.38 -- 7% off, on a law fitted to five\n"
+             "other fields. It sits with DECAY2 (2.42 s) and ENV3R3 (2.49 s).\n"
+             "Two detector faults had to be cleared first, and both were\n"
+             "caught by their own signature rather than by inspection. The\n"
+             "fall time read 0.020 s at EVERY setting because the minimum was\n"
+             "taken over the whole track, and with an instant attack that\n"
+             "minimum is the base corner in the opening frame -- so 90%-below\n"
+             "-peak was satisfied before the fall began. Then the spans\n"
+             "collapsed 2.10 -> 1.40 -> 0.56 because phase 2 happens DURING\n"
+             "the note and the note was 1.5 s, inherited from a release probe\n"
+             "where 1.5 was right.",
+    ),
+    ("keygroup", "ENV3R4"): Scale(
+        "keygroup", "ENV3R4", "s", "exp", 0.001515, 0.09549, (40, 80), 0.999973,
+        bounds="40..80, measured after note-off with the recording tail and\n"
+               "the analysis window BOTH raised to 10 s, and RELSE1 at 99 so\n"
+               "the amplitude outlasts the filter release.",
+        note="Seconds for a full 0..99 traverse, the release phase of\n"
+             "envelope 3.\n"
+             "PREDICTED BEFORE IT WAS MEASURED (§60): §59's structure said a\n"
+             "release should join the attack law at about 1.20 s at value 70,\n"
+             "and it measured 1.21 -- 1% off. It sits with ATTAK2, RELSE2 and\n"
+             "ENV3R1, all within 1.21..1.25 s at that value.\n"
+             "So the grouping really is by STAGE TYPE and not by envelope:\n"
+             "attack and release share one rate, the falling stages run at\n"
+             "about half of it, across both envelopes and all seven fields.",
+    ),
     ("keygroup", "ENV3R3"): Scale(
         "keygroup", "ENV3R3", "s", "exp", 0.003815, 0.09258, (10, 85), 0.999802,
         bounds="above 85 the fall outruns a 9 s capture (36 s at 99). The low\n"
