@@ -568,12 +568,16 @@ See RESOLUTION_NOTES §20-§55.
 - **`K_DAR2` measured** (§61) and predicted from `K_DAR1` to 4% before the run.
   Both envelopes scale with the key by the same law, coefficients 4.5% apart.
   Its note-64 pivot is **taken on trust**, not measured -- see below.
-- **The corner tracker cannot reach the top of the keyboard.** Its resolution
-  is the harmonic spacing: 3.5% of the corner at note 24, 14% at 48, 56% at 72.
-  Anything read through the FILTER is confined to the bottom two octaves, so
-  key-scaling work on filter fields cannot bracket the note-64 pivot the way
-  §48 did for `K_DAR1` through the amplitude envelope. Closing that needs a
-  different detector for high notes, not a longer run.
+- **The corner tracker's resolution is the harmonic spacing** -- 3.5% of the
+  corner at note 24, 14% at 48, 56% at 72 -- so anything read through the
+  filter must SOUND in the bottom two octaves. That is a limit on the sounding
+  pitch and **not** on the note number: key scaling reads the MIDI note (§62),
+  so `KGTUNO` holds the sound low while the note sweeps anywhere. The pivot
+  measurement §61 called unreachable was done this way the same day.
+  The proper fix remains a **white-noise sample**, which has no comb and a
+  bin-width resolution at every pitch. Blocked on sample transmission: this
+  editor speaks the header protocol and loading audio needs the MIDI Sample
+  Dump Standard. Only `SINE`, `SQUARE`, `SAWTOOTH` and `PULSE` are in memory.
 - **Envelope 3 measured** (§57): `ENV3R1` and `ENV3R3` are RATES and higher is
   SLOWER, despite the table naming `ENV3R1` "Attack rate". `ENV3L1` is linear
   in octaves and the excursion is level x depth. `ENV3R2` and `ENV3R4` are not
