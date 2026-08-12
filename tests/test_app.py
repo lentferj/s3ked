@@ -795,3 +795,93 @@ async def test_a_machine_without_a_load_page_says_so():
         for _ in range(20):
             await pilot.pause()
         assert "load source unavailable" in app.last_status
+
+
+async def test_loading_a_volume_is_gated_and_confirmed():
+    """A load is not a delete -- it adds -- but it moves megabytes."""
+    from textual.widgets import Static
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("d")
+        for _ in range(20):
+            await pilot.pause()
+
+        await pilot.press("l")
+        await pilot.pause()
+        assert "write gate is locked" in app.last_status
+        assert len(app.screen_stack) == 1, "no confirmation while locked"
+
+        app.allow_write = True
+        await pilot.press("l")
+        await pilot.pause()
+        assert len(app.screen_stack) == 2, "armed, so it must confirm"
+
+        prompt = str(app.screen_stack[-1].query_one("#confirm-prompt", Static).render())
+        assert "MB" in prompt and "free memory" in prompt
+
+        await pilot.press("n")
+        await pilot.pause()
+        assert len(app.screen_stack) == 1
+
+
+async def test_the_confirmation_says_when_a_volume_does_not_fit():
+    """The one thing the machine will not tell you until it has half-loaded.
+
+    It reports "insufficient waveform memory" once, then behaves as though
+    all is well -- so programs whose samples never arrived play silence.
+    """
+    from textual.widgets import Static
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    class Huge(DemoBridge):
+        def hd_directory(self, kind=1, *, limit=512, timeout=None):
+            return super().hd_directory(kind, limit=limit, timeout=timeout) * 30
+
+    app = S3kedApp(Huge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("d")
+        for _ in range(20):
+            await pilot.pause()
+        await pilot.press("l")
+        await pilot.pause()
+        prompt = str(app.screen_stack[-1].query_one("#confirm-prompt", Static).render())
+
+    assert "DOES NOT FIT" in prompt
+    assert "play silence" in prompt
+
+
+async def test_loading_without_reading_the_disk_first_is_refused():
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("l")
+        await pilot.pause()
+        assert "press d first" in app.last_status
+        assert len(app.screen_stack) == 1
+
+
+async def test_the_app_does_not_poll_a_loading_machine():
+    """A 58.7 MB load probed every 8 s ran in bursts and then wedged.
+
+    So the worker triggers and stops, and tells the user to refresh by hand.
+    """
+    import inspect
+    from s3ked.app import S3kedApp
+
+    src = inspect.getsource(S3kedApp._load_worker)
+    assert "trigger_load" in src
+    # no READS of the machine afterwards -- notify_status is not a read, so
+    # the check has to name the bridge calls rather than the substring
+    assert "self.bridge.status(" not in src
+    assert "self.bridge.hd_directory(" not in src
+    assert "self.bridge.volume_list(" not in src
+    assert "Press r" in src

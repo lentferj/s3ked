@@ -1021,6 +1021,35 @@ class S3kBridge:
             pass          # the write may well have taken; the read decides
         return self._misc_byte(self._MISC_MODE, timeout=timeout)
 
+    def trigger_load(self, load_type: int = 1, *,
+                     timeout: Optional[float] = None) -> None:
+        """Load the selected volume into the machine. **This writes and acts.**
+
+        ``load_type`` is the LOAD page's own setting: 1 is ALL PROGS +
+        SAMPLES, which pulls each program together with the samples it uses,
+        and 2 is ENTIRE VOLUME.
+
+        The machine goes busy and stops answering while it works -- seconds
+        for a few megabytes. **Do not poll it.** A 58.7 MB load that was
+        probed every 8 seconds ran in stop-start bursts and eventually sat at
+        BUSY until it was power cycled; the same trigger on a volume that fits,
+        with a quiet bus, completed in seconds (§72).
+
+        A load ADDS to what is resident rather than replacing it, so it is not
+        destructive in the way DELP/DELK/DELS are -- but it will fill memory
+        and stop with "insufficient waveform memory" if the volume is larger
+        than the free space, leaving programs whose samples never arrived.
+        Compare the directory's ``audio_words`` against free memory first.
+        """
+        for index in self._MISC_LOAD_TYPE[:1]:
+            frame = m.HeaderData(
+                command=m.Command.MISCDATA, index=index, selector=1, offset=0,
+                data=bytes([load_type]),
+                exclusive_channel=self.exclusive_channel,
+            ).encode()
+            self._drain()
+            self._send(frame, write=True)
+
     def load_source(self, *, timeout: Optional[float] = None) -> Dict[str, int]:
         """What the front panel's LOAD page currently shows.
 

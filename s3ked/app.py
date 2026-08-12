@@ -235,6 +235,7 @@ class S3kedApp(App):
         Binding("d", "disk", "Read disk"),
         Binding("[", "partition_prev", "Prev partition", show=False),
         Binding("]", "partition_next", "Next partition", show=False),
+        Binding("l", "load_volume", "Load volume"),
         Binding("tab", "focus_next", "Next pane", show=False),
     ]
 
@@ -246,6 +247,8 @@ class S3kedApp(App):
         self._programs: List[str] = []
         self._samples: List[str] = []
         self._keygroups: int = 0
+        self._disk_entries: List[object] = []
+        self._words_free: Optional[int] = None
         self._param_values: Dict[str, object] = {}
         self._param_rows: List[p.Parameter] = []
         self._undo: List[_Change] = []
@@ -461,6 +464,56 @@ class S3kedApp(App):
             return
         self.call_from_thread(self.action_disk)
 
+    def action_load_volume(self) -> None:
+        """Load the selected volume into the machine. **This writes.**
+
+        Not a delete, so not the Master screen's arm-then-fire: a load ADDS
+        to what is resident and can be undone by deleting. But it moves
+        megabytes, takes seconds to minutes, and fails messily when the volume
+        is larger than free memory -- so it confirms, and the confirmation
+        shows whether it fits, which is the one thing the machine will not
+        tell you until it has already half-loaded.
+        """
+        if not self.allow_write:
+            self.notify_status("write gate is locked — press w to arm it")
+            return
+        if not self._disk_entries:
+            self.notify_status("no volume read yet — press d first")
+            return
+
+        needed = sum(getattr(e, "audio_words", 0) for e in self._disk_entries)
+        free = self._words_free
+        mb = lambda w: f"{w * 2 / 1024 / 1024:.2f} MB"
+        fits = free is None or needed <= free
+        headline = (f"Load {len(self._disk_entries)} item(s), {mb(needed)}?"
+                    if fits else
+                    f"Load {len(self._disk_entries)} item(s), {mb(needed)} — "
+                    f"THIS DOES NOT FIT")
+        detail = (f"\n\nfree memory: {mb(free)}" if free is not None else "")
+        if not fits:
+            detail += ("\n\nThe machine will load what it can and stop with "
+                       "'insufficient waveform memory'. Programs whose samples "
+                       "did not arrive play silence.")
+
+        def go(confirmed) -> None:
+            if confirmed:
+                self._load_worker()
+
+        self.push_screen(ConfirmScreen(headline + detail), go)
+
+    @work(thread=True)
+    def _load_worker(self) -> None:
+        try:
+            with self._bridge_lock:
+                self.bridge.trigger_load()
+        except Exception as exc:
+            self.call_from_thread(self.notify_status, f"load: {exc}")
+            return
+        self.call_from_thread(
+            self.notify_status,
+            "load started. The machine is busy — nothing is being sent to it. "
+            "Press r when the display settles.")
+
     def _show_volumes(self, volumes, entries, source=None,
                       source_error=None) -> None:
         table = self.query_one("#volumes", DataTable)
@@ -469,6 +522,14 @@ class S3kedApp(App):
             table.add_row(f"v{volume.index}", volume.name)
         for entry in entries:
             table.add_row(f"  {entry.index}", entry.name)
+        self._disk_entries = list(entries or [])
+        try:
+            status = self.bridge.status()
+            self._words_free = getattr(status, "words_free", None)
+            if self._words_free is None and hasattr(status, "used_words"):
+                self._words_free = 16777216 - status.used_words
+        except Exception:
+            self._words_free = None
         where = self._describe_source(source)
         loaded = f", {len(entries)} items" if entries else ""
         cost = ""

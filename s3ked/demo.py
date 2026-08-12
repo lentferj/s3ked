@@ -251,6 +251,10 @@ class DemoBridge:
         names += [f"WORK VOL{i:02d}" for i in range(3, 34)]
         return [_Volume(index=i, name=n, kind=3) for i, n in enumerate(names)]
 
+    def trigger_load(self, load_type: int = 1, *, timeout: Optional[float] = None):
+        """The demo loads instantly and adds, as the machine does."""
+        self._loaded = True
+
     def load_source(self, *, timeout: Optional[float] = None):
         return {"scsi_drive_id": 4, "scsi_local_id": 6, "device_type": 1,
                 "partition": getattr(self, "_partition", 0), "volume": 1}
@@ -267,6 +271,7 @@ class DemoBridge:
         needs the SHAPE -- programs first, then the samples they use, with the
         selector acting as a starting point rather than a filter.
         """
+        from s3k import bridge as b, messages as m
         from s3k.bridge import _DirectoryEntry
 
         # the demo's partitions differ from each other, so stepping through
@@ -276,7 +281,20 @@ class DemoBridge:
         samples = [f"BASS C{i}" for i in range(1, 5)]
         samples += [f"PAD C{i}" for i in range(1, 4)]
         names = (programs + samples) if kind <= 1 else samples
-        return [_DirectoryEntry(index=i, name=n, raw=bytes(24))
+        n_prog = len(programs) if kind <= 1 else 0
+
+        def record(i, name):
+            # A real record: type, then a three-byte file size. Without a size
+            # the pane's "will it fit" check reads 0.00 MB and tells the user
+            # nothing, which is worse than not showing it.
+            is_prog = i < n_prog
+            kind_byte = b.ITEM_PROGRAM if is_prog else b.ITEM_SAMPLE
+            size = 900 if is_prog else (380_000 + (i * 47_000) % 300_000)
+            return (bytes(m.encode_name(name, 12)) + b"\x20\x20\x20\x20"
+                    + bytes([kind_byte]) + int(size).to_bytes(3, "little")
+                    + b"\x00\x00\x1e\x09")
+
+        return [_DirectoryEntry(index=i, name=n, raw=record(i, n))
                 for i, n in enumerate(names)]
 
     def keygroup_count(self, program: int) -> int:

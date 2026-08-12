@@ -79,11 +79,19 @@ drive, whatever is bolted on:
 
 <img src="docs/screenshots/disk.svg" alt="the disk pane listing volumes read from the attached SCSI disk" width="100%">
 
-**Listing is all the protocol offers.** `RVOLLIST` enumerates volumes and
-`RHDDIR` the hard-disk directory, and both are reply-only: there is no
-documented operation that loads one. Loading stays a front-panel job. The read
-is 7 round trips for a 100-volume disk, about 1.3 seconds, which is why it
-happens on `d` rather than at startup.
+`[` and `]` step the partition, and `l` loads the selected volume — both write
+to the machine, so both need the write gate. The load confirms first and says
+whether the volume **fits in free memory**, which is the one thing the sampler
+will not tell you until it has already half-loaded and stopped with
+"insufficient waveform memory", leaving programs whose samples never arrived
+playing silence.
+
+The volume itself is the one part that stays manual: there is no volume
+register to write, so choose it at the panel. `s3kcli` and the pane read
+whichever one the panel last selected.
+
+The read is 7 round trips for a 100-volume disk, about 1.3 seconds, which is
+why it happens on `d` rather than at startup.
 
 Deleting anything lives behind a separate screen that has to be armed and then
 fired, because the protocol offers no device-side confirmation and no undo:
@@ -172,7 +180,9 @@ pass `--exclusive-channel N`. The port pair that answers is remembered in
 | `w` | toggle the write gate (shown in the header when armed) |
 | `z` | undo the last write |
 | `r` | re-read the catalog |
-| `d` | read the volume list off the disk |
+| `d` | read the disk — volumes and the loaded volume's contents |
+| `[` `]` | step the partition (writes) |
+| `l` | load the selected volume (writes, confirms, checks it fits) |
 | `m` | Master — the destructive operations |
 | `q` | quit |
 
