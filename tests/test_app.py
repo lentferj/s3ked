@@ -549,3 +549,55 @@ async def test_the_editor_refuses_a_block_address():
         await pilot.press("e")
         await pilot.pause()
         assert len(app.screen_stack) == 1, "no modal should have opened"
+
+
+@pytest.mark.parametrize("keys,should_delete", [
+    (("m",), False),
+    (("m", "1"), False),
+    (("m", "1", "enter"), False),
+    (("m", "1", "enter", "n"), False),
+    (("m", "1", "enter", "escape"), False),
+    (("m", "1", "enter", "y"), True),
+])
+async def test_every_prefix_of_the_delete_path_is_safe(keys, should_delete):
+    """Only the complete four-keypress sequence deletes. Every prefix is inert.
+
+    The individual steps were already tested; this walks the path one key at a
+    time, which is how a user meets it -- and how a stray Enter or a mistyped
+    confirmation would meet it. `m 1 enter` fires with nothing armed only if a
+    number was never pressed, and firing unarmed dismisses with None.
+    """
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        before = len(app.bridge.program_list())
+        for key in keys:
+            await pilot.press(key)
+            for _ in range(3):
+                await pilot.pause()
+        for _ in range(4):
+            await pilot.pause()
+        after = len(app.bridge.program_list())
+
+    assert (after < before) is should_delete, (
+        f"{' '.join(keys)} {'deleted' if after < before else 'did not delete'}"
+    )
+
+
+async def test_the_whole_delete_path_does_nothing_with_the_gate_locked():
+    """Four correct keypresses, and still nothing, because the gate is shut."""
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        before = len(app.bridge.program_list())
+        for key in ("m", "1", "enter", "y"):
+            await pilot.press(key)
+            for _ in range(3):
+                await pilot.pause()
+        assert len(app.bridge.program_list()) == before

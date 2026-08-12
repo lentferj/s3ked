@@ -27,16 +27,30 @@ s3kcli status
 s3ked                                  # write gate starts locked
 ```
 
-Things worth deliberately trying, because each is a claim the README makes:
+Things worth deliberately trying, because each is a claim the README makes.
+**Every one below has been driven headlessly and passes** — what a machine
+cannot judge is whether the result is legible and pleasant, which is the whole
+reason a person still has to look.
 
-- [ ] arrow around all four panes at 80×24 and at a full-screen terminal
-- [ ] `w` arms the gate and the header changes
-- [ ] `e` on a normal parameter; `e` on `PRIDENT` (must refuse)
-- [ ] `z` undoes a write, and the pending-count in the subtitle is right
-- [ ] `m` → arm → fire → confirm, on a program you do not mind losing
-- [ ] `r` re-reads after you change something on the front panel
-- [ ] resize the terminal while it is running
-- [ ] `q` from every screen
+- [x] arrow around all four panes — tab cycles programs → keygroups → samples
+      → parameters, every pane scrolls
+- [x] `w` arms the gate and the header changes
+- [x] `e` on a normal parameter; `e` on `PRIDENT` refuses
+- [x] `z` undoes a write (1 → 3 → 1)
+- [x] `m` → arm → fire → confirm: only the full `m 1 enter y` deletes, every
+      prefix is inert, and the whole sequence does nothing with the gate locked
+- [x] `r` re-reads
+- [x] resize while running — 120×40 down to 40×12, all survived
+- [x] out-of-range, non-numeric and scalar-into-`TEMPER` edits are all refused
+      without changing anything
+
+Left for a human, because no test can see it:
+
+- [ ] is anything unreadable or truncated at 80×24?
+- [ ] does the status line say useful things at the moment you need them?
+- [ ] is the parameter table navigable when it is 85 rows long?
+- [ ] a terminal without truecolour, and one with a light background
+- [ ] does it feel like a tool you would reach for?
 
 Anything that feels wrong here outranks everything below it.
 
