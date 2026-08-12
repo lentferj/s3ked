@@ -542,10 +542,11 @@ See RESOLUTION_NOTES §20-§55.
 - **Nothing is provisional** (§53 `FILQ`, §55 `LFODEL`, §58 `ATTAK2`'s
   depth-dependence, §59 `RELSE2`). Envelope 2 is fully re-measured off the
   spectral centroid.
-- **One time base across both envelopes** (§59): attack and release agree to
-  2.2% at value 70 -- `ATTAK2`, `RELSE2` and `ENV3R1` are one law -- and the
-  decay stages run at about half that rate. `ENV3R2` and `ENV3R4` are still
-  unmeasured and are the obvious test of whether the pattern holds.
+- **Envelope stages group by TYPE, not by envelope** (§59, tested §60). Seven
+  fields, two envelopes, two rates: `ATTAK2`/`RELSE2`/`ENV3R1`/`ENV3R4` all sit
+  at 1.19-1.21 s for a full traverse at value 70, and `DECAY2`/`ENV3R2`/
+  `ENV3R3` at 2.38-2.49. The last two were **predicted before measurement** --
+  1% and 7% off -- which is the strongest confirmation in the calibration.
   Neither was settled by fitting harder; each needed a different measurement.
   The marking mechanism stays and is still tested against an injected scale,
   because the next half-answered measurement should be marked rather than
