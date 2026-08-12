@@ -1004,3 +1004,40 @@ def test_frame_spectra_drops_silence_and_returns_matching_shapes():
     assert len(times) == len(rows) > 10
     assert rows.shape[1] == len(freqs)
     assert times.min() > 0.2, "the leading silence should be dropped"
+
+
+# --- refusing a frozen series -----------------------------------------------
+
+def test_verify_varies_accepts_a_real_law():
+    np = pytest.importorskip("numpy")
+    ok, msg = cal.verify_varies([0.2, 0.29, 0.55, 1.25, 3.01], label="t90")
+    assert ok and "5 distinct" in msg
+
+
+@pytest.mark.parametrize("series,label", [
+    ([-0.150, -0.150, -0.150, -0.150, -0.150], "PANDEL onset"),
+    ([23.19, 23.19, 23.19, 23.19, 23.19], "resonance peak"),
+    ([200, 200, 200, 200, 200, 200, 200, 200], "frames after note-off"),
+])
+def test_verify_varies_refuses_each_frozen_series_this_project_produced(series, label):
+    """All three were reported as findings before being caught by hand."""
+    np = pytest.importorskip("numpy")
+    ok, msg = cal.verify_varies(series, label=label)
+    assert not ok
+    assert "FROZEN" in msg and label in msg
+
+
+def test_verify_varies_refuses_two_distinct_values_as_well():
+    """Two values across six settings is nearly as suspicious as one."""
+    np = pytest.importorskip("numpy")
+    ok, _ = cal.verify_varies([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
+    assert not ok
+
+
+def test_verify_varies_ignores_nan_rather_than_counting_it():
+    """A detector that failed to read is a different fault, not a frozen one."""
+    np = pytest.importorskip("numpy")
+    ok, _ = cal.verify_varies([float("nan"), 0.2, 0.5, 1.1, 2.4])
+    assert ok
+    ok, msg = cal.verify_varies([float("nan"), float("nan"), 3.0])
+    assert not ok and "nothing to compare" in msg

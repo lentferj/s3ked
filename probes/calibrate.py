@@ -762,6 +762,64 @@ def corner_from_difference(ref_db, run_db, freqs, *, gate_db: float = 45.0,
     return np.asarray(freqs)[np.argmax(diff, axis=1)]
 
 
+def verify_varies(values, *, label: str = "reading", settings=None,
+                  min_distinct: int = 3, rel_tol: float = 1e-9):
+    """Refuse a series whose readings barely move across settings that should differ.
+
+    ``(ok, message)``. Call it on the swept quantity before fitting anything.
+
+    This exists because three separate measurements in this project reported a
+    number that was identical across every setting, and each time it read as a
+    finding rather than as a fault:
+
+      - `PANDEL` returned -0.150 s at all five settings. A negative onset is
+        impossible, and an identical impossible value everywhere is a floor:
+        the rolling window made any onset before 0.57 s return exactly that
+        (§52).
+      - A resonance peak read the same at smoothing widths from 6 to 40 Hz,
+        which cannot happen for a peak narrower than the window -- the corner
+        had one sample point within 40 Hz and there was nothing to average
+        (§53).
+      - A release sweep reported exactly 200 frames after note-off at all
+        eight settings, because the recording tail had been lengthened and the
+        analysis window had not. The fit still came back r2 0.92, which is bad
+        by this project's standards but not obviously broken (§59).
+
+    The common shape is a DERIVED quantity that is bit-identical where the
+    settings differ. That is mechanically checkable, and cheaper than the
+    judgement it replaces: a frozen series is either an instrument at a floor
+    or a parameter that does nothing, and those need different follow-ups but
+    the same interruption.
+
+    ``min_distinct`` is 3 rather than 2 because two distinct values across a
+    sweep of six is nearly as suspicious as one, and a real law passes it
+    trivially. Values that are NaN are ignored -- a detector that failed to
+    read is a different fault, and one this cannot diagnose.
+    """
+    np = _np()
+    v = np.asarray([x for x in values], dtype="float64")
+    finite = v[np.isfinite(v)]
+    if len(finite) < 2:
+        return False, (f"{label}: {len(finite)} finite readings, nothing to "
+                       f"compare")
+    scale = float(np.max(np.abs(finite))) or 1.0
+    rounded = np.round(finite / (scale * max(rel_tol, 1e-12)))
+    distinct = len(set(rounded.tolist()))
+    if distinct >= min_distinct:
+        return True, (f"{label}: {distinct} distinct values across "
+                      f"{len(finite)} readings")
+    where = ""
+    if settings is not None:
+        where = " at " + ", ".join(str(s) for s in list(settings)[:8])
+    return False, (
+        f"{label} is FROZEN: {distinct} distinct value(s) across "
+        f"{len(finite)} settings{where} -- {finite[0]:.6g} throughout. "
+        f"That is an instrument at a floor or a field that does nothing, and "
+        f"either way it is not a law. Check that the ANALYSIS window was "
+        f"widened and not just the capture, and that the detector can produce "
+        f"the value it would show if the field worked.")
+
+
 def running_median(values, width: int = 5):
     """Kills stray frames, keeps edges -- an envelope's shape survives it.
 
