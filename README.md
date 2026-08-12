@@ -49,6 +49,28 @@ python3 -m venv .venv --system-site-packages
 
 Requires Python 3.11+, `python-rtmidi` and `textual`.
 
+## What it looks like
+
+<img src="docs/screenshots/catalog.svg" alt="the catalog: programs, keygroups and samples beside a decoded parameter table" width="100%">
+
+The write gate is closed until you open it, and the header says which state it
+is in:
+
+<img src="docs/screenshots/write-gate.svg" alt="the write gate armed, shown in the header" width="100%">
+
+Editing one parameter shows its range and the specification's own wording for
+it, so a value can be checked against the document without leaving the screen:
+
+<img src="docs/screenshots/edit.svg" alt="editing PRIORT, showing range 0..3 and the transcription note" width="100%">
+
+Deleting anything lives behind a separate screen that has to be armed and then
+fired, because the protocol offers no device-side confirmation and no undo:
+
+<img src="docs/screenshots/master.svg" alt="the Master screen listing destructive operations" width="100%">
+
+These are generated from `--demo` by `tools/screenshots.py`, which checks each
+image contains what its caption claims before it is written.
+
 ## Try it without hardware
 
 Every command takes `--demo`, which runs against an in-memory sampler and

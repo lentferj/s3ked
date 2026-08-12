@@ -483,3 +483,69 @@ async def test_every_shown_binding_has_a_description():
     for binding in S3kedApp.BINDINGS:
         if binding.show:
             assert binding.description
+
+
+# --- the screens render, which nothing checked until there were screenshots --
+
+@pytest.mark.parametrize("name,keys,allow_write,param,must_contain", [
+    ("catalog", (), False, None, "Programs"),
+    ("write-gate", ("w",), False, None, "write ARMED"),
+    ("edit", ("w", "e"), False, "PRIORT", "range:"),
+    ("master", ("m",), True, None, "Destructive operations"),
+])
+async def test_each_documented_screen_actually_renders(
+    name, keys, allow_write, param, must_contain, tmp_path
+):
+    """The README's screenshots, as assertions.
+
+    tools/screenshots.py was the first thing to drive this app's key handling
+    end to end, and it caught three wrong assumptions immediately -- the app
+    was right in all three. This keeps the screens under test so a later change
+    cannot quietly break one and leave the picture in the README claiming
+    otherwise.
+    """
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=allow_write)
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        if param is not None:
+            table = app.query_one("#parameters", DataTable)
+            names = [str(table.get_row_at(i)[1]) for i in range(table.row_count)]
+            table.move_cursor(row=names.index(param))
+            table.focus()
+            await pilot.pause()
+        for key in keys:
+            await pilot.press(key)
+            await pilot.pause()
+        await pilot.pause()
+        out = tmp_path / f"{name}.svg"
+        app.save_screenshot(str(out))
+
+    text = out.read_text().replace("&#160;", " ").replace("&quot;", '"')
+    assert must_contain in text, f"{name} did not render {must_contain!r}"
+
+
+async def test_the_editor_refuses_a_block_address():
+    """Row 0 of the parameters pane is PRIDENT, and `e` must not open on it.
+
+    Found by a screenshot script aiming at the wrong row and getting a refusal
+    -- correct behaviour that nothing had asserted.
+    """
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        table = app.query_one("#parameters", DataTable)
+        names = [str(table.get_row_at(i)[1]) for i in range(table.row_count)]
+        table.move_cursor(row=names.index("PRIDENT"))
+        table.focus()
+        await pilot.pause()
+        await pilot.press("e")
+        await pilot.pause()
+        assert len(app.screen_stack) == 1, "no modal should have opened"
