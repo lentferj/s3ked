@@ -4776,3 +4776,64 @@ not perfect, so **an effect smaller than about 11% could not be claimed from
 this run**. The measured effects are 30-fold and 42-fold, so nothing here is
 at risk; it is recorded because the next field measured this way might move by
 15%.
+
+---
+
+## §64 — `V_REL3` and `O_REL3`: the rig could not have measured one of them (2026-08-12)
+
+```
+V_REL3   note-ON  velocity scales the release, bipolar, more than tenfold
+O_REL3   note-OFF velocity scales the release, bipolar: 1.440 s at 20, 0.150 s at 120
+```
+
+Both respond. **All four of envelope 3's velocity scalers work** — `V_ENV3`,
+`V_ATT3`, `V_REL3`, `O_REL3` — which is the counter-case to §47, where five of
+six envelope scaling fields were recorded inert.
+
+### The rig sent note-off velocity 0, unconditionally
+
+`O_REL3` is *"dependence of envelope 3 release rate on note-off velocity"*.
+The rig's note-off was `[0x80 | channel, note, 0]` and had been since it was
+written.
+
+So a measurement of `O_REL3` before today would have varied the depth, seen
+nothing, and produced a flat null with a live route, a working detector and a
+clean control — the exact shape of §63, with the modified quantity never
+allowed to happen.
+
+**It was caught by reading the field's description before the run**, not by any
+check. §63's rule was written four hours earlier and this is the first time it
+fired prospectively rather than as a post-mortem. `Rig.play_and_record` now
+takes a `release_velocity`, range-checked, with the synthetic rig accepting it
+too so the path is exercisable without hardware.
+
+### The depth-0 rows do the orthogonality work
+
+Each field was measured with the other at depth 0, so cross-talk between the
+two fields is excluded by construction. What remained was whether either
+*velocity* reaches the release by some other path — and the controls answer it:
+note-on velocity alone gives 0.290 against 0.280, note-off velocity alone
+0.290 against 0.290. Neither moves the release without a depth to act through.
+
+That is worth noting because a separate cross-control was attempted and was
+**mis-specified**: it re-ran the same sweep with the other velocity pinned at a
+different fixed value, which tests robustness rather than orthogonality. The
+depth-0 rows already had it covered, so nothing was lost, but the intended
+check was not the check that ran.
+
+### An effect too large to measure is still a result
+
+At `V_REL3` ±50 one end of the sweep ran past an 8 s capture, so the ratio is
+`NaN` and the size of the effect is **bounded below rather than measured**. The
+first version of the summary crashed on that; it now reports it as what it is.
+
+A reading that leaves the window is evidence the field works. Dropping it would
+lose that, and treating it as a failed measurement would understate the field.
+`V_REL3` is recorded as "more than tenfold, exact factor not measured".
+
+### For a converter
+
+`O_REL3` is reachable but **rarely driven** — few controllers send a note-off
+velocity at all. A converter must not read a default of 0 as evidence the field
+is inert: 0 is one end of its range, and it is the end that makes the release
+longest at positive depth.

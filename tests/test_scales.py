@@ -976,3 +976,24 @@ def test_the_velocity_fields_record_their_control(name):
     """A responds-verdict is only as good as the depth-0 row behind it."""
     note = scales.SCALES[("keygroup", name)].note
     assert "the control" in note
+
+
+def test_all_four_velocity_scalers_of_envelope_3_respond():
+    """V_ENV3, V_ATT3, V_REL3, O_REL3 -- none of them inert.
+
+    Recorded together because §47 had five of six envelope scaling fields down
+    as inert, and this group is the counter-case: every one works once the
+    stage it governs is allowed to happen and the quantity it keys on is
+    allowed to vary.
+    """
+    for name in ("V_ENV3", "V_ATT3", "V_REL3", "O_REL3"):
+        scale = scales.SCALES[("keygroup", name)]
+        assert scale.fitted == (-50, 50)
+        assert "bipolar" in scale.note
+
+
+def test_o_rel3_warns_that_zero_is_a_value_not_an_absence():
+    """Few controllers send note-off velocity, and 0 is one end of the range."""
+    note = scales.SCALES[("keygroup", "O_REL3")].note
+    assert "note-off velocity" in note.lower()
+    assert "inert" in note

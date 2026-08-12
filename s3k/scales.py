@@ -468,6 +468,40 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "layer in. A negative needs the right stage as well as the right\n"
              "route.",
     ),
+    ("keygroup", "V_REL3"): Scale(
+        "keygroup", "V_REL3", "x", "linear", 1.0, 0.0, (-50, 50), 0.99,
+        bounds="tested at -50, 0 and +50 against note-on velocities 20 and\n"
+               "120, with ENV3R4 at 50 (~0.28 s of release) and ENV3L4 0.\n"
+               "At full depth one end runs past an 8 s capture, so the size\n"
+               "of the effect is bounded below rather than measured.",
+        note="Note-ON velocity scales envelope 3's RELEASE, bipolar:\n"
+             "  V_REL3 +50   0.150 s at velocity 20, past the window at 120\n"
+             "  V_REL3   0   0.290 and 0.280 -- the control, ratio 1.04\n"
+             "  V_REL3 -50   the sense inverted\n"
+             "More than a tenfold swing; the exact factor is not measured\n"
+             "because the slow end left the capture. That is the field\n"
+             "working too well to ratio, and it is recorded as a bound.\n"
+             "The depth-0 control also does the orthogonality work: note-on\n"
+             "velocity alone does not touch the release, so what moves at\n"
+             "depth is this field and not velocity by some other path.",
+    ),
+    ("keygroup", "O_REL3"): Scale(
+        "keygroup", "O_REL3", "x", "linear", 1.0, 0.0, (-50, 50), 0.99,
+        bounds="tested at -50, 0 and +50 against note-OFF velocities 20 and\n"
+               "120. Measuring it at all required the rig to send a note-off\n"
+               "velocity, which it did not do before 2026-08-12.",
+        note="Note-OFF velocity scales envelope 3's RELEASE, bipolar, and it\n"
+             "is the cleanest of the four velocity scalers:\n"
+             "  O_REL3 +50   1.440 s at off-velocity 20, 0.150 s at 120\n"
+             "  O_REL3   0   0.290 and 0.290 -- the control, ratio 1.00\n"
+             "  O_REL3 -50   0.160 s and 1.830 s, the sense inverted\n"
+             "A tenfold swing each way. Higher note-off velocity shortens the\n"
+             "release at positive depth.\n"
+             "**Few controllers send a note-off velocity**, so a converter\n"
+             "should treat this as reachable but rarely driven, and must not\n"
+             "assume a default of 0 means the field is inert -- 0 is simply\n"
+             "one end of its range.",
+    ),
     ("keygroup", "V_ENV3"): Scale(
         "keygroup", "V_ENV3", "x", "linear", 1.0, 0.0, (-50, 50), 0.99,
         bounds="tested at -50, 0 and +50 against velocities 20 and 120. The\n"
