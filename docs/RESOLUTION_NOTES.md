@@ -4837,3 +4837,65 @@ lose that, and treating it as a failed measurement would understate the field.
 velocity at all. A converter must not read a default of 0 as evidence the field
 is inert: 0 is one end of its range, and it is the end that makes the release
 longest at positive depth.
+
+---
+
+## §65 — Only slot 1 modulates the filter, and the "!" sources are not inverted (2026-08-12)
+
+```
+source through slot 1, MODVFILT1 10, corner in octaves above base
+    modwheel   (1)    -0.01 -> +2.08     delta +2.09
+    !modwheel (11)    -0.01 -> +2.08     delta +2.09
+    bend       (2)    -0.01 -> +2.08     delta +2.09
+    !bend     (12)    -0.01 -> +2.08     delta +2.09
+    none       (0)    -0.01 -> -0.01     delta +0.00
+
+envelope 3 (source 14) through each slot
+    slot 1     1.68 .. 2.08 octaves   (§63, §64)
+    slot 2     0.00 octaves           MODSFILT2 reads 14, MODVFILT2 reads 10
+    slot 3     0.01 octaves           MODSFILT3 reads 14, MODVFILT3 reads 10
+```
+
+**`MODSFILT2` and `MODSFILT3` do not modulate the filter.** The writes were
+read back and confirmed, the same source and depth move the corner two octaves
+through slot 1 in the same session, and the second and third slots move it by
+one part in two hundred. This is a negative with the route proved live
+elsewhere, the field values verified, and the stage correct — the three things
+§48, §63 and §64 each had to learn.
+
+**Bend works as a modulation source**, which was untested before.
+
+**The "!" variants are not inverted.** `!modwheel` and `!bend` behave like
+`modwheel` and `bend`: same sign, same magnitude. Whatever the prefix means in
+Akai's table, it is not "invert the source" on this machine.
+
+### The resolution caveat, which limits the last claim
+
+The four deltas agree to five decimal places — 2.08517 throughout — and
+`verify_varies` flags them as frozen. That is expected here rather than
+alarming: the corner tracker quantises to the nearest harmonic, so at note 48
+adjacent readings are 0.19 octaves apart and any difference smaller than that
+lands in the same bin.
+
+So the claim that survives is about **sign and rough magnitude**: an inverted
+source would read near zero where these read +2.08, and that is far larger than
+the quantum. Whether the "!" variants differ from their twins in some smaller
+way this detector cannot see is **open**, and the identical values are not
+evidence that they are identical.
+
+### What was not tested, and why
+
+`external` (4) and `!external` (13) are **not measured**. The source documents
+do not say what "external" is — a rear-panel control input, or a MIDI
+controller assigned elsewhere — and without knowing the stimulus a null would
+be worthless. That is the `O_REL3` situation from §64: the rig could not vary
+the quantity the field keys on, and the failure would have been invisible.
+
+Recorded as needing the source identified first. **Not as inert.**
+
+### The ceiling, again
+
+The first run used `MODVFILT1` 40 and read +2.98 octaves for every source
+against a ceiling of +2.84 (§57) — all four saturated, all four identical, and
+the identity meant nothing. Rerun at depth 10 the identity persisted, which is
+what makes it reportable. Two runs at different drive levels, again.

@@ -564,6 +564,16 @@ See RESOLUTION_NOTES §20-§55.
   -- **which means the `FILFRQ` law itself wants re-deriving from the
   resonance peak.** That is the next open measurement.
 - **Untouched:** `ZPLAY1` and the velocity-crossfade fields.
+- **Only matrix slot 1 modulates the filter** (§65). `MODSFILT2` and
+  `MODSFILT3` move the corner by 0.00-0.01 octaves where slot 1 moves it 2.08,
+  with the writes read back and verified. A converter should route everything
+  through slot 1.
+- **`bend` works as a source; the `!` variants are NOT inverted** (§65).
+  `!modwheel` and `!bend` match their twins in sign and magnitude. Whether they
+  differ in some way below the tracker's 0.19-octave quantum is open.
+- **`external` (4) and `!external` (13) are UNTESTED, not inert** (§65). The
+  documents do not say what "external" is, so the stimulus is unknown and a
+  null would be worthless. Identifying the source is the blocker.
 - **All four of envelope 3's velocity scalers work** (§63, §64) -- `V_ENV3`,
   `V_ATT3`, `V_REL3`, `O_REL3`. The counter-case to §47's five-of-six inert.
   `O_REL3` could not have been measured at all before the rig learned to send
