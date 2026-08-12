@@ -664,6 +664,122 @@ def _measure(kind: str, wav: str, t_on: float, t_off: float,
     raise AssertionError(f"measurement {kind!r} is listed but not implemented")
 
 
+def _np():
+    """numpy, or a message that says how to get it.
+
+    Deliberately not a module-level import: the editor itself never needs
+    numpy, so it is not a project dependency, and only the analysis paths in
+    this probe pull it in.
+    """
+    try:
+        import numpy as np
+    except ImportError as exc:  # pragma: no cover - environment-dependent
+        raise RuntimeError(
+            "the calibration analysis needs numpy, which is not a project "
+            "dependency because the editor never uses it. Install it in the "
+            "venv: `.venv/bin/pip install numpy`."
+        ) from exc
+    return np
+
+
+def frame_spectra(samples, sr: int, frame: float = 0.040, hop: float = 0.010,
+                  lo: float = 120.0, hi: float = 9000.0,
+                  quiet: float = 1e-4):
+    """``(times, spectra_db, freqs)`` -- a log spectrogram, frames of silence dropped.
+
+    The frame length sets two things at once and they pull opposite ways: it is
+    the time resolution of anything measured from the result, and it is the
+    frequency resolution that decides whether two harmonics can be told apart.
+    40 ms gives 25 Hz bins, which resolves the comb of any note below about
+    C2 and is short against every envelope this machine can produce.
+    """
+    np = _np()
+    n, h = int(frame * sr), int(hop * sr)
+    if n <= 0 or h <= 0 or len(samples) < n:
+        return np.asarray([]), np.asarray([]), np.asarray([])
+    win = np.hanning(n)
+    freqs = np.fft.rfftfreq(n, 1.0 / sr)
+    band = (freqs > lo) & (freqs < hi)
+    times, rows = [], []
+    for i in range(0, len(samples) - n, h):
+        seg = samples[i:i + n]
+        if float(np.sqrt((seg ** 2).mean())) < quiet:
+            continue
+        times.append(i / sr)
+        rows.append(20 * np.log10(np.abs(np.fft.rfft(seg * win))[band] + 1e-12))
+    return np.asarray(times), np.asarray(rows), freqs[band]
+
+
+def corner_from_difference(ref_db, run_db, freqs, *, gate_db: float = 45.0,
+                           smooth_bins: int = 3):
+    """Filter corner per frame, from resonance-on minus resonance-off spectra.
+
+    Both arguments are log spectrograms of the SAME note under the SAME
+    settings, differing only in resonance: ``run_db`` with ``FILQ`` high,
+    ``ref_db`` with it at zero. The resonant peak sits at the corner
+    (RESOLUTION_NOTES §53), so the peak of the difference locates it.
+
+    **Why a difference rather than the spectrum's own maximum.** A sawtooth
+    falls about 6 dB per octave, so by 2.9 kHz the source is ~27 dB below its
+    own fundamental and 25 dB of resonance cannot lift it above. Tracking the
+    raw argmax returns the FUNDAMENTAL at high corners -- 125 Hz where the
+    answer was 2875 -- and looks entirely plausible while doing it.
+    Differencing removes the source's slope exactly, and removes any fixed
+    poles with it, so what is left is only the pair the resonance control
+    moves.
+
+    **Why the gate.** Above a low corner both captures are at the noise floor,
+    and the difference of two noise floors is random: without this the median
+    was right and the frame-to-frame scatter was 630%. Only bins where the
+    REFERENCE has signal -- within ``gate_db`` of its own peak in that frame --
+    are eligible.
+
+    Because it works frame by frame with no reference to a static state, it
+    tracks a corner that is MOVING, which is what an envelope measurement
+    needs and what a differenced static measurement cannot give.
+
+    Measured performance on static corners, against §54's law: 0.9% mean error
+    and 2.0% worst, frame-to-frame steadiness 0.1-1.0%, over 527..4525 Hz.
+    **Below about 500 Hz it is unusable** -- the peak snaps to the nearest
+    harmonic, so the resolution is one harmonic spacing, and at 321 Hz with a
+    65 Hz comb that quantum is 20%. Use the lowest note the keygroup will
+    play, and do not operate it below its floor: a measurement whose base
+    corner sat at 321 Hz produced a control that "moved" 2.03 octaves.
+    """
+    np = _np()
+    m = min(len(ref_db), len(run_db))
+    if m == 0 or len(freqs) == 0:
+        return np.asarray([])
+    ref, run = np.asarray(ref_db)[:m], np.asarray(run_db)[:m]
+    diff = run - ref
+    diff = np.where(ref > ref.max(axis=1, keepdims=True) - gate_db,
+                    diff, -np.inf)
+    if smooth_bins > 1:
+        k = np.ones(smooth_bins) / float(smooth_bins)
+        diff = np.apply_along_axis(
+            lambda r: np.convolve(np.where(np.isfinite(r), r, -300.0), k,
+                                  "same"), 1, diff)
+    return np.asarray(freqs)[np.argmax(diff, axis=1)]
+
+
+def running_median(values, width: int = 5):
+    """Kills stray frames, keeps edges -- an envelope's shape survives it.
+
+    An excursion should be measured as max minus min of THIS, never as a
+    percentile spread: a percentile understates a transient badly, because a
+    corner that spends 0.3 s moving and 2.7 s on a plateau puts both the 5th
+    and the 95th percentile on the plateau. A real two-octave sweep read as
+    0.31 octaves that way.
+    """
+    np = _np()
+    v = np.asarray(values)
+    if len(v) < width or width < 2:
+        return v
+    half = width // 2
+    return np.asarray([np.median(v[max(0, i - half):i + half + 1])
+                       for i in range(len(v))])
+
+
 # ==========================================================================
 # Driving
 # ==========================================================================

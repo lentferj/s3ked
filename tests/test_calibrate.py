@@ -888,3 +888,119 @@ def test_the_bar_is_documented_as_an_effect_size():
     doc = " ".join(inspect.getdoc(cal.beyond_noise).split())
     assert "EFFECT SIZE, not a significance test" in doc
     assert "adding replicates will not resolve" in doc
+
+
+# --- the corner tracker -----------------------------------------------------
+#
+# Built for RESOLUTION_NOTES §57. Every test here is a failure the real
+# instrument produced against hardware before it worked, rebuilt synthetically
+# so it cannot come back quietly.
+
+def _two_pole_db(np, freqs, fc, zeta):
+    x = np.asarray(freqs) / float(fc)
+    return -10 * np.log10((1 - x ** 2) ** 2 + (2 * zeta * x) ** 2)
+
+
+def _sawtooth_source_db(np, freqs):
+    """Falls 6 dB/octave, like the source the tracker actually sees."""
+    return -20 * np.log10(np.maximum(np.asarray(freqs), 1.0) / 100.0)
+
+
+def _spectra(np, freqs, fc, *, frames=20, floor_db=-80.0, q_zeta=0.03):
+    """(reference, run) log spectrograms of one static corner."""
+    src = _sawtooth_source_db(np, freqs)
+    ref = src + _two_pole_db(np, freqs, fc, 0.47)
+    run = src + _two_pole_db(np, freqs, fc, q_zeta)
+    ref = np.maximum(ref, floor_db)
+    run = np.maximum(run, floor_db)
+    return np.tile(ref, (frames, 1)), np.tile(run, (frames, 1))
+
+
+def test_corner_tracker_finds_a_static_corner():
+    np = pytest.importorskip("numpy")
+    freqs = np.arange(120.0, 9000.0, 25.0)
+    for fc in (600.0, 930.0, 1900.0, 2900.0, 4500.0):
+        ref, run = _spectra(np, freqs, fc)
+        got = cal.corner_from_difference(ref, run, freqs)
+        assert abs(float(np.median(got)) / fc - 1) < 0.05, fc
+        assert float(np.std(got)) < 0.02 * fc, f"{fc} not steady"
+
+
+def test_corner_tracker_beats_the_raw_argmax_at_a_high_corner():
+    """The failure that started it: 125 Hz reported for a 2875 Hz corner.
+
+    A sawtooth falls 6 dB/octave, so at a high corner the source is further
+    below its own fundamental than the resonance is above the local level, and
+    the spectrum's maximum stays at the bottom. Differencing removes the slope;
+    without it the answer is the fundamental, confidently.
+    """
+    np = pytest.importorskip("numpy")
+    freqs = np.arange(120.0, 9000.0, 25.0)
+    ref, run = _spectra(np, freqs, 2900.0)
+
+    naive = float(freqs[int(np.argmax(run[0]))])
+    assert naive < 500.0, "the raw argmax should fail here, or this proves nothing"
+
+    tracked = float(np.median(cal.corner_from_difference(ref, run, freqs)))
+    assert abs(tracked / 2900.0 - 1) < 0.05
+
+
+def test_corner_tracker_gate_rejects_the_difference_of_two_noise_floors():
+    """Above a low corner both captures are at the floor and their difference
+    is random. Ungated, the median stayed right and the scatter was 630%."""
+    np = pytest.importorskip("numpy")
+    rng = np.random.default_rng(11)
+    freqs = np.arange(120.0, 9000.0, 25.0)
+    ref, run = _spectra(np, freqs, 600.0, frames=40, floor_db=-70.0)
+    noise = lambda: rng.normal(0.0, 6.0, size=ref.shape)
+    ref_n, run_n = ref + noise(), run + noise()
+
+    gated = cal.corner_from_difference(ref_n, run_n, freqs, gate_db=45.0)
+    ungated = cal.corner_from_difference(ref_n, run_n, freqs, gate_db=400.0)
+
+    assert float(np.std(gated)) < float(np.std(ungated)) / 3
+    assert abs(float(np.median(gated)) / 600.0 - 1) < 0.10
+
+
+def test_corner_tracker_follows_a_moving_corner():
+    """The whole point: a differenced STATIC measurement cannot do this."""
+    np = pytest.importorskip("numpy")
+    freqs = np.arange(120.0, 9000.0, 25.0)
+    sweep = np.geomspace(700.0, 3500.0, 30)
+    ref = np.stack([_spectra(np, freqs, fc, frames=1)[0][0] for fc in sweep])
+    run = np.stack([_spectra(np, freqs, fc, frames=1)[1][0] for fc in sweep])
+
+    got = cal.corner_from_difference(ref, run, freqs)
+    assert np.all(np.diff(got) >= -50), "should rise monotonically"
+    assert abs(float(got[0]) / 700.0 - 1) < 0.08
+    assert abs(float(got[-1]) / 3500.0 - 1) < 0.08
+
+
+def test_running_median_keeps_an_excursion_a_percentile_span_would_lose():
+    """A corner that moves briefly and then sits still.
+
+    max-minus-min of the smoothed track recovers the excursion; the 5th-to-95th
+    percentile puts both ends on the plateau and reports a fraction of it.
+    """
+    np = pytest.importorskip("numpy")
+    trace = np.concatenate([np.linspace(0.0, 2.0, 20), np.full(180, 2.0)])
+    trace[57] = 9.0                                   # one stray frame
+    smoothed = cal.running_median(trace, 5)
+
+    assert smoothed.max() - smoothed.min() == pytest.approx(2.0, abs=0.15)
+    assert float(trace.max() - trace.min()) > 8.0, "unsmoothed, the stray wins"
+    pct = float(np.percentile(trace, 95) - np.percentile(trace, 5))
+    assert pct < 1.0, "the percentile span understates the transient"
+
+
+def test_frame_spectra_drops_silence_and_returns_matching_shapes():
+    np = pytest.importorskip("numpy")
+    sr = 44100
+    t = np.arange(0, int(sr * 0.5)) / sr
+    tone = 0.2 * np.sin(2 * np.pi * 440 * t)
+    samples = np.concatenate([np.zeros(sr // 4), tone])
+
+    times, rows, freqs = cal.frame_spectra(samples, sr)
+    assert len(times) == len(rows) > 10
+    assert rows.shape[1] == len(freqs)
+    assert times.min() > 0.2, "the leading silence should be dropped"

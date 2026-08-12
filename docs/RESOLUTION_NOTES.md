@@ -4312,6 +4312,20 @@ floor I had just measured** — and its control duly "moved" 2.03 octaves.
 Validating an instrument and then operating it outside the validated range is
 worth nothing.
 
+**Replicated through the library code** (2026-08-12). The tracker was validated
+as inline probe code and then moved into `probes/calibrate.py`; code that has
+been moved is not code that has been checked, so the identical validation was
+re-run through the library functions: **1.0% mean accuracy, 2.0% worst**,
+against 0.9% and 2.0% for the original. The numbers above belong to the code
+the project actually ships.
+
+One difference is worth stating rather than smoothing over. At `FILFRQ` 55 the
+first run scattered 22.6% frame-to-frame and the second 1.6% — **the
+instability at the resolution floor is not reproducible**, while the 20%
+quantum that causes it is structural. So the floor is a statement about
+resolution, not about a repeatable amount of noise, and a single steady-looking
+run there proves nothing.
+
 ### Envelope 3
 
 ```
