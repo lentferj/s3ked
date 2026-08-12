@@ -2587,7 +2587,11 @@ prefactor that travels without the operational definition that produced it.
 
 ---
 
-## §33 — `FILQ` is resonance, and it peaks below the corner (2026-08-11)
+## §33 — SUPERSEDED by §53. `FILQ` is resonance, and it peaks below the corner (2026-08-11)
+
+> **The linear law below is wrong; §53 measures the field properly.** The
+> peak-below-the-corner finding here REPLICATES and stands. Left in place
+> because the reason the linear reading failed is the useful part.
 
 ```
 resonant gain = 0.5764 * FILQ dB     0..15    r2 0.9366   LOWER BOUND
@@ -3942,3 +3946,94 @@ What remains genuinely inert is **one destination**: the pan output of LFO2.
 does not reach pan. That is a much narrower and more useful statement than "the
 pan LFO does nothing", and a converter can now write `PANRAT`/`PANDEP` for
 matrix use while knowing auto-pan itself will not sound.
+
+---
+
+## §53 — `FILQ` sets damping, and damping is linear (2026-08-12)
+
+§33 fitted `FILQ` as 0.5764 dB per step and said in its own text that the
+number was a lower bound. It was: the true law is not linear, not in dB, and
+the last three steps are worth more than the first ten put together.
+
+```
+damping   z = 0.46864 - 0.029587 * FILQ        r2 0.999975   (2985 points)
+boost     dB = -20 log10(1 - FILQ / 15.84)
+Q         = 1.067 / (1 - FILQ / 15.84)         1.07 at 0, ~20 at 15
+corner    919 Hz, the SAME at every one of the sixteen settings
+```
+
+Damping reaches zero at **FILQ 15.84** — past the top of the field — so the
+machine stops just short of self-oscillation and the top step is the loudest
+resonance it can make. That single number generates all sixteen steps.
+
+### Sliding the comb instead of the corner
+
+Every earlier attempt held a note and read the filter through that note's
+harmonic comb, 261.6 Hz apart. **Between the teeth the response is not
+observable**, so a resonance narrower than the spacing is measured wherever a
+tooth happens to fall. At Q 20 the peak here is 46 Hz wide against a 262 Hz
+comb.
+
+`K_FREQ` 0 stops the filter tracking the keyboard. With `FILFRQ` fixed, every
+NOTE puts its harmonics at different absolute frequencies while the corner
+stays put, so the comb slides across a stationary filter. Eleven notes at
+three-semitone steps give 208 points; thirty-one notes at one-semitone steps
+interleave nine harmonic indices through the corner and give 588.
+
+What is measured at each point is a difference:
+
+```
+dB(f) = level(FILQ = q, note, h) - level(FILQ = 0, note, h)
+```
+
+Same note, same harmonic, same sample — so the source's spectrum, the pitch
+shift, the converters and the room divide out exactly. **And because it is a
+ratio, any fixed non-resonant poles cancel too**, which is what makes the
+two-pole model legitimate on a filter that is not two poles: the difference
+sees only the pair whose damping `FILQ` moves.
+
+Fitting that model to all 2985 points, rather than reading the height of a
+peak, is what turns a lower bound into a law. Two runs with different note
+sets agree: fc 919 against 918 Hz, slope -0.029587 against -0.029688, zero
+damping at 15.84 against 15.93.
+
+### Three errors of mine, each caught by a check the previous one taught
+
+1. **A summary statistic hid the thing it was summarising.** The first run
+   reported "median spacing 10 Hz between 900 and 1700 Hz" — true, and
+   useless. The harmonics cluster elsewhere in that band; the corner's own
+   neighbourhood had **one** point within 40 Hz, with neighbours at 881 and
+   988. The tell was that the smoothing half-width made no difference from
+   6 Hz to 40 Hz, which is impossible for a peak narrower than the window.
+   *Report the density where the feature is, never averaged over a band.*
+2. **The error bar measured the wrong thing.** The null pass — FILQ 0 run
+   twice and differenced — gave sd 0.016 dB, and that is a real number for
+   what it measures: whether one note-and-harmonic path repeats. It says
+   nothing about whether two DIFFERENT paths landing on the same frequency
+   agree, and they scatter by 1–2 dB. The global fit's rms is 0.274 dB, 17x
+   the null. *A repeat that follows the same path measures repeatability, not
+   accuracy.*
+3. **The estimator was biased and the model paid for it.** Reading peak
+   height under-reads at high Q — 23.2 dB observed at FILQ 15 against 25.5
+   fitted — and that bias appeared as systematic curvature in the residuals,
+   which I first tried to fix by adding parameters to the model. The fix was
+   a better estimator, not a bigger model.
+
+The dense re-measurement is worth recording as a negative result too: it moved
+the peaks by at most 0.07 dB. The under-sampling was real, the correction was
+not, and it was still the right run to make — that is what checking costs when
+the answer turns out fine.
+
+### What this leaves open
+
+The corner sits **0.42 octaves below** what §22's `FILFRQ` law predicts — 919
+Hz against 1229 nominal at `FILFRQ` 70 — and that replicates §33's 0.41
+octaves at `FILFRQ` 77. Two operating points, two methods, same offset: the
+fields genuinely do not share a reference.
+
+§22 fitted `FILFRQ` by inverting a spectral centroid, and a centroid is not a
+corner. A resonance peak is, and this measurement locates it to about a hertz.
+**Re-deriving `FILFRQ` from the resonance peak at high `FILQ` should replace
+the centroid ruler** — and would also be free of the fold that makes the
+centroid ruler invertible only on its rising branch (§20). That is the next
+item.

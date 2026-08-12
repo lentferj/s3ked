@@ -519,11 +519,10 @@ question immediately. `probes/calibrate.py` now has `replicate()` and
 decay have different exponents (0.11175 vs ~0.0977) and are different kinds of
 quantity. A test pins this because the idea has returned twice.
 
-Still unmeasured: `FILQ` resonance, `LFODEP`/`LFODEL`/`LFO2` rate,
-velocity-modulation depths, and the ~20 fields the document lists as fixed
-placeholders.
+Still unmeasured: `LFODEL`'s shape, envelope 3, and the ~20 fields the
+document lists as fixed placeholders.
 
-See RESOLUTION_NOTES §20-§43.
+See RESOLUTION_NOTES §20-§53.
 
 ### Added since, and worth reading before extending any of it
 
@@ -531,14 +530,21 @@ See RESOLUTION_NOTES §20-§43.
   referenced to the centre of the controller's MIDI range, not to middle C or
   the sample root. This **predicts** that `MWLDEP`, `PRSDEP`, `VFREQ1` and
   `VPANO1` pivot there too -- untested, and the cheapest way to refute the rule.
-- **Two inert paths.** Auto-pan (`PANDEP`/`PANRAT`/`PANDEL`/`LFO2WAVE`/
-  `LFO2TRIG`) and the per-zone `VLOUD1` move nothing measurable, while
-  `PANPOS` and the program-wide `V_LOUD` work fully (§39, §40). Recorded as
-  "nothing reachable from these fields moves the output", not as
-  "unimplemented" -- whether they need the IB304F board is not established.
-- **Still provisional:** `FILQ` is a lower bound (harmonic-comb resolution)
-  and `LFODEL`'s shape does not fit (the detector conflates delay with
-  fade-in). Both have a stated route to settling them.
+- **One inert DESTINATION, not five inert fields** (§52, retracting §39).
+  All of `PANDEP`/`PANRAT`/`PANDEL`/`LFO2WAVE`/`LFO2TRIG` work -- LFO2 is
+  assignable-matrix source 8 and runs at exactly twice LFO1 -- but LFO2 does
+  not reach pan. `PANPOS` moves the image 118 dB, so neither end is broken,
+  only the connection. The per-zone `VLOUD1` remains inert (§40).
+- **Still provisional:** `LFODEL` alone. Its shape does not fit because the
+  detector conflates delay with fade-in, and it has a stated route to
+  settling. `FILQ` left this list in §53.
+- **`FILQ` is damping, and damping is linear** (§53). One number generates
+  all sixteen steps: damping reaches zero at FILQ 15.84, just past the top of
+  the field. Q runs 1.07 to ~20; the last three steps are worth more than the
+  first ten together. Its corner sits 0.42 octaves below what the `FILFRQ`
+  law predicts, replicating the same offset measured at a different `FILFRQ`
+  -- **which means the `FILFRQ` law itself wants re-deriving from the
+  resonance peak.** That is the next open measurement.
 - **Untouched:** `MWLDEP`, `PRSDEP`, `VELDEP`, `LFO1WAVE`, envelope 3, the
   envelope-2 velocity set, `ZPLAY1`, and the velocity-crossfade fields.
 

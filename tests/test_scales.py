@@ -375,13 +375,15 @@ def test_the_tuning_fit_and_the_exact_constant_agree():
 
 
 def test_what_is_still_provisional():
-    """ATTAK2: two of this project's rise-time definitions differ by 33%.
-    FILQ: read through a harmonic comb, so its gain is a lower bound.
-    LFODEL: the detector measures delay plus fade-in as their sum.
+    """LFODEL: the detector measures delay plus fade-in as their sum.
+
+    FILQ left this list once it was fitted to the DAMPING over the whole
+    transfer function rather than to the height of a peak a harmonic comb
+    steps past.
     """
     provisional = sorted(n for (_r, n), s in scales.SCALES.items()
                          if s.provisional)
-    assert provisional == ["FILQ", "LFODEL"]
+    assert provisional == ["LFODEL"]
 
 
 def test_the_attack_and_the_decay_are_different_laws():
@@ -398,9 +400,9 @@ def test_the_attack_and_the_decay_are_different_laws():
 
 def test_a_provisional_value_is_marked_in_the_display():
     """A number whose meaning is unsettled must not read like a finished one."""
-    assert scales.describe("keygroup", "FILQ", 8).startswith("!")
+    assert scales.describe("program", "LFODEL", 60).startswith("!")
     assert not scales.describe("keygroup", "FILFRQ", 80).startswith("!")
-    assert not scales.describe("keygroup", "FILFRQ", 80).startswith("!")
+    assert not scales.describe("keygroup", "FILQ", 8).startswith("!")
 
 
 def test_the_settled_laws_are_not_marked_provisional():
@@ -434,20 +436,54 @@ def test_zero_resonance_is_zero_gain():
     assert db == pytest.approx(0.0, abs=1e-9)
 
 
-def test_filq_is_a_lower_bound_and_says_so():
-    """A harmonic comb understates a peak that falls between its teeth."""
+def test_filq_is_damping_falling_linearly_to_zero():
+    """The one-parameter law, and why it is one parameter.
+
+    Every step shares a single number: the FILQ at which damping would reach
+    zero. Fitted to 2985 points of transfer function, r2 0.999975, and
+    replicated by a second run with a different note set (15.84 against
+    15.93).
+    """
     scale = scales.SCALES[("keygroup", "FILQ")]
-    assert scale.provisional
-    assert "LOWER BOUND" in scale.provisional
+    assert not scale.provisional
+    assert scale.kind == "reso"
+    assert 15.0 < scale.a < 16.0, "self-oscillation lies past the field's top"
+    assert scale.value_to_physical(0) == pytest.approx(0.0, abs=1e-9)
+    assert scale.resonance_q(0) == pytest.approx(1.067, abs=0.01)
+    assert scale.resonance_q(15) > 15
+
+
+def test_filq_last_three_steps_beat_the_first_ten():
+    """Which is why the field feels abrupt rather than gradual.
+
+    A linear reading of FILQ -- what §33 recorded -- gets this exactly
+    backwards, and a converter using it would spread the resonance evenly.
+    """
+    s = scales.SCALES[("keygroup", "FILQ")]
+    first_ten = s.value_to_physical(10) - s.value_to_physical(0)
+    last_three = s.value_to_physical(15) - s.value_to_physical(12)
+    assert last_three > first_ten
+
+
+def test_filq_refuses_to_extrapolate_past_self_oscillation():
+    """Beyond 15.84 the model is a division by zero, not a loud filter."""
+    s = scales.SCALES[("keygroup", "FILQ")]
+    with pytest.raises(ValueError):
+        s.value_to_physical(16)
+    assert scales.to_physical("keygroup", "FILQ", 16) is None
 
 
 def test_filq_resonance_peaks_below_the_filfrq_corner():
-    """1570 Hz measured against 2093 Hz nominal -- 0.41 octaves apart.
+    """0.42 octaves at FILFRQ 70, replicating 0.41 octaves at FILFRQ 77.
 
     The two fields do not share a frequency reference, and a converter that
-    assumes they do will place resonance in the wrong place.
+    assumes they do will place resonance in the wrong place. Pinned because
+    it now holds at two operating points measured months and methods apart,
+    which is what makes it a property of the machine rather than of a rig.
     """
-    assert "BELOW the corner" in scales.SCALES[("keygroup", "FILQ")].note
+    note = scales.SCALES[("keygroup", "FILQ")].note
+    assert "BELOW the corner" in note
+    assert "REPLICATES" in note
 
 
 def test_the_release_span_is_measured_not_assumed():

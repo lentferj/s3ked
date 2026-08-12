@@ -97,7 +97,7 @@ class Scale:
     region: str
     param: str
     unit: str
-    kind: str                      # "exp" | "linear" | "pan"
+    kind: str                      # "exp" | "linear" | "pan" | "reso"
     a: float
     b: float
     fitted: Tuple[int, int]        # the range the law was measured over
@@ -127,7 +127,26 @@ class Scale:
             eps = 1e-6
             theta = min(max(theta, eps), math.pi / 2 - eps)
             return self.a * 20.0 * math.log10(math.tan(theta)) + self.b
+        if self.kind == "reso":
+            # Resonant boost at the corner, in dB, for a pole pair whose
+            # damping falls LINEARLY to zero at ``a``. At the corner the
+            # response is 1/(2z), so relative to the value at 0 the boost is
+            # 20 log10(z0/z) = -20 log10(1 - v/a) -- the z0 cancels, which is
+            # why one parameter describes all sixteen steps.
+            if value >= self.a:
+                raise ValueError(
+                    f"{self.param} {value} is at or past self-oscillation "
+                    f"({self.a:.2f}); the field only reaches 15")
+            return -20.0 * math.log10(1.0 - value / self.a)
         raise ValueError(f"unknown scale kind {self.kind!r}")
+
+    def resonance_q(self, value: float) -> float:
+        """Q of the resonant pole pair. ``reso`` scales only; ``b`` is Q at 0."""
+        if self.kind != "reso":
+            raise ValueError(f"{self.param} is not a resonance scale")
+        if value >= self.a:
+            raise ValueError(f"{self.param} {value} is at or past {self.a:.2f}")
+        return self.b / (1.0 - value / self.a)
 
     def physical_to_value(self, physical: float) -> float:
         if self.kind == "exp":
@@ -139,6 +158,10 @@ class Scale:
         if self.kind == "pan":
             theta = math.atan(10.0 ** ((physical - self.b) / (self.a * 20.0)))
             return theta / (math.pi / 2.0) * 100.0 - 50.0
+        if self.kind == "reso":
+            if physical < 0:
+                raise ValueError(f"{self.param} cannot cut, only boost")
+            return self.a * (1.0 - 10.0 ** (-physical / 20.0))
         raise ValueError(f"unknown scale kind {self.kind!r}")
 
     def within(self, value: float) -> bool:
@@ -403,31 +426,41 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "the per-zone velocity fields will pivot, so it can be refuted.",
     ),
     ("keygroup", "FILQ"): Scale(
-        "keygroup", "FILQ", "dB", "linear", 0.5764, 0.0, (0, 15), 0.9366,
-        provisional="a LOWER BOUND on the resonant gain, not the gain. The "
-                    "probe reads the filter through a sawtooth's harmonic "
-                    "comb, 261.6 Hz apart, so whenever the true peak falls "
-                    "between two harmonics its height is understated. The top "
-                    "step also breaks the straight line (+10.0 dB measured "
-                    "against +8.6 predicted), so the law is a summary rather "
-                    "than a fit worth trusting at the ends.",
-        bounds="the full 0..15 was swept. The limit is resolution, not range: "
-               "peak position is pinned only to about +/-8% near 1570 Hz.",
-        note="FILQ is resonance, and it peaks BELOW the corner the FILFRQ law\n"
-             "gives -- 1570 Hz measured against 2093 Hz nominal, 0.41 octaves\n"
-             "down, with FILFRQ parked at 77. So the two fields do not share\n"
-             "a frequency reference and a converter must not assume they do.\n"
-             "Gain grows monotonically: +1.8, +3.5, +4.5, +5.7, +10.0 dB at\n"
-             "FILQ 3, 6, 9, 12, 15.\n"
-             "The transition above the peak is steep at high Q -- 17.8 dB\n"
-             "between adjacent harmonics at FILQ 15 -- which is what wrecked\n"
-             "the first attempt at this measurement: it watched a single\n"
-             "harmonic sitting on that cliff, and read the edge sliding past\n"
-             "as a level that rose and fell.\n"
-             "Forced through the origin: FILQ 0 is zero gain BY DEFINITION,\n"
-             "being the reference every other step was measured against, so\n"
-             "the free fit's -0.23 dB intercept is bias. Same correction as\n"
-             "KGTUNO.",
+        "keygroup", "FILQ", "dB", "reso", 15.84, 1.067, (0, 15), 0.999975,
+        bounds="the full 0..15, every value measured. The law is fitted to the\n"
+               "DAMPING, which is linear across the whole range, so there is no\n"
+               "sub-range where it holds better.",
+        note="FILQ sets the damping of one pole pair, and it does so LINEARLY:\n"
+             "  z = 0.46864 - 0.029587 * FILQ    r2 0.999975\n"
+             "Damping reaches zero at FILQ 15.84 -- past the top of the field,\n"
+             "so the machine stops just short of self-oscillation. Q runs from\n"
+             "1.07 at FILQ 0 to about 20 at FILQ 15, and the boost at the\n"
+             "corner is -20 log10(1 - FILQ/15.84) dB: +3.3 at 5, +8.7 at 10,\n"
+             "+25.5 at 15. The last three steps are worth more than the first\n"
+             "ten put together, which is what makes the field feel abrupt.\n"
+             "Measured by holding the corner still and sliding the harmonic\n"
+             "comb across it with the NOTE (K_FREQ 0), differencing every\n"
+             "harmonic against the same harmonic at FILQ 0. The fit is to the\n"
+             "whole transfer function -- 2985 points -- not to the height of\n"
+             "the peak, and because it is a RATIO any fixed non-resonant poles\n"
+             "cancel exactly, so it isolates the pair FILQ actually moves.\n"
+             "Two runs with different note sets agree: fc 919 vs 918 Hz, slope\n"
+             "-0.029587 vs -0.029688, zero at 15.84 vs 15.93.\n"
+             "The corner does NOT move with FILQ: 919 Hz at every setting.\n"
+             "It does sit BELOW the corner the FILFRQ law gives -- 919 Hz\n"
+             "measured against 1229 nominal at FILFRQ 70, 0.42 octaves down.\n"
+             "That REPLICATES the earlier 0.41 octaves at FILFRQ 77 (1570 vs\n"
+             "2093), so the offset is a property of the machine and not of one\n"
+             "operating point: the two fields do not share a frequency\n"
+             "reference and a converter must not assume they do. The FILFRQ\n"
+             "law was fitted by inverting a spectral centroid, which is not\n"
+             "the corner, and a resonance peak locates it far better -- see\n"
+             "RESOLUTION_NOTES for the re-derivation this calls for.\n"
+             "Reading the peak height directly under-reads it -- 23.2 dB\n"
+             "observed at FILQ 15 against 25.5 from the fit -- because at Q 20\n"
+             "the peak is 46 Hz wide and a harmonic comb steps past it. That\n"
+             "is the same trap as the first two attempts, and the reason the\n"
+             "law is fitted to damping instead of to peak height.",
     ),
     ("keygroup", "SUSTN2"): Scale(
         "keygroup", "SUSTN2", "%", "linear", 100.0 / 99.0, 0.0, (0, 70), 0.9908,
@@ -692,6 +725,10 @@ def describe(region: str, param: str, value: float) -> str:
                 else f"{physical:.2f} s")
     elif unit == "dB":
         text = f"{physical:+.1f} dB"
+        if s.kind == "reso":
+            # Q is the number that says what the resonance SOUNDS like; the
+            # dB alone reads like a volume and this field is not one.
+            text += f" (Q {s.resonance_q(value):.1f})"
     elif unit == "cents":
         text = f"{physical:+.1f} cents"
     elif unit == "%":
