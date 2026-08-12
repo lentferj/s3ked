@@ -941,7 +941,15 @@ class S3kBridge:
     _MISC_PARTITION = 2          # 0 = A. Writable, and the machine re-reads.
     _MISC_SCSI_DRIVE_ID = 11
     _MISC_SCSI_LOCAL_ID = 12
-    _MISC_VOLUME = 49            # 1-based. Reads the panel; see below.
+    #: NOT the volume, despite reading as one. It is the value of whichever
+    #: field the panel's cursor is on: 3 while the LOAD page showed volume 3,
+    #: and 0 in SINGLE, which has no such field. That is why writing it never
+    #: moved anything -- the panel writes it, the machine does not read it.
+    _MISC_CURSOR_VALUE = 49
+    #: The current main-menu page. An internal enumeration with gaps -- not
+    #: the button positions: GLOBAL is the second button of the second row and
+    #: reads 8, where its position would be 5.
+    _MISC_MODE = 91
     _MISC_SELECTION_HELD = 4     # 1 suppresses the re-read. See below.
 
     #: Bytes 6-9 are the LOAD TYPE, mirrored -- writing one moves all four.
@@ -983,6 +991,36 @@ class S3kBridge:
                               f"writing misc byte {index}")
         return self._misc_byte(index, timeout=timeout)
 
+    #: Main-menu pages, by the value :attr:`_MISC_MODE` takes. Only the three
+    #: that have been observed are named; the rest of the eight buttons have
+    #: not been pressed with a probe running.
+    MODES = {0: "SINGLE", 8: "GLOBAL", 10: "LOAD"}
+
+    def mode(self, *, timeout: Optional[float] = None) -> int:
+        """Which main-menu page the machine is showing."""
+        return self._misc_byte(self._MISC_MODE, timeout=timeout)
+
+    def select_mode(self, mode: int, *, timeout: Optional[float] = None) -> int:
+        """Move the machine to a main-menu page. **This writes.**
+
+        There is no button injection in this protocol -- the specification has
+        no keypress message and no panel echo. This is not that: the current
+        page is a variable, and writing it moves the machine.
+
+        **The device's acknowledgement cannot be trusted here.** Writing 0
+        (SINGLE) answers with REPLY error code 1 and switches the page anyway;
+        the other values answer OK and also switch. The reply is wrong in one
+        direction here and wrong in the other for `byte[4]`, which accepts a
+        write and ignores it. So this returns what the register READS BACK,
+        and callers should compare against what they asked for rather than
+        trusting either the ack or this method's success.
+        """
+        try:
+            self._misc_byte(self._MISC_MODE, mode, timeout=timeout)
+        except DeviceError:
+            pass          # the write may well have taken; the read decides
+        return self._misc_byte(self._MISC_MODE, timeout=timeout)
+
     def load_source(self, *, timeout: Optional[float] = None) -> Dict[str, int]:
         """What the front panel's LOAD page currently shows.
 
@@ -999,7 +1037,9 @@ class S3kBridge:
             "device_type": self._misc_byte(self._MISC_DEVICE_TYPE,
                                            timeout=timeout),
             "partition": self._misc_byte(self._MISC_PARTITION, timeout=timeout),
-            "volume": self._misc_byte(self._MISC_VOLUME, timeout=timeout),
+            "cursor_value": self._misc_byte(self._MISC_CURSOR_VALUE,
+                                            timeout=timeout),
+            "mode": self._misc_byte(self._MISC_MODE, timeout=timeout),
         }
 
     def select_partition(self, partition: int, *,
@@ -1017,12 +1057,14 @@ class S3kBridge:
         operation loads from disk. This moves the selection the front panel
         would act on, and nothing more.
 
-        **The volume cannot be moved this way.** ``load_source()["volume"]``
-        reads back correctly -- it tracks the panel, and writing it changes
-        what reads back -- but the selection does not follow: a partition with
-        78 items reports the same 78 at volume 1 and at volume 2. Only the
-        partition is settable, so remote enumeration reaches volume 1 of every
-        partition and no further. How to move the volume is unsolved (§70).
+        **The volume cannot be moved remotely at all.** There is no volume
+        register: `byte[49]` looked like one because it read 1, 2, 3 as the
+        panel stepped through volumes, but it is the value of whatever field
+        the cursor is on and reads 0 in a page that has no such field. Writing
+        it does nothing, on single- and multi-volume discs alike (§72).
+
+        So remote enumeration reaches whichever volume the panel last selected
+        in each partition, and no further.
         **`byte[4]` has to be clear or nothing happens.** The panel sets it
         when the selection lands on a volume that does not exist -- it shows
         "INACTIVE" -- and while it is set the machine accepts a partition

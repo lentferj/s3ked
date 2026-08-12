@@ -851,10 +851,10 @@ def _misc_machine(initial):
 
 
 def test_load_source_reads_the_panel_fields():
-    bridge = _misc_machine({0: 1, 2: 2, 11: 4, 12: 6, 49: 1})
+    bridge = _misc_machine({0: 1, 2: 2, 11: 4, 12: 6, 49: 1, 91: 10})
     assert bridge.load_source() == {
-        "scsi_drive_id": 4, "scsi_local_id": 6,
-        "device_type": 1, "partition": 2, "volume": 1,
+        "scsi_drive_id": 4, "scsi_local_id": 6, "device_type": 1,
+        "partition": 2, "cursor_value": 1, "mode": 10,
     }
 
 
@@ -874,12 +874,13 @@ def test_selecting_a_partition_clears_the_hold_flag_first():
     assert bridge.writes.index(4) < bridge.writes.index(2), "cleared FIRST"
 
 
-def test_the_volume_is_readable_but_not_settable():
-    """Pinned as a limitation, so nobody adds a volume= argument that lies.
+def test_there_is_no_volume_register_to_offer():
+    """Pinned so nobody adds a volume= argument that lies.
 
-    Writing byte[49] changes what reads back and does not move the selection:
-    a partition with 78 items reports 78 at volume 1 and at volume 2. Remote
-    enumeration reaches volume 1 of every partition and no further.
+    byte[49] looked like the volume because it read 1, 2, 3 as the panel
+    stepped through them -- but it is the value of whatever field the cursor
+    is on, and reads 0 on a page that has no such field. Writing it does
+    nothing, on single- and multi-volume discs alike.
     """
     from s3k import bridge as b
     import inspect
@@ -887,4 +888,22 @@ def test_the_volume_is_readable_but_not_settable():
     assert not hasattr(b.S3kBridge, "select_volume")
     params = inspect.signature(b.S3kBridge.select_partition).parameters
     assert "volume" not in params
-    assert "not be moved this way" in b.S3kBridge.select_partition.__doc__
+    assert "cannot be moved remotely" in b.S3kBridge.select_partition.__doc__
+
+
+def test_select_mode_reports_what_the_register_reads_not_the_ack():
+    """The device's acknowledgement is wrong in both directions.
+
+    Writing 0 answers REPLY error and switches the page anyway; byte[4]
+    accepts a write and ignores it. So select_mode swallows the error and
+    returns the read-back, which is the only thing that tells the truth.
+    """
+    from s3k import bridge as b
+
+    class Contrary(_misc_machine({91: 10}).__class__):
+        def _receive(self, timeout=None):
+            from s3k import messages as m
+            return m.Reply(code=m.ReplyCode.ERROR, exclusive_channel=0).encode()
+
+    bridge = Contrary()
+    assert bridge.select_mode(0) == 0, "the write took despite the error"

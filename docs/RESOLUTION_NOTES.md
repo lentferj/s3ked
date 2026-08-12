@@ -5357,3 +5357,101 @@ was the same act under a different description. **A stated rule did not fire
 because the situation did not look like the one the rule described** — which
 is §63's lesson arriving in a new place: the check has to be attached to the
 action, not to the story about the action.
+
+---
+
+## §72 — Five of six: the load and the menu are remotely controllable (2026-08-12)
+
+The workflow was: select a SCSI ID, open the LOAD menu, choose floppy/hard/
+flash, choose a partition and volume, load it, and get the programs with their
+samples. Five of those six work over MIDI.
+
+```
+SCSI drive ID    byte[11]   works LIVE, no reboot -- five discs, five listings
+device type      byte[0]    floppy / hard / flash
+main-menu page   byte[91]   SINGLE 0, GLOBAL 8, LOAD 10
+partition        byte[2]    works; the machine re-reads, the drive light flashes
+volume           --         NO REGISTER. Panel only.
+trigger a load   byte[6]    works; verified end to end
+```
+
+### The load works, and the earlier disaster was mine
+
+Writing the load-type byte on a **3.62 MB volume into an empty machine, with
+nothing else on the bus**, loaded cleanly in seconds:
+
+```
+before   1 program,  4 samples,   131,072 words (0.8%)
+after    2 programs, 12 samples, 1,942,384 words (11.6%)
+```
+
+the single program on that volume arrived with all eight of its samples. So "ALL PROGS +
+SAMPLES" does pull the dependencies, which was the last part of the workflow.
+
+The earlier run that ended in "BUSY" until a power cycle was a 58.7 MB volume
+into a 32 MB machine while a poller interrupted it every 8 seconds. **Neither
+of my two explanations for it was right** -- the trigger was not broken and
+the machine was not left in a bad state by the write.
+
+**A load ADDS rather than replaces.** `TEST PROGRAM` and the four factory
+waveforms survived it. §71 recorded that a load clears RAM and would need
+arm-then-fire treatment; that is withdrawn.
+
+### The main menu is a variable, and writing it moves the machine
+
+There is no button injection in this protocol -- no keypress message, no panel
+echo, and §1 settled that years of looking would not find one. This is not
+that. The current page is a **variable**, and writing it switches the machine:
+
+```
+wrote 10 LOAD    ack ok       reads 10   TOOK
+wrote  8 GLOBAL  ack ok       reads  8   TOOK
+wrote  0 SINGLE  ack ERROR    reads  0   TOOK
+```
+
+The values are an internal enumeration with gaps, not button positions:
+GLOBAL is the second button of the second row and reads 8, where its position
+would be 5.
+
+### The acknowledgement lies in both directions
+
+This is the finding worth carrying furthest.
+
+```
+byte[4]    accepts a write, replies OK, and IGNORES it
+byte[91]=0 replies with error code 1, and PERFORMS the write
+```
+
+Both were mistaken for their opposite. `byte[4]` produced an hour of "the
+partition write has stopped working"; `byte[91]` produced a written-down
+conclusion that the mode register was read-only, contradicted a minute later
+by Jan saying the display had moved.
+
+`REPLY` has been leaned on throughout this project as making a write
+verifiable without reading back -- it says so in `s3k.messages`. **That is not
+safe.** The reply is evidence about the message, not about the effect. Reading
+the state back is the only thing that settles it, and `select_mode` therefore
+swallows the error and returns what the register reads.
+
+### `byte[49]` is not the volume
+
+Recorded in §70 as "volume, 1-based, reads the panel but writing does not move
+it". It is not a volume register at all: it holds the value of whatever field
+the cursor is on -- 3 while the LOAD page showed volume 3, and **0 in SINGLE**,
+which has no such field.
+
+That explains the whole puzzle. It was never a control, so writing it could
+never have done anything, and the "1 -> 2" that identified it was the cursor
+sitting on the volume field at the time.
+
+**There is no volume register.** Remote enumeration reaches whichever volume
+the panel last selected in each partition. Confirmed on a 30-volume disc,
+which is the one that could have shown otherwise.
+
+### And the SCSI ID binds live
+
+§71 said it probably bound at boot, because changing it never altered the
+volume list. With five discs on the bus at IDs 0-4, sweeping the ID walks
+through five different listings with no reboot. The old conclusion was drawn
+on a bus with one disc, where "switched to an empty ID" and "did not switch"
+look identical.
