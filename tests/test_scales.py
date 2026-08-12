@@ -931,3 +931,16 @@ def test_both_envelopes_scale_with_the_key_by_the_same_law():
     k2 = scales.SCALES[("keygroup", "K_DAR2")]
     assert k1.b < 0 < k2.b, "one is a rate, the other a time"
     assert abs(abs(k2.b) / abs(k1.b) - 1) < 0.06
+
+
+def test_key_scaling_is_referenced_to_note_64_by_measurement():
+    """§43's pivot rule, now resting on a directly measured crossing.
+
+    K_FREQ and K_DAR1 established it; K_DAR2's pivot was inherited from the
+    shared prefix for one day and then measured at 63.6 by sweeping the note
+    number while holding the sounding pitch fixed. Pinned because an inherited
+    pivot and a measured one look identical in the coefficient.
+    """
+    note = scales.SCALES[("keygroup", "K_DAR2")].note
+    assert "MEASURED at note 63.6" in note
+    assert "reads the MIDI note" in note

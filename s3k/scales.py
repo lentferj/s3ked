@@ -467,10 +467,13 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "same law.\n"
              "The control is exact: at K_DAR2 0 the decay reads 0.670..0.680 s\n"
              "across 24 semitones, a spread of 1.015x.\n"
-             "**The note-64 pivot is taken on trust from §48, not measured\n"
-             "here.** These notes are all below it, so this run fixes the\n"
-             "SLOPE and cannot see where the fields meet. A pivot taken on\n"
-             "trust is not a pivot measured.",
+             "The pivot was taken on trust from §48 for one day and is now\n"
+             "MEASURED at note 63.6 (§62), by holding the SOUND at note 48\n"
+             "with KGTUNO while the NOTE swept 48..68 across the pivot. That\n"
+             "works because key scaling reads the MIDI note and not the\n"
+             "sounding pitch -- two conditions that sound identical and differ\n"
+             "only in note number gave 1.95 at depth +20 and exactly 1.00 at\n"
+             "depth 0.",
     ),
     ("keygroup", "K_FREQ"): Scale(
         "keygroup", "K_FREQ", "semitones/octave", "linear", 1.0, 0.0, (0, 12),

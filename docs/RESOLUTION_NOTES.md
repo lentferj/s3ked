@@ -4649,3 +4649,68 @@ measured, not just how precisely.
 The depth range is narrow for an unrelated reason: at ±50 these notes span a
 400-fold range of decay times, which no single `DECAY2` setting holds inside a
 measurable window.
+
+---
+
+## §62 — Key scaling reads the note, not the pitch — and the pivot is measured (2026-08-12)
+
+§61 recorded `K_DAR2`'s note-64 pivot as taken on trust, and said closing it
+needed a different detector. That was wrong in a useful way: **the limit is the
+source, not the detector.** The sibling mpc2emu made the point — a comb spaced
+`f0` apart cannot locate a peak closer than about `f0/2`, and `f0` doubles every
+octave, so the resolution degrades exactly as you climb. White noise has no
+comb and its resolution is the FFT bin width at every pitch.
+
+That fix is right and is not available here: this editor speaks the header
+protocol, and loading a sample needs the MIDI Sample Dump Standard. Only four
+synthetic waveforms are in memory and all of them are combs.
+
+### The way round, and the fact it turned on
+
+**Key scaling reads the MIDI note number, not the sounding pitch.**
+
+```
+    K_DAR2        note 48, KGTUNO 0      note 68, KGTUNO -5120      ratio
+         0            0.670 s                  0.670 s              1.00
+       +20            0.410 s                  0.800 s              1.95
+```
+
+Two conditions that sound identical — both at 130.8 Hz — and differ only in
+note number. At depth 0 they agree exactly, so detuning does not touch the
+decay by any other route; at +20 they differ by 1.95, against 1.79 predicted
+for the note hypothesis and 1.00 for the pitch hypothesis.
+
+So `KGTUNO` can hold the SOUND at one low pitch, where the comb is fine, while
+the NOTE sweeps across the pivot. The instrument's limit is on the *sounding
+pitch*, and the quantity of interest is the *note* — they are separable, and
+nothing about the tracker had to change.
+
+### The pivot
+
+```
+  K_DAR2    note 48    note 53    note 58    note 63    note 68
+     -20      1.060      0.970      0.800      0.730      0.600
+       0      0.660      0.670      0.660      0.670      0.670
+      20      0.420      0.500      0.600      0.670      0.800
+```
+
+Every condition sounds at note 48. The `K_DAR2` 0 row is flat at 0.660..0.670
+across the whole sweep — the same exact control §48 had. The sloped rows cross
+it at **note 65.0 and 62.3**, mean **63.6**, against 64 predicted.
+
+So §43's pivot rule now rests on three key-driven fields — `K_FREQ`, `K_DAR1`
+and `K_DAR2` — and on `K_DAR2` it is measured rather than inherited from a
+shared prefix. An inherited pivot and a measured one look identical in the
+coefficient, which is why the entry says which it is.
+
+### What this changes about instrument limits generally
+
+§61 concluded that the tracker's resolution limit was directional and cost a
+whole class of question. The limit is real and the numbers were right. The
+conclusion was not: the question was answerable, by separating the variable the
+instrument constrains (sounding pitch) from the variable under study (note
+number) and holding the first fixed.
+
+**Before recording a limit as blocking, check whether the constrained variable
+and the studied variable are the same one.** Here they were merely correlated
+by default, and one field broke the correlation.
