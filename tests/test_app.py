@@ -665,7 +665,7 @@ async def test_the_disk_pane_is_empty_until_asked():
 
         table = app.query_one("#volumes", DataTable)
         assert table.row_count > 0
-        assert "volume" in str(app.query_one("#disk-title", Static).render())
+        assert "vol" in str(app.query_one("#disk-title", Static).render())
         # volumes are prefixed "v", the loaded volume's contents are indented,
         # so one pane can carry both without a second table
         assert str(table.get_row_at(0)[0]) == "v0"
@@ -707,3 +707,91 @@ async def test_reading_the_disk_needs_no_write_gate():
             await pilot.pause()
         assert app.query_one("#volumes", DataTable).row_count > 0
         assert app.allow_write is False
+
+
+async def test_the_disk_pane_shows_the_load_source():
+    """The panel's own words: HARD-:C vol 001."""
+    from textual.widgets import Static
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("d")
+        for _ in range(20):
+            await pilot.pause()
+        title = str(app.query_one("#disk-title", Static).render())
+
+    assert "HARD-:A" in title
+    assert "vol 001" in title
+    assert "SCSI 4" in title
+
+
+async def test_stepping_the_partition_is_behind_the_write_gate():
+    """It loads nothing, but it does change what the machine has selected.
+
+    Anything that changes the device belongs behind the same gate as an edit,
+    even when it is navigation rather than editing.
+    """
+    from textual.widgets import Static
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("d")
+        for _ in range(20):
+            await pilot.pause()
+        before = str(app.query_one("#disk-title", Static).render())
+
+        await pilot.press("]")
+        for _ in range(20):
+            await pilot.pause()
+
+        assert "write gate is locked" in app.last_status
+        assert str(app.query_one("#disk-title", Static).render()) == before
+
+
+async def test_stepping_the_partition_moves_the_listing_once_armed():
+    from textual.widgets import Static, DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("d")
+        for _ in range(20):
+            await pilot.pause()
+        assert "HARD-:A" in str(app.query_one("#disk-title", Static).render())
+
+        await pilot.press("]")
+        for _ in range(25):
+            await pilot.pause()
+        title = str(app.query_one("#disk-title", Static).render())
+        assert "HARD-:B" in title
+
+        # and the listing followed, not just the label
+        rows = app.query_one("#volumes", DataTable)
+        names = [str(rows.get_row_at(i)[1]) for i in range(rows.row_count)]
+        assert any(n.startswith("B ") for n in names)
+
+
+async def test_a_machine_without_a_load_page_says_so():
+    """Silence would look like a device that has no LOAD page."""
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    class NoLoadPage(DemoBridge):
+        def load_source(self, *, timeout=None):
+            raise RuntimeError("no such operation")
+
+    app = S3kedApp(NoLoadPage(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("d")
+        for _ in range(20):
+            await pilot.pause()
+        assert "load source unavailable" in app.last_status

@@ -233,6 +233,8 @@ class S3kedApp(App):
         Binding("z", "undo", "Undo"),
         Binding("m", "master", "Master"),
         Binding("d", "disk", "Read disk"),
+        Binding("[", "partition_prev", "Prev partition", show=False),
+        Binding("]", "partition_next", "Next partition", show=False),
         Binding("tab", "focus_next", "Next pane", show=False),
     ]
 
@@ -394,6 +396,16 @@ class S3kedApp(App):
     def _read_disk_worker(self) -> None:
         try:
             with self._bridge_lock:
+                source, source_error = None, None
+                try:
+                    source = self.bridge.load_source()
+                except Exception as exc:
+                    # Carried to the end rather than reported here: a status
+                    # emitted mid-worker is overwritten by the completion
+                    # message a moment later, so the user never sees it. An
+                    # older machine may genuinely not answer, and silence
+                    # would look like a device with no LOAD page.
+                    source_error = str(exc)
                 volumes = self.bridge.volume_list()
                 try:
                     entries = self.bridge.hd_directory(1)
@@ -406,30 +418,80 @@ class S3kedApp(App):
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"disk: {exc}")
             return
-        self.call_from_thread(self._show_volumes, volumes, entries)
+        self.call_from_thread(self._show_volumes, volumes, entries, source,
+                              source_error)
 
-    def _show_volumes(self, volumes, entries) -> None:
+    @staticmethod
+    def _describe_source(source) -> str:
+        """The LOAD page as the panel writes it: HARD-:C vol 001."""
+        if not source:
+            return ""
+        device = {0: "FLOPPY", 1: "HARD", 2: "FLASH"}.get(
+            source.get("device_type"), f"DEV{source.get('device_type')}")
+        letter = chr(65 + source.get("partition", 0))
+        return (f"{device}-:{letter} vol {source.get('volume', 0):03d}"
+                f"  (SCSI {source.get('scsi_drive_id')})")
+
+    def action_partition_prev(self) -> None:
+        self._step_partition(-1)
+
+    def action_partition_next(self) -> None:
+        self._step_partition(+1)
+
+    def _step_partition(self, delta: int) -> None:
+        """Move the LOAD selection. This WRITES, so the gate applies.
+
+        It loads nothing -- the protocol cannot -- but it does change what the
+        machine has selected, and the front panel follows. Anything that
+        changes the device belongs behind the same gate as an edit.
+        """
+        if not self.allow_write:
+            self.notify_status("write gate is locked — press w to arm it")
+            return
+        self._step_partition_worker(delta)
+
+    @work(thread=True)
+    def _step_partition_worker(self, delta: int) -> None:
+        try:
+            with self._bridge_lock:
+                current = self.bridge.load_source()["partition"]
+                self.bridge.select_partition(max(0, min(7, current + delta)))
+        except Exception as exc:
+            self.call_from_thread(self.notify_status, f"partition: {exc}")
+            return
+        self.call_from_thread(self.action_disk)
+
+    def _show_volumes(self, volumes, entries, source=None,
+                      source_error=None) -> None:
         table = self.query_one("#volumes", DataTable)
         table.clear()
         for volume in volumes:
             table.add_row(f"v{volume.index}", volume.name)
         for entry in entries:
             table.add_row(f"  {entry.index}", entry.name)
-        loaded = f", {len(entries)} in the loaded volume" if entries else ""
+        where = self._describe_source(source)
+        loaded = f", {len(entries)} items" if entries else ""
+        cost = ""
+        if entries:
+            words = sum(getattr(e, "audio_words", 0) for e in entries)
+            if words:
+                cost = f", {words * 2 / 1024 / 1024:.1f} MB"
+        head = f"Disk — {where}" if where else "Disk"
         self.query_one("#disk-title", Static).update(
-            f"Disk — {len(volumes)} volume(s){loaded}"
-            if volumes or entries else "Disk — empty"
+            f"{head} — {len(volumes)} vol{loaded}{cost}"
+            if volumes or entries else f"{head} — empty"
         )
+        note = f"  (load source unavailable: {source_error})" if source_error else ""
         if entries:
             self.notify_status(
                 f"{len(volumes)} volume(s); {len(entries)} item(s) in the "
                 f"loaded volume. Loading a different one is a front-panel "
-                f"operation — the protocol cannot."
+                f"operation — the protocol cannot.{note}"
             )
         else:
             self.notify_status(
                 f"{len(volumes)} volume(s). Nothing loaded, so the directory "
-                f"is empty; load a volume at the panel and press d again."
+                f"is empty; load a volume at the panel and press d again.{note}"
             )
 
     def action_toggle_write(self) -> None:

@@ -251,6 +251,14 @@ class DemoBridge:
         names += [f"WORK VOL{i:02d}" for i in range(3, 34)]
         return [_Volume(index=i, name=n, kind=3) for i, n in enumerate(names)]
 
+    def load_source(self, *, timeout: Optional[float] = None):
+        return {"scsi_drive_id": 4, "scsi_local_id": 6, "device_type": 1,
+                "partition": getattr(self, "_partition", 0), "volume": 1}
+
+    def select_partition(self, partition: int, *, timeout: Optional[float] = None):
+        self._partition = max(0, min(7, int(partition)))
+        return self.load_source()
+
     def hd_directory(self, kind: int = 1, *, limit: int = 512,
                      timeout: Optional[float] = None):
         """An invented directory, for the same reason the volumes are invented.
@@ -261,7 +269,10 @@ class DemoBridge:
         """
         from s3k.bridge import _DirectoryEntry
 
-        programs = ["DEEP BASS", "GLASS PAD", "SOFT KEYS"]
+        # the demo's partitions differ from each other, so stepping through
+        # them in the pane visibly does something
+        letter = chr(65 + getattr(self, "_partition", 0))
+        programs = [f"{letter} DEEP BASS", f"{letter} GLASS PAD", "SOFT KEYS"]
         samples = [f"BASS C{i}" for i in range(1, 5)]
         samples += [f"PAD C{i}" for i in range(1, 4)]
         names = (programs + samples) if kind <= 1 else samples
