@@ -5060,16 +5060,39 @@ includes a volume genuinely named `000000000000` so the wrong rule fails.
 S3000XL layer adds only multi data. `RVOLLIST` and `RHDDIR` are both marked
 reply-only, and neither has a counterpart that acts on a volume.
 
-23 opcodes are unassigned in this project's table — `0x17`–`0x1C`,
-`0x1E`–`0x26`, `0x39`–`0x40` — so a load command could exist and be
-untranscribed. **Probing them blindly is not sensible**: `DELP`, `DELK` and
-`DELS` sit at `0x12`–`0x14` with no device-side confirmation, and an unknown
-opcode aimed at a machine full of someone's samples is not a cheap experiment.
-The sane order is to re-read the manual scan for a disk section first.
+**The manual settles this, in Akai's own words** (S2800/S3000/S3200 spec,
+overview section):
 
-`RHDDIR` (`0x37`) answers, but returned `ff`-filled records here — most likely
-no hard-disk directory in the current mode rather than a broken operation.
-Untested against a machine that has one.
+> *"There are no functions within MIDI system exclusive to provide direct
+> access to and from disk files. Directories and files can be loaded into the
+> S3000 and the data then accessed. However, if external parties wish to get
+> data directly from disk, it is available via SCSI."*
+
+So the 23 unassigned opcodes are not hiding a load command — the manufacturer
+states the functionality does not exist. This was recorded here as "could
+exist and be untranscribed" for an hour before the document was read, which
+is the wrong order and is left visible for that reason.
+
+Anything wanting to move data off the disk must speak SCSI, not MIDI. That is
+what the ZuluSCSI already is.
+
+### `RHDDIR` was probed wrongly, and the manual says how
+
+The first probe used a 64-byte read with the second byte at 0, and got
+`ff`-filled records. The spec gives the real shape:
+
+```
+nn,nn  Directory entry (0-509) / item number
+ss     Selector: 0=volume data, 1=program, 2=sample, 3=cue list,
+                 4=take list, 5=effects file, 6=drum file
+nn,nn  Number of bytes of data (24)
+```
+
+Entries are **24 bytes**, not 64, and the selector chooses the KIND of item.
+Re-probed correctly across all seven selectors, every entry is empty on this
+machine. That is consistent with the sentence above: a directory has to be
+*loaded into* the machine before it can be read, and nothing is loaded. It is
+not a browser for the disk's contents.
 
 ### The SCSI ID is not reachable, and here is the state of that
 
@@ -5078,8 +5101,27 @@ sample and multi, with no system or global region. The plausible home is
 miscellaneous data, and **the miscellaneous data-index table is missing from
 the source** (an open TODO since §5).
 
-`RMDATA` returns a 96-byte block and `RMISCDATA` answers on every selector
-0–31, but without the index table none of it is identifiable. The way to find
-it is differential: snapshot, change the setting on the panel, snapshot again,
-diff. A baseline of all 33 readable blocks is captured; the change has not
-been made yet.
+**The addressing is documented; the meanings are not.** `RMISCDATA` takes:
+
+```
+dd,dd  Data Index
+bb     Data bank: 1=byte, 2=word, 3=dword, 4=smpte, 5=signed smpte,
+                  6=name, 7=16byteflag
+nn,nn  Number of bytes (1/2/4/5/6/12/16)
+```
+
+The first probe swept `bb` while holding `dd` at 0 — that reads item 0 of
+every bank, which is the wrong axis. Sweeping the INDEX within the byte bank
+gives 48 readable items, and the name bank returns `DRUM INPUTS`,
+`NEW NAME`, `NO VOL. READ`, `PULSE`, `TAKE 1` — so the mechanism works and
+only the index-to-meaning table is missing.
+
+**A candidate for the SCSI ID, not yet a finding.** The Japanese operator's
+manual shows the settings page as `SCSI drive ID: 5` and `local SCSI ID: 6`.
+The byte bank reads `byte[11] = 5`, `byte[12] = 6`, `byte[13] = 6`.
+
+That is a value match and nothing more. Confirming it needs the differential:
+change the ID on the panel and see which index moves. A baseline of 80 items
+(48 byte, 16 word) is captured for exactly that. **Value-matching has been
+wrong in this project before** — §61's pivot looked settled from a
+coefficient and needed a measurement — so it is written down as a candidate.
