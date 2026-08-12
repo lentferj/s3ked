@@ -443,6 +443,35 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "It is the ONLY responder among six envelope scaling fields:\n"
              "V_REL1, O_REL1, V_ATT2, V_REL2 and V_ENV2 are all inert (§47).",
     ),
+    ("keygroup", "K_DAR2"): Scale(
+        "keygroup", "K_DAR2", "x per semitone", "exp", 1.0, 0.0014603,
+        (-20, 20), 0.99584,
+        bounds="-20..+20 at notes 24/30/36/42/48. The DEPTH is narrow because\n"
+               "at +/-50 these notes span a 400-fold range of decay times and\n"
+               "no single DECAY2 holds that inside a measurable window. The\n"
+               "NOTES are low because the corner tracker's resolution is the\n"
+               "harmonic spacing -- 3.5% of the corner at note 24, 14% at 48,\n"
+               "56% at 72 -- so anything read through the filter lives in the\n"
+               "bottom two octaves. §48 could use notes 48..84 for K_DAR1\n"
+               "because it measured the amplitude envelope in dB, which has no\n"
+               "comb.",
+        note="Key scaling of the filter envelope's DECAY, and the companion to\n"
+             "K_DAR1 that its note predicted.\n"
+             "  time = base * exp(+0.0014603 * K_DAR2 * (note - 64))\n"
+             "The sign is positive where K_DAR1's is negative because this is\n"
+             "a TIME and that was a RATE; they are the same behaviour.\n"
+             "PREDICTED BEFORE MEASUREMENT (§61) from K_DAR1's coefficient:\n"
+             "time(24)/time(48) of 0.48 at depth +20 and 2.08 at -20, measured\n"
+             "0.50 and 2.16 -- 4% off both. The fitted coefficient lands 4.5%\n"
+             "from K_DAR1's, so the two envelopes scale with the key by the\n"
+             "same law.\n"
+             "The control is exact: at K_DAR2 0 the decay reads 0.670..0.680 s\n"
+             "across 24 semitones, a spread of 1.015x.\n"
+             "**The note-64 pivot is taken on trust from §48, not measured\n"
+             "here.** These notes are all below it, so this run fixes the\n"
+             "SLOPE and cannot see where the fields meet. A pivot taken on\n"
+             "trust is not a pivot measured.",
+    ),
     ("keygroup", "K_FREQ"): Scale(
         "keygroup", "K_FREQ", "semitones/octave", "linear", 1.0, 0.0, (0, 12),
         0.99890,

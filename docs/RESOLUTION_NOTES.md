@@ -4595,3 +4595,57 @@ without a note is indistinguishable from one that was never measured.
 Its exclusion does not carry the result: the remaining seven points fit at
 r² 0.99983 and the prediction test used value 70 only through the fitted law,
 not through that reading.
+
+---
+
+## §61 — `K_DAR2` measured, predicted from `K_DAR1` (2026-08-12)
+
+```
+time = base * exp(+0.0014603 * K_DAR2 * (note - 64))   -20..+20   r2 0.99584
+```
+
+§48 measured `K_DAR1` and observed in its note that the `K_` prefix means KEY,
+making `K_DAR2` and `K_DAR3` its likely companions. That was a guess about
+naming. This tests it.
+
+**Predicted before the run**, from `K_DAR1`'s coefficient applied to a time
+rather than a rate:
+
+```
+                  predicted           measured      miss
+    K_DAR2   0    flat across notes   1.015x        exact control
+    K_DAR2 +20    time(24)/time(48) = 0.48   0.50    4%
+    K_DAR2 -20    time(24)/time(48) = 2.08   2.16    4%
+```
+
+The fitted coefficient is 0.0014603 against `K_DAR1`'s 0.0015286 — **4.5%
+apart**. Both envelopes scale with the key by the same law. The sign differs
+because `K_DAR1` was fitted to a rate and this to a time; a converter copying
+the magnitude without the sign gets a filter that brightens where it should
+darken, so the test pins both.
+
+The control is exact, as §48's was: at `K_DAR2` 0 the decay reads
+**0.670..0.680 s across 24 semitones**, a spread of 1.015x. A flat control row
+is worth more than a good fit — it says the rig does not tilt with the note,
+and every sloped row is measured against it rather than against an assumption.
+
+### What this run cannot see
+
+**The pivot is taken on trust.** Every note here is below 64, so the run fixes
+the slope and never sees where the depths meet. §48 could show the pivot
+directly because its notes bracketed it — all five of its depths read 25.3 dB/s
+at note 64. A pivot taken on trust is not a pivot measured, and it is recorded
+that way in the entry.
+
+The reason is the instrument, not the machine. **The corner tracker's
+resolution is the harmonic spacing** — 3.5% of the corner at note 24, 14% at
+48, 56% at 72 — so anything read through the filter is confined to the bottom
+two octaves. §48 escaped that by measuring the amplitude envelope in dB, which
+has no comb. This is the first time the tracker's resolution limit has cost a
+finding rather than merely bounding one, and it is worth knowing that the
+limit is directional: it constrains where in the KEYBOARD the filter can be
+measured, not just how precisely.
+
+The depth range is narrow for an unrelated reason: at ±50 these notes span a
+400-fold range of decay times, which no single `DECAY2` setting holds inside a
+measurable window.

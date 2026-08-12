@@ -917,3 +917,17 @@ def test_the_envelope_stages_group_by_type_not_by_envelope():
     assert max(f) / min(f) < 1.06, "attack and release are one rate"
     assert max(s) / min(s) < 1.10, "the falling stages are one rate"
     assert min(s) > max(f) * 1.7, "the falling stages run at about half rate"
+
+
+def test_both_envelopes_scale_with_the_key_by_the_same_law():
+    """K_DAR1 and K_DAR2 agree on the coefficient to 4.5%.
+
+    K_DAR1 was fitted to a RATE and K_DAR2 to a TIME, so their exponents carry
+    opposite signs for the same behaviour. Pinned with the signs explicit,
+    because a converter that copies the magnitude without the sign gets a
+    filter that brightens where it should darken.
+    """
+    k1 = scales.SCALES[("keygroup", "K_DAR1")]
+    k2 = scales.SCALES[("keygroup", "K_DAR2")]
+    assert k1.b < 0 < k2.b, "one is a rate, the other a time"
+    assert abs(abs(k2.b) / abs(k1.b) - 1) < 0.06
