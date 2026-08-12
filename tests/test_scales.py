@@ -55,7 +55,7 @@ ANCHORS = [
     ("keygroup", "ATTAK2",     55,    0.289,     0.030, "s"),
     ("keygroup", "ATTAK2",     80,    3.190,     0.200, "s"),
     ("keygroup", "DECAY2",     70,    2.450,     0.150, "s"),
-    ("keygroup", "RELSE2",     70,    51.86,      3.00, "u/s"),
+    ("keygroup", "RELSE2",     70,    1.220,     0.080, "s"),
     ("keygroup", "SUSTN2",     50,     50.5,       2.0, "%"),
 ]
 
@@ -101,7 +101,7 @@ def test_the_law_is_monotonic_across_its_measured_range(key):
     )
 
 
-@pytest.mark.parametrize("name", ["DECAY1", "RELSE1", "RELSE2"])
+@pytest.mark.parametrize("name", ["DECAY1", "RELSE1"])
 def test_a_bigger_value_means_a_slower_rate(name):
     """These are RATES, so slower means a smaller number."""
     scale = scales.SCALES[("keygroup", name)]
@@ -110,7 +110,7 @@ def test_a_bigger_value_means_a_slower_rate(name):
             < scales.to_physical("keygroup", name, lo)[0])
 
 
-@pytest.mark.parametrize("name", ["ATTAK2", "DECAY2", "ENV3R1", "ENV3R3"])
+@pytest.mark.parametrize("name", ["ATTAK2", "DECAY2", "RELSE2", "ENV3R1", "ENV3R3"])
 def test_a_bigger_value_means_a_slower_stage_in_seconds(name):
     """These report the SECONDS a full traverse takes, so slower means bigger.
 
@@ -410,14 +410,17 @@ def test_the_withdrawn_attak2_fit_is_gone():
 
 
 def test_the_two_releases_are_measured_in_different_units():
-    """RELSE1 is dB/s and RELSE2 is octaves/s -- they cannot be divided.
+    """RELSE1 is dB/s and RELSE2 is seconds -- they cannot be divided.
 
-    The retracted section compared them and reported "RELSE2 is 5.7x faster".
+    A retracted section compared them and reported "RELSE2 is 5.7x faster".
     That ratio was between two numbers whose units differ, so it never meant
-    anything; both were also seconds under a model since withdrawn.
+    anything. §59 changed RELSE2's units again, from octaves/s to seconds for
+    a full traverse, which makes the two LESS comparable rather than more --
+    and that is the point worth pinning. The amplitude release is a rate in
+    decibels; the filter release is now expressed as a time.
     """
     assert scales.SCALES[("keygroup", "RELSE1")].unit == "dB/s"
-    assert scales.SCALES[("keygroup", "RELSE2")].unit == "u/s"
+    assert scales.SCALES[("keygroup", "RELSE2")].unit == "s"
 
 
 # --- a fitted range is a measurement, and so is its reason -----------------
@@ -468,13 +471,13 @@ def test_the_tuning_fit_and_the_exact_constant_agree():
 
 
 def test_what_is_still_provisional():
-    """RELSE2, and it went back ON the list rather than off it.
+    """Nothing again, and RELSE2's round trip is the point.
 
-    §58 re-measured three of the four envelope-2 laws with the resonance
-    tracker and left RELSE2 alone -- release happens after note-off and needs
-    a capture window that run did not have. Its siblings moved by up to 22%,
-    so leaving it unmarked while its neighbours were corrected would have made
-    it the most trustworthy-looking law in the group and the least checked.
+    §58 put RELSE2 ON this list -- the one envelope-2 law it did not
+    re-measure, marked because its three siblings had just moved by up to 22%
+    and leaving it alone would have made it the most trustworthy-looking law
+    in the group and the least checked. §59 measured it and took it back off.
+    The mark did its job: it named a debt and the debt was paid.
 
     FILQ left the list in §53 and LFODEL in §55; ATTAK2's depth-dependence
     mark came off in §58 once two drive levels showed it was a ceiling.
@@ -486,7 +489,7 @@ def test_what_is_still_provisional():
     """
     provisional = sorted(n for (_r, n), s in scales.SCALES.items()
                          if s.provisional)
-    assert provisional == ["RELSE2"]
+    assert provisional == []
 
 
 def test_the_attack_and_the_decay_are_different_laws():
@@ -877,3 +880,20 @@ def test_describe_survives_every_value_of_every_law():
         step = max(1, span // 200)
         for value in range(param.minimum, param.maximum + 1, step):
             scales.describe(region, name, value)
+
+
+def test_the_attack_and_the_release_are_one_law_across_both_envelopes():
+    """ATTAK2, RELSE2 and ENV3R1 agree to 2.2% at value 70.
+
+    Three fields, two envelopes, one time base -- and the decays run at about
+    half that rate rather than on laws of their own. Pinned because it is the
+    kind of structure a converter can rely on, and because it was found by
+    measuring three fields the same way rather than by assuming a family.
+    """
+    at, re_, e3 = (scales.SCALES[("keygroup", n)]
+                   for n in ("ATTAK2", "RELSE2", "ENV3R1"))
+    at70, re70, e370 = (s.value_to_physical(70) for s in (at, re_, e3))
+    assert max(at70, re70, e370) / min(at70, re70, e370) < 1.05
+
+    dec = scales.SCALES[("keygroup", "DECAY2")].value_to_physical(70)
+    assert 1.7 < dec / at70 < 2.3, "the decay runs at about half the rate"

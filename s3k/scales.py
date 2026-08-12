@@ -404,22 +404,24 @@ SCALES: Dict[Tuple[str, str], Scale] = {
         endpoints={0: "fastest"},
     ),
     ("keygroup", "RELSE2"): Scale(
-        "keygroup", "RELSE2", "u/s", "exp", 61190.0, -0.10123, (58, 76), 0.99977,
-        provisional="NOT re-measured. This is the only envelope-2 law still "
-                    "resting on the spectral centroid, and §54 showed that "
-                    "ruler reads 20-30% high by an amount that grows with "
-                    "frequency. Its three siblings were re-measured with the "
-                    "resonance tracker and SUSTN2's absolute coefficient moved "
-                    "22%, so expect a correction of that order here. The shape "
-                    "-- a rate, exponential in the value -- is not in doubt; "
-                    "the coefficient is. Release happens after note-off, which "
-                    "needs a capture window the envelope-2 run did not have.",
-        bounds="swept 58..76; above 76 the fall outlasts the capture tail, the\n"
-               "same ceiling that stopped RELSE1.",
-        note="A RATE, not a duration: FILFRQ units (octaves) per second. Its\n"
-             "exponent sits furthest from the ~0.0977 the other stages share,\n"
-             "and it rests on the fewest points, so treat the clustering claim\n"
-             "as weakest here.",
+        "keygroup", "RELSE2", "s", "exp", 0.001344, 0.09692, (40, 80), 0.999975,
+        bounds="40..80. Measured after note-off, with the recording tail raised\n"
+               "to 10 s and RELSE1 parked at 99 so the amplitude outlasts the\n"
+               "filter release -- otherwise the note falls into the noise while\n"
+               "the corner is still moving.",
+        note="Seconds to traverse the FULL 0..99 range, released to ENV2L4.\n"
+             "Re-measured 2026-08-12 (§59); the previous law was\n"
+             "61190 * exp(-0.10123 v) FILFRQ-units/s, read through a spectral\n"
+             "centroid, over 58..76.\n"
+             "THE ATTACK AND THE RELEASE ARE ONE LAW, across both envelopes:\n"
+             "  ATTAK2  0.001363 * exp(0.09703 v)\n"
+             "  RELSE2  0.001344 * exp(0.09692 v)\n"
+             "  ENV3R1  0.001392 * exp(0.09669 v)\n"
+             "coefficients within 3.6%, exponents within 0.35%, predictions\n"
+             "2.2% apart at value 70. The DECAYS are about twice as slow --\n"
+             "DECAY2 1.9-2.0x and ENV3R3 2.0-2.3x -- so the family is one time\n"
+             "base with the decay stages running at half rate, not five\n"
+             "separate calibrations.",
         endpoints={0: "fastest"},
     ),
     ("keygroup", "K_DAR1"): Scale(

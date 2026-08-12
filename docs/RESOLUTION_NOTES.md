@@ -4464,3 +4464,72 @@ Leaving it unmarked would have made it the **most trustworthy-looking law in
 the group and the least checked** — its r² is 0.99977 and its neighbours now
 carry visible correction history. A law does not become more reliable by
 having been left alone.
+
+---
+
+## §59 — `RELSE2` measured, and the family turns out to be one law (2026-08-12)
+
+```
+RELSE2   full 0..99 traverse = 0.001344 * exp(0.09692 * v) s   40..80  r2 0.999975
+```
+
+The last envelope-2 law resting on the spectral centroid, and the last entry on
+the provisional list. §58 put it there rather than leave it alone; §59 takes it
+off. **The mark named a debt and the debt was paid** — which is the only thing
+that makes marking better than silence.
+
+### One time base, with the decays at half rate
+
+Measuring the third stage the same way as the first two made a structure
+visible that none of them showed alone:
+
+```
+                 full 0..99 traverse            at value 70
+    ATTAK2    0.001363 * exp(0.09703 v)          1.25 s
+    RELSE2    0.001344 * exp(0.09692 v)          1.22 s
+    ENV3R1    0.001392 * exp(0.09669 v)          1.25 s
+    ----------------------------------------------------
+    DECAY2    0.002464 * exp(0.09844 v)          2.42 s
+    ENV3R3    0.003815 * exp(0.09258 v)          2.61 s
+```
+
+**Attack and release are one law across both envelopes** — coefficients within
+3.6%, exponents within 0.35%, predictions 2.2% apart at value 70. The decays
+run at about **half** that rate: DECAY2 at 1.9–2.0x and ENV3R3 at 2.0–2.3x.
+
+So the family is one time base with the decay stages halved, not five
+calibrations. Worth stating carefully: `DECAY2`'s exponent is 1.5% from the
+attack's and `ENV3R3`'s is 4.6% away, so "exactly half" is supported for
+`DECAY2` and only approximate for `ENV3R3`.
+
+This was not found by assuming a family and fitting one curve to all of it. It
+was found by measuring five fields the same way and looking at the answers
+side by side — the same move that has now produced three findings in a row.
+
+### Two windows, one of them changed
+
+The first run of this fitted at **r² 0.9225** and the exponent came out 27%
+from `DECAY2`'s.
+
+Release begins at note-off, and the rig records a 2.0 s tail while a slow
+filter release runs past 4 s — so `calibrate.TAIL` was raised to 10 s. But the
+ANALYSIS window was a separate hardcoded `note-off + 2.0`, and it was not
+raised. Every row duly reported exactly **200 frames after note-off**, which is
+2.0 s at the 10 ms hop: an identical count across eight settings, which is the
+same tell as §55's identical −0.150 s and §53's smoothing width that changed
+nothing.
+
+With both windows widened: r² **0.999975**, spans 2.04–2.06 octaves throughout,
+and the exponent 1.5% from `DECAY2`'s instead of 27%.
+
+**Changing a capture parameter and an analysis parameter are two edits.** I
+made one and believed I had made both, and the truncated fit was good enough
+to look like a result rather than an artefact — 0.92 is poor by this project's
+standards but it is not obviously broken.
+
+### What the amplitude release still needs
+
+`RELSE1` is a rate in dB/s and `RELSE2` is now a time in seconds. They are less
+comparable than before, not more, and any ratio between them is meaningless.
+`RELSE1` has not been re-examined and does not depend on the filter ruler, so
+nothing here casts doubt on it.
