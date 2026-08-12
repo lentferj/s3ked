@@ -279,14 +279,29 @@ class Rig:
         return out
 
     def play_and_record(self, note: int, hold: float, velocity: int = 100,
-                        gap: float = 0.5, out_wav: Optional[str] = None):
+                        gap: float = 0.5, out_wav: Optional[str] = None,
+                        release_velocity: int = 0):
         """Record one note. Returns ``(wav_path, t_on, t_off)`` in audio time.
 
         The two times come from the MIDI clock plus the measured onset offset,
         never from silence detection: a slow attack starts too quietly for a
         gate to find, and the amount by which the gate is late is exactly the
         attack time the sweep is trying to measure.
+
+        ``release_velocity`` rides on the note-off. It defaults to 0, which is
+        what this rig sent unconditionally until `O_REL3` needed measuring --
+        and a field scaled by note-off velocity, tested with note-off velocity
+        nailed to 0, returns a flat null that means nothing. That is the
+        wrong-stage shape described in ``verify_varies``: the modified
+        quantity was never allowed to happen.
+
+        Note-off is sent as a real 0x80 message rather than a note-on with
+        zero velocity, because the running-status shorthand cannot carry a
+        release velocity at all.
         """
+        if not 0 <= release_velocity <= 127:
+            raise ValueError(
+                f"release_velocity {release_velocity} outside 0..127")
         total = LEAD_IN + hold + gap + TAIL
         ours = not out_wav
         if ours:
@@ -303,7 +318,8 @@ class Rig:
                 out.send_message([0x90 | self.midi_channel, note, velocity])
 
             def _release():
-                out.send_message([0x80 | self.midi_channel, note, 0])
+                out.send_message([0x80 | self.midi_channel, note,
+                                  release_velocity])
 
             # note-on at ~0.15 s in, note-off `hold` later, and TAIL of
             # recording after that so the release has somewhere to land.
@@ -1386,7 +1402,8 @@ class _SyntheticRig:
     def __init__(self, state: Dict[str, int]):
         self.state = state
 
-    def play_and_record(self, note, hold, velocity=100, gap=0.5, out_wav=None):
+    def play_and_record(self, note, hold, velocity=100, gap=0.5, out_wav=None,
+                        release_velocity=0):
         import wave
         import numpy as np
 

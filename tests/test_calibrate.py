@@ -1054,3 +1054,32 @@ def test_verify_varies_says_what_it_cannot_catch():
     doc = cal.verify_varies.__doc__
     assert "WRONG STAGE" in doc
     assert "not clearance" in doc
+
+
+def test_release_velocity_is_accepted_and_range_checked():
+    """O_REL3 is scaled by note-off velocity, so the rig has to send one.
+
+    Until this existed the rig sent note-off velocity 0 unconditionally, which
+    would have made any measurement of O_REL3 a flat null of the wrong-stage
+    kind -- the modified quantity never allowed to happen.
+    """
+    import inspect
+    sig = inspect.signature(cal.Rig.play_and_record)
+    assert "release_velocity" in sig.parameters
+    assert sig.parameters["release_velocity"].default == 0
+
+    doc = cal.Rig.play_and_record.__doc__
+    assert "note-off velocity" in doc
+
+    rig = cal.Rig.__new__(cal.Rig)
+    rig.midi_port = None
+    for bad in (-1, 128):
+        with pytest.raises(ValueError, match="release_velocity"):
+            cal.Rig.play_and_record(rig, 60, 1.0, release_velocity=bad)
+
+
+def test_the_synthetic_rig_takes_the_same_argument():
+    """A fake that cannot accept the parameter cannot exercise the path."""
+    import inspect
+    sig = inspect.signature(cal._SyntheticRig.play_and_record)
+    assert "release_velocity" in sig.parameters
