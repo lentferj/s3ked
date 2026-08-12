@@ -1041,3 +1041,16 @@ def test_verify_varies_ignores_nan_rather_than_counting_it():
     assert ok
     ok, msg = cal.verify_varies([float("nan"), float("nan"), 3.0])
     assert not ok and "nothing to compare" in msg
+
+
+def test_verify_varies_says_what_it_cannot_catch():
+    """The docstring carries the boundary, because that is where it is read.
+
+    Five of six known measurement-fault shapes are mechanical and one is not.
+    A wrong-stage failure produces a true measurement of a condition nobody
+    wanted, so there is no statistic that finds it -- and a green run from
+    this function is not clearance.
+    """
+    doc = cal.verify_varies.__doc__
+    assert "WRONG STAGE" in doc
+    assert "not clearance" in doc

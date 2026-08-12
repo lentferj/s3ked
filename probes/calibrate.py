@@ -795,6 +795,29 @@ def verify_varies(values, *, label: str = "reading", settings=None,
     sweep of six is nearly as suspicious as one, and a real law passes it
     trivially. Values that are NaN are ignored -- a detector that failed to
     read is a different fault, and one this cannot diagnose.
+
+    **WHAT NO CHECK IN THIS FILE CAN CATCH.** The measurement faults found so
+    far fall into six shapes, and five of them are mechanical:
+
+        frozen readings     this function
+        frozen settings     this function, applied to the manipulated column
+        collapsed span      the excursion shrinking as the setting slows
+        unresponsive        a reading that moves far less than its setting
+        folded              a curve that reverses and cannot be inverted
+        WRONG STAGE         nothing here. Read the field's description.
+
+    A wrong-stage failure is a TRUE measurement of a condition nobody wanted
+    measured. The data is correct, every statistic computed on it is correct,
+    and there is no signal to find. `K_DAR3` read a flat null across every
+    note and depth with a live route and a flat control, because it was timed
+    on a stage its own description does not name (§63); `V_ATT3` read 0.000 s
+    everywhere because the attack it scales had been set to instant.
+
+    The shapes to watch for: an attack scaler tested on an instant attack, a
+    release scaler on a note that never releases, a decay scaler on a sustain
+    of 100%. Each reads exactly like a dead field.
+
+    **A green run here is not clearance.**
     """
     np = _np()
     v = np.asarray([x for x in values], dtype="float64")
