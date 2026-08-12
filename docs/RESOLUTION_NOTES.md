@@ -2988,7 +2988,12 @@ each reading free to be what it wanted to be?"**
 
 ---
 
-## §39 — The pan LFO does nothing on this machine, and `PANPOS` cross-validates (2026-08-11)
+## §39 — RETRACTED by §52. The pan LFO does nothing on this machine, and `PANPOS` cross-validates (2026-08-11)
+
+> **The pan-LFO half of this section is wrong and is superseded by §52.**
+> All five fields work; they were tested against the pan destination, which
+> is the one broken part. The `PANPOS` cross-validation below still stands.
+> Left in place so the reasoning that failed stays legible.
 
 ### Auto-pan is inert
 
@@ -3871,3 +3876,69 @@ adds the enforcement: **make it show that, on something, in the same run.**
 Ten fields, not fourteen: the pan LFO group (§39) and five of six envelope
 scaling fields (§47, positive control present). The per-zone block is
 withdrawn from that list entirely.
+
+---
+
+## §52 — RETRACTION. LFO2 works; only its route to pan is dead (2026-08-12)
+
+§39 recorded five fields as inert — `PANRAT`, `PANDEP`, `PANDEL`, `LFO2WAVE`,
+`LFO2TRIG` — and called the finding "the pan LFO does nothing". **All five
+work.** Every one of them was tested against the pan destination, which is the
+single broken component.
+
+LFO2 is **assignable-matrix source 8**. Routed to the filter it modulates
+cleanly, at 25–99× prominence with 4000–10000 Hz of excursion, against controls
+(source 0, and source 8 with `PANDEP` 0) that show 15 Hz of drift.
+
+```
+PANRAT    rate = 0.23708 * PANRAT Hz      5..80    r2 0.999843
+PANDEP    gates the depth -- 0 silences it entirely with the route live
+PANDEL    delays the growth -- early/late swing ratio 1.14, 1.05, 0.72,
+          0.13, 0.17 across 0..99; at 99 the delay exceeds a 6 s capture
+LFO2WAVE  changes the shape -- wave 0 middle-third 0.27 against 0.09/0.01/0.05
+LFO2TRIG  mode 1 locks the phase to note-on: sd 54 Hz across five notes,
+          against 307, 312 and 471 Hz for the free-running modes
+```
+
+**LFO2 runs at exactly twice LFO1** for the same parameter value — 0.23708
+against `LFORAT`'s 0.11867, a ratio of 1.998.
+
+### Three detectors in a row that could only give one answer
+
+This topic took four runs, and three of them produced a verdict the detector
+was incapable of contradicting:
+
+1. **The rate above `PANRAT` 80** read exactly half the extrapolation — ratios
+   0.502, 0.501, 0.500, 0.504. A value that lands on precisely half is an
+   artefact; the analysis window smoothed adjacent peaks and the FFT took the
+   subharmonic. The fold **moved** when the window shortened (above 60 at
+   40 ms, above 80 at 15 ms), which proves it is mine — but it did not move
+   *proportionally*, so the mechanism is still not understood and the fitted
+   range simply stops at 80.
+2. **`PANDEL` read −0.150 s at all five settings.** A negative onset is
+   impossible, and an identical impossible value everywhere is a floor: the
+   rolling window was 0.42 s and the arithmetic made any onset before 0.57 s
+   return exactly that. Replaced with an early-window against late-window
+   comparison, which estimates no onset and therefore has no floor.
+3. **`LFO2TRIG` showed rate flat to 0.0 % and swing to 2.6 %** — both correctly
+   measured and both irrelevant, because a trigger mode sets the LFO's *phase*
+   and changes neither by construction.
+
+§47's rule — *state what the detector would show if the field worked, and
+confirm it can produce that* — was written by me four sections earlier and
+violated three times inside one topic. **Stating a rule is not applying it.**
+The rule needs to fire while the probe is being written, and the only mechanism
+that has actually worked is the positive control: every run since §51 proves
+the route live before reporting any negative, and that is what caught these.
+
+### The inert count
+
+**Five fields, not ten**: the five envelope scaling fields of §47, which still
+have a positive control (`K_DAR1`) and still stand. The pan group is withdrawn
+entirely.
+
+What remains genuinely inert is **one destination**: the pan output of LFO2.
+`PANPOS` moves the stereo image 118 dB, and LFO2 modulates the filter, but LFO2
+does not reach pan. That is a much narrower and more useful statement than "the
+pan LFO does nothing", and a converter can now write `PANRAT`/`PANDEP` for
+matrix use while knowing auto-pan itself will not sound.

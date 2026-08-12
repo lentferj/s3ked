@@ -636,3 +636,25 @@ def test_the_v_prefix_on_zone_fields_means_zone_not_velocity():
     """
     note = " ".join(scales.SCALES[("keygroup", "VTUNO1")].note.split())
     assert "velocity ZONE the field belongs to" in note
+
+
+def test_lfo2_runs_at_twice_lfo1():
+    """0.23708 against 0.11867 Hz per unit -- a ratio of 1.998."""
+    lfo2 = scales.SCALES[("program", "PANRAT")].a
+    lfo1 = scales.SCALES[("program", "LFORAT")].a
+    assert abs(lfo2 / lfo1 - 2.0) < 0.02
+
+
+def test_panrat_is_lfo2_not_a_pan_only_control():
+    """§39 called it inert by testing it against pan, which is the dead route.
+
+    Routed to the filter as matrix source 8, LFO2 and all five of its fields
+    work. Pinned because the retraction is easy to lose.
+    """
+    note = " ".join(scales.SCALES[("program", "PANRAT")].note.split())
+    assert "Only its route to PAN is inert" in note
+
+
+def test_zero_lfo2_rate_at_zero():
+    hz, _u, _e = scales.to_physical("program", "PANRAT", 0)
+    assert hz == pytest.approx(0.0, abs=1e-9)

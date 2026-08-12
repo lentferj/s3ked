@@ -471,6 +471,29 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "when PRLOUD is high and V_LOUD positive.\n"
              "This is the one field here not linear in a perceptual domain.",
     ),
+    ("program", "PANRAT"): Scale(
+        "program", "PANRAT", "Hz", "linear", 0.23708, 0.0, (5, 80), 0.999843,
+        bounds="fitted 5..80. Above 80 the measured rate collapses to exactly\n"
+               "HALF the extrapolation (ratios 0.502, 0.501, 0.500, 0.504),\n"
+               "which is a detector artefact rather than a machine behaviour --\n"
+               "the fold MOVED when the analysis window shortened, from above\n"
+               "60 at 40 ms to above 80 at 15 ms. It did not move\n"
+               "proportionally, so the mechanism is not understood and no\n"
+               "correction is applied.",
+        note="LFO2's rate, and LFO2 is NOT the pan-only oscillator §39 took it\n"
+             "for: it is assignable-matrix source 8, and routed to the filter\n"
+             "it works perfectly. Only its route to PAN is inert.\n"
+             "  rate = 0.23708 * PANRAT Hz\n"
+             "**Exactly twice LFO1's rate for the same value** -- 0.23708\n"
+             "against LFORAT's 0.11867, a ratio of 1.998. Forced through the\n"
+             "origin: the free fit's intercept was 0.026 Hz, and zero rate at\n"
+             "zero is definitional.\n"
+             "Its four companions all work too, through the same route:\n"
+             "PANDEP gates the depth, PANDEL delays the growth, LFO2WAVE\n"
+             "changes the shape, and LFO2TRIG mode 1 locks the phase to\n"
+             "note-on (sd 54 Hz across five notes against 307..471 for the\n"
+             "free-running modes).",
+    ),
     ("program", "LFODEP"): Scale(
         "program", "LFODEP", "cents", "linear", 19.4932, 0.0, (0, 99), 0.99949,
         bounds="the full range was usable, which is unusual here -- most\n"
