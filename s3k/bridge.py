@@ -1485,6 +1485,48 @@ class S3kBridge:
             confirm,
         )
 
+    def clear_memory(self, *, timeout: Optional[float] = None) -> Dict[str, int]:
+        """Delete everything resident. **DESTRUCTIVE, and there is no undo.**
+
+        This is the remote half of the panel's CLR. CLR itself is not
+        reachable: the manual describes it as F7-CLR raising an on-screen
+        prompt, F8-YES answering it and F8-GO then loading, and no value in
+        the trigger register reaches any of that (§74). What IS reachable is
+        the effect, by deleting what is resident.
+
+        Deleting a sample really does return its waveform memory -- deleting a
+        312,257-word sample moved the free figure by 312,272. It is worth
+        stating because the first measurement said otherwise: the sample
+        deleted was a few-thousand-word calibration tone and the figure did
+        not visibly move, which reads exactly like a machine that unlists
+        without reclaiming.
+
+        **The last program cannot be deleted.** The delete is acknowledged OK
+        and the list stays at one. So this stops when a delete stops making
+        progress rather than counting to a guess, and reports what is left.
+
+        Programs are deleted after samples, because a program costs about a
+        hundred words and the point of the exercise is the megabytes.
+        """
+        result = {"samples": 0, "programs": 0}
+        for kind, listing, delete in (
+            ("samples", self.sample_list, self.delete_sample),
+            ("programs", self.program_list, self.delete_program),
+        ):
+            while True:
+                names = listing(timeout=timeout)
+                if not names:
+                    break
+                delete(0)
+                result[kind] += 1
+                if len(listing(timeout=timeout)) >= len(names):
+                    # acknowledged and ignored -- the last program does this.
+                    # Stopping here rather than spinning on a fixed guard.
+                    break
+        result["samples_left"] = len(self.sample_list(timeout=timeout))
+        result["programs_left"] = len(self.program_list(timeout=timeout))
+        return result
+
     def _destructive(self, frame: bytes, what: str, confirm: bool) -> None:
         if not confirm:
             self._send(frame, write=True)

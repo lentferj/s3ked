@@ -1013,9 +1013,10 @@ async def test_no_clr_is_offered_because_the_machine_has_none_to_offer():
     """
     from s3ked.app import MasterScreen
 
-    offered = " ".join(d for _a, d in MasterScreen._ACTIONS.values())
-    assert "CLR" not in offered
-    assert all("load" not in a for a, _d in MasterScreen._ACTIONS.values())
+    offered = [a for a, _d in MasterScreen._ACTIONS.values()]
+    assert "load_clr" not in offered
+    assert all("load" not in a for a in offered), \
+        "no load belongs in the destructive menu -- clearing is a delete"
 
 
 async def test_plain_load_stays_at_the_appending_value():
@@ -1041,3 +1042,52 @@ async def test_plain_load_stays_at_the_appending_value():
             await pilot.pause()
 
     assert fired == [1], "LOAD appends and is value 1"
+
+
+async def test_clearing_memory_is_armed_and_says_what_survives():
+    """The remote stand-in for CLR, built from the deletes it is made of."""
+    from textual.widgets import Static
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        before = len(app.bridge.sample_list())
+        assert before
+
+        await pilot.press("m")
+        await pilot.pause()
+        await pilot.press("4")
+        await pilot.pause()
+        assert len(app.bridge.sample_list()) == before, "arming must not fire"
+
+        await pilot.press("enter")
+        await pilot.pause()
+        prompt = str(app.screen_stack[-1].query_one("#confirm-prompt", Static).render())
+        assert "no undo" in prompt
+        assert "last one" in prompt, "the surviving program must be stated"
+
+        await pilot.press("y")
+        for _ in range(30):
+            await pilot.pause()
+
+        assert app.bridge.sample_list() == []
+        assert len(app.bridge.program_list()) == 1, "one program always survives"
+
+
+async def test_clearing_memory_needs_the_write_gate():
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("m")
+        await pilot.pause()
+        await pilot.press("4")
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        assert "write gate is locked" in app.last_status
+        assert app.bridge.sample_list() != []

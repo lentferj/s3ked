@@ -128,6 +128,7 @@ class MasterScreen(ModalScreen[Optional[str]]):
         "1": ("delete_program", "Delete the selected program and its keygroups"),
         "2": ("delete_keygroup", "Delete the selected keygroup"),
         "3": ("delete_sample", "Delete the selected sample"),
+        "4": ("clear_memory", "Clear memory — delete EVERY program and sample"),
     }
 
     def __init__(self, context: str) -> None:
@@ -888,10 +889,56 @@ class S3kedApp(App):
         )
 
         def chosen(action: Optional[str]) -> None:
-            if action:
+            if action == "clear_memory":
+                self._confirm_clear()
+            elif action:
                 self._confirm_destructive(action, index)
 
         self.push_screen(MasterScreen(context), chosen)
+
+    def _confirm_clear(self) -> None:
+        """The remote half of the panel's CLR: delete everything resident.
+
+        CLR itself cannot be reached -- it is a panel chain with its own
+        on-screen prompt (§74). This is the same effect built out of DELS and
+        DELP, which is why it lives behind the same arm-then-fire as they do
+        rather than next to the load.
+        """
+        if not self.allow_write:
+            self.notify_status("write gate is locked — press w to arm it")
+            return
+        held = (self._total_words - self._words_free
+                if self._total_words and self._words_free is not None else None)
+        detail = (f"\n\n{held * 2 / 1024 / 1024:.2f} MB resident"
+                  if held is not None else "")
+
+        def go(confirmed: bool) -> None:
+            if confirmed:
+                self._clear_worker()
+
+        self.push_screen(
+            ConfirmScreen(
+                f"Delete [b]every resident program and sample[/b]?{detail}"
+                "\n\nThere is no undo. One program always survives — the "
+                "machine refuses to delete the last one."
+            ),
+            go,
+        )
+
+    @work(thread=True)
+    def _clear_worker(self) -> None:
+        try:
+            with self._bridge_lock:
+                result = self.bridge.clear_memory()
+        except Exception as exc:
+            self.call_from_thread(self.notify_status, f"clear: {exc}")
+            return
+        self.call_from_thread(
+            self.notify_status,
+            f"cleared {result['samples']} sample(s) and "
+            f"{result['programs']} program(s); "
+            f"{result['programs_left']} program(s) left")
+        self.call_from_thread(self.action_refresh)
 
     def _confirm_destructive(self, action: str, index: Optional[int]) -> None:
         if index is None:

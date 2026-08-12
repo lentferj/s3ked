@@ -264,6 +264,14 @@ class DemoBridge:
     #: SINGLE, which is where the machine comes up.
     _mode = 0
 
+    def clear_memory(self, *, timeout: Optional[float] = None):
+        samples, programs = len(self._samples), len(self._programs)
+        self._samples = []
+        # the machine refuses to delete the last program, so the demo does too
+        self._programs = self._programs[:1]
+        return {"samples": samples, "programs": max(0, programs - 1),
+                "samples_left": 0, "programs_left": len(self._programs)}
+
     def mode(self, *, timeout: Optional[float] = None) -> int:
         return self._mode
 

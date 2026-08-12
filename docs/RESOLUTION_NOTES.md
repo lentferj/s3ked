@@ -5600,3 +5600,72 @@ The reading that settled this was memory arithmetic, not the display. With
 needs to be at the machine. Choosing the resident state to make the two
 predictions far apart is what made the experiment work; running it against
 an empty machine would have made CLR and LOAD indistinguishable.
+
+## §75 — CLR is a panel chain; the effect is reachable, the button is not (2026-08-13)
+
+**Status: settled.** Measured 2026-08-12/13, RAM only.
+
+§74 established that the trigger register has exactly one acting value and
+concluded there was no remote CLR. That conclusion was right about the
+register and wrong about the capability, and the correction came from asking
+what CLR *is* rather than which value it might be.
+
+The owner's manual describes it as a sequence, not a button:
+
+> F7-CLR を押すと、メモリ全体をクリアしたいかどうかを尋ねるメッセージが出ます。
+> F8-YES を押します
+>
+> ("pressing F7-CLR brings up a message asking whether you want to clear the
+> entire memory; press F8-YES")
+
+and, for a load: select the volume, `F7-CLR`, then `F8-GO`. So CLR raises its
+own on-screen confirmation and is answered by a second keypress, and the load
+is a third. `byte[6] = 1` is the `F8-GO` step alone. Nothing in the register
+was ever going to reach the other two — which is why sweeping it found
+nothing, and why the sweep was the wrong instrument rather than a
+disappointing result.
+
+### The effect, built out of what does exist
+
+Deleting every resident sample and program reproduces it:
+
+```
+resident before   11,549,680 words   22.03 MB
+cleared           60 samples, 1 program
+resident after       131,072 words    0.25 MB
+reclaimed         11,418,608 words   21.78 MB
+```
+
+Two facts had to be measured on the way, and the first one nearly ended the
+investigation:
+
+**DELS does return waveform memory** — but the first sample deleted was a
+few-thousand-word calibration tone, and the free figure did not move at all.
+Read on its own that says "the machine unlists without reclaiming", which
+would have killed the idea. Deleting a sample of *known and large* size
+settled it: `SLNGTH` said 312,257 words, and the free figure moved 312,272.
+Picking the largest resident sample, and writing the predicted figure down
+before the delete, is what made the reading interpretable.
+
+**The last program cannot be deleted.** The delete is acknowledged OK and the
+list stays at one. An earlier loop counted to its 300-iteration guard against
+this and reported "nothing happened", when in fact it had taken the programs
+from 9 down to 1 first. The guard hid the finding; a progress check would
+have shown it immediately, so `clear_memory` stops when a delete stops
+changing the list rather than counting to a number.
+
+**0.25 MB is never returned.** 131,072 words exactly — 2^17, too round to be
+anything but a fixed system reserve. Whatever it is, it is not available and
+a memory budget should be figured against `free_words`, which already
+excludes it, rather than against `max_words`.
+
+### What this means for the editor
+
+`clear_memory()` deletes samples first and programs second, since a program
+header costs about a hundred words and the megabytes are all in the samples.
+In the TUI it sits in the Master screen behind arm-then-fire, with the
+deletes it is made of, and not next to the load — a load adds and can be
+undone by deleting, whereas this is the delete.
+
+"CLR then load" is therefore two deliberate operations here, which is
+honest: it is two on the machine as well.
