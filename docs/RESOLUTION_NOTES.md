@@ -4195,3 +4195,71 @@ difference between them is a reminder that a detector tuned for one quantity
 **With this, no law in `s3k/scales.py` is provisional.** The marking mechanism
 stays and is still tested, against a scale injected for the purpose — the next
 half-answered measurement should be marked, not rounded up into certainty.
+
+---
+
+## §56 — The tuning fields are 256x wider than this table said (2026-08-12)
+
+Six two-byte fields — `PTUNO`, `KGTUNO` and the four per-zone `VTUNO*` — were
+declared `0..50`. The document was quoted directly alongside, in the same
+entry: *"-50.00 to +50.00 (fraction is binary)"*. **Those are semitones**, and
+the raw unit is 1/256 of one, so the true range is `-12800..+12800`.
+
+```
+raw    256  ->   +99.8 cents        raw  -256  ->  -100.1 cents
+raw    512  ->  +199.8              raw -1280  ->  -500.3
+raw   1280  ->  +499.9              raw -5120  -> -2000.3
+raw   2560  ->  +999.9
+raw   5120  -> +1999.9
+```
+
+Measured by writing raw values and reading the **pitch** back, not just the
+bytes. Every value round-tripped exactly — including 32767 and the negatives
+as two's complement — so storage was never the question; the question was
+whether the stored number means what the document says, and it does, to better
+than 0.4 cents across ±20 semitones.
+
+### How a dormant error became a live one
+
+`0..50` sat in the table harmlessly for as long as nothing checked it. The
+calibration swept 0..50 and fitted 100/256 cents per unit, which is correct and
+which *is the evidence against the range*: 50 units is 19.53 cents, and no
+sampler ships a tuning control that stops one fifth of a semitone from centre.
+The number was there to be read and I did not read it.
+
+§55's commit then tightened `encode_field` to range-check every numeric field.
+That fixed a real bug and **created a worse one**: with the range at 0..50 the
+guard refused every detune past 19.53 cents, so a keygroup could not be moved
+by a semitone. The commit message for that change says, in its own words, that
+an over-tight check would be the worse bug. It was, within the hour.
+
+The general tell is cheap and is now a test: **a two-byte field whose declared
+maximum fits in one byte** is either a display range transcribed as a value
+range, or a modelling error. It caught all six, and it is the check that would
+have caught them before the guard did.
+
+### What is not established
+
+Beyond ±5120 — twenty semitones — the scale is unverified. The pitch detector
+tops out, and at +12800 the reading was nonsense rather than +5000 cents.
+Whether the **sampler** transposes fifty semitones is a different question from
+whether the **field** stores it, and only the second has been answered. The
+range follows the document; the scale is measured over ±20 semitones and
+extrapolated beyond.
+
+### `TEMPER` is a different bug, left open
+
+`TEMPER` is twelve bytes, one per semitone of the octave, each −50..+50 cents.
+The table models it as a single twelve-byte integer, so writing it through
+`set_parameter` encodes one number across all twelve: −5 becomes `FB FF FF …`,
+which is C at −5 cents and **every other note at −1**. Not caused by the range
+guard and not fixed here — it needs array support in the parameter model, which
+is a design change rather than a patch. Recorded in TODO.md.
+
+### Credit
+
+The 256x disagreement was spotted by the sibling mpc2emu session, reading this
+project's table after the range-check commit landed. Its proposed
+discriminator — write raw 5120 and see whether it survives — is exactly the
+measurement above, and its reasoning about which reading the existing
+calibration supported was right before any hardware was involved.

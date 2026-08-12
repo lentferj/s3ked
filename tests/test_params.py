@@ -284,6 +284,48 @@ def test_encode_field_rejects_a_value_the_field_does_not_accept():
     assert p.encode_field(p.lookup(("keygroup", "MODVFILT1")), 50) == bytes([50])
 
 
+def test_a_tuning_field_can_express_a_semitone():
+    """The regression the range guard introduced, pinned so it cannot return.
+
+    Six two-byte tuning fields were declared 0..50, which is the document's
+    display range in SEMITONES transcribed as a raw range. One raw unit is
+    1/256 of a semitone, so 0..50 caps the field at 19.53 cents and makes an
+    ordinary one-semitone detune impossible. Tightening encode_field turned a
+    dormant table error into a refusal to write legal values -- exactly the
+    "over-tight check is the worse bug" case.
+    """
+    for region, name in (("keygroup", "KGTUNO"), ("program", "PTUNO"),
+                         ("keygroup", "VTUNO1"), ("keygroup", "VTUNO2"),
+                         ("keygroup", "VTUNO3"), ("keygroup", "VTUNO4")):
+        param = p.lookup((region, name))
+        assert param.size == 2
+        assert param.minimum == -12800 and param.maximum == 12800
+        p.encode_field(param, 256)        # one semitone up
+        p.encode_field(param, -256)       # one semitone down
+        p.encode_field(param, 5120)       # +20 semitones, measured
+    assert p.encode_field(p.lookup(("keygroup", "KGTUNO")), 256) == b"\x00\x01"
+    assert p.encode_field(p.lookup(("keygroup", "KGTUNO")), -256) == b"\x00\xff"
+
+
+def test_no_multi_byte_field_declares_a_single_byte_range():
+    """A 2-byte field whose maximum fits in one byte is the tell.
+
+    That mismatch is what a display range transcribed as a value range looks
+    like, and it hid in six fields until a range check made it bite. TEMPER is
+    exempt: it is genuinely twelve independent signed bytes, one per semitone,
+    and its -50..50 is per element.
+    """
+    for param in p.PARAMETERS.values():
+        if getattr(param, "kind", "") == "text" or param.size < 2:
+            continue
+        if param.name == "TEMPER":
+            continue
+        assert param.maximum > 255, (
+            f"{param.name} is {param.size} bytes but declares a range that "
+            f"fits in one -- check whether that is the document's DISPLAY "
+            f"range")
+
+
 def test_encode_field_still_accepts_every_legal_value_of_every_field():
     """The guard must not reject anything the table itself declares legal.
 

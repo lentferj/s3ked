@@ -213,25 +213,28 @@ SCALES: Dict[Tuple[str, str], Scale] = {
         endpoints={99: "wide open"},
     ),
     ("keygroup", "KGTUNO"): Scale(
-        "keygroup", "KGTUNO", "cents", "linear", 100.0 / 256.0, 0.0, (0, 50),
-        0.9998,
-        note="1/256 of a semitone per unit, not one cent -- so exactly\n"
-             "100/256 = 0.390625 cents. This is the EXACT structural constant\n"
-             "from the format document (\"the fraction is binary\"), not the\n"
-             "measured slope, which came out 0.391667 and agrees to 0.27%.\n"
-             "Where a document states an exact relationship and a fit merely\n"
-             "confirms it, ship the exact one: the fit carries this bench's\n"
-             "error and the constant does not. Credit to mpc2emu, who reached\n"
-             "0.390625 from the document while this side was still fitting.\n"
-             "The fit also had an intercept of -0.31 cents; that is bias, and\n"
-             "zero offset is zero detune by definition, so it is dropped.",
-        bounds="swept 0..50; the law is structural and holds over the full\n"
-               "range, so the bound is the sweep's, not the machine's.",
+        "keygroup", "KGTUNO", "cents", "linear", 100.0 / 256.0, 0.0,
+        (-5120, 5120), 0.9998,
+        bounds="confirmed by PITCH from -5120 to +5120 -- twenty semitones each\n"
+               "way -- against a law first fitted over 0..50 raw, which is only\n"
+               "0..19.5 cents. The field's declared range was 0..50 until the\n"
+               "same measurement widened it to +/-12800: that was the document's\n"
+               "display range in SEMITONES, transcribed as a raw range, and it\n"
+               "made a one-semitone detune impossible to express. Beyond +/-20\n"
+               "semitones the scale is unverified -- the pitch detector tops out,\n"
+               "and whether the sampler transposes that far is a separate\n"
+               "question from whether the field stores it (it does; every value\n"
+               "up to 32767 round-tripped exactly).",
+        note="One raw unit is 1/256 of a semitone, so the low byte is the\n"
+             "binary fraction the document means by \"-50.00 to +50.00\".\n"
+             "Measured: 256 -> +99.8 cents, 512 -> +199.8, 1280 -> +499.9,\n"
+             "2560 -> +999.9, 5120 -> +1999.9, and the negatives match to\n"
+             "0.3 cents. RESOLUTION_NOTES §56.",
     ),
     ("keygroup", "VTUNO1"): Scale(
-        "keygroup", "VTUNO1", "cents", "linear", 100.0 / 256.0, 0.0, (0, 50),
+        "keygroup", "VTUNO1", "cents", "linear", 100.0 / 256.0, 0.0, (-5120, 5120),
         0.999,
-        bounds="measured at both extremes at a fixed velocity; the intermediate\n"
+        bounds="range widened and the scale confirmed by KGTUNO's pitch\nmeasurement over +/-20 semitones (§56); this field shares the\nencoding and the 1/256-semitone unit. Originally: measured at both extremes at a fixed velocity; the intermediate\n"
                "points are not swept, so this is two points plus a structural\n"
                "constant rather than a fitted curve.",
         note="Per-ZONE tuning offset -- a STATIC offset, not a velocity\n"
@@ -247,10 +250,10 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "across their ranges.",
     ),
     ("program", "PTUNO"): Scale(
-        "program", "PTUNO", "cents", "linear", 100.0 / 256.0, 0.0, (0, 50),
+        "program", "PTUNO", "cents", "linear", 100.0 / 256.0, 0.0, (-5120, 5120),
         0.9998,
         note="same exact 100/256 scale as KGTUNO, spot-checked at two values",
-        bounds="spot-checked rather than swept; KGTUNO carries the evidence.",
+        bounds="range widened and the scale confirmed by KGTUNO's pitch\nmeasurement over +/-20 semitones (§56); this field shares the\nencoding and the 1/256-semitone unit. Originally: spot-checked rather than swept; KGTUNO carries the evidence.",
     ),
     ("program", "PRLOUD"): Scale(
         "program", "PRLOUD", "dB", "linear", 0.61872, -0.61872 * 99, (0, 99),
