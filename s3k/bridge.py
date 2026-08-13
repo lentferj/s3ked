@@ -999,9 +999,22 @@ class S3kBridge:
         return self._misc_byte(index, timeout=timeout)
 
     #: Main-menu pages, by the value :attr:`_MISC_MODE` takes. Only the three
-    #: that have been observed are named; the rest of the eight buttons have
-    #: not been pressed with a probe running.
+    #: that have been observed are named; naming the rest needs somebody
+    #: reading the display, and the one eyes-free candidate did not work --
+    #: RMULTIDATA answers in every mode, so it cannot identify MULTI (§78).
     MODES = {0: "SINGLE", 8: "GLOBAL", 10: "LOAD"}
+
+    #: The highest page value the machine survives. The S2000/S3000XL
+    #: document says "eleven modes available from the eight mode keys" --
+    #: SINGLE, MULTI, SAMPLE and EFFECTS, an EDIT variant of each, plus LOAD,
+    #: SAVE and GLOBAL -- and the register takes 0-10, which is exactly
+    #: eleven.
+    #:
+    #: **11 is not refused. It stops the machine answering at all**, on a
+    #: HARDDISK with media present, requiring a power cycle (§79). So the
+    #: range check below is not defensive tidiness standing in for a device
+    #: that would have said no; it is the only thing that says no.
+    _MAX_MODE = 10
 
     def mode(self, *, timeout: Optional[float] = None) -> int:
         """Which main-menu page the machine is showing."""
@@ -1022,6 +1035,12 @@ class S3kBridge:
         and callers should compare against what they asked for rather than
         trusting either the ack or this method's success.
         """
+        if not 0 <= mode <= self._MAX_MODE:
+            raise ValueError(
+                f"mode {mode} is outside 0-{self._MAX_MODE}; the machine does "
+                f"not refuse an out-of-range page, it stops answering and "
+                f"needs a power cycle (§79)"
+            )
         try:
             self._misc_byte(self._MISC_MODE, mode, timeout=timeout)
         except DeviceError:

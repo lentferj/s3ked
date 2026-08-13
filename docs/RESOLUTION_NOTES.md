@@ -5857,3 +5857,60 @@ fingerprints differ between pages (mode 2 read 1, mode 4 read 7, mode 6 read
 1, the rest 0) but a field value cannot name the field's page.
 
 Naming the remaining modes probably does require somebody at the display.
+
+## §79 — Eleven modes, confirmed; and 11 is a crash, not a refusal (2026-08-13)
+
+**Status: settled.** Measured 2026-08-13, with HARDDISK selected on a drive
+with media — deliberately, because §78's wedge came from sweeping pages over
+an empty floppy drive and that confound had to be removed before anything
+here could be attributed to the value itself.
+
+The S2000/S3000XL document says **"there are now eleven modes available from
+the eight mode keys"**: SINGLE, MULTI, SAMPLE and EFFECTS, an EDIT variant of
+each of those four, plus LOAD, SAVE and GLOBAL.
+
+The register takes **0-10** without incident. That is exactly eleven values,
+and the three known names sit in it consistently — SINGLE 0, GLOBAL 8, LOAD 10, with SAVE
+at 9 on the evidence of §78's malformed reply. The count is now a property of
+this machine and not only a sentence in a manual.
+
+**Writing 11 stops the machine answering at all.** Not an error reply and not
+a clamp — no reply to anything, on any port, until a power cycle. Media was
+present and the device selector was on HARDDISK, so the wedge is attributable
+to the value rather than to §78's empty-drive confound.
+
+**What that does NOT establish is that 11 is out of range.** Two readings fit
+the silence equally: the value is past the end of the enumeration, or it is
+one of the eleven real pages and cannot initialise for a reason of its own —
+the same shape as SAVE opening on an empty floppy drive, which also produced
+a malformed reply rather than a refusal. A hang looks identical either way
+over the wire, and separating them needs somebody watching the display.
+
+Eleven values taking the write is consistent with the document's eleven
+modes, and that is as far as the evidence goes. Recorded in `TODO.md` as
+needing visual confirmation.
+
+### The consequence for the code
+
+`select_mode` passed any integer through. The machine's response to a bad one
+is to die, so **the range check in the bridge is the only thing that says
+no**. It is not defensive tidiness standing in for a device that would have
+rejected the write.
+
+That is a different situation from the other guards in this project. Elsewhere
+a range check duplicates a refusal the device would have made anyway and
+mainly improves the error message; §51 even had to be careful not to make one
+tighter than the machine's own. Here there is nothing to duplicate.
+
+### Cost, and what it says about page probes
+
+Two power cycles, for one number. Worth it — an editor that can move the
+machine between pages needs to know where the pages stop, and the answer was
+never going to come from a reply code.
+
+But both wedges came from the same class of action: **writing a value to a
+page register and finding out what happens.** §78's came from a page with no
+media under it, §79's from a value with no page behind it. A parameter write
+that is out of range gets an error reply; a page write that is out of range
+gets silence. Pages are not parameters, and probing them costs a power cycle
+each time the guess is wrong.

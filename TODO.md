@@ -665,6 +665,20 @@ Two classes, both structural rather than incidental:
    `VTUNO1`/`KGTUNO`/`PTUNO` are the obvious candidates -- 1/256ths in the byte,
    semitones and cents on the display.
 
+3. **Pages that hang instead of refusing.** Writing 11 to the page register
+   (`byte[91]`) stops the machine answering entirely, needing a power cycle
+   (§79). Whether that is because 11 is past the end of the eleven modes, or
+   because it is a real page that cannot initialise -- SAVE on an empty
+   floppy drive behaves similarly (§78) -- cannot be told apart over the
+   wire. Both produce identical silence. **Someone has to watch the display
+   while 11 is written.** Until then the bridge refuses 11 and above, and
+   `MenuScreen` offers only the three named pages.
+
+   Cheap to settle and worth doing alongside the other panel checks: it also
+   names MULTI, SAMPLE, EFFECTS, SAVE and the four EDIT variants, none of
+   which has an eyes-free discriminator -- `RMULTIDATA` answers in every
+   mode, which was the best candidate (§78).
+
 Highest value: envelope 3 at offsets 179-186, on which §50 rests entirely and
 which the owner's manual says should not work at all without the IB304F; the
 IB304F's own presence, which one page settles and which mpc2emu also carries;

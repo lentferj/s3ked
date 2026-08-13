@@ -979,3 +979,25 @@ def test_choosing_a_drive_forces_the_machine_to_go_and_look():
 
     assert store[11] == 3
     assert 4 in store, "nothing triggered the re-read"
+
+
+def test_an_out_of_range_page_is_refused_here_because_the_machine_will_not():
+    """Writing 11 to the page register stops the machine answering.
+
+    Not an error reply, not a clamp -- it needs a power cycle. The document's
+    "eleven modes available from the eight mode keys" matches the 0-10 the
+    register takes, and 11 is past the end of that.
+    """
+    import pytest
+
+    handler, store = _misc_bank()
+    bridge = _bridge_with(handler)
+
+    for good in (0, 8, 10):
+        bridge.select_mode(good)
+        assert store[91] == good
+
+    for bad in (11, 16, 255, -1):
+        with pytest.raises(ValueError, match="power cycle"):
+            bridge.select_mode(bad)
+    assert store[91] == 10, "nothing out of range may reach the wire"
