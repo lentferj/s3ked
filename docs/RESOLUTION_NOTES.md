@@ -5805,3 +5805,55 @@ ID binds at boot": the ID does not bind at boot (§72), it does not act until
 a following write (§76), and it does not survive a boot at all. The original
 claim was wrong in every part, and each part failed for a different reason,
 which is why it took three passes to dismantle.
+
+## §78 — Sweeping pages with absent media wedges the machine (2026-08-13)
+
+**Status: settled as a hazard.** The machine required a power cycle.
+
+Sweeping `byte[91]` from 0 upward: values 0-8 took the write cleanly. Value 9
+took it and returned **one malformed reply on arrival** — a short body where a
+data frame was expected — after which the machine was fine. Continuing into
+10-15 left it answering nothing at all, on any port.
+
+The explanation is not "value 9 is bad". `byte[0]` boots to **0**, which is
+FLOPPY, and there is no floppy in the drive. Value 9 is SAVE. A save page
+opening on an empty floppy drive has nothing to render, and LOAD gives the
+same behaviour for the same reason. The sweep walked the machine onto disk
+pages while its device selector pointed at absent media, repeatedly.
+
+**This was avoidable and the information to avoid it was already in hand.**
+The power-on default of `byte[0]` had been measured twenty minutes earlier
+and recorded in §77. What was missing was connecting a measured default to
+what the next probe was about to do — the page sweep was designed as a test
+of the mode register in isolation, and pages are not isolated from the device
+selector.
+
+### The rule
+
+**Select a device that has media before moving to any page that reads one.**
+`byte[0]` to 1 (HARDDISK) first. A sweep across pages is not a read-only
+operation, however read-only the register looks: arriving at a page makes the
+machine do the page's work.
+
+### What the sweep established before it died
+
+| value | result |
+|---|---|
+| 0-8 | all took the write; 0 is SINGLE, 8 is GLOBAL |
+| 9 | took it, one malformed reply on arrival — SAVE |
+| 10 | LOAD, known already |
+| 11-15 | never cleanly reached |
+
+The document's "eleven modes available from the eight mode keys" therefore
+remains unconfirmed against the register: whether 11-15 are refused is
+exactly what was not reached.
+
+### A discriminator that is now gone
+
+`RMULTIDATA` (0x41) answers in **every** mode, so it is not gated on MULTI
+and cannot be used to identify that page. That was the best eyes-free
+candidate for naming an unknown mode, and it does not work. `byte[49]`
+fingerprints differ between pages (mode 2 read 1, mode 4 read 7, mode 6 read
+1, the rest 0) but a field value cannot name the field's page.
+
+Naming the remaining modes probably does require somebody at the display.

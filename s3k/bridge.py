@@ -1178,11 +1178,22 @@ class S3kBridge:
         except DeviceError:
             pass
 
-    #: What ``byte[0]`` means. Only HARD and FLASH are confirmed: the machine
-    #: read 1 sitting on HARD, and writing 2 put the panel on FLASH -- seen by
-    #: eye, and the directory emptied because nothing is mounted there. FLOPPY
-    #: is 0 by elimination: 0 is the power-on default, measured across a power
-    #: cycle (§77), but that it means FLOPPY is not confirmed by eye.
+    #: What ``byte[0]`` means: the panel's device selector, in its own order,
+    #: reading **FLOPPY | HARDDISK | FLASH (when available)**.
+    #:
+    #: HARD is confirmed by eye (the machine read 1 sitting on it) and so is
+    #: FLASH (writing 2 put the panel there). FLOPPY is 0, supported by two
+    #: independent readings rather than by elimination: 0 is the power-on
+    #: default (§77), and moving to the SAVE page while byte[0] held 0 made
+    #: the machine fail on absent media, which is what a save page opening on
+    #: an empty floppy drive would do (§78).
+    #:
+    #: **"When available" is not decoration.** With no flash fitted, writing 2
+    #: is accepted and the register reads back 2, while the volume list stays
+    #: exactly what it was -- selecting FLASH and selecting FLOPPY returned
+    #: the same 100 volumes. So the register having taken the value is not
+    #: evidence that the device is there, and a caller that needs to know
+    #: must look at what comes back rather than at byte[0].
     DEVICE_TYPES = {0: "FLOPPY", 1: "HARD", 2: "FLASH"}
 
     def select_device(self, kind: int, *,
