@@ -85,6 +85,29 @@ real range is ±12800 (§56), which made a semitone of detune impossible to
 express. On a frozen branch that is unambiguously a fix — the editor was
 refusing a value the machine accepts.
 
+## `docs/RESOLUTION_NOTES.md` is identical on both branches
+
+**The notes document the sampler, not this codebase.** That the machine
+crashes on page value 11, that its mode register walks past the panel's own
+hardware gate, that tuning writes snap to a one-cent grid — none of that
+changes with a branch, and a reader on either one needs all of it.
+
+So the file is kept byte-identical, and a finding lands on both branches even
+when only one implements it. The freeze branch carrying a note about a
+capability it does not ship is harmless; a reader missing a hazard because
+they were on the wrong branch is not.
+
+It is also the practical answer. The file grows by append, so every
+cherry-pick that touches it conflicts — three did in one evening before this
+rule existed, each resolved by hand the same way.
+
+Sync it whenever it drifts:
+
+```sh
+git checkout release/0.1.x
+git checkout main -- docs/RESOLUTION_NOTES.md
+```
+
 ## Practical
 
 ```sh
