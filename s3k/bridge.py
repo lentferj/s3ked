@@ -1487,6 +1487,120 @@ class S3kBridge:
 
     # -- byte-addressable header access -------------------------------------
 
+    # -- effects and reverb -------------------------------------------------
+    #
+    # `RFXDATA`/`FXDATA` have opcodes and a five-value selector in this
+    # project and no field table anywhere, because no source describes the
+    # structure: the Akai scan documents only the MULTI header's fx1..fx4
+    # pointers and its `fxfilename`, which reference an effects file rather
+    # than describing one. What follows was measured (§88).
+    #
+    # **All of it works on a machine with no EB16 board fitted.** The panel
+    # refuses to open the EFFECTS page there; the data underneath is live and
+    # complete (§86). So an editor can author effects for a program destined
+    # for a machine that has the board, which is a librarian's job.
+
+    #: One effect or reverb preset. Found by reading index 0 with a long count
+    #: and locating where index 1's known name appears -- "where does the next
+    #: one start" rather than "where does this one end", because the extended
+    #: layer answers past-the-end reads with buffer contents instead of an
+    #: error (§11) and so can never tell you the latter.
+    FX_ENTRY_SIZE = 128
+
+    #: The effects file's own name, 12 characters at offset 3 -- the same
+    #: place the multi header carries its name. Reads ``EFFECTS FILE``.
+    FX_NAME_OFFSET = 3
+
+    def fx_bytes(self, selector: "m.FxSelector", index: int = 0,
+                 offset: int = 0, count: int = 12, *,
+                 timeout: Optional[float] = None) -> bytes:
+        """Read *count* bytes from one effects structure. ``RFXDATA``.
+
+        ``selector`` picks which structure (:class:`s3k.messages.FxSelector`)
+        and ``index`` which entry within it, for the two selectors that are
+        lists. `FX_HEADER` and `FX_ASSIGN` ignore the index -- every value
+        returns the same record.
+
+        No bounds check is possible here: there is no documented count of
+        entries and no field table, so nothing local knows what is in range.
+        Reading past the end returns the previous read's buffer rather than an
+        error, exactly as it does for the header regions (§11), which is why
+        :meth:`fx_names` stops on a repeat instead of on a failure.
+        """
+        frame = m.HeaderRequest(
+            command=m.Command.RFXDATA, index=index, selector=int(selector),
+            offset=offset, count=count,
+            exclusive_channel=self.exclusive_channel,
+        ).encode()
+        reply = self.send_and_receive(frame, timeout=timeout)
+        _channel, command, _payload = m.parse_frame(reply)
+        if command == m.Command.REPLY:
+            self._raise_for_reply(reply, f"reading fx {selector!r} {index}")
+        if command != m.Command.FXDATA:
+            raise DeviceError(
+                f"expected FXDATA reading fx {selector!r}, got {command:#04x}")
+        data = m.HeaderData.decode(reply).data
+        if len(data) != count:
+            raise DeviceError(
+                f"asked for {count} bytes at offset {offset}, got {len(data)}")
+        return bytes(data)
+
+    def set_fx_bytes(self, selector: "m.FxSelector", data: bytes,
+                     index: int = 0, offset: int = 0, *,
+                     confirm: bool = True,
+                     timeout: Optional[float] = None) -> None:
+        """Write bytes into one effects structure. ``FXDATA``. **This writes.**
+
+        Same shape as :meth:`set_header_bytes`, and the same warning applies
+        with more force: nothing here knows the structure, so an offset is
+        only as good as the caller's evidence for it. Read the bytes first.
+        """
+        frame = m.HeaderData(
+            command=m.Command.FXDATA, index=index, selector=int(selector),
+            offset=offset, data=bytes(data),
+            exclusive_channel=self.exclusive_channel,
+        ).encode()
+        if not confirm:
+            self._send(frame, write=True)
+            return
+        self._drain()
+        self._send(frame, write=True)
+        self._raise_for_reply(self._receive(timeout),
+                              f"writing fx {selector!r} {index}")
+
+    def fx_names(self, selector: "m.FxSelector", *, limit: int = 128,
+                 timeout: Optional[float] = None) -> List[str]:
+        """Enumerate a preset list by name. ``FX_ENTRY`` or ``RVB_ENTRY``.
+
+        **The end of the list is not discoverable from the device, and this
+        does not pretend otherwise.** There is no count anywhere: the header
+        carries none, the entries have no validity marker -- bytes 12-15 read
+        `0,0,0,0` for real entries and for garbage alike -- and past the last
+        one the machine answers with buffer contents rather than an error
+        (§11). Stopping on a repeat does not work either, because the garbage
+        keeps changing and so never repeats.
+
+        So this stops at the first name containing a character the device's
+        own charset cannot represent, which `decode_name` renders as ``?``.
+        That is a **heuristic with a known failure**: on the machine measured
+        it ends the reverb list correctly at 51 entries, and the very next
+        record decodes as ``001TL1`` -- valid characters, no meaning. A
+        caller that knows the count should pass ``limit`` and ignore the rule.
+
+        Counts measured on one S3000XL, offered as data and not as a rule:
+        **51 reverb presets, and the effect list ends the same way.** Another
+        machine or firmware may differ, and nothing here can check.
+        """
+        names: List[str] = []
+        for index in range(limit):
+            raw = self.fx_bytes(selector, index, 0, m.NAME_LENGTH,
+                                timeout=timeout)
+            name = m.decode_name(list(raw))
+            if "?" in name:
+                break                 # past the end; see the docstring
+            names.append(name)
+        return names
+
     def get_header_bytes(
         self,
         region: str,

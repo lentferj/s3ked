@@ -6701,3 +6701,69 @@ never re-read after the measurements existed.
 That is the same failure as the stale "provisional" entries in `TODO.md` and
 as eosed's §23: a document describing a state of knowledge that has since
 moved, with nothing in the process that would notice.
+
+## §88 — The effects structure, measured; no document describes it (2026-08-13)
+
+**Status: read and write both working, structure partly characterised.**
+Measured on an S3000XL with **no EB16 fitted**, which §86 established is no
+obstacle: the panel refuses the page, the data underneath is live.
+
+`RFXDATA`/`FXDATA` (0x2D/0x2E) have been in this project as opcodes with a
+five-value `FxSelector` and nothing else, because no source describes what
+they address. The Akai scan documents only the MULTI header's `fx1`..`fx4`
+pointers and its `fxfilename` — *references* to an effects file, not its
+contents.
+
+### What the five selectors are
+
+| selector | what it is |
+|---|---|
+| `FX_HEADER` | one record; 12-char name at **offset 3**, reading `EFFECTS FILE` |
+| `FX_ASSIGN` | one record, all zeroes on this machine |
+| `FX_ENTRY` | a list of **51** effect presets, `REVERB EQ 1` … `NAMEOFEFFECT` |
+| `RVB_ASSIGN` | byte-identical to `RVB_ENTRY` over the range compared |
+| `RVB_ENTRY` | a list of **51** reverb presets, `TIGHT ROOM 1` … `NAMEOFREVERB` |
+
+The name at offset 3 is the same placement the multi header uses, which is
+the one piece of this that a document did predict.
+
+`RVB_ASSIGN` and `RVB_ENTRY` returning identical bytes is **not explained**.
+Either they alias, or one is unimplemented, or they differ outside the range
+compared. Not investigated further and not modelled.
+
+### One entry is 128 bytes, found the only way that terminates
+
+The first attempt raised the byte count until the machine complained. It never
+complains: past the end it returns buffer contents (§11), so *"how long is
+this"* has no answer by that route and the measurement — "at least 256 bytes
+readable" — was worth nothing and was discarded.
+
+The stride is findable by asking **where the next entry starts** instead.
+Reading index 0 with a long count and locating index 1's known name puts it at
+offset **128**, for both lists. That is a read *inside* the structure, which
+the device answers honestly.
+
+### The end of a list is NOT discoverable, and the API says so
+
+There is no count in the header, and no validity marker in an entry — bytes
+12-15 read `0,0,0,0` for genuine entries and for garbage alike. Stopping on a
+repeated name fails too: past the end the buffer keeps changing and so never
+repeats.
+
+`fx_names` therefore stops at the first name containing a character the
+device's charset cannot represent, and its docstring calls that a heuristic
+with a known failure: on this machine the record after the last reverb decodes
+as `001TL1` — valid characters, no meaning. It would have been caught only
+because the *preceding* record already contained `?`.
+
+Both lists ending at exactly 51, and both ending with a template and a
+`NAMEOF…` placeholder, is decent evidence the boundary is right. It is not
+proof, and 51 is recorded as **data from one machine** rather than as a
+constant.
+
+### Write verified
+
+Entry 50's name was changed to `S3KED TEST` and restored; the bytes came back
+identical. So `FXDATA` writes take on a board-less machine, which is the point
+— an editor here can author effects for a program destined for a machine that
+has the board.

@@ -1104,3 +1104,110 @@ def test_the_re_read_happens_only_when_refusing():
     for _ in range(4):
         bridge.get_header_bytes("program", 0, 4, 2)
     assert len(device.sent) == 4, "no extra round trips on the happy path"
+
+
+# --- effects and reverb ------------------------------------------------------
+
+
+def _fx_machine(entries=("REVERB EQ 1", "RICH CHORUS", "FX TEMPLATE")):
+    """An FX structure that behaves like the machine, including past its end.
+
+    The important fidelity is the LAST part: an out-of-range entry read must
+    return something plausible rather than an error, because that is what the
+    device does (§11) and it is the whole reason fx_names cannot stop on a
+    failure.
+    """
+    from s3k import messages as m
+
+    store = {i: bytearray(m.encode_name(n)) + bytearray(116)
+             for i, n in enumerate(entries)}
+    junk = bytearray([0xC1, 0x88, 0xA2] + [0] * 125)   # not valid charset
+
+    def handler(frame):
+        channel, command, _payload = m.parse_frame(frame)
+        if command == m.Command.RFXDATA:
+            request = m.HeaderRequest.decode(frame)
+            raw = store.get(request.index, junk)
+            return m.HeaderData(
+                command=m.Command.FXDATA, index=request.index,
+                selector=request.selector, offset=request.offset,
+                data=bytes(raw[request.offset:request.offset + request.count]),
+                exclusive_channel=channel).encode()
+        if command == m.Command.FXDATA:
+            data = m.HeaderData.decode(frame)
+            raw = store.setdefault(data.index, bytearray(128))
+            raw[data.offset:data.offset + len(data.data)] = data.data
+            return m.Reply(code=m.ReplyCode.OK, exclusive_channel=channel).encode()
+        return None
+
+    return handler, store
+
+
+def test_fx_names_enumerates_a_preset_list():
+    from s3k import messages as m
+
+    handler, _store = _fx_machine()
+    bridge = _bridge_with(handler)
+    assert bridge.fx_names(m.FxSelector.FX_ENTRY) == [
+        "REVERB EQ 1", "RICH CHORUS", "FX TEMPLATE"]
+
+
+def test_fx_names_stops_where_the_charset_does():
+    """Past the end the device answers with buffer contents, not an error.
+
+    There is no count in the header and no validity marker in an entry, so
+    the only available signal is bytes the charset cannot represent. The
+    fake returns exactly that past its last entry.
+    """
+    from s3k import messages as m
+
+    handler, _store = _fx_machine()
+    bridge = _bridge_with(handler)
+    names = bridge.fx_names(m.FxSelector.FX_ENTRY, limit=40)
+    assert len(names) == 3, "must not run on into the junk"
+    assert all("?" not in n for n in names)
+
+
+def test_fx_names_honours_an_explicit_limit():
+    """A caller who knows the count should not depend on the heuristic."""
+    from s3k import messages as m
+
+    handler, _store = _fx_machine()
+    bridge = _bridge_with(handler)
+    assert bridge.fx_names(m.FxSelector.FX_ENTRY, limit=2) == [
+        "REVERB EQ 1", "RICH CHORUS"]
+
+
+def test_fx_bytes_round_trips_a_write():
+    """Verified on hardware too: renaming entry 50 and restoring it came back
+    byte-identical."""
+    from s3k import messages as m
+
+    handler, store = _fx_machine()
+    bridge = _bridge_with(handler)
+
+    bridge.set_fx_bytes(m.FxSelector.FX_ENTRY, bytes(m.encode_name("NEW NAME")),
+                        1, 0)
+    assert bridge.fx_names(m.FxSelector.FX_ENTRY)[1] == "NEW NAME"
+    assert bytes(store[1][:12]) == bytes(m.encode_name("NEW NAME"))
+
+
+def test_fx_bytes_refuses_a_short_reply():
+    """The same guard the header regions have: asked for n, got fewer."""
+    import pytest
+    from s3k import messages as m
+    from s3k.bridge import DeviceError
+
+    def stingy(frame):
+        channel, command, _payload = m.parse_frame(frame)
+        if command == m.Command.RFXDATA:
+            request = m.HeaderRequest.decode(frame)
+            return m.HeaderData(
+                command=m.Command.FXDATA, index=request.index,
+                selector=request.selector, offset=request.offset,
+                data=b"\x01\x02", exclusive_channel=channel).encode()
+        return None
+
+    bridge = _bridge_with(stingy)
+    with pytest.raises(DeviceError, match="asked for"):
+        bridge.fx_bytes(m.FxSelector.FX_ENTRY, 0, 0, 12)
