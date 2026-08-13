@@ -161,9 +161,14 @@ class ZoneRef:
         A dead key range kills the whole keygroup, so all four of its zones
         are unreachable, where a dead velocity pair kills only its own zone.
 
-        Reachability here is now the conjunction of both. What is still not
-        covered: whether some *other* keygroup shadows this one, and anything
-        the machine does with overlapping ranges.
+        Reachability here is the conjunction of both.
+
+        **No keygroup shadows another.** Two keygroups made to overlap on one
+        note both answered it -- measured, since a program that silently
+        dropped the lower-priority voice would make every layered program
+        wrong in a way no file inspection reveals. So a zone in an
+        overlapping keygroup stays reachable and nothing here needs to model
+        priority.
         """
         return (self.hi_vel > 0 and self.lo_vel <= self.hi_vel
                 and self.lo_note <= self.hi_note)

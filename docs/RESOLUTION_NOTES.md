@@ -6161,3 +6161,61 @@ re-reading the last real keygroup — and they would look entirely plausible.
 
 Cost: 4 reads per keygroup plus one per program. A 61-keygroup bank audits in
 4.3 s.
+
+## §81 — Overlapping keygroups layer; neither shadows the other (2026-08-13)
+
+**Status: settled.** Measured 2026-08-13, RAM only.
+
+§80 left one half of reachability open: whether a keygroup that overlaps
+another on the same note still sounds, or whether one wins. The consequence
+is mpc2emu's — their writer builds one keygroup per key span, so overlaps
+arise from any layered multisample. If only one answers, every layered
+program they write loses voices silently and no file inspection would show
+it.
+
+### Built rather than found
+
+Program 1 has 61 keygroups; all were parked at 24..24 except two, which were
+made to overlap on note 60. A program found in a library carries whatever its
+author intended; this needed the case with nothing else varying.
+
+### The discriminator is the sample, not the level
+
+Two keygroups playing the same sample at the same pitch sum coherently, and
++6 dB is hard to distinguish from one louder voice. So keygroup A got `SINE`
+(one partial) and keygroup B got `SQUARE` (strong third harmonic), making
+`3f0/f0` a marker for *which* voice is present rather than merely how loud
+the result is.
+
+```
+case                        RMS    3f0/f0
+A only  (SINE)          0.01999     0.000
+B only  (SQUARE)        0.01981     0.335
+BOTH overlapping        0.03377     0.184
+```
+
+**Both answer.** Three things agree, which is why this is settled rather than
+suggestive:
+
+1. `0.03377` exceeds the loudest single (`0.01999`) and also the incoherent
+   power sum (`0.02814`), sitting below the fully coherent amplitude sum
+   (`0.03980`) — two voices sharing a fundamental, partly in phase.
+2. The third harmonic survives at `0.184`. If `SQUARE` alone were sounding it
+   would read `0.335`; if `SINE` alone, `0.000`. Predicted for both present:
+   `0.335 × 0.01981/0.03980 = 0.167` against `0.184` measured.
+3. `SINE` alone reads `3f0/f0 = 0.000`, which validates the marker itself —
+   a spectral ratio that never reached zero would say nothing about which
+   voice was present.
+
+### Consequence
+
+`ZoneRef.reachable` needs no priority model: a zone in an overlapping
+keygroup stays reachable. The caveat §80 carried — "whether some other
+keygroup shadows this one" — is closed, and closed in the direction that
+required no code change, which is worth stating because the alternative
+would have required modelling voice priority to avoid reporting live zones
+as dead.
+
+Not covered: what happens when overlapping voices exceed polyphony. That is
+a resource limit rather than a routing rule, and it is not what an audit of
+a program's references is asking about.
