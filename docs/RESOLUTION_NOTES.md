@@ -6767,3 +6767,75 @@ Entry 50's name was changed to `S3KED TEST` and restored; the bytes came back
 identical. So `FXDATA` writes take on a board-less machine, which is the point
 — an editor here can author effects for a program destined for a machine that
 has the board.
+
+## §89 — Tuning is settable in CENTS, not in 1/256ths, and §56 never tested that (2026-08-13)
+
+**Status: settled.** Measured at the panel and by round trip.
+
+§56 established that `KGTUNO` holds 1/256 of a semitone and that the declared
+range `0..50` was the display range transcribed as a value range, 256x too
+narrow. All true. It also said **"every value round-tripped exactly"** — and
+every value it tried was a multiple of 256. Whole semitones. Nobody wrote a
+value that was not.
+
+### The display agrees; the machine quantises
+
+Keygroup tune lives under **KGrp → SPAN**, not the Pitch page — that page
+carries `LFO1>pitch` and `Env2>Pitch`, which are modulation depths.
+
+```
+raw 5120  ->  panel shows +20        20 semitones exactly
+raw 5248  ->  panel shows +20.50     20 semitones + 128/256
+raw 5121  ->  panel shows +20.00     and READS BACK 5120
+```
+
+The last line is the finding. The panel shows two decimals of a semitone,
+which is one cent, and the byte holds 1/256 of a semitone, which is 0.39 of
+one — so the byte looks finer than the screen. **It is not.** Writing a value
+off the cent grid stores the nearest value on it.
+
+### The grid, fitted to 22 points
+
+```
+stored = trunc( round_half_away( written / 2.56 ) * 2.56 )
+```
+
+22 of 22 measured values fit. The one that missed at first was Python's
+banker's rounding, not the machine's: raw 32 is exactly 12.5 cents, where
+`round()` goes to even and the sampler goes up.
+
+So **2.56 raw units is one cent**, and only 101 of the 256 values in a
+semitone are reachable:
+
+```
+ 0 cents -> raw   0     4 cents -> raw  10     8 cents -> raw  20
+ 1 cent  -> raw   2     5 cents -> raw  12     9 cents -> raw  23
+ 2 cents -> raw   5     6 cents -> raw  15    10 cents -> raw  25
+ 3 cents -> raw   7     7 cents -> raw  17
+```
+
+### What this changes
+
+**Nothing about the law.** `scales.py` reports `0.391667 cents` per raw unit,
+which is 100/256 and remains exactly right for the values the machine keeps.
+
+**Something about writing.** A caller computing raw units from cents should
+go through the grid — `trunc(cents * 2.56)` — rather than assuming any 16-bit
+value is honoured. Anything else is silently snapped, and the read-back is the
+only way to notice. That matters most for a converter authoring programs, so
+it goes in the mpc2emu handoff.
+
+**And it is a stored-versus-displayed answer of the opposite kind to
+`POLYPH`.** `POLYPH` stores 31 and shows 32, so the display is ahead of the
+byte. Here the display and the byte agree perfectly at every reachable value;
+what differs is that the byte *appears* to offer resolution the machine will
+not accept. A field can disagree with its display in more than one way, and
+only one of them is an offset.
+
+### Method note
+
+This was found by testing a value that no previous sweep had reason to try.
+§56 swept 256, 512, 1280, 2560, 5120 and their negatives — a sensible ladder,
+every rung a whole semitone, and the quantisation is invisible from all of
+them. The +1 came from asking a different question: not "what does this
+field mean" but "can the display represent everything the byte can hold".
