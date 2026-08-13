@@ -2455,7 +2455,7 @@ _PARAMS: List[Parameter] = [
         99,
         desc="Attack rate of envelope 3",
         notes="also called ATTAK3 in later OS versions",
-        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
+        models="Envelope 3 exists and WORKS without the IB304F: its stages were measured on an S3000XL with no filter board and no effects board, routed to filter 1 through the assignable matrix (§50, §63). What the board adds is the SECOND FILTER this envelope can also target -- `2nd filter board IB304F not fitted!` gates that page, not this envelope. Previously noted here as doing nothing without the board, citing §19, which is about FILFRQ and says nothing on the subject. RESOLUTION_NOTES §87.",
     ),
     _p(
         "keygroup",
@@ -2466,7 +2466,7 @@ _PARAMS: List[Parameter] = [
         0,
         99,
         desc="Final level of attack phase (phase 1) of envelope 3",
-        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
+        models="Envelope 3 exists and WORKS without the IB304F: its stages were measured on an S3000XL with no filter board and no effects board, routed to filter 1 through the assignable matrix (§50, §63). What the board adds is the SECOND FILTER this envelope can also target -- `2nd filter board IB304F not fitted!` gates that page, not this envelope. Previously noted here as doing nothing without the board, citing §19, which is about FILFRQ and says nothing on the subject. RESOLUTION_NOTES §87.",
     ),
     _p(
         "keygroup",
@@ -2477,7 +2477,7 @@ _PARAMS: List[Parameter] = [
         0,
         99,
         desc="Rate of phase 2 of envelope 3",
-        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
+        models="Envelope 3 exists and WORKS without the IB304F: its stages were measured on an S3000XL with no filter board and no effects board, routed to filter 1 through the assignable matrix (§50, §63). What the board adds is the SECOND FILTER this envelope can also target -- `2nd filter board IB304F not fitted!` gates that page, not this envelope. Previously noted here as doing nothing without the board, citing §19, which is about FILFRQ and says nothing on the subject. RESOLUTION_NOTES §87.",
     ),
     _p(
         "keygroup",
@@ -2488,7 +2488,7 @@ _PARAMS: List[Parameter] = [
         0,
         99,
         desc="Final level of phase 2 of envelope 3",
-        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
+        models="Envelope 3 exists and WORKS without the IB304F: its stages were measured on an S3000XL with no filter board and no effects board, routed to filter 1 through the assignable matrix (§50, §63). What the board adds is the SECOND FILTER this envelope can also target -- `2nd filter board IB304F not fitted!` gates that page, not this envelope. Previously noted here as doing nothing without the board, citing §19, which is about FILFRQ and says nothing on the subject. RESOLUTION_NOTES §87.",
     ),
     _p(
         "keygroup",
@@ -2500,7 +2500,7 @@ _PARAMS: List[Parameter] = [
         99,
         desc="Rate of phase 3 of envelope 3",
         notes="also called DECAY3 in later OS versions",
-        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
+        models="Envelope 3 exists and WORKS without the IB304F: its stages were measured on an S3000XL with no filter board and no effects board, routed to filter 1 through the assignable matrix (§50, §63). What the board adds is the SECOND FILTER this envelope can also target -- `2nd filter board IB304F not fitted!` gates that page, not this envelope. Previously noted here as doing nothing without the board, citing §19, which is about FILFRQ and says nothing on the subject. RESOLUTION_NOTES §87.",
     ),
     _p(
         "keygroup",
@@ -2512,7 +2512,7 @@ _PARAMS: List[Parameter] = [
         99,
         desc="Final level of phase 3 of envelope 3",
         notes="also called SUSTN3 in later OS versions",
-        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
+        models="Envelope 3 exists and WORKS without the IB304F: its stages were measured on an S3000XL with no filter board and no effects board, routed to filter 1 through the assignable matrix (§50, §63). What the board adds is the SECOND FILTER this envelope can also target -- `2nd filter board IB304F not fitted!` gates that page, not this envelope. Previously noted here as doing nothing without the board, citing §19, which is about FILFRQ and says nothing on the subject. RESOLUTION_NOTES §87.",
     ),
     _p(
         "keygroup",
@@ -2524,7 +2524,7 @@ _PARAMS: List[Parameter] = [
         99,
         desc="Rate of release phase (phase 4) of envelope 3",
         notes="also called RELSE3 in later OS versions",
-        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
+        models="Envelope 3 exists and WORKS without the IB304F: its stages were measured on an S3000XL with no filter board and no effects board, routed to filter 1 through the assignable matrix (§50, §63). What the board adds is the SECOND FILTER this envelope can also target -- `2nd filter board IB304F not fitted!` gates that page, not this envelope. Previously noted here as doing nothing without the board, citing §19, which is about FILFRQ and says nothing on the subject. RESOLUTION_NOTES §87.",
     ),
     _p(
         "keygroup",
@@ -2535,7 +2535,7 @@ _PARAMS: List[Parameter] = [
         0,
         99,
         desc="Final target level of envelope 3",
-        models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
+        models="Envelope 3 exists and WORKS without the IB304F: its stages were measured on an S3000XL with no filter board and no effects board, routed to filter 1 through the assignable matrix (§50, §63). What the board adds is the SECOND FILTER this envelope can also target -- `2nd filter board IB304F not fitted!` gates that page, not this envelope. Previously noted here as doing nothing without the board, citing §19, which is about FILFRQ and says nothing on the subject. RESOLUTION_NOTES §87.",
     ),
     _p(
         "keygroup",

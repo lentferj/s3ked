@@ -6642,3 +6642,62 @@ machine.** The S3000XL's own UI declines to enter a page it judges useless,
 and the register underneath has no such opinion. Anywhere else this project
 has taken a panel behaviour as evidence about the device, that inference is
 worth re-examining.
+## §87 — Envelope 3 does not need the IB304F, and the note saying so cited an unrelated finding (2026-08-13)
+
+**Status: corrected.** Measured on an S3000XL with **no** filter board and
+**no** effects board.
+
+`params.py` flagged fifteen fields as IB304F-dependent with the note *"the
+fields exist in the header on every model; without the board they do nothing"*.
+Eight of them are envelope 3: `ENV3R1`..`ENV3L4`.
+
+**Envelope 3 works on a machine that has never had the board.** §50 measured
+all four of its stages, §63 its key scaling and all four velocity scalers, and
+§64 the rest — on this machine, routed to filter **1** through the assignable
+matrix. The whole envelope-3 calibration was performed on hardware the note
+claims it could not run on.
+
+The note cited **§19**, which is the `FILFRQ` measurement and says nothing
+about the IB304F at all. So the claim was an assumption wearing a citation —
+the most persuasive form a wrong claim can take in this project, because the
+reference makes it look checked.
+
+### What the board actually gates
+
+Jan's photograph settles it. The second-filter page renders on the panel with
+its fields visible — frequency, key follow, resonance, and the three
+modulation depths — and a line across the bottom:
+
+```
+2nd filter board IB304F not fitted !
+```
+
+So the board supplies **the second filter**, which envelope 3 can target
+among other destinations. It does not supply envelope 3. The seven fields
+that really are board-dependent — `FLT2GAIN`, `FLT2MODE`, `FLT2Q`, `FIL2FR`,
+`K_FRQ2`, `TONEFREQ`, `TONESLOP` — keep the note.
+
+### Two different gates, which is worth knowing
+
+The panel does not treat the two boards alike:
+
+| page | without the board |
+|---|---|
+| EFFECTS (EB16) | **refused** — lamp stays dark, "not fitted" and no page |
+| FILTER 2 (IB304F) | **rendered**, fields shown, warning line at the bottom |
+
+And §86 showed the EFFECTS refusal is a panel policy that the mode register
+ignores entirely. So "the panel would not let me" has now been wrong twice as
+evidence about what the machine can do.
+
+### How it survived
+
+Every envelope-3 sweep in this project ran against a board-less machine and
+produced clean laws, at r² 0.999-something, while a note three files away said
+those fields did nothing. **Neither ever looked at the other.** The
+measurements did not check the parameter table's claims, and the table was
+never re-read after the measurements existed.
+
+That is the same failure as the stale "provisional" entries in `TODO.md` and
+as eosed's §23: a document describing a state of knowledge that has since
+moved, with nothing in the process that would notice.
