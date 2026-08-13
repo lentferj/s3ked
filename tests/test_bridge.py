@@ -1053,3 +1053,54 @@ def test_an_out_of_range_page_is_refused_here_because_the_machine_will_not():
         with pytest.raises(ValueError, match="power cycle"):
             bridge.select_mode(bad)
     assert store[91] == 10, "nothing out of range may reach the wire"
+
+
+def test_a_stale_count_does_not_refuse_a_valid_read():
+    """The cache cannot see the front panel, so it must not be trusted to refuse.
+
+    A program or keygroup added at the machine is invisible to this bridge
+    until something happens to invalidate. Refusing that read has no recourse
+    but a restart, which is worse than the stale-buffer read the check exists
+    to prevent -- so a refusal is re-checked against a fresh count first.
+    """
+    handler, store = _misc_bank()
+    from s3k import messages as m
+
+    programs = ["ONE"]
+
+    def sampler(frame):
+        channel, command, _payload = m.parse_frame(frame)
+        if command == m.Command.RPLIST:
+            return m.ProgramList(names=list(programs),
+                                 exclusive_channel=channel).encode()
+        return _sampler()(frame)
+
+    device = FakeDevice(sampler)
+    bridge = S3kBridge(device, device, "fake", timeout=0.5)
+    bridge.get_header_bytes("program", 0, 4, 2)
+    assert bridge._counts["program"] == 1
+
+    programs.append("TWO")            # added at the panel; nothing told us
+    bridge.get_header_bytes("program", 1, 4, 2)   # must not raise
+    assert bridge._counts["program"] == 2, "the refusal path re-read the count"
+
+
+def test_a_genuinely_bad_index_is_still_refused_after_the_re_read():
+    """Self-healing must not become never-refusing."""
+    import pytest
+
+    device = FakeDevice(_sampler())
+    bridge = S3kBridge(device, device, "fake", timeout=0.5)
+    with pytest.raises(ValueError, match="does not exist"):
+        bridge.get_header_bytes("program", 99, 4, 2)
+
+
+def test_the_re_read_happens_only_when_refusing():
+    """A valid read must not pay for the recovery path."""
+    device = FakeDevice(_sampler())
+    bridge = S3kBridge(device, device, "fake", timeout=0.5)
+    bridge.program_list()
+    device.sent.clear()
+    for _ in range(4):
+        bridge.get_header_bytes("program", 0, 4, 2)
+    assert len(device.sent) == 4, "no extra round trips on the happy path"

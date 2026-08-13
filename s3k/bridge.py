@@ -644,6 +644,11 @@ class S3kBridge:
         self._counts = {"program": None, "sample": None}
         self._groups = {}
 
+    def _recount(self, region: str, *, timeout: Optional[float] = None) -> int:
+        """Drop this region's cached count and read it again."""
+        self._counts[region] = None
+        return self._count(region, timeout=timeout)
+
     def _count(self, region: str, *, timeout: Optional[float] = None) -> int:
         if self._counts.get(region) is None:
             if region == "program":
@@ -693,8 +698,21 @@ class S3kBridge:
                 f"past the header rather than an error (§11).")
         if not self.bounds_check:
             return
+        # A refusal is re-checked against a FRESH count before it stands. The
+        # cache cannot see the front panel, so a stale entry would otherwise
+        # refuse a read that is perfectly valid -- a program or keygroup added
+        # at the machine, or by another session, is invisible until something
+        # here happens to invalidate. That failure has no recourse but a
+        # restart, which makes it worse than the silent stale-buffer read the
+        # check exists to prevent.
+        #
+        # The re-read costs one round trip and only on the refusal path, which
+        # is the right way round: refusing is rare, and being wrong about it is
+        # expensive.
         if region in ("program", "sample"):
             held = self._count(region, timeout=timeout)
+            if not 0 <= index < held:
+                held = self._recount(region, timeout=timeout)
             if not 0 <= index < held:
                 raise ValueError(
                     f"{region} {index} does not exist; the machine holds "
@@ -703,10 +721,15 @@ class S3kBridge:
         elif region == "keygroup":
             held = self._count("program", timeout=timeout)
             if not 0 <= index < held:
+                held = self._recount("program", timeout=timeout)
+            if not 0 <= index < held:
                 raise ValueError(
                     f"program {index} does not exist; the machine holds "
                     f"{held} (§11).")
             groups = self._keygroup_count(index, timeout=timeout)
+            if not 0 <= selector < groups:
+                self._groups.pop(index, None)
+                groups = self._keygroup_count(index, timeout=timeout)
             if not 0 <= selector < groups:
                 raise ValueError(
                     f"program {index} has {groups} keygroup(s); asked for "
