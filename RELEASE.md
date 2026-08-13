@@ -3,6 +3,13 @@
 
 # What a first public beta needs
 
+> **Frozen.** The 0.1 line lives on `release/0.1.x`, cut from `main` at
+> `4b67cc5` with 775 tests green. That branch takes **bug fixes only** — see
+> [`docs/FREEZE.md`](docs/FREEZE.md) for what counts as one, including the
+> awkward case where most of this project's content is documented
+> measurements. New work goes to `main`.
+
+
 Ordered by what would embarrass the project most if it were skipped.
 
 ## 1. Run the TUI. As a person. Before anything else.
