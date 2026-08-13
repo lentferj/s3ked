@@ -11,6 +11,25 @@ The reasoning behind almost every entry here lives in
 `docs/RESOLUTION_NOTES.md`, which is numbered by section (§n) and is the
 long-form record; this file is the short one.
 
+## [Unreleased]
+
+Work after the 0.1 line was frozen. `release/0.1.x` takes bug fixes only; see
+`docs/FREEZE.md` for what counts as one.
+
+### Added
+
+- **Effects and reverb read/write** (`fx_bytes`, `set_fx_bytes`, `fx_names`).
+  No document describes the structure — the Akai scan covers only the multi
+  header's pointers to an effects file — so it was measured: a 12-character
+  name at offset 3, entries 128 bytes apart, and two lists of 51 presets. Both
+  lists' extents are recorded as data from one machine rather than as
+  constants, because the device offers no count and answers past the end with
+  buffer contents (§88).
+- **All of it works on a machine with no EB16 fitted**, which is the point: an
+  editor can author effects for a program destined for a machine that has the
+  board. It is fenced behind declaring the board, like the IB304F fields
+  (§86).
+
 ## [0.1.0] — unreleased, first public beta
 
 First release. An editor and librarian for the Akai S1000/S3000 family over
