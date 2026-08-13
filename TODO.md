@@ -713,7 +713,20 @@ Two classes, both structural rather than incidental:
    which has an eyes-free discriminator -- `RMULTIDATA` answers in every
    mode, which was the best candidate (§78).
 
-Highest value: envelope 3 at offsets 179-186, on which §50 rests entirely and
+**Answered 2026-08-13: this machine has NO expansion boards** -- 8 MB of
+flash ROM and nothing else, no EB16 effects board and no additional filter
+board. Two consequences, both good:
+
+- **§50 needs no caveat.** The owner's manual says envelope 3 at offsets
+  179-186 should not work without the IB304F. It works, measured across all
+  four stages, on a machine that does not have one. So the manual is wrong
+  about that and §50 rests on base-machine functionality.
+- **The value-11 hypothesis is live and now the leading one.** A firmware
+  page for a board that is not fitted would crash on initialisation exactly
+  as observed (§85), and this machine is missing precisely the boards such a
+  page would belong to.
+
+Remaining highest value: envelope 3 at offsets 179-186, on which §50 rests entirely and
 which the owner's manual says should not work at all without the IB304F; the
 IB304F's own presence, which one page settles and which mpc2emu also carries;
 and whether the ten inert fields (§39, §47) have pages at all or merely have no

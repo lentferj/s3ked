@@ -1351,12 +1351,17 @@ class S3kBridge:
     #: the machine fail on absent media, which is what a save page opening on
     #: an empty floppy drive would do (§78).
     #:
-    #: **"When available" is not decoration.** With no flash fitted, writing 2
-    #: is accepted and the register reads back 2, while the volume list stays
-    #: exactly what it was -- selecting FLASH and selecting FLOPPY returned
-    #: the same 100 volumes. So the register having taken the value is not
-    #: evidence that the device is there, and a caller that needs to know
-    #: must look at what comes back rather than at byte[0].
+    #: **The register taking a value is not evidence the device is there**,
+    #: and a caller that needs to know must look at what comes back.
+    #:
+    #: Selecting FLASH and selecting FLOPPY return byte-identical volume
+    #: listings -- the same 100 entries, `BOOT SYSTEM#` then `AUTOLOAD 01`
+    #: onward. This was first written up as "that is what an absent device
+    #: looks like", which was wrong: the machine has 8 MB of flash fitted.
+    #: The identical listings are **unexplained**. Candidates not
+    #: distinguished: a listing that is not per-device at all, a re-read that
+    #: did not fire, or a genuine shared boot-volume namespace. Do not build
+    #: on it either way.
     DEVICE_TYPES = {0: "FLOPPY", 1: "HARD", 2: "FLASH"}
 
     def select_device(self, kind: int, *,
