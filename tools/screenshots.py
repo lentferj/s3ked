@@ -66,6 +66,9 @@ SHOTS = {
     "edit": (("w", "e"), False, "PRIORT", "range:"),
     "master": (("m",), True, None, "Destructive operations"),
     "disk": (("d",), False, None, "volume"),
+    # the check that finds programs whose samples never arrived; the demo
+    # carries one dangling reference on purpose so this has something to show
+    "integrity": (("i",), False, None, "silent zone"),
 }
 
 

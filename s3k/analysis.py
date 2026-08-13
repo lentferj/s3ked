@@ -41,8 +41,8 @@ name cannot be told apart by a zone that names one of them.
 
 **An unassigned zone holds twelve SPACES**, charset value 10, decoding to a
 blank string. That is what the machine actually does, measured on a loaded
-program: an unused zone reads ``[10]*12`` while its neighbour reads
-a sample on that volume.
+program: an unused zone reads ``[10]*12`` while the assigned zone beside it
+holds a twelve-character name.
 
 This module first assumed twelve *zero* bytes and tested against a fixture
 that invented them, which passed nine synthetic tests and then reported 182

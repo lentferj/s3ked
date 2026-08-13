@@ -5385,8 +5385,9 @@ before   1 program,  4 samples,   131,072 words (0.8%)
 after    2 programs, 12 samples, 1,942,384 words (11.6%)
 ```
 
-the single program on that volume arrived with all eight of its samples. So "ALL PROGS +
-SAMPLES" does pull the dependencies, which was the last part of the workflow.
+The single program on that volume arrived with all eight of its samples. So
+"ALL PROGS + SAMPLES" does pull the dependencies, which was the last part of
+the workflow.
 
 The earlier run that ended in "BUSY" until a power cycle was a 58.7 MB volume
 into a 32 MB machine while a poller interrupted it every 8 seconds. **Neither
@@ -5939,8 +5940,8 @@ silently picking the first.
 
 ### An unassigned zone holds twelve SPACES
 
-Measured: an unused zone reads `[10]*12` and decodes to blank, while its
-neighbour reads a sample on that volume.
+Measured: an unused zone reads `[10]*12` and decodes to blank, while the
+assigned zone beside it holds a twelve-character name.
 
 This module was written assuming twelve **zeros**, and tested against a
 fixture that invented them. Nine synthetic tests passed. The first real bank
@@ -5975,7 +5976,7 @@ and require it to name exactly the affected zones.
 
 ```
 before   66 references, 2 programs, 12 samples, 0 dangling
-predict  deleting 'a sample on that volume' and 'F 5' dangles 24 references
+predict  deleting the two most-referenced samples dangles 24 references
 after    24 DANGLING in 1 program — exactly those two names
 ```
 

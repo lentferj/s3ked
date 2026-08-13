@@ -98,6 +98,40 @@ fired, because the protocol offers no device-side confirmation and no undo:
 
 <img src="docs/screenshots/master.svg" alt="the Master screen listing destructive operations" width="100%">
 
+### What plays silence
+
+A load that overruns memory says "insufficient waveform memory" **once** and
+then behaves normally. The programs stay resident and selectable; the ones
+whose samples never arrived play nothing, and the machine will not tell you
+which. `i` walks every keygroup and says:
+
+<img src="docs/screenshots/integrity.svg" alt="the integrity report naming programs with zones that reference a missing sample" width="100%">
+
+`u` answers the other direction — every zone that uses the selected sample.
+Both are read-only, so neither needs the write gate. From the shell:
+
+```console
+$ s3kcli audit
+DANGLING -- these zones name a sample the machine does not hold, and play silence:
+
+prog  program      kg  zone  names
+4     STRINGS LO   2   1     TINE HARD C3
+
+11 zone reference(s) across 5 program(s); 9 resident sample(s); 1 DANGLING in 1 program(s) — these play silence; 3 unused sample(s)
+
+$ s3kcli audit --sample "BASS C2"
+prog  program      kg  zone
+0     BASS ROUND   1   1
+1     BASS SUB     0   1
+
+2 zone(s) use 'BASS C2'
+```
+
+Zones reference samples by **name**, not by number, so renaming a sample
+breaks every zone that named it — and because the machine enforces no name
+uniqueness, two samples sharing a name make a reference that cannot be
+resolved to either. The audit reports that rather than picking one.
+
 These are generated from `--demo` by `tools/screenshots.py`, which checks each
 image contains what its caption claims before it is written.
 
