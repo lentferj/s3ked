@@ -1116,9 +1116,64 @@ class S3kBridge:
         partition switching worked, then stopped, and the difference was this
         flag left set by an earlier panel change. It is cleared here.
         """
-        self._misc_byte(self._MISC_SELECTION_HELD, 0, timeout=timeout)
-        self._misc_byte(self._MISC_PARTITION, partition, timeout=timeout)
+        self._force_reread(timeout=timeout)
+        self._misc_write_verify(self._MISC_PARTITION, partition,
+                                "selecting partition", timeout=timeout)
         return self.load_source(timeout=timeout)
+
+    def _misc_write_verify(self, index: int, value: int, what: str, *,
+                           timeout: Optional[float] = None) -> int:
+        """Write a miscellaneous byte and believe the READ, not the reply.
+
+        Three of these registers now answer with error code 1 and perform the
+        write regardless -- ``byte[2]``, ``byte[4]`` and the mode -- and
+        ``byte[4]`` additionally answers OK and ignores the write in one
+        state. There is no state in which the acknowledgement is a reliable
+        account of what happened, so this stops asking it: write, read back,
+        and raise only if the register did not end up holding the value.
+
+        That is not a workaround for an unreliable machine. The machine is
+        consistent; the acknowledgement simply does not mean what the frame
+        layout implies, and an editor that raises on it aborts work that has
+        already succeeded. A bus map died that way.
+        """
+        try:
+            self._misc_byte(index, value, timeout=timeout)
+        except DeviceError:
+            pass
+        got = self._misc_byte(index, timeout=timeout)
+        if got != value:
+            raise DeviceError(
+                f"{what}: asked for {value}, register reads {got}")
+        return got
+
+    def _force_reread(self, *, timeout: Optional[float] = None) -> None:
+        """Make the machine act on a selection it has only recorded.
+
+        Writing the SCSI ID or the device type stores the choice and does
+        **not** send the machine to look at it: sweeping the ID and reading
+        the volume list after each write returned the same list every time,
+        and reading after a following write returned each drive's real list
+        one step behind. Off by exactly one, which is the signature of a read
+        taken before the machine had gone anywhere.
+
+        A write to ``byte[4]`` or to the partition both trigger it, equally
+        and immediately. ``byte[4]`` is used here because it does not move the
+        selection.
+
+        **It answers with error code 1 and performs the write anyway**, in
+        every state tested, on both the SINGLE and LOAD pages. That is the
+        third register on this machine whose acknowledgement is wrong in one
+        direction or the other, so the error is swallowed and the caller is
+        expected to check ``load_source`` rather than trust the ack. Not
+        swallowing it is what made a whole bus map read the wrong discs and
+        then abort: the exception fired on a device that was working
+        perfectly.
+        """
+        try:
+            self._misc_byte(self._MISC_SELECTION_HELD, 0, timeout=timeout)
+        except DeviceError:
+            pass
 
     #: What ``byte[0]`` means. Only HARD and FLASH are confirmed: the machine
     #: read 1 sitting on HARD, and writing 2 put the panel on FLASH -- seen by
@@ -1137,8 +1192,9 @@ class S3kBridge:
         once, when an empty listing was read as a broken partition write
         rather than as a switch to a device with no media (§70).
         """
-        self._misc_byte(self._MISC_SELECTION_HELD, 0, timeout=timeout)
-        self._misc_byte(self._MISC_DEVICE_TYPE, kind, timeout=timeout)
+        self._misc_write_verify(self._MISC_DEVICE_TYPE, kind,
+                                "selecting device", timeout=timeout)
+        self._force_reread(timeout=timeout)
         return self.load_source(timeout=timeout)
 
     def select_drive(self, scsi_id: int, *,
@@ -1157,8 +1213,9 @@ class S3kBridge:
         sampler answers to, over the bus it is answering on, is not something
         this offers.
         """
-        self._misc_byte(self._MISC_SELECTION_HELD, 0, timeout=timeout)
-        self._misc_byte(self._MISC_SCSI_DRIVE_ID, scsi_id, timeout=timeout)
+        self._misc_write_verify(self._MISC_SCSI_DRIVE_ID, scsi_id,
+                                "selecting SCSI drive", timeout=timeout)
+        self._force_reread(timeout=timeout)
         return self.load_source(timeout=timeout)
 
     def hd_directory(self, kind: int = 1, *, limit: int = 512,

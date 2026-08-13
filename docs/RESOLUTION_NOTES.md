@@ -5669,3 +5669,74 @@ undone by deleting, whereas this is the delete.
 
 "CLR then load" is therefore two deliberate operations here, which is
 honest: it is two on the machine as well.
+
+## §76 — The drive ID records a choice; a second write makes the machine act (2026-08-13)
+
+**Status: settled.** Measured 2026-08-13. Reads and selection writes only.
+
+Three defects in this project's own code, found by trying to use it at bus
+scale for the first time. None of them is a defect in the machine.
+
+### 1. Writing the SCSI ID does not send the machine to the drive
+
+Sweeping the ID and reading the volume list after each write returned **the
+same list every time** — six IDs, four volumes, identical first name. Reading
+after a *following* write to `byte[2]` or `byte[4]` returned each drive's
+real list, and the id-only column turned out to be the same data **one drive
+behind**:
+
+```
+drive |  A: id only          B: id+partition
+  0   |    4 (prev drive's)     9
+  1   |    9 (drive 0's)        4
+  2   |    4 (drive 1's)       31
+  3   |   31 (drive 2's)       18
+  4   |   18 (drive 3's)        1
+```
+
+Off by exactly one is the signature of a read taken before the machine had
+gone anywhere. The ID register **records** a selection; a subsequent write to
+`byte[2]` or `byte[4]` is what makes it **act**. Both trigger it equally;
+`byte[4]` is now used, since it does not move the selection.
+
+§72's "sweeping the ID walks through five different listings" was right that
+the ID is not bound at boot, and wrong about the mechanism — the listings it
+saw were each one step stale, and it never compared them against a known
+disc.
+
+### 2. Three registers answer with an error and perform the write anyway
+
+`byte[2]`, `byte[4]` and the mode register all reply **error code 1** and
+carry out the write, in every state tested, on both the SINGLE and LOAD
+pages. `byte[4]` additionally replies OK and ignores the write in one state
+(§72). So there is no state in which the acknowledgement is a reliable
+account of what happened.
+
+The bridge raised on it. That aborted a bus scan mid-way on a device that was
+working perfectly, and produced "SCSI 3-7: write refused" for drives that
+were simply never written to. Selection writes now use `_misc_write_verify`:
+write, swallow `DeviceError`, read back, and raise only if the register did
+not end up holding the value. A test asserts the error is swallowed **and**
+that a genuine refusal — a register that does not move — still raises, since
+the easy version of this fix swallows both.
+
+### 3. The volume list is per-partition, not per-drive
+
+"9, 4, 31, 18, 1 volumes on drives 0-4" is really the count in whichever
+partition each drive happened to have selected. Re-reading with different
+partitions current gives different counts for the same disc. Volumes live
+inside partitions, so a volume count is only meaningful alongside the
+partition it was read in.
+
+### Method note, and a cost
+
+The first bus map was run before any of this was understood, and every number
+in it was wrong: stale lists attributed to the wrong drives, and whole
+partitions reported as refusing writes that were never attempted. It looked
+entirely plausible. What exposed it was re-reading two drives a few minutes
+later and getting different answers — the check was cheap and was only done
+because the numbers were being used for something else.
+
+**A directory read that follows a selection write needs the selection to have
+taken effect, and the machine does not say when it has.** Read something
+twice before believing a survey of it.

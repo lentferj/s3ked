@@ -907,3 +907,75 @@ def test_select_mode_reports_what_the_register_reads_not_the_ack():
 
     bridge = Contrary()
     assert bridge.select_mode(0) == 0, "the write took despite the error"
+
+
+# --- registers whose acknowledgement does not describe what happened --------
+
+
+def _misc_bank(*, error_on=(), ignore=()):
+    """A miscellaneous byte bank that answers like the real machine.
+
+    ``error_on`` indices reply with error code 1 and perform the write
+    anyway -- byte[2], byte[4] and the mode all do this. ``ignore`` indices
+    reply OK and do nothing, which byte[4] also does in one state. Between
+    them there is no reply that can be believed, which is the point.
+    """
+    from s3k import messages as m
+
+    store = {}
+
+    def handler(frame):
+        channel, command, payload = m.parse_frame(frame)
+        if command == m.Command.RMISCDATA:
+            request = m.HeaderRequest.decode(frame)
+            return m.HeaderData(
+                command=m.Command.MISCDATA, index=request.index, selector=1,
+                offset=0, data=bytes([store.get(request.index, 0)]),
+                exclusive_channel=channel,
+            ).encode()
+        if command == m.Command.MISCDATA:
+            data = m.HeaderData.decode(frame)
+            if data.index not in ignore:
+                store[data.index] = data.data[0]
+            code = 1 if data.index in error_on else 0
+            return m.Reply(code=code, exclusive_channel=channel).encode()
+        return None
+
+    return handler, store
+
+
+def test_a_selection_write_believes_the_register_not_the_reply():
+    """byte[2] answers error code 1 and performs the write regardless."""
+    handler, store = _misc_bank(error_on={2, 4})
+    bridge = _bridge_with(handler)
+
+    bridge.select_partition(5)          # must not raise
+    assert store[2] == 5
+
+
+def test_a_selection_write_still_raises_when_the_register_did_not_move():
+    """Swallowing the error must not swallow a genuine refusal."""
+    import pytest
+    from s3k.bridge import DeviceError
+
+    handler, store = _misc_bank(error_on={2}, ignore={2})
+    bridge = _bridge_with(handler)
+
+    with pytest.raises(DeviceError, match="register reads"):
+        bridge.select_partition(5)
+
+
+def test_choosing_a_drive_forces_the_machine_to_go_and_look():
+    """Writing the ID records a choice; it does not act on it.
+
+    Sweeping the ID and reading after each write returned the same volume
+    list every time, and reading after a following write returned each
+    drive's real list one step behind -- off by exactly one. So the ID write
+    must be followed by something that triggers the re-read.
+    """
+    handler, store = _misc_bank(error_on={4})
+    bridge = _bridge_with(handler)
+    bridge.select_drive(3)
+
+    assert store[11] == 3
+    assert 4 in store, "nothing triggered the re-read"
