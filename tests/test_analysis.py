@@ -282,3 +282,29 @@ def test_a_blank_sample_name_collides_with_an_empty_zone_too():
     assert "lower bound" in audit.summary()
     # and it is not mistaken for a dangling reference
     assert audit.dangling() == []
+
+
+def test_an_inverted_velocity_range_is_dead_too():
+    """Measured, not reasoned: a machine could clamp, swap or wrap it.
+
+    On an S3000XL, lo=100 hi=50 at velocity 75 gave 0.00003 RMS against
+    0.00711 for the full range -- as silent as an out-of-range zone, and the
+    pair read back as written, so nothing was swapped.
+    """
+    bank = {"KIT": [[("BACKWARDS", 100, 50), ("FORWARDS", 0, 127), None, None]]}
+    audit = a.collect(FakeBank(bank, []))
+
+    by_zone = {r.zone: r for r in audit.references}
+    assert by_zone[1].reachable is False, "lo > hi selects nothing"
+    assert by_zone[2].reachable is True
+
+    assert [r.sample for r in audit.dangling()] == ["FORWARDS"]
+    assert [r.sample for r in audit.suppressed()] == ["BACKWARDS"]
+
+
+def test_a_single_velocity_point_is_still_reachable():
+    """lo == hi is a one-velocity zone, not an empty one."""
+    bank = {"KIT": [[("PINPOINT", 64, 64), None, None, None]]}
+    audit = a.collect(FakeBank(bank, []))
+    assert audit.references[0].reachable is True
+    assert [r.sample for r in audit.dangling()] == ["PINPOINT"]

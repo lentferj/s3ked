@@ -112,12 +112,34 @@ class ZoneRef:
         confirmed -- their zone-relative +0c/+0d are this table's LOVEL and
         HIVEL, at SNAME+12 and SNAME+13.
 
+        An **inverted** range with a nonzero high -- ``lo=100, hi=50`` -- is
+        dead too, and that one was measured rather than reasoned, because it
+        is a claim about what the machine does with a range it was never
+        meant to hold, and machines clamp, swap or wrap such things. On an
+        S3000XL, note 60 at velocity 75 with the built-in sawtooth:
+
+        ======================  ===  ===  =========
+        setting                 lo   hi        RMS
+        ======================  ===  ===  =========
+        control, full range       0  127    0.00711
+        outside the range       100  127    0.00003
+        inverted                100   50    0.00003
+        ======================  ===  ===  =========
+
+        The gate is real (247x) and an inverted range is as silent as an
+        out-of-range one. The machine also stored ``100..50`` as written, so
+        it neither swapped nor clamped. mpc2emu treats inverted ranges as
+        dead and their note said they did not know whether that was
+        justified; it is.
+
+        ``lo == hi`` is a one-velocity zone and stays reachable.
+
         **This is half of reachability, not all of it.** A keygroup's own
         key range can also exclude a zone, so a reachable zone is the
         conjunction and only this half is established. A zone reported
         reachable here may still never sound.
         """
-        return self.hi_vel > 0
+        return self.hi_vel > 0 and self.lo_vel <= self.hi_vel
 
     def __str__(self) -> str:  # pragma: no cover - display only
         return (f"program {self.program} ({self.program_name}) "

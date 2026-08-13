@@ -5990,6 +5990,38 @@ name, so one 14-byte read gets all three where the name alone took 12.
 Fetching them separately would have tripled a walk that already costs four
 reads per keygroup.
 
+**An inverted range is dead too, and that one is measured.** `lo=100, hi=50`
+selects nothing by the same logic, but that is a claim about what the machine
+does with a range it was never meant to hold, and machines clamp, swap or
+wrap such things. Neither project had tested it — mpc2emu's note said so
+explicitly. Note 60 at velocity 75 with the built-in sawtooth:
+
+```
+setting                 lo   hi        RMS
+control, full range      0   127    0.00711
+outside the range      100   127    0.00003
+inverted               100    50    0.00003
+```
+
+The gate is real (247×) and inverted is as silent as out-of-range. The
+machine stored `100..50` as written, so it neither swapped nor clamped the
+pair. `lo == hi` stays reachable — a one-velocity zone is not an empty one.
+
+**How often a dead zone names something absent**, from mpc2emu over their
+54,488 zones — theirs alone, and quoted as such:
+
+| | zones | naming a sample present on the disc |
+|---|---|---|
+| `hi_vel == 0` | 10,825 | 4.43% |
+| `hi_vel > 0` | 43,663 | 97.13% |
+
+That is a **self-check on the classifier from the other end**: a suppressed
+zone should name an absent sample about 95% of the time, so a `suppressed()`
+list full of zones naming *resident* samples means the suppression is wrong,
+not the bank. Their measure of the false-positive class removed: trusting the
+name alone invents up to three phantom zones per keygroup, 65% and 67% of two
+discs' zones.
+
 **This is half of reachability.** A keygroup's own key range can also
 exclude a zone, so a reachable zone is the conjunction and only this half is
 established — by either project. A zone reported reachable may still never
