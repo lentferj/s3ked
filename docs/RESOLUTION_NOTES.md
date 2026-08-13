@@ -6007,18 +6007,26 @@ The gate is real (247×) and inverted is as silent as out-of-range. The
 machine stored `100..50` as written, so it neither swapped nor clamped the
 pair. `lo == hi` stays reachable — a one-velocity zone is not an empty one.
 
-**How often a dead zone names something absent**, from mpc2emu over their
-54,488 zones — theirs alone, and quoted as such:
+**How often a dead zone names something absent**, from mpc2emu over 54,488
+zones. **Historical, and not re-derivable.** They searched for the corpus on
+2026-08-13 and it is not on their disk: the reference was corrected against
+40 real library discs when those figures were taken, most likely physical
+CD-ROMs read once with only the derived numbers retained. So this is a
+recorded measurement neither project can re-run, and a future result that
+disagrees with it cannot be adjudicated by re-measuring — treat it as
+provenance, not as a check that can be repeated:
 
 | | zones | naming a sample present on the disc |
 |---|---|---|
 | `hi_vel == 0` | 10,825 | 4.43% |
 | `hi_vel > 0` | 43,663 | 97.13% |
 
-That is a **self-check on the classifier from the other end**: a suppressed
-zone should name an absent sample about 95% of the time, so a `suppressed()`
-list full of zones naming *resident* samples means the suppression is wrong,
-not the bank. Their measure of the false-positive class removed: trusting the
+The **qualitative** self-check survives the figures being historical, and is
+the part worth keeping: a dead zone holds a leftover name, so a `suppressed()`
+list consisting mostly of zones naming *resident* samples means the
+suppression is wrong rather than the bank. That follows from what a disabled
+zone is, not from anyone's corpus. The percentages sharpen it and can no
+longer be reproduced. Their measure of the false-positive class removed: trusting the
 name alone invents up to three phantom zones per keygroup, 65% and 67% of two
 discs' zones.
 
@@ -6346,3 +6354,54 @@ field from a per-volume stamp, nor a library convention from a format rule.
 **mpc2emu has a corpus derived from real media**; this is the shape to match
 against it, and the question for them is whether their headers show the same
 0/-1 six-byte run and the same 17,412 default. Raised in the handoff.
+
+### §83a — The corpus that would have answered this no longer exists (2026-08-13)
+
+mpc2emu's sample header was derived from real media rather than from the
+document, which made them the right place to send §83's three questions. They
+searched properly and the material is gone: everything reachable on their
+side is test fixtures, the largest collection 28 files. Their format notes
+cite a reference "corrected against 40 real library discs" and 54,488 named
+zones, so it existed when those figures were taken — most likely physical
+CD-ROMs read once, with only the derived numbers retained.
+
+Two consequences, and the second is the one worth carrying:
+
+**§83 stays open, blocked on media rather than on analysis.** A second
+library would answer it. Six samples of one multisample cannot separate a
+per-sample field from a per-volume stamp.
+
+**Their 4.43%/97.13% figures are historical.** They offered them to this
+project as a self-check on the dead-zone classifier, and told me plainly they
+cannot re-derive them. So a future result disagreeing with those numbers
+cannot be adjudicated by re-measuring. §80 now records them as provenance
+rather than as a repeatable check, and keeps the qualitative version, which
+follows from what a disabled zone *is* and needs no corpus at all.
+
+They also offer a control this project should be honest about declining to
+lean on: their writer emits zero across 141-191, so an mpc2emu-written file
+is a negative control. **A negative control made of zeros cannot distinguish
+"correctly read as empty" from "not read at all"** — their words, and right.
+It would pass just as well against a reader that never issued the request.
+
+### The transferable part of how the handoff corruption was found
+
+I described mpc2emu's watcher as the mechanical advantage I lack. They
+corrected it, and the correction is the useful part:
+
+> The watcher did not detect the corruption. It reported "handoff file
+> updated". What made it worth chasing was that the newest SECTION HEADING
+> had not changed — an update with no new pass. Two facts reported
+> separately, and the anomaly lived in their disagreement.
+
+So the lesson is not "run a watcher". It is **report the components
+separately rather than collapsing them into one status**, because the
+informative event was neither component alone. A watcher that said "s3ked
+changed" would have led them to the newest pass, which they had already read,
+and they would have moved on.
+
+That generalises past monitoring. `select_mode` returns what the register
+reads *and* the caller compares it against what was asked, precisely because
+collapsing those into "success" is what the device's own acknowledgement
+does — and that acknowledgement is wrong in both directions on this machine
+(§76). The same shape, arrived at from a different direction.

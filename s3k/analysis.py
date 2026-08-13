@@ -106,8 +106,10 @@ class ZoneRef:
         implements MIDI correctly. This project first carried it as "measured
         by mpc2emu over 54,488 zones", which was the weaker half of the
         evidence and understated it -- their corpus establishes which
-        *spellings* occur in practice, and they note the distribution is
-        library-dependent and should not be generalised.
+        *spellings* occur in practice, is library-dependent, and is no longer
+        re-derivable: the discs it came from are not on their disk any more.
+        A rule that needs no corpus is a better footing than one that rests
+        on material nobody can re-read.
 
         Not reproduced here either way: every zone on the banks this project
         has loaded reads ``lo=0, hi=127``. The layout is independently

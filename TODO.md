@@ -315,10 +315,24 @@ writes have no description at all.
 By contrast **program bytes 115-191 are zero across all eleven resident
 programs**, so that tail really does look like padding.
 
-**To close this:** ask mpc2emu, whose sample header is derived from real media
-rather than from the document. Raised in the handoff.
+**Characterised 2026-08-13 (§83), not decoded.** The region is signed: bytes
+182-187 read exactly 0 or exactly -1 across six library samples, which is
+sign extension rather than data, and 188-191 as signed little-endian is
+identical at 17,412 for four of six with the two extremes of the multisample
+negative. The built-ins are all zero across 141-191, confirming the control.
 
-**Blocked on:** a better source. RESOLUTION_NOTES §14.
+**Asked mpc2emu and the answer is that they cannot help.** Their sample
+header was corrected against 40 real library discs, and that material is no
+longer on their disk — most likely physical CD-ROMs read once with only the
+derived numbers kept. They can offer one control and they rate it themselves
+as weak: their writer emits zero across the whole range, so an
+mpc2emu-written file is a negative — but a negative made of zeros cannot
+distinguish "correctly read as empty" from "not read at all".
+
+**Blocked on:** more real media, from any source. Six samples of one
+multisample on one disc cannot separate a per-sample field from a per-volume
+stamp, nor a library convention from a format rule. A second library would
+answer it. RESOLUTION_NOTES §14, §83.
 
 ---
 
