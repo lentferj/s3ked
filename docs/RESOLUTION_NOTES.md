@@ -5740,3 +5740,68 @@ because the numbers were being used for something else.
 **A directory read that follows a selection write needs the selection to have
 taken effect, and the machine does not say when it has.** Read something
 twice before believing a survey of it.
+
+## §77 — What a power cycle settles: five defaults and one reserve (2026-08-13)
+
+**Status: settled.** Measured 2026-08-13 across a power cycle, with the state
+snapshotted beforehand so the boot could be diffed rather than described.
+
+### The built-in waveforms are regenerated at boot
+
+`SINE`, `SQUARE`, `SAWTOOTH` and `PULSE` came back on their own. They are not
+loaded from any volume — the search that preceded this looked at flash,
+floppy and all 24 hard-disk partitions on the bus and found them nowhere.
+They are the machine's own, and a boot restores them.
+
+That matters practically, because the calibration probes address the source
+by name (`SNAME1 = "SAWTOOTH"`) and had been left without one after
+`clear_memory` deleted them. A power cycle is the repair. **`TEST PROGRAM` is
+also created at start-up**, which is why it is the program the machine
+refuses to delete (§75).
+
+### The 0.25 MB is a genuine reserve, and it holds the built-ins
+
+§75 recorded 131,072 words never returned and called it a fixed reserve on
+the strength of the number being round — reasoning, not measurement. The boot
+settles it, and adds the mechanism:
+
+```
+the four built-in waveforms    256 words each,   1,024 total
+held by a freshly booted machine                131,072
+difference                                      130,048
+```
+
+The figure is **131,072 both before and after the boot** — with no samples
+resident and with all four built-ins resident. So the built-ins live *inside*
+the reserve rather than in user waveform memory, and 130,048 words of it are
+something else again.
+
+This also explains the reading that nearly derailed §75: deleting `SINE`
+freed exactly zero words, which looked like a machine that unlists without
+reclaiming. It reclaims fine — a 312,257-word sample returned 312,272 — but a
+built-in is not in the pool being reclaimed from. The free figure is not
+coarsely quantised; the sample was simply not there to free.
+
+**Usable waveform memory is `free_words`, and never `max_words` minus what
+you think you loaded.**
+
+### Power-on defaults, measured
+
+| register | before | after boot | |
+|---|---|---|---|
+| `byte[0]` device type | 1 | **0** | |
+| `byte[2]` partition | 7 | **0** | A |
+| `byte[6..9]` load trigger | 7 | **0** | confirms the comment's claim |
+| `byte[11]` SCSI drive | 1 | **5** | |
+| `byte[49]` cursor value | 5 | **0** | |
+| `byte[91]` mode | 10 | **0** | SINGLE |
+
+Two of these were assertions in this project's code that nobody had checked.
+`byte[6]`'s "0 is the power-on default" is now measured rather than assumed.
+
+**The drive ID is not persisted — it is reset to 5.** It read 1 before the
+cycle and 5 after. This is the third and final correction to §71's "the SCSI
+ID binds at boot": the ID does not bind at boot (§72), it does not act until
+a following write (§76), and it does not survive a boot at all. The original
+claim was wrong in every part, and each part failed for a different reason,
+which is why it took three passes to dismantle.

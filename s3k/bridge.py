@@ -958,7 +958,10 @@ class S3kBridge:
     #: stored cleanly and did nothing at all (§74).
     #:
     #: So this is a trigger that happens to keep its last value, not a "load
-    #: type" selector. It was called one here for a while, on the strength of
+    #: type" selector. The value it keeps is not persisted: it read 7 before a
+    #: power cycle and 0 after, so 0 is the power-on default (§77).
+    #:
+    #: It was called a load-type selector here for a while, on the strength of
     #: the LOAD page having a type setting on screen; the register does not
     #: reach it.
     #:
@@ -966,10 +969,10 @@ class S3kBridge:
     #: resident data and finished with 19.00 MB, the sum to within 630 words,
     #: and §74 repeated it at 3.62 MB onto 19.00 MB for a miss of 120.
     #:
-    #: **The panel's CLR softkey has no remote equivalent.** CLR erases
-    #: waveform memory and then loads; nothing in 0-7 does that. Memory can
-    #: only be reclaimed remotely by deleting what is resident, or not
-    #: remotely at all.
+    #: **The panel's CLR softkey is not in this register.** CLR erases
+    #: waveform memory and then loads, and nothing in 0-7 does that -- it is a
+    #: panel chain with its own on-screen confirmation (§75). The effect is
+    #: reachable: see :meth:`clear_memory`, which deletes what is resident.
     _MISC_LOAD_TYPE = (6, 7, 8, 9)
 
     def _misc_byte(self, index: int, value: Optional[int] = None, *,
@@ -1178,8 +1181,8 @@ class S3kBridge:
     #: What ``byte[0]`` means. Only HARD and FLASH are confirmed: the machine
     #: read 1 sitting on HARD, and writing 2 put the panel on FLASH -- seen by
     #: eye, and the directory emptied because nothing is mounted there. FLOPPY
-    #: is 0 by elimination and has NOT been observed, so it is named but not
-    #: claimed.
+    #: is 0 by elimination: 0 is the power-on default, measured across a power
+    #: cycle (§77), but that it means FLOPPY is not confirmed by eye.
     DEVICE_TYPES = {0: "FLOPPY", 1: "HARD", 2: "FLASH"}
 
     def select_device(self, kind: int, *,
