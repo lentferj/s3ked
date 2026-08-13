@@ -461,8 +461,8 @@ records the opcodes and the aksy prior art.
 
 ## Parameter scales -- what a value MEANS (RESOLVED for 19 fields)
 
-**Status: 19 laws measured on an S3000XL and shipped in `s3k/scales.py`,
-two of them still provisional.**
+**Status: 35 laws measured on an S3000XL and shipped in `s3k/scales.py`,
+none provisional.**
 The editor now shows `FILFRQ 80 (~2.57 kHz)` and accepts `set FILFRQ 500Hz`.
 Remaining fields are listed at the bottom; the tooling to do them is built and
 proven, so each is a bench session rather than a research problem.
@@ -487,7 +487,7 @@ Measured (see RESOLUTION_NOTES §20-§26 for each sweep and its bounds):
 | `ATTAK1` | `0.000150326 * exp(0.11175 v)` s (a real rise time) | 55..90 | 0.99991 |
 | `DECAY1` | `23525.6 * exp(-0.09776 v)` dB/s | 45..85 | 0.99998 |
 | `RELSE1` | `22055.3 * exp(-0.09683 v)` dB/s | 55..70 | 0.99956 |
-| `ATTAK2` | `0.00115864 * exp(0.09850 v)` s **provisional, depth 18 only** | 55..85 | 0.99967 |
+| `ATTAK2` | `0.00115864 * exp(0.09850 v)` s | 55..85 | 0.99967 |
 | `DECAY2` | `25200 * exp(-0.09796 v)` octaves/s | 50..80 | 0.99995 |
 | `RELSE2` | `61190 * exp(-0.10123 v)` octaves/s | 58..76 | 0.99977 |
 | `SUSTN2` | `FILFRQ shift = 0.024645 * SUSTN2 * MODVFILT1` | 0..70 | 0.9908 |
@@ -538,12 +538,13 @@ ratio near 30. The earlier claim of a threefold depth effect is **withdrawn**
 -- it compared an exponential time constant against a 10-90% rise time, two
 different quantities carrying the same unit.
 
-**Still open, and the reason changed:** `ATTAK2` stays provisional not for
-depth-dependence but because **two implementations of "10-90% rise" in this
-project disagree by 33% on the same condition** (3.060 s against 2.297 s).
-The exponent is trustworthy; the prefactor is not. Whether a small residual
-span-dependence exists is also unsettled -- that separation is 2.68x, below
-the 3x bar.
+**Closed (§58).** `ATTAK2` was provisional over a threefold disagreement
+between `MODVFILT1` 18 and 25, recorded as depth-dependence. It was not
+depth-dependence: read through a spectral centroid, a linear ramp through a
+saturating corner gives a time that scales inversely with drive and fits
+beautifully at the wrong answer. Re-measured with the resonance tracker at
+two depths chosen so neither clips, the times agree and the law is
+drive-independent. Nothing in `scales.py` is provisional now.
 
 **The gap behind three inconclusive runs: no sweep had ever replicated.**
 Every condition was measured once, so nothing carried an error bar. Three
@@ -562,10 +563,19 @@ See RESOLUTION_NOTES §20-§55.
 
 ### Added since, and worth reading before extending any of it
 
-- **Everything pivots on 64** (§43). `V_LOUD`, `V_ATT1` and `K_FREQ` are all
-  referenced to the centre of the controller's MIDI range, not to middle C or
-  the sample root. This **predicts** that `MWLDEP`, `PRSDEP`, `VFREQ1` and
-  `VPANO1` pivot there too -- untested, and the cheapest way to refute the rule.
+- **Only sources with an inherent centre pivot on 64** (§43, refuted and
+  replaced by §44). `V_LOUD`, `V_ATT1` and `K_FREQ` pivot; `MWLDEP` and
+  `PRSDEP` do **not** -- the wheel is proportional to its value, 0.50 of full
+  depth at 64, r² 0.99989. The boundary is not arbitrary: velocity and note
+  have an inherent centre, so bipolar modulation about the midpoint is
+  meaningful, while a wheel rests at zero and pivoting there would mean a
+  wheel at rest applying maximum negative modulation.
+  `VELDEP` shows the distinction is about the **route**, not the source: it is
+  driven by velocity, which pivots elsewhere, but as a *depth* control it
+  scales from zero like the wheel.
+  The prediction's other two names, `VFREQ1` and `VPANO1`, turned out not to
+  be modulation at all (§46): the `V` is the velocity ZONE they belong to, so
+  they are static offsets and the pivot question does not apply.
 - **One inert DESTINATION, not five inert fields** (§52, retracting §39).
   All of `PANDEP`/`PANRAT`/`PANDEL`/`LFO2WAVE`/`LFO2TRIG` work -- LFO2 is
   assignable-matrix source 8 and runs at exactly twice LFO1 -- but LFO2 does
