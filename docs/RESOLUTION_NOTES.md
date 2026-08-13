@@ -6568,3 +6568,77 @@ further SysEx could have.
 That is the same lesson as §84's method note from the other direction: there
 the person was the instrument and had to set the pace; here the person was
 the only instrument that could see the relevant channel at all.
+
+## §86 — The mode register walks past the panel's own hardware gate (2026-08-13)
+
+**Status: settled, and it is a capability rather than a hazard.** Measured
+2026-08-13 on a machine with **no EB16 effects board and no filter board** —
+8 MB of flash ROM and nothing else.
+
+Pressing **EFFECTS on the front panel** does nothing: the lamp stays dark and
+the display says *"Multi-effects board EB16 not fitted"*.
+
+Writing **6 to `byte[91]`** opens the page. The lamp lights red, and the
+screen renders a complete, populated effects interface:
+
+```
+EFFECTS/REVERB SELECT for Prog Number
+Chan        Effects              Reverb
+FX1  >  1 REVERB EQ 1     >   3 LONG HALL 1
+FX2  >  2 REVERB EQ 2     >  14 BRIGHT ROOM
+RV3  >                    >   3 LONG HALL 1
+RV4  >                    >   4 SHORT REV 1
+I/O
+```
+
+Real preset names, four channels, soft-key labels. **The lamp follows the
+register, not the panel's gate.**
+
+### The data is live too, not just the page
+
+`RFXDATA` answers on every selector, on the same board-less machine:
+
+| selector | first 12 bytes as text |
+|---|---|
+| `FX_HEADER` | `200EFFECTS F` |
+| `FX_ASSIGN` | `000000000000` (all zero) |
+| `FX_ENTRY` | `REVERB EQ 1` |
+| `RVB_ASSIGN` | `TIGHT ROOM 1` |
+| `RVB_ENTRY` | `TIGHT ROOM 1` |
+
+`FX_ENTRY` matching what the display shows is the check that this is real
+data rather than an uninitialised buffer answering plausibly — the two agree
+and were read through completely different paths.
+
+So the effects **firmware, UI and preset tables are all in the base machine**;
+the EB16 supplies the DSP that would process audio, and the panel refuses to
+show an interface it cannot make audible. Nothing else is missing.
+
+### What this is good for
+
+An editor on a board-less machine can still read and author effects settings
+— for a program destined to be played on a machine that *does* have the
+board. That is exactly a librarian's job, and it is a capability this project
+had assumed was unavailable. `RFXDATA`/`FXDATA` are in `messages.py` as
+opcodes with a `FxSelector`, and there is no bridge method for them; that is
+now worth building. **Feature, so `main`.**
+
+### And it narrows §85
+
+Value 6 opens a page for absent hardware **without crashing**. So "a page for
+hardware that is not fitted" is not, on its own, a crash — which weakens the
+leading explanation for value 11 rather than supporting it. If 11 is a page,
+it is one that differs from EFFECTS in touching the missing hardware during
+initialisation rather than merely displaying without it.
+
+The three live readings for 11 are now: past the end of the enumeration; a
+page whose init genuinely dereferences absent hardware where EFFECTS' does
+not; or something else entirely. Still open, and no longer with a favourite.
+
+### The rule underneath
+
+**A front-panel refusal is a policy of the panel, not a property of the
+machine.** The S3000XL's own UI declines to enter a page it judges useless,
+and the register underneath has no such opinion. Anywhere else this project
+has taken a panel behaviour as evidence about the device, that inference is
+worth re-examining.
