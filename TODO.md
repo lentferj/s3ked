@@ -721,10 +721,12 @@ board. Two consequences, both good:
   179-186 should not work without the IB304F. It works, measured across all
   four stages, on a machine that does not have one. So the manual is wrong
   about that and §50 rests on base-machine functionality.
-- **The value-11 hypothesis is live and now the leading one.** A firmware
-  page for a board that is not fitted would crash on initialisation exactly
-  as observed (§85), and this machine is missing precisely the boards such a
-  page would belong to.
+- **The value-11 hypothesis is live, and §86 then weakened it.** A firmware
+  page for a board that is not fitted would crash on initialisation as §85
+  observed, and this machine is missing precisely the boards such a page
+  would belong to. But value 6 opens the EFFECTS page — for the absent EB16 —
+  **without** crashing, so "a page for hardware that is not there" is not by
+  itself fatal. Three readings remain and none is favoured.
 
 Remaining highest value: envelope 3 at offsets 179-186, on which §50 rests entirely and
 which the owner's manual says should not work at all without the IB304F; the
