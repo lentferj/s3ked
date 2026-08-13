@@ -248,6 +248,14 @@ def test_the_version_and_the_development_status_agree():
     assert version.startswith("0.1."), version
 
     changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
-    assert f"## [{version}]" in changelog, \
+    marker = f"## [{version}]"
+    assert marker in changelog, \
         f"CHANGELOG has no entry for the version in pyproject ({version})"
-    assert "beta" in changelog.split("## [")[1].lower()
+
+    # Find THIS version's section, not the first one in the file. main carries
+    # an [Unreleased] section above it, so indexing the first heading tested
+    # whichever section happened to come first -- a test coupled to file
+    # order rather than to what it was checking.
+    section = changelog[changelog.index(marker):]
+    section = section.split("\n## [")[0]
+    assert "beta" in section.lower(), section[:200]
