@@ -44,6 +44,14 @@ measurement of the wrong parameter.
 MIDI port and no audio device. It is not a simulation of a real S3000 -- the
 curves it invents are made up -- but it exercises the sweep, the measurement
 and the fit, which is how this file was developed with no sampler in the room.
+
+
+Envelope-3 sweeps need `boards=["IB304F"]` on the bridge. The fields are
+fenced by default because the panel gates their pages and the machine has
+been crashed while that area was exercised (§85, §90) -- but §50 and §63
+measured envelope 3 working on a board-LESS machine, routed to filter 1
+through the assignable matrix, so a calibration run is exactly the caller
+that should declare the board and accept the risk deliberately.
 """
 
 from __future__ import annotations

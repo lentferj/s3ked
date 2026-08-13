@@ -248,6 +248,65 @@ class SourceScreen(ModalScreen[Optional[Tuple[str, int]]]):
         self.dismiss(None)
 
 
+class BoardsScreen(ModalScreen[Optional[set]]):
+    """Declare which expansion boards the machine has.
+
+    The device cannot be asked. No reply carries a fitted-options field, and
+    the mode register opens pages the panel refuses (§86), so nothing on the
+    wire distinguishes a fitted board from an absent one.
+
+    It matters because the fields behind these boards are not merely inert
+    without them: the panel gates their pages outright, and an S3000XL was
+    crashed twice in one session with the same flooding-display signature
+    while that area was being exercised (§85, §90). So the default is to
+    assume nothing is fitted and refuse those fields.
+    """
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    _BOARDS = {
+        "1": ("IB304F", "2nd filter board — filter 2, tone section, envelope 3"),
+        "2": ("EB16", "multi-effects board — the EFFECTS pages"),
+    }
+
+    def __init__(self, fitted: set) -> None:
+        super().__init__()
+        self.fitted = set(fitted)
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="boards-box"):
+            yield Label("[b]Expansion boards fitted[/b]", id="boards-title")
+            yield Label("")
+            for key, (name, what) in self._BOARDS.items():
+                yield Label(self._row(key, name, what), id=f"board-{name}")
+            yield Label("")
+            yield Label("[dim]Fields behind an undeclared board are refused, "
+                        "for reading and writing\n  alike. The machine cannot "
+                        "be asked which are fitted, so this is a\n  declaration "
+                        "— and a wrong one is how a sampler gets "
+                        "crashed.[/dim]")
+            yield Label("[b]1[/b]/[b]2[/b] toggle    [b]enter[/b] save    "
+                        "[b]esc[/b] cancel")
+
+    def _row(self, key: str, name: str, what: str) -> str:
+        mark = "[b]fitted[/b]" if name in self.fitted else "[dim]not fitted[/dim]"
+        return f"  [b]{key}[/b]  {name:<8} {mark}   [dim]{what}[/dim]"
+
+    def on_key(self, event) -> None:
+        if event.key in self._BOARDS:
+            name = self._BOARDS[event.key][0]
+            self.fitted ^= {name}
+            self.query_one(f"#board-{name}", Label).update(
+                self._row(event.key, name, self._BOARDS[event.key][1]))
+            event.stop()
+        elif event.key == "enter":
+            self.dismiss(self.fitted)
+            event.stop()
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
 class MenuScreen(ModalScreen[Optional[int]]):
     """Jump the machine to one of its eight main-menu pages.
 
@@ -381,15 +440,20 @@ class S3kedApp(App):
         Binding("l", "load_volume", "Load volume"),
         Binding("s", "source", "Load source"),
         Binding("g", "menu", "Main menu"),
+        Binding("B", "boards", "Boards fitted"),
         Binding("i", "integrity", "Integrity"),
         Binding("u", "usage", "Who uses"),
         Binding("tab", "focus_next", "Next pane", show=False),
     ]
 
-    def __init__(self, bridge, *, allow_write: bool = False) -> None:
+    def __init__(self, bridge, *, allow_write: bool = False,
+                 config_path: Optional[str] = None) -> None:
         super().__init__()
         self.bridge = bridge
         self.allow_write = allow_write
+        #: Where a board declaration is persisted. None means this session
+        #: only -- the demo and most tests, which must not write a user's file.
+        self._config_path = config_path
         self._bridge_lock = threading.Lock()
         self._programs: List[str] = []
         self._samples: List[str] = []
@@ -723,6 +787,33 @@ class S3kedApp(App):
                 f"{what}: asked for {value}, machine reads {got}")
             return
         self.call_from_thread(self.action_disk)
+
+    def action_boards(self) -> None:
+        """Declare which expansion boards this machine has. Saved to config.
+
+        Upper-case B deliberately: this changes what the editor will let you
+        touch, and a mistyped lower-case key should not silently unfence
+        fields that have crashed a sampler.
+        """
+        from s3k import bridge as bridge_mod
+
+        def chosen(fitted) -> None:
+            if fitted is None:
+                return
+            self.bridge.boards = {b.upper() for b in fitted}
+            shown = ", ".join(sorted(fitted)) or "none"
+            if self._config_path is None:
+                self.notify_status(f"boards fitted: {shown} — this session only")
+                return
+            try:
+                bridge_mod.save_boards(fitted, self._config_path)
+            except Exception as exc:
+                self.notify_status(f"boards: {shown}, but not saved ({exc})")
+                return
+            self.notify_status(f"boards fitted: {shown} — saved")
+
+        self.push_screen(BoardsScreen(getattr(self.bridge, "boards", set())),
+                         chosen)
 
     def action_menu(self) -> None:
         """Move the machine to another main-menu page."""
@@ -1168,7 +1259,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         except Exception as exc:
             sys.exit(f"error: {exc}")
 
-    app = S3kedApp(bridge, allow_write=args.allow_write)
+    # --demo gets no config path: a demo must never write a user's settings.
+    app = S3kedApp(
+        bridge, allow_write=args.allow_write,
+        config_path=None if args.demo
+        else (args.config or b.DEFAULT_CONFIG_PATH))
     try:
         app.run()
     finally:

@@ -1268,3 +1268,103 @@ def test_unrelated_settings_survive_each_others_saves(tmp_path):
 
     assert bridge_mod.load_last_ports(path) == ("Out", "In")
     assert bridge_mod.load_exclusive_channel(path) == 7
+
+
+# --- expansion boards: fields that can crash a machine without them ---------
+
+
+def _quiet_bridge(**kw):
+    class Dev:
+        def send_message(self, *a, **k): pass
+        def get_message(self): return None
+        def close_port(self): pass
+    return S3kBridge(Dev(), Dev(), "fake", timeout=0.02, **kw)
+
+
+def test_a_board_field_is_refused_when_the_board_is_not_declared():
+    """Crash prevention, not tidiness.
+
+    The panel gates these pages outright on a machine without the board --
+    EFFECTS and ENV3 both refuse to open -- and an S3000XL was crashed twice
+    in one session with the same flooding-display signature while this area
+    was being exercised (§85, §90).
+    """
+    import pytest
+    from s3k.bridge import BoardNotFitted
+
+    bridge = _quiet_bridge()
+    for name in ("ENV3R1", "FLT2Q", "FIL2FR", "TONEFREQ"):
+        with pytest.raises(BoardNotFitted, match="IB304F"):
+            bridge.get_parameter(("keygroup", name), 0, keygroup=0)
+        with pytest.raises(BoardNotFitted, match="IB304F"):
+            bridge.set_parameter(("keygroup", name), 0, 1, keygroup=0)
+
+
+def test_declaring_the_board_lifts_the_fence():
+    """It must be a declaration, not a permanent refusal: the fields work on
+    a machine that has the hardware."""
+    from s3k.bridge import BoardNotFitted
+
+    bridge = _quiet_bridge(boards=["IB304F"])
+    try:
+        bridge.get_parameter(("keygroup", "ENV3R1"), 0, keygroup=0)
+    except BoardNotFitted:
+        raise AssertionError("still fenced with the board declared")
+    except Exception:
+        pass          # no device answers; the fence is what is under test
+
+
+def test_base_machine_fields_are_never_fenced():
+    """The guard must not spread. Only the fifteen tagged fields are gated."""
+    from s3k.bridge import BoardNotFitted
+
+    bridge = _quiet_bridge()
+    for name in ("FILFRQ", "FILQ", "KGTUNO", "ATTAK1", "ENV2L1"):
+        try:
+            bridge.get_parameter(("keygroup", name), 0, keygroup=0)
+        except BoardNotFitted:
+            raise AssertionError(f"{name} is base-machine and must not be fenced")
+        except Exception:
+            pass
+
+
+def test_exactly_the_documented_fields_carry_a_requirement():
+    """Pins the list, so a future edit cannot quietly widen or narrow it."""
+    from s3k import params as p
+
+    tagged = {q.name for q in p.region_params("keygroup") if q.requires}
+    assert tagged == {
+        "FLT2GAIN", "FLT2MODE", "FLT2Q", "TONEFREQ", "TONESLOP",
+        "FIL2FR", "K_FRQ2",
+        "ENV3R1", "ENV3L1", "ENV3R2", "ENV3L2",
+        "ENV3R3", "ENV3L3", "ENV3R4", "ENV3L4",
+    }
+    assert all(q.requires == "IB304F"
+               for q in p.region_params("keygroup") if q.requires)
+
+
+def test_boards_round_trip_through_the_config(tmp_path):
+    import s3k.bridge as bridge_mod
+
+    path = str(tmp_path / "config.toml")
+    assert bridge_mod.load_boards(path) == set()
+
+    bridge_mod.save_boards({"IB304F"}, path)
+    assert bridge_mod.load_boards(path) == {"IB304F"}
+
+    bridge_mod.save_boards({"IB304F", "EB16"}, path)
+    assert bridge_mod.load_boards(path) == {"IB304F", "EB16"}
+
+    bridge_mod.save_boards(set(), path)
+    assert bridge_mod.load_boards(path) == set(), "must be un-declarable too"
+
+
+def test_declaring_boards_does_not_disturb_other_settings(tmp_path):
+    import s3k.bridge as bridge_mod
+
+    path = str(tmp_path / "config.toml")
+    bridge_mod.save_exclusive_channel(4, path)
+    bridge_mod.save_boards({"EB16"}, path)
+
+    assert bridge_mod.load_exclusive_channel(path) == 4
+    assert bridge_mod.load_boards(path) == {"EB16"}

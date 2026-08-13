@@ -1159,3 +1159,49 @@ async def test_who_uses_this_sample_lists_the_zones():
 
     assert app._samples[0] in title
     assert "keygroup" in body or "nothing uses it" in body
+
+
+async def test_the_boards_screen_declares_and_does_not_guess():
+    """The device cannot be asked which boards it has, so this is a
+    declaration -- and the default is to assume none."""
+    from s3ked.app import S3kedApp, BoardsScreen
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("B")
+        await pilot.pause()
+        screen = app.screen_stack[-1]
+        assert isinstance(screen, BoardsScreen)
+        text = " ".join(str(w.render()) for w in screen.query("Label"))
+        assert "IB304F" in text and "EB16" in text
+        assert "not fitted" in text, "nothing is assumed fitted"
+
+        await pilot.press("1")            # toggle IB304F on
+        await pilot.press("enter")
+        for _ in range(20):
+            await pilot.pause()
+
+    assert app.bridge.boards == {"IB304F"}
+    assert "IB304F" in app.last_status
+
+
+async def test_the_demo_never_writes_a_config():
+    """A demo that persisted settings would edit a user's file on a machine
+    they may not even own."""
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("B")
+        await pilot.pause()
+        await pilot.press("2")
+        await pilot.press("enter")
+        for _ in range(20):
+            await pilot.pause()
+
+    assert app._config_path is None
+    assert "this session only" in app.last_status

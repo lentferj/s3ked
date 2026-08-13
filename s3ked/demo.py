@@ -281,6 +281,11 @@ class DemoBridge:
     #: bridge it was handed, so the demo has to carry them too -- app.py must
     #: not import s3k.bridge, which pulls in rtmidi.
     DEVICE_TYPES = {0: "FLOPPY", 1: "HARD", 2: "FLASH"}
+    #: The demo machine has no expansion boards, matching the S3000XL this
+    #: project measures against -- so the fence is exercised in --demo too
+    #: rather than only against hardware.
+    boards: set = set()
+
     MODES = {
         0: "SINGLE",       1: "SINGLE EDIT",
         2: "MULTI",        3: "MULTI EDIT",

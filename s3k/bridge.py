@@ -80,6 +80,7 @@ __all__ = [
     "DEFAULT_CONFIG_PATH",
     "MidiUnavailable",
     "AmbiguousDevice",
+    "BoardNotFitted",
     "DeviceError",
     "list_ports",
     "bidirectional_ports",
@@ -141,6 +142,15 @@ class MidiUnavailable(RuntimeError):
     and nothing plugged in enumerates cleanly and returns empty lists. This
     is the harder failure -- no sequencer whatsoever -- and a caller wants to
     tell the user something different in each case.
+    """
+
+
+class BoardNotFitted(RuntimeError):
+    """A field or page needing an expansion board that is not declared fitted.
+
+    Separate from :class:`DeviceError` deliberately: nothing went wrong on the
+    wire, and the caller can fix it by declaring the board rather than by
+    retrying.
     """
 
 
@@ -290,6 +300,25 @@ def save_last_ports(
 def load_exclusive_channel(path: str = DEFAULT_CONFIG_PATH) -> Optional[int]:
     value = _read_config_dict(path).get("exclusive_channel")
     return value if isinstance(value, int) else None
+
+
+def load_boards(path: str = DEFAULT_CONFIG_PATH) -> set:
+    """Expansion boards declared fitted in config.toml.
+
+    One boolean per board rather than a list: the flat writer here handles
+    bools and not sequences, and a user editing the file by hand should not
+    have to guess list syntax.
+    """
+    data = _read_config_dict(path)
+    return {name for name, key in (("IB304F", "ib304f_fitted"),
+                                   ("EB16", "eb16_fitted"))
+            if data.get(key) is True}
+
+
+def save_boards(boards, path: str = DEFAULT_CONFIG_PATH) -> None:
+    fitted = {str(b).upper() for b in boards}
+    _update_config(path, ib304f_fitted="IB304F" in fitted,
+                   eb16_fitted="EB16" in fitted)
 
 
 def save_exclusive_channel(channel: int, path: str = DEFAULT_CONFIG_PATH) -> None:
@@ -662,6 +691,7 @@ class S3kBridge:
         exclusive_channel: int = m.DEFAULT_EXCLUSIVE_CHANNEL,
         timeout: float = DEFAULT_TIMEOUT,
         bounds_check: bool = True,
+        boards: Optional[Iterable[str]] = None,
     ):
         self.out = midi_out
         self.inp = midi_in
@@ -673,6 +703,22 @@ class S3kBridge:
         #: probe the device's own behaviour, which is the one job the guard
         #: gets in the way of.
         self.bounds_check = bounds_check
+        #: Expansion boards declared fitted, upper-cased. Fields and
+        #: operations that need one are refused unless it is in here.
+        #:
+        #: **This is crash prevention, not tidiness.** The panel gates these
+        #: pages on a machine without the board -- EFFECTS will not open at
+        #: all, and neither will ENV3 -- and an S3000XL was crashed twice in
+        #: one session with the same flooding-display signature while this
+        #: area was being exercised (§85, §90). The machine is not merely
+        #: ignoring absent hardware; something reachable here can take it
+        #: down, and nothing in the protocol says which.
+        #:
+        #: The device cannot be asked: no reply carries a fitted-options
+        #: field, and the mode register happily opens a page the panel
+        #: refuses (§86). So it has to be declared, and the safe default is
+        #: to assume nothing is fitted.
+        self.boards = {b.upper() for b in (boards or ())}
         self._counts: Dict[str, Optional[int]] = {"program": None,
                                                   "sample": None}
         self._groups: Dict[int, int] = {}
@@ -910,6 +956,9 @@ class S3kBridge:
             f"{send_name} -> {recv_name}",
             exclusive_channel=channel,
             timeout=max(timeout, DEFAULT_TIMEOUT),
+            # Declared boards come from config.toml, so a machine that has
+            # the hardware says so once and every later session honours it.
+            boards=load_boards(config_path) if config_path else (),
         )
         if config_path:
             save_last_ports(send_name, recv_name, config_path)
@@ -1779,6 +1828,17 @@ class S3kBridge:
 
     # -- parameter access, in terms of s3k.params ---------------------------
 
+    def _require_board(self, param, what: str) -> None:
+        """Refuse a field whose board has not been declared fitted."""
+        need = getattr(param, "requires", "")
+        if need and need not in self.boards:
+            raise BoardNotFitted(
+                f"{param.name} needs the {need} expansion board, which is not "
+                f"declared fitted. The panel gates these pages on a machine "
+                f"without it and this area has crashed an S3000XL (§85, §90), "
+                f"so {what} is refused. If the board IS fitted, say so: "
+                f"S3kBridge(..., boards=['{need}']), or set it in config.toml.")
+
     def get_parameter(
         self,
         param,
@@ -1791,11 +1851,15 @@ class S3kBridge:
     ):
         """Read one named parameter, decoded per its table entry.
 
+        Refuses fields belonging to an undeclared expansion board; see
+        :attr:`boards`.
+
         ``_bounds`` is private and exists for one caller: reading ``GROUPS``
         to find out how many keygroups a program has cannot itself require
         knowing how many keygroups a program has.
         """
         param = param if isinstance(param, p.Parameter) else p.lookup(param, region)
+        self._require_board(param, "reading it")
         raw = self.get_header_bytes(
             param.region,
             index,
@@ -1820,6 +1884,7 @@ class S3kBridge:
     ) -> None:
         """Write one named parameter, encoded per its table entry."""
         param = param if isinstance(param, p.Parameter) else p.lookup(param, region)
+        self._require_board(param, "writing it")
         if not param.writable:
             why = "read-only" if param.readonly else "an internal block address"
             raise ValueError(f"{param.name} is {why} and must not be written")
