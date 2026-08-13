@@ -1144,10 +1144,19 @@ class S3kBridge:
     #: SAVE and GLOBAL -- and the register takes 0-10, which is exactly
     #: eleven.
     #:
-    #: **11 is not refused. It stops the machine answering at all**, on a
-    #: HARDDISK with media present, requiring a power cycle (§79). So the
-    #: range check below is not defensive tidiness standing in for a device
-    #: that would have said no; it is the only thing that says no.
+    #: **11 is not refused. It CRASHES the machine.** The write gets no
+    #: reply at all, and the LCD floods with a repeating pattern and keeps
+    #: flooding -- a runaway loop, not a page that failed to draw (§85). It
+    #: needs a power cycle, and the front panel dies with it. So the range
+    #: check below is not defensive tidiness standing in for a device that
+    #: would have said no; it is the only thing between a caller's typo and a
+    #: reboot.
+    #:
+    #: Whether 11 is past the end or a page for an expansion board this
+    #: machine does not have is **open** -- a page crashing on init against
+    #: absent hardware looks identical from here (§85). Either way the guard
+    #: stands: a page that only exists with a board fitted is not reachable
+    #: on a machine without one.
     _MAX_MODE = 10
 
     def mode(self, *, timeout: Optional[float] = None) -> int:

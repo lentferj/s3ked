@@ -6472,3 +6472,99 @@ reader was looking at the sampler. Setting one value, asking, waiting, then
 setting the next cost eleven exchanges and produced eleven unambiguous
 answers. **Where a person is the instrument, their attention is the
 bottleneck and the loop has to run at their pace, not the bus's.**
+
+## §85 — Value 11 crashes the firmware, and the LCD is what proved it (2026-08-13)
+
+**Status: settled.** Cost one power cycle, which was the expected price.
+
+§79 established that writing 11 to `byte[91]` stops the machine answering, and
+left open whether that is because 11 is past the end of the enumeration or
+because it is a real twelfth page that cannot initialise. **Over the wire the
+two are identical**: both are silence. §84 having named all eleven documented
+modes made "past the end" the favourite, but a favourite is not a finding.
+
+The display separates them, and it did so unambiguously. With HARDDISK
+selected and 30 volumes visible — so §78's empty-media confound was
+definitely absent — writing 11 left the LCD **flooded, and still flooding,
+with a repeating `0054`**.
+
+The machine is in a runaway loop writing to its own screen. It is also frozen
+to its **front panel** — no button or dial does anything — so this is a total
+firmware crash and not a MIDI-side hang.
+
+**What that does NOT establish is which of the two hypotheses is right, and
+the first version of this entry claimed it did.** It argued that a page
+failing to initialise would leave the display static or half-drawn rather
+than flooding, so 11 could not be a page. Jan pointed out the hole: an
+S3000XL takes expansion boards (the IB304F filter/effects board among them),
+and **a page whose initialisation touches hardware that is not fitted would
+crash exactly like an out-of-range index does.** A crash is a crash; the
+display tells you the firmware died, not what it was reaching for.
+
+So the honest position is narrower than the one first written here:
+
+* **Established.** Writing 11 crashes the firmware completely — no MIDI
+  reply, no front panel, a flooding display, recoverable only by power
+  cycling. The guard in `select_mode` is therefore load-bearing.
+* **Not established.** Whether 11 is past the end of the enumeration or a
+  real page for hardware this machine does not have. §84 accounts for all
+  eleven modes the *document* describes, which favours "past the end" — but
+  the document describes a base machine, and an expansion board is exactly
+  the kind of thing it would not enumerate.
+
+Settling it needs a machine with the board fitted, which is a hardware
+question rather than a protocol one.
+
+A second detail, not captured in §79: **the write itself got no reply.** Not
+an error code, not an OK — a timeout. So the firmware died *inside* the write
+handler rather than moving to a page and then failing to talk. Together with
+the flooding display that makes the sequence unambiguous: the write is
+executed, it goes somewhere it should not, and the machine never returns.
+
+`0054` is recorded verbatim and not interpreted. It could be an error code, an
+address, a character pattern, or whatever happened to be in a register — six
+samples of one repeating value on one crash is not evidence for any of those,
+and guessing would be exactly the kind of decoration this project keeps
+retracting.
+
+### What this makes of the range check
+
+`select_mode` refuses anything outside 0-10, and §79 already noted that the
+check is unusual in this project: elsewhere a range guard duplicates a refusal
+the device would have made anyway and mainly improves the error message. Here
+there is nothing to duplicate. The measurement upgrades that from "the device
+does not refuse" to **"the device crashes"**, which makes the guard the only
+thing standing between a caller's typo and a power cycle.
+
+Worth stating plainly because it inverts the usual reasoning about defensive
+checks: this one is not belt-and-braces over a device that would have coped.
+
+### The overclaim, and how it happened
+
+The first draft of this entry reasoned from the *manner* of the failure to
+its *cause*: flooding rather than static, therefore not a page. That is a
+real inference and it is not a sound one — it rules out "a page that drew
+and then failed to talk", which was never the interesting hypothesis, while
+saying nothing about "a page that crashed on init". The alternative was
+supplied by the person holding the machine, who knew it takes expansion
+boards, within a minute of the entry being written.
+
+Three sessions of this project have now produced the same error: reaching a
+conclusion by eliminating the alternatives that came to mind. §74's `2 = CLR`
+came from a two-item list. §80's sample-name uniqueness came from
+generalising a program-level finding. Both were wrong for the same reason
+this was — the alternatives that come to mind are the ones you already have
+the vocabulary for, and hardware you have never seen is not in that
+vocabulary.
+
+### The general shape, which is the transferable part
+
+Two sessions of wire-level probing could not distinguish these two
+hypotheses, because the observable they differ in is not on the wire. **A
+protocol has no opinion about a device that has stopped implementing it.**
+Ten seconds of somebody looking at the front panel settled what no amount of
+further SysEx could have.
+
+That is the same lesson as §84's method note from the other direction: there
+the person was the instrument and had to set the pace; here the person was
+the only instrument that could see the relevant channel at all.
