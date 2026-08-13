@@ -61,6 +61,7 @@ returns ok/error. :meth:`S3kBridge.set_header_bytes` waits for it by default.
 
 from __future__ import annotations
 
+import sys
 import time
 from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -180,22 +181,70 @@ class AmbiguousDevice(RuntimeError):
         )
 
 
+#: Set by the first save that had to leave an unreadable config alone.
+_warned_unreadable = False
+
+
 # --- config.toml: a flat, local, gitignored key/value store -----------------
 # Read-modify-write, never a blind overwrite, so unrelated keys survive each
 # other's saves -- this file holds more than one independent setting.
 
 
-def _read_config_dict(path: str) -> dict:
+def _read_config(path: str) -> Tuple[dict, str]:
+    """``(settings, status)`` where status is ok / missing / unreadable.
+
+    The distinction matters because saving is read-modify-write. A file that
+    cannot be parsed and a file that does not exist both yield no settings,
+    and collapsing them turns the next save into a blind overwrite of a file
+    this code never understood -- so one stray bracket costs the user every
+    other setting in it, silently.
+
+    Found in the sibling eosed (its §24) and present here identically: the
+    write used the locale codec, which on Windows is cp1252, and the em dash
+    in the header line below then lands as a byte `tomllib` refuses. That was
+    one cause; the masking is the bug, and it fires for any parse failure.
+    """
     import os
     import tomllib
 
     if not os.path.exists(path):
-        return {}
+        return {}, "missing"
     try:
         with open(path, "rb") as handle:
-            return tomllib.load(handle)
+            raw = handle.read()
+    except OSError:
+        return {}, "unreadable"
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        # written by a pre-fix build under a non-UTF-8 locale; decode
+        # leniently so hand-edited keys survive, and the next save repairs it
+        text = raw.decode("cp1252", errors="replace")
+    try:
+        return tomllib.loads(text), "ok"
     except Exception:
-        return {}
+        return {}, "unreadable"
+
+
+def _read_config_dict(path: str) -> dict:
+    """Just the settings, for readers that cannot act on a failure."""
+    return _read_config(path)[0]
+
+
+def _update_config(path: str, **changes) -> None:
+    """Read-modify-write, or leave an unreadable file alone and say so."""
+    global _warned_unreadable
+
+    data, status = _read_config(path)
+    if status == "unreadable":
+        if not _warned_unreadable:
+            _warned_unreadable = True
+            print(f"s3ked: {path} could not be parsed, so settings are not "
+                  f"being saved. Fix or delete it; nothing has been "
+                  f"overwritten.", file=sys.stderr)
+        return
+    data.update(changes)
+    _write_config_dict(data, path)
 
 
 def _write_config_dict(data: dict, path: str) -> None:
@@ -208,7 +257,10 @@ def _write_config_dict(data: dict, path: str) -> None:
         else:
             lines.append(f"{key} = {value}")
     try:
-        with open(path, "w") as handle:
+        # encoding= is not optional: without it Python uses the locale codec,
+        # cp1252 on Windows, and the em dash above becomes a byte tomllib
+        # cannot read back. Both ends must say UTF-8; TOML is UTF-8 by spec.
+        with open(path, "w", encoding="utf-8") as handle:
             handle.write("\n".join(lines) + "\n")
     except OSError:
         pass  # the cache is a convenience, not required for correctness
@@ -232,10 +284,7 @@ def load_last_ports(path: str = DEFAULT_CONFIG_PATH) -> Optional[Tuple[str, str]
 def save_last_ports(
     send_port: str, recv_port: str, path: str = DEFAULT_CONFIG_PATH
 ) -> None:
-    data = _read_config_dict(path)
-    data["send_port"] = send_port
-    data["recv_port"] = recv_port
-    _write_config_dict(data, path)
+    _update_config(path, send_port=send_port, recv_port=recv_port)
 
 
 def load_exclusive_channel(path: str = DEFAULT_CONFIG_PATH) -> Optional[int]:
@@ -244,9 +293,7 @@ def load_exclusive_channel(path: str = DEFAULT_CONFIG_PATH) -> Optional[int]:
 
 
 def save_exclusive_channel(channel: int, path: str = DEFAULT_CONFIG_PATH) -> None:
-    data = _read_config_dict(path)
-    data["exclusive_channel"] = int(channel)
-    _write_config_dict(data, path)
+    _update_config(path, exclusive_channel=int(channel))
 
 
 # --- MIDI port enumeration --------------------------------------------------

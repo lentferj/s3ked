@@ -1211,3 +1211,60 @@ def test_fx_bytes_refuses_a_short_reply():
     bridge = _bridge_with(stingy)
     with pytest.raises(DeviceError, match="asked for"):
         bridge.fx_bytes(m.FxSelector.FX_ENTRY, 0, 0, 12)
+def test_an_unparseable_config_is_left_alone_rather_than_overwritten(tmp_path, capsys):
+    """One hand-typed bracket must not cost every other setting.
+
+    Saving is read-modify-write, so a read reporting "no settings" for a file
+    that has some turns the next save into a blind overwrite. Found in the
+    sibling eosed and present here identically.
+    """
+    import s3k.bridge as bridge_mod
+
+    bridge_mod._warned_unreadable = False
+    path = tmp_path / "config.toml"
+    original = 'exclusive_channel = 3\nthis line is [broken\n'
+    path.write_text(original, encoding="utf-8")
+
+    bridge_mod.save_last_ports("Out", "In", str(path))
+
+    assert path.read_text(encoding="utf-8") == original
+    assert "could not be parsed" in capsys.readouterr().err
+
+
+def test_a_missing_config_is_still_created(tmp_path):
+    """Conflating missing with unreadable is the bug; the fix must not too."""
+    import s3k.bridge as bridge_mod
+
+    path = tmp_path / "config.toml"
+    bridge_mod.save_exclusive_channel(5, str(path))
+    assert bridge_mod.load_exclusive_channel(str(path)) == 5
+
+
+def test_config_is_written_as_utf8_whatever_the_locale(tmp_path, monkeypatch):
+    """A byte-level assertion would pass on a UTF-8 host with the bug present,
+    so assert the call names its encoding instead."""
+    import builtins
+    import s3k.bridge as bridge_mod
+
+    real_open, seen = builtins.open, []
+
+    def recording_open(file, mode="r", *args, **kwargs):
+        if "w" in mode:
+            seen.append(kwargs.get("encoding"))
+        return real_open(file, mode, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", recording_open)
+    bridge_mod.save_exclusive_channel(2, str(tmp_path / "config.toml"))
+
+    assert seen and all(e == "utf-8" for e in seen), seen
+
+
+def test_unrelated_settings_survive_each_others_saves(tmp_path):
+    import s3k.bridge as bridge_mod
+
+    path = str(tmp_path / "config.toml")
+    bridge_mod.save_last_ports("Out", "In", path)
+    bridge_mod.save_exclusive_channel(7, path)
+
+    assert bridge_mod.load_last_ports(path) == ("Out", "In")
+    assert bridge_mod.load_exclusive_channel(path) == 7
