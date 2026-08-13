@@ -99,10 +99,17 @@ class ZoneRef:
         ``lo=0, hi=0`` -- and both leave a leftover name in the slot, often
         a ROM waveform's.
 
-        Measured by the sibling mpc2emu over 54,488 zones from real discs.
-        Not reproduced here: every zone on the banks this project has loaded
-        reads ``lo=0, hi=127``. The layout is independently confirmed
-        though -- their zone-relative +0c/+0d are this table's LOVEL and
+        **The rule needs no corpus.** Velocity 0 is note-off in MIDI, so a
+        zone whose high velocity is 0 cannot be selected on any machine that
+        implements MIDI correctly. This project first carried it as "measured
+        by mpc2emu over 54,488 zones", which was the weaker half of the
+        evidence and understated it -- their corpus establishes which
+        *spellings* occur in practice, and they note the distribution is
+        library-dependent and should not be generalised.
+
+        Not reproduced here either way: every zone on the banks this project
+        has loaded reads ``lo=0, hi=127``. The layout is independently
+        confirmed -- their zone-relative +0c/+0d are this table's LOVEL and
         HIVEL, at SNAME+12 and SNAME+13.
 
         **This is half of reachability, not all of it.** A keygroup's own
@@ -125,9 +132,10 @@ class Audit:
     resident: List[str] = field(default_factory=list)
     #: Programs whose keygroup count could not be read, so were not walked.
     unread: List[Tuple[int, str]] = field(default_factory=list)
-    #: Resident samples whose name encodes to twelve zero bytes, which is
-    #: also what an unassigned zone holds. References to these cannot be
-    #: distinguished from empty zones.
+    #: Resident samples whose name occupies the same bytes an unassigned
+    #: zone would -- all zeroes, or blank. References to these cannot be
+    #: distinguished from empty zones, so their usage counts are a lower
+    #: bound and they may look like orphans when they are not.
     indistinguishable: List[str] = field(default_factory=list)
 
     def _resident_set(self) -> set:
@@ -266,16 +274,29 @@ def _zone_info(bridge, program: int, keygroup: int, offset: int,
     return name, int(raw[m.NAME_LENGTH]), int(raw[m.NAME_LENGTH + 1])
 
 
-def _encodes_to_zeros(name: str) -> bool:
-    """Does this name occupy the same bytes as an unassigned zone?
+def _collides_with_empty(name: str) -> bool:
+    """Does this name occupy the same bytes an unassigned zone would?
+
+    Two ways it can, and both make the sample invisible to this walk,
+    because a zone naming it is byte-identical to a zone naming nothing:
+
+    * **All zeroes.** Charset index 0 is the character ``0``, so a sample
+      named ``000000000000`` is the same twelve bytes as an unwritten field.
+    * **Blank.** An unassigned zone holds twelve spaces, so a sample whose
+      name is empty or all-whitespace collides too. This is not hypothetical:
+      the sibling mpc2emu's encoder *substitutes* unsupported characters with
+      spaces rather than refusing, so a name made entirely of characters the
+      Akai alphabet lacks — CJK, punctuation — encodes to twelve spaces and
+      writes a sample whose name field cannot be told from an empty slot.
 
     ``encode_name`` refuses anything the device cannot store rather than
-    substituting, which is right for writing and wrong here: this is a
-    classification of names that already exist, and a name it rejects is
-    simply not the all-zero one. Letting it raise aborted the whole audit
-    over one odd name in the sample list -- a caller passing names of its
-    own, or a lowercase character, was enough.
+    substituting, which is right for writing and wrong here: this classifies
+    names that already exist, and a name it rejects is simply not one of the
+    colliding forms. Letting it raise aborted the whole audit over one odd
+    name in the sample list.
     """
+    if not name.strip():
+        return True
     try:
         return not any(m.encode_name(name.strip()))
     except ValueError:
@@ -303,7 +324,7 @@ def collect(bridge, *, programs: Optional[Sequence[str]] = None,
     audit.resident = list(samples if samples is not None
                           else bridge.sample_list(timeout=timeout))
     audit.indistinguishable = [name for name in audit.resident
-                               if _encodes_to_zeros(name)]
+                               if _collides_with_empty(name)]
     names = list(programs if programs is not None
                  else bridge.program_list(timeout=timeout))
     groups_field = p.lookup(("program", "GROUPS"))

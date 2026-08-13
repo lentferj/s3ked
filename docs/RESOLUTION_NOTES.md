@@ -5973,9 +5973,17 @@ different source, before trusting the semantics.
 
 **Not reproduced here.** Every zone on every bank this project has loaded
 reads `lo=0, hi=127`; a scan of all 66 references on the resident bank found
-none disabled. So the layout is confirmed locally and the semantics are
-theirs. `dangling()` excludes unreachable zones by default and
+none disabled. `dangling()` excludes unreachable zones by default and
 `suppressed()` lists what it hid, rather than silently dropping them.
+
+**Correction, from mpc2emu:** this note first said "the semantics are
+theirs", carrying the rule on their 54,488-zone corpus. That was the weaker
+half of the evidence. The rule follows from **velocity 0 being note-off in
+MIDI** and holds on any machine implementing MIDI correctly — no corpus
+required. Their measurement establishes which *spellings* occur in practice,
+and they add that the distribution is library-dependent and should not be
+generalised. Attributing a general rule to a particular corpus understates
+it and quietly makes it look contingent.
 
 The velocity pair costs **no extra round trips**: it is contiguous with the
 name, so one 14-byte read gets all three where the name alone took 12.
@@ -5986,6 +5994,33 @@ reads per keygroup.
 exclude a zone, so a reachable zone is the conjunction and only this half is
 established — by either project. A zone reported reachable may still never
 sound.
+
+### A third way a name collides with an empty zone
+
+Found by mpc2emu, from this project's twelve-spaces measurement. Their
+encoder **substitutes** characters the Akai alphabet lacks with spaces
+rather than refusing, so a sample named entirely of unsupported characters —
+CJK, punctuation — encodes to twelve spaces:
+
+```
+name '日本'        -> 0a x12
+name '!!!'         -> 0a x12
+unassigned zone    -> 0a x12
+```
+
+A zone naming such a sample is byte-identical to a zone naming nothing, so
+this walk reads it as unassigned and the sample becomes invisible. Their
+guard was `stem or 'SAMPLE'`, which catches the empty string only — a
+non-empty name that *encodes* to nothing is still truthy in Python.
+
+`Audit.indistinguishable` now covers both collision forms, all-zero and
+blank, rather than all-zero alone.
+
+**The two projects fail this in opposite directions from the same design
+choice.** `encode_name` here *refuses* what the device cannot store, which
+took the whole audit down over one lowercase character; theirs *substitutes*,
+which silently wrote a sample whose name cannot be told from an empty slot.
+Neither default is obviously right.
 
 ### Two bugs this found in code that already passed its tests
 

@@ -265,3 +265,20 @@ def test_an_unencodable_sample_name_does_not_abort_the_whole_audit():
     assert [r.sample for r in audit.references] == ["KICK"]
     assert audit.indistinguishable == [], "unencodable is not all-zero"
     assert "a lowercase name" in audit.orphans()
+
+
+def test_a_blank_sample_name_collides_with_an_empty_zone_too():
+    """An encoder that substitutes can write a name that vanishes.
+
+    mpc2emu's str_to_akai turns anything the Akai alphabet lacks into a
+    space, so a sample named entirely of CJK or punctuation encodes to
+    twelve spaces -- byte-identical to an unassigned zone. A zone naming it
+    reads as empty here, and the sample looks like an orphan.
+    """
+    bank = {"KIT": [["KICK", None, None, None]]}
+    audit = a.collect(FakeBank(bank, ["KICK", "   ", ""]))
+
+    assert audit.indistinguishable == ["   ", ""]
+    assert "lower bound" in audit.summary()
+    # and it is not mistaken for a dangling reference
+    assert audit.dangling() == []
