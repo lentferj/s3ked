@@ -50,7 +50,7 @@ from typing import Dict, List, Optional, Tuple
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import (
     DataTable,
@@ -159,6 +159,33 @@ class MasterScreen(ModalScreen[Optional[str]]):
         self.dismiss(self.armed)
 
     def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class ReportScreen(ModalScreen[None]):
+    """A read-only result: integrity, or who uses a sample."""
+
+    BINDINGS = [
+        Binding("escape", "close", "Close"),
+        Binding("q", "close", "Close"),
+        Binding("enter", "close", "Close"),
+    ]
+
+    def __init__(self, title: str, body: str, footer: str) -> None:
+        super().__init__()
+        self.title_text = title
+        self.body = body
+        self.footer = footer
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="report-box"):
+            yield Label(f"[b]{self.title_text}[/b]", id="report-title")
+            with VerticalScroll(id="report-scroll"):
+                yield Static(self.body, id="report-body")
+            yield Label(self.footer, id="report-footer")
+            yield Label("[b]Esc[/b] close")
+
+    def action_close(self) -> None:
         self.dismiss(None)
 
 
@@ -344,6 +371,8 @@ class S3kedApp(App):
         Binding("l", "load_volume", "Load volume"),
         Binding("s", "source", "Load source"),
         Binding("g", "menu", "Main menu"),
+        Binding("i", "integrity", "Integrity"),
+        Binding("u", "usage", "Who uses"),
         Binding("tab", "focus_next", "Next pane", show=False),
     ]
 
@@ -572,6 +601,72 @@ class S3kedApp(App):
             self.call_from_thread(self.notify_status, f"partition: {exc}")
             return
         self.call_from_thread(self.action_disk)
+
+    def action_integrity(self) -> None:
+        """Which zones name a sample the machine does not hold.
+
+        These are the silent ones. A load that overran memory leaves the
+        programs resident and selectable, and nothing on the machine says
+        which of them lost their samples (§73) -- this is the only place
+        that information exists.
+        """
+        self.notify_status("walking every keygroup…")
+        self._audit_worker(None)
+
+    def action_usage(self) -> None:
+        """Every zone naming the selected sample."""
+        table = self.query_one("#samples", DataTable)
+        row = table.cursor_row
+        if row is None or row >= len(self._samples):
+            self.notify_status("select a sample first")
+            return
+        name = self._samples[row]
+        self.notify_status(f"looking for uses of {name!r}…")
+        self._audit_worker(name)
+
+    @work(thread=True)
+    def _audit_worker(self, sample: Optional[str]) -> None:
+        from s3k import analysis
+
+        try:
+            with self._bridge_lock:
+                audit = analysis.collect(self.bridge)
+        except Exception as exc:
+            self.call_from_thread(self.notify_status, f"audit: {exc}")
+            return
+        self.call_from_thread(self._show_audit, audit, sample)
+
+    def _show_audit(self, audit, sample: Optional[str]) -> None:
+        from s3k import analysis
+
+        if sample is not None:
+            where = audit.usage(sample)
+            body = (
+                "\n".join(f"  program {r.program} ({r.program_name})  "
+                           f"keygroup {r.keygroup}  zone {r.zone}"
+                           for r in where[:24])
+                or "  nothing uses it")
+            extra = (f"\n  … and {len(where) - 24} more" if len(where) > 24
+                     else "")
+            self.push_screen(ReportScreen(
+                f"Uses of [b]{sample}[/b]", body + extra,
+                f"{len(where)} zone(s)"))
+            return
+
+        dangling = audit.dangling()
+        if dangling:
+            lines = []
+            for program, refs in audit.programs_playing_silence().items():
+                names = sorted({r.sample for r in refs})
+                lines.append(
+                    f"  program {program} ({refs[0].program_name}): "
+                    f"{len(refs)} silent zone(s)")
+                lines.append(f"      naming {', '.join(names[:4])}"
+                             + (" …" if len(names) > 4 else ""))
+            body = "\n".join(lines)
+        else:
+            body = "  Every zone names a sample the machine holds."
+        self.push_screen(ReportScreen("Integrity", body, audit.summary()))
 
     def action_source(self) -> None:
         """Show the load source and let it be changed."""

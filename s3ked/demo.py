@@ -71,6 +71,10 @@ _DEMO_SAMPLES: List[str] = [
     "STRING C2",
 ]
 
+#: Named by a demo keygroup but never resident, so the audit has something
+#: to find. Invented, like every other name here.
+_MISSING_SAMPLE = "TINE HARD C3"
+
 #: How many keygroups each demo program has, by program index.
 _DEMO_KEYGROUPS: List[int] = [2, 1, 4, 1, 3]
 
@@ -147,11 +151,21 @@ class DemoBridge:
                 hi = min(21 + (kg + 1) * span, 127) if kg + 1 < count else 127
                 self._write_named(kheader, "keygroup", "LONOTE", min(lo, 127))
                 self._write_named(kheader, "keygroup", "HINOTE", hi)
+                # The last keygroup of the last program names a sample that
+                # is deliberately NOT resident, so the demo has one dangling
+                # reference to show. That is the state a load which ran out
+                # of memory leaves behind: the program is resident and
+                # selectable, and the zone plays silence with nothing on the
+                # machine to say so (§73). A demo where nothing is ever wrong
+                # cannot demonstrate the check that finds it.
+                last = (index == len(self._keygroup_counts) - 1
+                        and kg == self._keygroup_counts[index] - 1)
                 self._write_named(
                     kheader,
                     "keygroup",
                     "SNAME1",
-                    self._samples[(index + kg) % len(self._samples)],
+                    _MISSING_SAMPLE if last
+                    else self._samples[(index + kg) % len(self._samples)],
                 )
                 groups.append(kheader)
             self._keygroup_headers[index] = groups

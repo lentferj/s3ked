@@ -183,6 +183,8 @@ pass `--exclusive-channel N`. The port pair that answers is remembered in
 | `d` | read the disk — volumes and the loaded volume's contents |
 | `[` `]` | step the partition (writes) |
 | `l` | load the selected volume (writes, confirms, checks it fits) |
+| `i` | integrity — which zones name a sample that is not there |
+| `u` | who uses the selected sample |
 | `s` | load source — SCSI drive, floppy/hard/flash, partition |
 | `g` | main menu — move the machine between its pages |
 | `m` | Master — the destructive operations |

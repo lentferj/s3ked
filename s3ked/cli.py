@@ -97,6 +97,55 @@ def _cmd_samples(bridge, _args) -> None:
     print(_fmt_table([[str(i), n] for i, n in enumerate(names)], ["num", "name"]))
 
 
+def _cmd_audit(bridge, args) -> None:
+    """Cross-reference: what points at what, and what points at nothing.
+
+    The dangling list is the reason this exists. A load that exceeds free
+    memory says "insufficient waveform memory" once and then behaves
+    normally, leaving programs resident whose samples never arrived -- and
+    they play silence with nothing on the machine to say so (§73).
+    """
+    from s3k import analysis
+
+    audit = analysis.collect(bridge)
+
+    if args.sample is not None:
+        where = audit.usage(args.sample)
+        if not where:
+            held = args.sample.strip() in {s.strip() for s in audit.resident}
+            print(f"nothing uses {args.sample!r}"
+                  + ("" if held else " (and no resident sample has that name)"))
+            return
+        print(_fmt_table(
+            [[str(r.program), r.program_name, str(r.keygroup), str(r.zone)]
+             for r in where],
+            ["prog", "program", "kg", "zone"]))
+        print(f"\n{len(where)} zone(s) use {args.sample!r}")
+        return
+
+    dangling = audit.dangling()
+    if dangling:
+        print("DANGLING -- these zones name a sample the machine does not "
+              "hold, and play silence:\n")
+        print(_fmt_table(
+            [[str(r.program), r.program_name, str(r.keygroup), str(r.zone),
+              r.sample] for r in dangling],
+            ["prog", "program", "kg", "zone", "names"]))
+        print()
+    if audit.orphans() and args.verbose:
+        print(f"unused samples (memory nothing plays): "
+              f"{', '.join(audit.orphans())}\n")
+    if audit.ambiguous():
+        for name, count in audit.ambiguous().items():
+            print(f"AMBIGUOUS: {count} resident samples are named {name!r}; "
+                  f"a zone naming it cannot be resolved to one of them")
+        print()
+    for index, name in audit.unread:
+        print(f"NOT READ: program {index} ({name}) -- keygroup count "
+              f"unreadable, so its zones were not walked")
+    print(audit.summary())
+
+
 def _cmd_header(bridge, args) -> None:
     values = bridge.get_header(
         args.region, args.index, keygroup=args.keygroup
@@ -250,6 +299,7 @@ _COMMANDS: Dict[str, Callable] = {
     "status": _cmd_status,
     "programs": _cmd_programs,
     "samples": _cmd_samples,
+    "audit": _cmd_audit,
     "header": _cmd_header,
     "get": _cmd_get,
     "set": _cmd_set,
@@ -300,6 +350,14 @@ def build_parser() -> argparse.ArgumentParser:
         )
         if with_group:
             sp.add_argument("--group", default=None, help="limit to a dotted group")
+
+    sp = sub.add_parser(
+        "audit",
+        help="cross-reference programs and samples: what plays silence")
+    sp.add_argument("--sample", metavar="NAME",
+                    help="instead, list every zone that uses this sample")
+    sp.add_argument("-v", "--verbose", action="store_true",
+                    help="also list samples no program uses")
 
     sp = sub.add_parser("header", help="dump one whole header, decoded")
     sp.add_argument("region", choices=p.REGIONS)

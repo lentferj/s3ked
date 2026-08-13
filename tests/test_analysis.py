@@ -1,0 +1,197 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026  s3ked contributors
+#
+# This file is part of s3ked.
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the Free
+# Software Foundation; either version 2 of the License, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+# more details.
+"""The cross-reference, and the two traps it exists to avoid."""
+from s3k import analysis as a
+from s3k import messages as m
+from s3k import params as p
+
+ZONE_OFFSETS = [p.lookup(("keygroup", f)).offset for f in a.ZONE_FIELDS]
+GROUPS = p.lookup(("program", "GROUPS"))
+
+
+class FakeBank:
+    """A bank described as {program name: [[zone names per keygroup], ...]}.
+
+    ``None`` in a zone means nothing assigned, and is stored as twelve
+    SPACES, which is what the machine actually does -- measured on a loaded
+    program, where an unused zone reads [10]*12.
+
+    This fixture used to store twelve ZEROES, which no machine ever produces.
+    Nine tests passed against it and the first real bank produced 182
+    references to ''. A fixture is a claim about the device, and this one was
+    wrong.
+    """
+
+    def __init__(self, bank, samples):
+        self.bank = bank
+        self.samples = samples
+        self.reads = 0
+
+    def program_list(self, *, timeout=None):
+        return list(self.bank)
+
+    def sample_list(self, *, timeout=None):
+        return list(self.samples)
+
+    def get_parameter(self, param, index, *, timeout=None, **kw):
+        assert param is GROUPS
+        return len(list(self.bank.values())[index])
+
+    def get_header_bytes(self, region, index, offset, size, *, selector=0,
+                         timeout=None):
+        self.reads += 1
+        assert region == "keygroup"
+        keygroup = list(self.bank.values())[index][selector]
+        zone = ZONE_OFFSETS.index(offset)
+        name = keygroup[zone] if zone < len(keygroup) else None
+        if name is None:
+            return bytes(m.encode_name(" "))
+        return bytes(m.encode_name(name))
+
+
+def test_a_dangling_reference_is_a_name_no_resident_sample_carries():
+    bank = {"KIT": [["KICK", "SNARE", None, None]],
+            "PAD": [["MISSING PAD", None, None, None]]}
+    audit = a.collect(FakeBank(bank, ["KICK", "SNARE"]))
+
+    dangling = audit.dangling()
+    assert [r.sample for r in dangling] == ["MISSING PAD"]
+    assert dangling[0].program == 1
+    assert dangling[0].keygroup == 0 and dangling[0].zone == 1
+    assert "DANGLING" in audit.summary()
+
+
+def test_an_unassigned_zone_holds_spaces_which_is_what_the_machine_stores():
+    """Measured: an unused zone reads [10]*12 and decodes to blank.
+
+    Counting those as references reported 182 dangling samples named '' on a
+    real two-program bank.
+    """
+    assert m.encode_name(" ") == [10] * m.NAME_LENGTH
+
+    bank = {"KIT": [["KICK", None, None, None]]}
+    audit = a.collect(FakeBank(bank, ["KICK"]))
+
+    assert len(audit.references) == 1, "only the assigned zone counts"
+    assert [r.sample for r in audit.references] == ["KICK"]
+    assert audit.dangling() == []
+
+
+def test_an_unwritten_zone_of_zero_bytes_is_also_unassigned():
+    """Zeros decode to '000000000000', not to blank, so this needs its own
+    check -- a blank test alone would call it a reference to that name."""
+    assert m.decode_name([0] * m.NAME_LENGTH) == "0" * m.NAME_LENGTH
+
+    class Zeroed(FakeBank):
+        def get_header_bytes(self, region, index, offset, size, *,
+                             selector=0, timeout=None):
+            got = super().get_header_bytes(region, index, offset, size,
+                                           selector=selector, timeout=timeout)
+            return bytes(m.NAME_LENGTH) if not got.strip(bytes([10])) else got
+
+    audit = a.collect(Zeroed({"KIT": [["KICK", None, None, None]]}, ["KICK"]))
+    assert [r.sample for r in audit.references] == ["KICK"]
+
+
+def test_a_sample_named_all_zeroes_cannot_be_told_from_an_empty_zone():
+    """The trap has a second half, and it defeats the raw-bytes check.
+
+    encode_name("000000000000") is twelve zero bytes -- exactly what an
+    unassigned zone holds. Reading raw bytes rather than decoded text does
+    NOT separate them, which this module assumed until this test.
+
+    So the convention is "zeros mean empty", and the pathological case is
+    reported rather than silently swallowed.
+    """
+    odd = "0" * m.NAME_LENGTH
+    assert not any(m.encode_name(odd)), "the collision this test is about"
+
+    bank = {"ODD": [[odd, None, None, None]]}
+    audit = a.collect(FakeBank(bank, [odd]))
+
+    assert audit.references == [], "zeros are read as empty, by convention"
+    assert audit.dangling() == [], "and so nothing is reported missing"
+    assert audit.indistinguishable == [odd]
+    assert "lower bound" in audit.summary()
+    assert audit.usage(odd) == [], "a lower bound, and here it is zero"
+
+
+def test_usage_answers_who_uses_this_sample():
+    bank = {"A": [["KICK", None, None, None], ["KICK", "HAT", None, None]],
+            "B": [["HAT", None, None, None]]}
+    audit = a.collect(FakeBank(bank, ["KICK", "HAT"]))
+
+    kick = audit.usage("KICK")
+    assert len(kick) == 2
+    assert {(r.program, r.keygroup) for r in kick} == {(0, 0), (0, 1)}
+    assert len(audit.usage("HAT")) == 2
+    assert audit.usage("NOBODY") == []
+
+
+def test_orphans_are_samples_nothing_points_at():
+    bank = {"A": [["KICK", None, None, None]]}
+    audit = a.collect(FakeBank(bank, ["KICK", "UNUSED", "ALSO UNUSED"]))
+    assert audit.orphans() == ["UNUSED", "ALSO UNUSED"]
+
+
+def test_duplicate_sample_names_are_reported_as_ambiguous():
+    """The machine enforces no uniqueness, and zones reference by name."""
+    bank = {"A": [["TWICE", None, None, None]]}
+    audit = a.collect(FakeBank(bank, ["TWICE", "TWICE", "ONCE"]))
+
+    assert audit.ambiguous() == {"TWICE": 2}
+    assert audit.dangling() == [], "ambiguous is not the same as missing"
+    assert "duplicated" in audit.summary()
+
+
+def test_the_walk_is_bounded_by_GROUPS_and_not_by_a_guess():
+    """Reading past the last keygroup returns a stale buffer, not an error.
+
+    The extended layer does not bounds-check (§11), so a walk with a fixed
+    upper bound would manufacture references by re-reading the last real
+    keygroup -- and they would look entirely plausible.
+    """
+    bank = {"SMALL": [["ONE", None, None, None]]}
+    fake = FakeBank(bank, ["ONE"])
+    audit = a.collect(fake)
+
+    assert len(audit.references) == 1
+    assert fake.reads == 4, "four zones of one keygroup, and no more"
+
+
+def test_programs_playing_silence_groups_by_program_worst_first():
+    bank = {"OK": [["HERE", None, None, None]],
+            "BAD": [["GONE", "ALSO GONE", None, None]],
+            "WORSE": [["X", "Y", "Z", None], ["W", None, None, None]]}
+    audit = a.collect(FakeBank(bank, ["HERE"]))
+
+    grouped = audit.programs_playing_silence()
+    assert list(grouped) == [2, 1], "four missing before two"
+    assert 0 not in grouped
+
+
+def test_a_program_whose_keygroup_count_cannot_be_read_is_reported_not_skipped():
+    """Silence about an unread program would look like a clean bank."""
+    bank = {"FINE": [["OK", None, None, None]], "BROKEN": [[None] * 4]}
+
+    class Grumpy(FakeBank):
+        def get_parameter(self, param, index, *, timeout=None, **kw):
+            if index == 1:
+                raise RuntimeError("no reply")
+            return super().get_parameter(param, index, timeout=timeout, **kw)
+
+    audit = a.collect(Grumpy(bank, ["OK"]))
+    assert audit.unread == [(1, "BROKEN")]
+    assert "could not be read" in audit.summary()

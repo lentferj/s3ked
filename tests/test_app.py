@@ -1091,3 +1091,49 @@ async def test_clearing_memory_needs_the_write_gate():
         await pilot.pause()
         assert "write gate is locked" in app.last_status
         assert app.bridge.sample_list() != []
+
+
+async def test_the_integrity_check_names_the_programs_that_play_silence():
+    """The demo carries one dangling reference on purpose."""
+    from textual.widgets import Static
+    from s3ked.app import S3kedApp, ReportScreen
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("i")
+        for _ in range(40):
+            await pilot.pause()
+        screen = app.screen_stack[-1]
+        assert isinstance(screen, ReportScreen)
+        body = str(screen.query_one("#report-body", Static).render())
+        footer = str(screen.query_one("#report-footer", Static).render())
+
+    assert "silent zone" in body
+    assert "DANGLING" in footer
+    # reading is not writing: no gate needed for either of these
+    assert app.allow_write is False
+
+
+async def test_who_uses_this_sample_lists_the_zones():
+    from textual.widgets import DataTable, Static
+    from s3ked.app import S3kedApp, ReportScreen
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        table = app.query_one("#samples", DataTable)
+        table.move_cursor(row=0)
+        await pilot.pause()
+        await pilot.press("u")
+        for _ in range(40):
+            await pilot.pause()
+        screen = app.screen_stack[-1]
+        assert isinstance(screen, ReportScreen)
+        title = str(screen.query_one("#report-title", Static).render())
+        body = str(screen.query_one("#report-body", Static).render())
+
+    assert app._samples[0] in title
+    assert "keygroup" in body or "nothing uses it" in body

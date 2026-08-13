@@ -5914,3 +5914,75 @@ media under it, §79's from a value with no page behind it. A parameter write
 that is out of range gets an error reply; a page write that is out of range
 gets silence. Pages are not parameters, and probing them costs a power cycle
 each time the guess is wrong.
+
+## §80 — The cross-reference, and a fixture that was a false claim (2026-08-13)
+
+**Status: settled.** Built and verified 2026-08-13 against a real bank.
+
+`s3k/analysis.py` answers the two librarian questions the sibling eosed
+answers — *who uses this sample*, and *what points at nothing* — and exists
+because of §73: a load that exceeds free memory reports "insufficient
+waveform memory" once and then behaves normally, leaving programs resident
+and selectable whose samples never arrived. They play silence. Nothing on the
+machine distinguishes them from a program that is merely quiet.
+
+### What differs from eosed, and why it is not a port
+
+EOS voices reference a sample by **number**, and keep `E4_GEN_SAMPLE = N`
+after sample N is erased, so a dangling reference there is a number pointing
+at the device's "Empty Sample" placeholder. Akai keygroup zones reference by
+**name**. That makes the check a set membership rather than a placeholder
+comparison, and it makes duplicate names a genuine ambiguity — the machine
+enforces no uniqueness (§13a), so a zone naming a duplicated sample cannot be
+resolved to one of them. `Audit.ambiguous()` reports that rather than
+silently picking the first.
+
+### An unassigned zone holds twelve SPACES
+
+Measured: an unused zone reads `[10]*12` and decodes to blank, while its
+neighbour reads a sample on that volume.
+
+This module was written assuming twelve **zeros**, and tested against a
+fixture that invented them. Nine synthetic tests passed. The first real bank
+produced **248 references, 182 of them to `''`** — every empty zone on the
+two programs, reported as a dangling sample with an empty name.
+
+**The fixture was a claim about the device, and it was wrong.** No amount of
+testing against it could have found this, because it and the code agreed. What
+found it was running the walk against hardware and looking at the *count*:
+248 references across two programs is not a plausible number, and it was
+wrong in the direction that produces alarming output rather than silence,
+which is the only reason it was noticed at once.
+
+Both encodings are now accepted as unassigned — zeros are what an unwritten
+field would hold — but blank-after-decode is the check that matters.
+
+### The zero case still has a trap, and it is unresolvable
+
+Index 0 of the Akai charset is the character `0` (the §68 trap), so twelve
+zero bytes decode to `000000000000`, **not** to blank, and
+`encode_name("000000000000")` is likewise twelve zeros. A sample genuinely
+named `000000000000` and an unwritten field are therefore the same bytes and
+cannot be separated at all. The convention is "zeros mean unassigned", and
+`Audit.indistinguishable` names any resident sample whose name collides, so
+usage counts for it are reported as a lower bound rather than as fact.
+
+### Verified against hardware, including the failure case
+
+A check that only ever reports "no problems" has not been tested. So: load a
+volume, audit it clean, then **delete two samples the audit says are used**
+and require it to name exactly the affected zones.
+
+```
+before   66 references, 2 programs, 12 samples, 0 dangling
+predict  deleting 'a sample on that volume' and 'F 5' dangles 24 references
+after    24 DANGLING in 1 program — exactly those two names
+```
+
+The walk is bounded by `GROUPS` and never by a guess: the extended layer does
+not bounds-check reads and returns the previous valid read's buffer instead
+of an error (§11), so a fixed upper bound would manufacture references by
+re-reading the last real keygroup — and they would look entirely plausible.
+
+Cost: 4 reads per keygroup plus one per program. A 61-keygroup bank audits in
+4.3 s.
