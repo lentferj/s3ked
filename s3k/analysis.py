@@ -85,6 +85,32 @@ class ZoneRef:
     keygroup: int
     zone: int
     sample: str
+    lo_vel: int = 0
+    hi_vel: int = 127
+
+    @property
+    def reachable(self) -> bool:
+        """False when this zone can never be selected.
+
+        A zone is disabled by its velocity pair, not by clearing its name:
+        MIDI velocity 0 is note-off, so ``hi_vel == 0`` can never be
+        selected whatever the low value says. Two spellings occur in real
+        material and mean the same thing -- ``lo=1, hi=0`` inverted, and
+        ``lo=0, hi=0`` -- and both leave a leftover name in the slot, often
+        a ROM waveform's.
+
+        Measured by the sibling mpc2emu over 54,488 zones from real discs.
+        Not reproduced here: every zone on the banks this project has loaded
+        reads ``lo=0, hi=127``. The layout is independently confirmed
+        though -- their zone-relative +0c/+0d are this table's LOVEL and
+        HIVEL, at SNAME+12 and SNAME+13.
+
+        **This is half of reachability, not all of it.** A keygroup's own
+        key range can also exclude a zone, so a reachable zone is the
+        conjunction and only this half is established. A zone reported
+        reachable here may still never sound.
+        """
+        return self.hi_vel > 0
 
     def __str__(self) -> str:  # pragma: no cover - display only
         return (f"program {self.program} ({self.program_name}) "
@@ -107,15 +133,29 @@ class Audit:
     def _resident_set(self) -> set:
         return {name.strip() for name in self.resident}
 
-    def dangling(self) -> List[ZoneRef]:
+    def dangling(self, *, include_unreachable: bool = False) -> List[ZoneRef]:
         """Zones naming a sample the machine does not hold.
 
         These are the silent ones. After a partial load this is the list of
         programs that will play nothing, and it is the only place that
         information exists.
+
+        Zones that can never be selected are excluded by default: a
+        disabled zone keeps whatever name it last held (see
+        :attr:`ZoneRef.reachable`), so reporting it as a missing sample is
+        a fault the user cannot act on and did not cause. Pass
+        ``include_unreachable=True`` to see them anyway.
         """
         held = self._resident_set()
-        return [ref for ref in self.references if ref.sample.strip() not in held]
+        return [ref for ref in self.references
+                if ref.sample.strip() not in held
+                and (include_unreachable or ref.reachable)]
+
+    def suppressed(self) -> List[ZoneRef]:
+        """Dangling references hidden because their zone cannot sound."""
+        reachable = {id(r) for r in self.dangling()}
+        return [r for r in self.dangling(include_unreachable=True)
+                if id(r) not in reachable]
 
     def usage(self, sample: str) -> List[ZoneRef]:
         """Every zone naming ``sample``. The "who uses this" question."""
@@ -184,6 +224,10 @@ class Audit:
             parts.append(f"{len(self.orphans())} unused sample(s)")
         if self.ambiguous():
             parts.append(f"{len(self.ambiguous())} duplicated sample name(s)")
+        if self.suppressed():
+            parts.append(
+                f"{len(self.suppressed())} more in zones that cannot sound "
+                f"(not counted)")
         if self.unread:
             parts.append(f"{len(self.unread)} program(s) could not be read")
         if self.indistinguishable:
@@ -194,9 +238,16 @@ class Audit:
         return "; ".join(parts)
 
 
-def _zone_name(bridge, program: int, keygroup: int, offset: int,
-               timeout: Optional[float]) -> Optional[str]:
-    """The zone's sample name, or ``None`` when nothing is assigned.
+#: A zone's name and its velocity pair are contiguous -- LOVEL sits at
+#: SNAME+12 and HIVEL at SNAME+13 -- so one 14-byte read gets all three.
+#: Fetching the velocities separately would have tripled the round trips for
+#: a walk that already costs four per keygroup.
+_ZONE_SPAN = m.NAME_LENGTH + 2
+
+
+def _zone_info(bridge, program: int, keygroup: int, offset: int,
+               timeout: Optional[float]):
+    """``(name, lo_vel, hi_vel)``, or ``None`` when nothing is assigned.
 
     Read as raw bytes rather than through ``get_parameter``, because the
     decoded text cannot distinguish "no sample" from a sample named
@@ -204,14 +255,31 @@ def _zone_name(bridge, program: int, keygroup: int, offset: int,
     blank.
     """
     raw = bridge.get_header_bytes("keygroup", program, offset,
-                                  m.NAME_LENGTH, selector=keygroup,
+                                  _ZONE_SPAN, selector=keygroup,
                                   timeout=timeout)
-    if not any(raw):
+    name_bytes = raw[:m.NAME_LENGTH]
+    if not any(name_bytes):
         return None          # unwritten; see the module docstring
-    name = m.decode_name(list(raw))
+    name = m.decode_name(list(name_bytes))
     if not name.strip():
         return None          # twelve spaces: what the machine really stores
-    return name
+    return name, int(raw[m.NAME_LENGTH]), int(raw[m.NAME_LENGTH + 1])
+
+
+def _encodes_to_zeros(name: str) -> bool:
+    """Does this name occupy the same bytes as an unassigned zone?
+
+    ``encode_name`` refuses anything the device cannot store rather than
+    substituting, which is right for writing and wrong here: this is a
+    classification of names that already exist, and a name it rejects is
+    simply not the all-zero one. Letting it raise aborted the whole audit
+    over one odd name in the sample list -- a caller passing names of its
+    own, or a lowercase character, was enough.
+    """
+    try:
+        return not any(m.encode_name(name.strip()))
+    except ValueError:
+        return False
 
 
 def collect(bridge, *, programs: Optional[Sequence[str]] = None,
@@ -235,7 +303,7 @@ def collect(bridge, *, programs: Optional[Sequence[str]] = None,
     audit.resident = list(samples if samples is not None
                           else bridge.sample_list(timeout=timeout))
     audit.indistinguishable = [name for name in audit.resident
-                               if not any(m.encode_name(name.strip()))]
+                               if _encodes_to_zeros(name)]
     names = list(programs if programs is not None
                  else bridge.program_list(timeout=timeout))
     groups_field = p.lookup(("program", "GROUPS"))
@@ -251,14 +319,16 @@ def collect(bridge, *, programs: Optional[Sequence[str]] = None,
         for keygroup in range(count):
             for zone, offset in enumerate(offsets, start=1):
                 try:
-                    name = _zone_name(bridge, index, keygroup, offset, timeout)
+                    info = _zone_info(bridge, index, keygroup, offset, timeout)
                 except Exception:
                     continue
-                if name is None:
+                if info is None:
                     continue
+                name, lo_vel, hi_vel = info
                 audit.references.append(
                     ZoneRef(program=index, program_name=program_name,
-                            keygroup=keygroup, zone=zone, sample=name))
+                            keygroup=keygroup, zone=zone, sample=name,
+                            lo_vel=lo_vel, hi_vel=hi_vel))
         if progress is not None:
             progress(index + 1, len(names))
     return audit

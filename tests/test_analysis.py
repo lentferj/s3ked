@@ -51,14 +51,22 @@ class FakeBank:
 
     def get_header_bytes(self, region, index, offset, size, *, selector=0,
                          timeout=None):
+        """Name, then LOVEL, then HIVEL -- contiguous, as on the machine.
+
+        A zone entry is either a name, or ``(name, lo, hi)`` when the test
+        cares about the velocity pair. Default is 0..127, which is what
+        every zone on every bank this project has loaded actually reads.
+        """
         self.reads += 1
         assert region == "keygroup"
         keygroup = list(self.bank.values())[index][selector]
         zone = ZONE_OFFSETS.index(offset)
-        name = keygroup[zone] if zone < len(keygroup) else None
-        if name is None:
-            return bytes(m.encode_name(" "))
-        return bytes(m.encode_name(name))
+        entry = keygroup[zone] if zone < len(keygroup) else None
+        lo, hi = 0, 127
+        if isinstance(entry, tuple):
+            entry, lo, hi = entry
+        name = m.encode_name(" " if entry is None else entry)
+        return bytes(list(name) + [lo, hi])[:size]
 
 
 def test_a_dangling_reference_is_a_name_no_resident_sample_carries():
@@ -99,7 +107,9 @@ def test_an_unwritten_zone_of_zero_bytes_is_also_unassigned():
                              selector=0, timeout=None):
             got = super().get_header_bytes(region, index, offset, size,
                                            selector=selector, timeout=timeout)
-            return bytes(m.NAME_LENGTH) if not got.strip(bytes([10])) else got
+            if not bytes(got[:m.NAME_LENGTH]).strip(bytes([10])):
+                return bytes(m.NAME_LENGTH) + bytes(got[m.NAME_LENGTH:])
+            return got
 
     audit = a.collect(Zeroed({"KIT": [["KICK", None, None, None]]}, ["KICK"]))
     assert [r.sample for r in audit.references] == ["KICK"]
@@ -195,3 +205,63 @@ def test_a_program_whose_keygroup_count_cannot_be_read_is_reported_not_skipped()
     audit = a.collect(Grumpy(bank, ["OK"]))
     assert audit.unread == [(1, "BROKEN")]
     assert "could not be read" in audit.summary()
+
+
+def test_a_zone_that_cannot_sound_is_not_reported_as_missing():
+    """A disabled zone keeps whatever name it last held.
+
+    Velocity 0 is note-off, so hi_vel == 0 can never be selected whatever
+    the low value says, and both spellings seen in real material -- (1, 0)
+    inverted and (0, 0) -- leave a leftover name behind, often a ROM
+    waveform's. Reporting those as missing samples is a fault the user
+    cannot act on and did not cause.
+
+    Measured by the sibling mpc2emu over 54,488 zones from real discs. Not
+    reproduced on this project's hardware, where every zone reads 0..127 --
+    the layout is confirmed here, the semantics are theirs.
+    """
+    bank = {"KIT": [["LIVE", ("GONE INVERT", 1, 0), ("GONE FLAT", 0, 0),
+                     ("ALSO GONE", 64, 0)]]}
+    audit = a.collect(FakeBank(bank, ["LIVE"]))
+
+    assert len(audit.references) == 4, "all four zones are still named"
+    assert audit.dangling() == [], "none of the three can ever sound"
+    assert len(audit.suppressed()) == 3
+    assert "cannot sound" in audit.summary()
+
+    everything = audit.dangling(include_unreachable=True)
+    assert len(everything) == 3, "asked for, and returned"
+
+
+def test_a_reachable_zone_naming_a_missing_sample_is_still_reported():
+    """The suppression must not swallow the case the check exists for."""
+    bank = {"KIT": [[("MISSING", 0, 127), ("DISABLED", 0, 0), None, None]]}
+    audit = a.collect(FakeBank(bank, ["SOMETHING ELSE"]))
+
+    assert [r.sample for r in audit.dangling()] == ["MISSING"]
+    assert [r.sample for r in audit.suppressed()] == ["DISABLED"]
+
+
+def test_the_velocity_pair_costs_no_extra_round_trips():
+    """LOVEL and HIVEL are contiguous with the name, so one read gets all."""
+    bank = {"KIT": [["A", "B", None, None]]}
+    fake = FakeBank(bank, ["A", "B"])
+    a.collect(fake)
+    assert fake.reads == 4, "four zones, four reads -- not twelve"
+
+
+def test_an_unencodable_sample_name_does_not_abort_the_whole_audit():
+    """encode_name refuses what the device cannot store, which is right for
+    writing and wrong for classifying names that already exist. Letting it
+    raise took the entire audit down over one odd name."""
+    import pytest
+
+    with pytest.raises(ValueError):
+        m.encode_name("a lowercase name")
+
+    bank = {"KIT": [["KICK", None, None, None]]}
+    audit = a.collect(FakeBank(bank, ["KICK", "a lowercase name"]))
+
+    assert [r.sample for r in audit.references] == ["KICK"]
+    assert audit.indistinguishable == [], "unencodable is not all-zero"
+    assert "a lowercase name" in audit.orphans()

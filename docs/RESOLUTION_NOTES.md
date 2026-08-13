@@ -5958,6 +5958,51 @@ here and not there.** If a bank writer emits `BASS` and `BASS ` as distinct
 fields, this audit reports one duplicated name and the writer is not at
 fault.
 
+### A zone is disabled by its velocity pair, not by its name
+
+From mpc2emu, measured over 54,488 zones from real discs: `hi_vel == 0`
+means a zone can never be selected, because MIDI velocity 0 is note-off.
+Two spellings occur and mean the same — `lo=1, hi=0` inverted, and
+`lo=0, hi=0` — and **both leave a leftover name in the slot**, often a ROM
+waveform's. So a disabled zone still names a sample, and reporting that name
+as missing is a fault the user cannot act on and did not cause.
+
+Their zone-relative offsets (+0c, +0d) are this project's `LOVEL` and
+`HIVEL` at `SNAME`+12 and +13 — independent agreement on the layout, from a
+different source, before trusting the semantics.
+
+**Not reproduced here.** Every zone on every bank this project has loaded
+reads `lo=0, hi=127`; a scan of all 66 references on the resident bank found
+none disabled. So the layout is confirmed locally and the semantics are
+theirs. `dangling()` excludes unreachable zones by default and
+`suppressed()` lists what it hid, rather than silently dropping them.
+
+The velocity pair costs **no extra round trips**: it is contiguous with the
+name, so one 14-byte read gets all three where the name alone took 12.
+Fetching them separately would have tripled a walk that already costs four
+reads per keygroup.
+
+**This is half of reachability.** A keygroup's own key range can also
+exclude a zone, so a reachable zone is the conjunction and only this half is
+established — by either project. A zone reported reachable may still never
+sound.
+
+### Two bugs this found in code that already passed its tests
+
+**The demo's zones could never sound.** A blank keygroup header leaves
+`HIVEL1` at 0, so once the suppression landed, the demo's deliberate
+dangling reference was correctly hidden and the integrity screen went empty.
+The fixture had been unrealistic in a way nothing exercised until a check
+depended on it.
+
+**One odd sample name aborted the entire audit.** `collect` classified every
+resident name by calling `encode_name` on it, and that function refuses
+anything the device cannot store rather than substituting — right for
+writing, wrong for classifying names that already exist. A lowercase
+character or an over-long name raised, and the whole walk died. It cannot
+arise from names the machine produced, and it did arise from a caller
+passing its own list.
+
 ### What differs from eosed, and why it is not a port
 
 EOS voices reference a sample by **number**, and keep `E4_GEN_SAMPLE = N`

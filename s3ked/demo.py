@@ -151,6 +151,14 @@ class DemoBridge:
                 hi = min(21 + (kg + 1) * span, 127) if kg + 1 < count else 127
                 self._write_named(kheader, "keygroup", "LONOTE", min(lo, 127))
                 self._write_named(kheader, "keygroup", "HINOTE", hi)
+                # A blank header leaves HIVEL1 at 0, which means "this zone
+                # can never sound" -- velocity 0 is note-off. Every zone on
+                # every real bank read so far is 0..127, so the demo says so
+                # too; without this the demo's deliberate dangling reference
+                # is correctly suppressed as unreachable and the integrity
+                # check has nothing to show.
+                self._write_named(kheader, "keygroup", "LOVEL1", 0)
+                self._write_named(kheader, "keygroup", "HIVEL1", 127)
                 # The last keygroup of the last program names a sample that
                 # is deliberately NOT resident, so the demo has one dangling
                 # reference to show. That is the state a load which ran out
