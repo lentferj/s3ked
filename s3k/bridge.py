@@ -614,12 +614,104 @@ class S3kBridge:
         *,
         exclusive_channel: int = m.DEFAULT_EXCLUSIVE_CHANNEL,
         timeout: float = DEFAULT_TIMEOUT,
+        bounds_check: bool = True,
     ):
         self.out = midi_out
         self.inp = midi_in
         self.description = description
         self.exclusive_channel = exclusive_channel
         self.timeout = timeout
+        #: Refuse header reads and writes the device would answer with
+        #: somebody else's data. See :meth:`_check_bounds`. Set False only to
+        #: probe the device's own behaviour, which is the one job the guard
+        #: gets in the way of.
+        self.bounds_check = bounds_check
+        self._counts: Dict[str, Optional[int]] = {"program": None,
+                                                  "sample": None}
+        self._groups: Dict[int, int] = {}
+
+    # -- bounds -------------------------------------------------------------
+
+    def invalidate_structure(self) -> None:
+        """Forget cached program/sample/keygroup counts.
+
+        Called by every operation here that can change them. It cannot know
+        about changes made at the front panel, so the cache is a guess about
+        a device somebody else may be touching -- which is why being wrong
+        about it must be survivable. It is: a stale count produces a refusal
+        with a message naming the counts it used, not a silent wrong answer.
+        """
+        self._counts = {"program": None, "sample": None}
+        self._groups = {}
+
+    def _count(self, region: str, *, timeout: Optional[float] = None) -> int:
+        if self._counts.get(region) is None:
+            if region == "program":
+                self._counts[region] = len(self.program_list(timeout=timeout))
+            elif region == "sample":
+                self._counts[region] = len(self.sample_list(timeout=timeout))
+        return self._counts.get(region) or 0
+
+    def _keygroup_count(self, program: int, *,
+                        timeout: Optional[float] = None) -> int:
+        if program not in self._groups:
+            self._groups[program] = int(
+                self.get_parameter(p.lookup(("program", "GROUPS")), program,
+                                   timeout=timeout, _bounds=False))
+        return self._groups[program]
+
+    def _check_bounds(self, region: str, index: int, offset: int, count: int,
+                      selector: int, *, timeout: Optional[float] = None) -> None:
+        """Refuse what the device would answer with somebody else's data.
+
+        The extended layer does not bounds-check and does not error. An
+        out-of-range read returns **the previous valid read's buffer**, which
+        is the dangerous failure because it looks entirely plausible --
+        measured again 2026-08-13:
+
+            program 42 of 2      -> byte-identical to the primed read
+            keygroup 31 of 1     -> byte-identical
+            sample 50 of 10      -> byte-identical
+            offset 200 of 192    -> real-looking data from past the header
+
+        The block-identifier check further down catches only cross-region
+        confusion, and only at offset 0: a bad program index answers with a
+        *program* block, so the identifier is correct and the guard cannot
+        see it. That was measured too, and is why this exists rather than
+        relying on the identifier.
+
+        So the refusal has to happen here, before the frame is sent. The
+        size check is free. The index checks cost a round trip once per
+        region and are cached.
+        """
+        size = p.REGION_SIZES.get(region)
+        if size is not None and (offset < 0 or count < 0
+                                 or offset + count > size):
+            raise ValueError(
+                f"{region} header is {size} bytes; asked for {count} at "
+                f"offset {offset}. The device answers this with data from "
+                f"past the header rather than an error (§11).")
+        if not self.bounds_check:
+            return
+        if region in ("program", "sample"):
+            held = self._count(region, timeout=timeout)
+            if not 0 <= index < held:
+                raise ValueError(
+                    f"{region} {index} does not exist; the machine holds "
+                    f"{held}. Reading it would return the previous read's "
+                    f"buffer, not an error (§11).")
+        elif region == "keygroup":
+            held = self._count("program", timeout=timeout)
+            if not 0 <= index < held:
+                raise ValueError(
+                    f"program {index} does not exist; the machine holds "
+                    f"{held} (§11).")
+            groups = self._keygroup_count(index, timeout=timeout)
+            if not 0 <= selector < groups:
+                raise ValueError(
+                    f"program {index} has {groups} keygroup(s); asked for "
+                    f"keygroup {selector}. Reading it would return the "
+                    f"previous read's buffer, not an error (§11).")
 
     # -- construction -------------------------------------------------------
 
@@ -874,7 +966,11 @@ class S3kBridge:
             m.RequestProgramList(exclusive_channel=self.exclusive_channel).encode(),
             timeout=timeout,
         )
-        return m.ProgramList.decode(reply).names
+        names = m.ProgramList.decode(reply).names
+        # The bounds guard needs this count; taking it here means ordinary
+        # use warms the cache and the guard costs nothing extra.
+        self._counts["program"] = len(names)
+        return names
 
     #: One entry of the disk's volume list. ``kind`` is the record's type byte;
     #: every volume on the machine measured so far reports 3.
@@ -1077,6 +1173,7 @@ class S3kBridge:
         and leaves the machine alone. Read it again when the display settles
         (§71, §72).
         """
+        self.invalidate_structure()      # a load replaces the whole bank
         for index in self._MISC_LOAD_TYPE[:1]:
             frame = m.HeaderData(
                 command=m.Command.MISCDATA, index=index, selector=1, offset=0,
@@ -1332,7 +1429,9 @@ class S3kBridge:
             m.RequestSampleList(exclusive_channel=self.exclusive_channel).encode(),
             timeout=timeout,
         )
-        return m.SampleList.decode(reply).names
+        names = m.SampleList.decode(reply).names
+        self._counts["sample"] = len(names)
+        return names
 
     # -- byte-addressable header access -------------------------------------
 
@@ -1345,6 +1444,7 @@ class S3kBridge:
         *,
         selector: int = 0,
         timeout: Optional[float] = None,
+        _bounds: bool = True,
     ) -> bytes:
         """Read *count* bytes at *offset* from one header.
 
@@ -1357,6 +1457,9 @@ class S3kBridge:
             raise KeyError(
                 f"unknown region {region!r}; expected one of {tuple(_REGION_OPS)}"
             ) from None
+        if _bounds:
+            self._check_bounds(region, index, offset, count, selector,
+                               timeout=timeout)
         frame = m.HeaderRequest(
             command=request_op,
             index=index,
@@ -1411,6 +1514,7 @@ class S3kBridge:
         postpone: m.Postpone = m.Postpone.NONE,
         confirm: bool = True,
         timeout: Optional[float] = None,
+        _bounds: bool = True,
     ) -> None:
         """Write bytes at *offset* into one header.
 
@@ -1429,6 +1533,9 @@ class S3kBridge:
             raise KeyError(
                 f"unknown region {region!r}; expected one of {tuple(_REGION_OPS)}"
             ) from None
+        if _bounds:
+            self._check_bounds(region, index, offset, len(data), selector,
+                               timeout=timeout)
         frame = m.HeaderData(
             command=write_op,
             index=index,
@@ -1467,8 +1574,14 @@ class S3kBridge:
         keygroup: int = 0,
         region: Optional[str] = None,
         timeout: Optional[float] = None,
+        _bounds: bool = True,
     ):
-        """Read one named parameter, decoded per its table entry."""
+        """Read one named parameter, decoded per its table entry.
+
+        ``_bounds`` is private and exists for one caller: reading ``GROUPS``
+        to find out how many keygroups a program has cannot itself require
+        knowing how many keygroups a program has.
+        """
         param = param if isinstance(param, p.Parameter) else p.lookup(param, region)
         raw = self.get_header_bytes(
             param.region,
@@ -1543,6 +1656,7 @@ class S3kBridge:
 
     def delete_program(self, program: int, *, confirm: bool = True) -> None:
         """DELP. DESTRUCTIVE, one-shot, no device-side confirmation."""
+        self.invalidate_structure()
         self._destructive(
             m.DeleteProgram(
                 program=program, exclusive_channel=self.exclusive_channel
@@ -1555,6 +1669,7 @@ class S3kBridge:
         self, program: int, keygroup: int, *, confirm: bool = True
     ) -> None:
         """DELK. DESTRUCTIVE, one-shot, no device-side confirmation."""
+        self.invalidate_structure()
         self._destructive(
             m.DeleteKeygroup(
                 program=program,
@@ -1567,6 +1682,7 @@ class S3kBridge:
 
     def delete_sample(self, sample: int, *, confirm: bool = True) -> None:
         """DELS. DESTRUCTIVE, one-shot, no device-side confirmation."""
+        self.invalidate_structure()
         self._destructive(
             m.DeleteSample(
                 sample=sample, exclusive_channel=self.exclusive_channel
@@ -1598,6 +1714,7 @@ class S3kBridge:
         Programs are deleted after samples, because a program costs about a
         hundred words and the point of the exercise is the megabytes.
         """
+        self.invalidate_structure()
         result = {"samples": 0, "programs": 0}
         for kind, listing, delete in (
             ("samples", self.sample_list, self.delete_sample),

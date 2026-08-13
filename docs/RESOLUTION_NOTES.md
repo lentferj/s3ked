@@ -6219,3 +6219,73 @@ as dead.
 Not covered: what happens when overlapping voices exceed polyphony. That is
 a resource limit rather than a routing rule, and it is not what an audit of
 a program's references is asking about.
+
+## §82 — Refusing the reads the device answers with somebody else's data (2026-08-13)
+
+**Status: closed client-side.** The device is unchanged and still behaves
+this way.
+
+§11 found that an out-of-range `RPHEADER`/`RKHEADER`/`RSHEADER` returns the
+previous valid read's buffer instead of the documented error. Re-measured
+2026-08-13 before building against a three-day-old finding, and it is worse
+than §11 recorded:
+
+```
+reading 8 bytes at offset 20, on a machine with 2 programs / 10 samples
+  primed with program 0:        [127, 0, 255, 99, 0, 80, 20, 0]
+  program 42                    byte-identical to the primed read
+  keygroup 31 of a 1-keygroup   byte-identical
+  sample 50                     byte-identical
+  offset 200 of a 192-byte      real-looking data from past the header
+  program 42 at OFFSET 0        byte-identical -- the guard did not fire
+```
+
+**The existing block-identifier guard never caught a bad index.** It compares
+byte 0 against the region's identifier, so it catches reading a keygroup and
+getting a program block. But an out-of-range *program* read answers with a
+*program* block, so the identifier is correct and the check passes. It only
+ever caught cross-region confusion, and the comment beside it implied more.
+
+### The guard
+
+`_check_bounds` refuses before sending, on reads and writes:
+
+- **offset + count against the region's header size** — free, no round trip,
+  and it catches the case that returns data from past the structure.
+- **index against the program or sample count**, and **selector against that
+  program's `GROUPS`** — one round trip per region, cached.
+
+`program_list` and `sample_list` now record their own counts, so ordinary use
+warms the cache and the guard usually costs nothing at all.
+
+### The cost, pinned rather than discovered later
+
+Refusing needs to know how many programs exist, and that is a round trip. It
+broke two tests asserting "a whole header must cost one round trip" — which
+were right to break, so the property is now stated as the steady-state cost
+with the one-time read pinned by its own test. A walk of hundreds of headers
+pays it once.
+
+Every operation here that changes the structure calls `invalidate_structure`:
+the three deletes, `clear_memory`, and `trigger_load`, since a load replaces
+the whole bank.
+
+### What this does not fix
+
+The cache cannot know about changes made at the front panel. Being wrong
+about it is survivable and that is deliberate: a stale count produces a
+**refusal naming the counts it used**, never a silent wrong answer. The
+failure mode is loud and the message says what to do.
+
+`bounds_check=False` turns the index checks off, for probes that need to ask
+the device what it actually does — the one job the guard gets in the way of,
+and how the table above was produced.
+
+### A fixture that claimed the impossible, again
+
+The fake sampler's blank program header left `GROUPS` at 0, and the new guard
+correctly refused to index into a program with no keygroups. `GROUPS`' range
+is 1..99: zero is not a state the device can be in. Third time in two days
+that a fixture asserted something no machine produces (twelve-zero names §80,
+`HIVEL1` at 0 §80), and each time it was invisible until a new check read
+that exact field.

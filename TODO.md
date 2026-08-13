@@ -322,7 +322,7 @@ rather than from the document. Raised in the handoff.
 
 ---
 
-## The extended layer does not bounds-check reads, and fails silently (OPEN, hardware finding)
+## The extended layer does not bounds-check reads, and fails silently (RESOLVED client-side)
 
 **Status:** found 2026-08-10 by `probes/conformance.py`. An out-of-range
 `RPHEADER`/`RKHEADER`/`RSHEADER` — bad program number, bad keygroup, offset
@@ -334,10 +334,20 @@ Consequences: a wrong offset cannot be detected by reading; read-back
 verification of a write can confirm something that never happened; callers
 must bounds-check locally against PLIST/SLIST/GROUPS.
 
-**To close this:** decide whether the bridge should refuse out-of-range
-requests client-side rather than pass them to a device that will answer them.
+**Closed 2026-08-13 by refusing client-side.** `S3kBridge._check_bounds`
+rejects the request before it is sent, for reads and writes alike. The device
+is unchanged and still behaves this way; nothing here fixes the machine.
 
-**Blocked on:** nothing. RESOLUTION_NOTES §11.
+Re-measured before writing the guard, and it is worse than this entry said:
+the block-identifier check does **not** catch a bad index even at offset 0,
+because an out-of-range program read answers with a *program* block and the
+identifier is therefore correct. It only ever caught cross-region confusion.
+
+**Still open:** `bounds_check=False` exists for probes that need to ask the
+device what it really does, and the counts are cached, so a structural change
+made at the front panel can leave the cache stale. A stale count produces a
+refusal naming the counts it used, never a silent wrong answer.
+RESOLUTION_NOTES §11, §82.
 
 ---
 

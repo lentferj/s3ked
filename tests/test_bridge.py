@@ -111,6 +111,12 @@ def _sampler(headers=None, *, channel=0, fail=()):
             # is not exercising the check that catches a stale-buffer read.
             blank = bytearray(p.HEADER_SIZE)
             blank[0] = bridge_mod.BLOCK_IDENT[region]
+            if region == "program":
+                # GROUPS' range is 1..99, so a program with zero keygroups is
+                # not a state the device can be in. A blank header left it at
+                # 0, which the bounds guard then correctly refused to index
+                # into -- a fixture claiming something impossible.
+                blank[p.lookup(("program", "GROUPS")).offset] = 4
             raw = store.setdefault(
                 (region, request.index, request.selector), blank
             )
@@ -176,9 +182,16 @@ def test_get_and_set_parameter_round_trip():
 
 
 def test_set_parameter_is_flagged_as_a_write():
-    """The throttle needs to know; a lost write raises nothing."""
+    """The throttle needs to know; a lost write raises nothing.
+
+    The bounds guard's own program-list read comes first on a cold bridge
+    and is correctly flagged as a read, so this warms the cache to leave the
+    write as the only frame in flight.
+    """
     device = FakeDevice(_sampler())
     bridge = S3kBridge(device, device, "fake", timeout=0.5)
+    bridge.program_list()
+    device.writes.clear()
     bridge.set_parameter("PRIORT", 0, 1)
     assert device.writes[0] is True
 
@@ -210,9 +223,41 @@ def test_keygroup_parameter_uses_the_selector():
 def test_get_header_decodes_every_field_in_one_request():
     device = FakeDevice(_sampler())
     bridge = S3kBridge(device, device, "fake", timeout=0.5)
+    bridge.program_list()                      # warm the bounds cache
+    device.sent.clear()
     header = bridge.get_header("program", 0)
     assert len(header) == len(p.region_params("program"))
     assert len(device.sent) == 1, "a whole header must cost one round trip"
+
+
+def test_the_bounds_guard_costs_one_read_per_region_and_then_nothing():
+    """Pinned deliberately, because the guard changed a documented cost.
+
+    Refusing an out-of-range read needs to know how many programs exist, and
+    that is a round trip. It is taken once per bridge and cached; a walk of
+    hundreds of headers pays it once.
+    """
+    device = FakeDevice(_sampler())
+    bridge = S3kBridge(device, device, "fake", timeout=0.5)
+
+    bridge.get_header_bytes("program", 0, 4, 2)
+    assert len(device.sent) == 2, "one list read, then the header read"
+
+    device.sent.clear()
+    for _ in range(5):
+        bridge.get_header_bytes("program", 0, 4, 2)
+    assert len(device.sent) == 5, "cached: no further list reads"
+
+
+def test_a_structural_change_drops_the_cached_counts():
+    """A cache that outlived a delete would refuse valid reads."""
+    device = FakeDevice(_sampler())
+    bridge = S3kBridge(device, device, "fake", timeout=0.5)
+    bridge.get_header_bytes("program", 0, 4, 2)
+    assert bridge._counts["program"] == 2
+
+    bridge.delete_program(0)
+    assert bridge._counts["program"] is None, "delete must invalidate"
 
 
 def test_set_parameter_refuses_read_only():
@@ -234,9 +279,16 @@ def test_write_surfaces_a_device_error():
 
 
 def test_unconfirmed_write_does_not_wait():
-    """confirm=False is fire-and-forget, and must not consume a reply."""
+    """confirm=False is fire-and-forget, and must not consume a reply.
+
+    Counted after the bounds cache is warm: the guard costs one program-list
+    read the first time it sees a bridge, and nothing thereafter. A burst of
+    fire-and-forget writes is the case that matters and it pays nothing.
+    """
     device = FakeDevice(_sampler())
     bridge = S3kBridge(device, device, "fake", timeout=0.05)
+    bridge.program_list()                      # warm the count
+    device.sent.clear()
     bridge.set_header_bytes("program", 0, 18, b"\x02", confirm=False)
     assert len(device.sent) == 1
 
