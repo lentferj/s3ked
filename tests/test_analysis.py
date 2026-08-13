@@ -178,7 +178,7 @@ def test_the_walk_is_bounded_by_GROUPS_and_not_by_a_guess():
     audit = a.collect(fake)
 
     assert len(audit.references) == 1
-    assert fake.reads == 4, "four zones of one keygroup, and no more"
+    assert fake.reads == 5, "four zones plus one key range, and no more"
 
 
 def test_programs_playing_silence_groups_by_program_worst_first():
@@ -242,12 +242,19 @@ def test_a_reachable_zone_naming_a_missing_sample_is_still_reported():
     assert [r.sample for r in audit.suppressed()] == ["DISABLED"]
 
 
-def test_the_velocity_pair_costs_no_extra_round_trips():
-    """LOVEL and HIVEL are contiguous with the name, so one read gets all."""
-    bank = {"KIT": [["A", "B", None, None]]}
-    fake = FakeBank(bank, ["A", "B"])
+def test_the_walk_costs_four_reads_per_zone_plus_one_per_keygroup():
+    """The velocity pair is free; the key range is one read per keygroup.
+
+    LOVEL and HIVEL are contiguous with the name, so a 14-byte read gets all
+    three where the name alone took 12 -- fetching them separately would
+    have tripled the walk. LONOTE and HINOTE live at the top of the keygroup
+    header, so they cost one 2-byte read, once per keygroup rather than once
+    per zone.
+    """
+    bank = {"KIT": [["A", "B", None, None], ["C", None, None, None]]}
+    fake = FakeBank(bank, ["A", "B", "C"])
     a.collect(fake)
-    assert fake.reads == 4, "four zones, four reads -- not twelve"
+    assert fake.reads == 2 * (4 + 1), "two keygroups, four zones plus a range"
 
 
 def test_an_unencodable_sample_name_does_not_abort_the_whole_audit():
@@ -308,3 +315,45 @@ def test_a_single_velocity_point_is_still_reachable():
     audit = a.collect(FakeBank(bank, []))
     assert audit.references[0].reachable is True
     assert [r.sample for r in audit.dangling()] == ["PINPOINT"]
+
+
+def test_an_inverted_key_range_kills_every_zone_in_the_keygroup():
+    """Measured: 72..48 at note 60 gave 0.00003 RMS against 0.00711 full.
+
+    A dead key range kills the whole keygroup, unlike a dead velocity pair
+    which kills only its own zone.
+    """
+    class KeyRanged(FakeBank):
+        def __init__(self, bank, samples, ranges):
+            super().__init__(bank, samples)
+            self.ranges = ranges
+
+        def get_header_bytes(self, region, index, offset, size, *,
+                             selector=0, timeout=None):
+            if size == 2:                      # the key-range read
+                lo, hi = self.ranges[selector]
+                return bytes([lo, hi])
+            return super().get_header_bytes(region, index, offset, size,
+                                            selector=selector, timeout=timeout)
+
+    bank = {"KIT": [["A", "B", None, None], ["C", None, None, None]]}
+    audit = a.collect(KeyRanged(bank, [], {0: (72, 48), 1: (24, 127)}))
+
+    dead = [r for r in audit.references if not r.reachable]
+    assert {r.sample for r in dead} == {"A", "B"}, "both zones of keygroup 0"
+    assert [r.sample for r in audit.dangling()] == ["C"]
+
+
+def test_a_single_key_keygroup_is_reachable():
+    """60..60 sounded on note 60 at 0.00712 -- a `lo < hi` guard kills it."""
+    class KeyRanged(FakeBank):
+        def get_header_bytes(self, region, index, offset, size, *,
+                             selector=0, timeout=None):
+            if size == 2:
+                return bytes([60, 60])
+            return super().get_header_bytes(region, index, offset, size,
+                                            selector=selector, timeout=timeout)
+
+    audit = a.collect(KeyRanged({"KIT": [["ONE KEY", None, None, None]]}, []))
+    assert audit.references[0].reachable is True
+    assert [r.sample for r in audit.dangling()] == ["ONE KEY"]

@@ -87,6 +87,8 @@ class ZoneRef:
     sample: str
     lo_vel: int = 0
     hi_vel: int = 127
+    lo_note: int = 0
+    hi_note: int = 127
 
     @property
     def reachable(self) -> bool:
@@ -134,12 +136,37 @@ class ZoneRef:
 
         ``lo == hi`` is a one-velocity zone and stays reachable.
 
-        **This is half of reachability, not all of it.** A keygroup's own
-        key range can also exclude a zone, so a reachable zone is the
-        conjunction and only this half is established. A zone reported
-        reachable here may still never sound.
+        **The keygroup's key range is the other half**, and it behaves
+        identically -- measured the same way, on the same machine, at the
+        request of mpc2emu, whose writer clamps `lo_key` and `hi_key`
+        independently and so can emit an inverted pair from a malformed
+        source:
+
+        ========================  =========  =========
+        key range (note 60)         stored        RMS
+        ========================  =========  =========
+        24..127, spans the note    24..127    0.00711
+        72..127, above it          72..127    0.00003
+        24..48, below it            24..48    0.00003
+        72..48, INVERTED            72..48    0.00003
+        60..60, one key ON it       60..60    0.00712
+        61..61, one key beside it   61..61    0.00003
+        ========================  =========  =========
+
+        Same three answers as velocity: an inverted range is dead, a
+        single-key range is alive on its own note, and the machine stores the
+        inverted pair verbatim rather than swapping or clamping it -- so a
+        reader can see the state, not only a writer create it.
+
+        A dead key range kills the whole keygroup, so all four of its zones
+        are unreachable, where a dead velocity pair kills only its own zone.
+
+        Reachability here is now the conjunction of both. What is still not
+        covered: whether some *other* keygroup shadows this one, and anything
+        the machine does with overlapping ranges.
         """
-        return self.hi_vel > 0 and self.lo_vel <= self.hi_vel
+        return (self.hi_vel > 0 and self.lo_vel <= self.hi_vel
+                and self.lo_note <= self.hi_note)
 
     def __str__(self) -> str:  # pragma: no cover - display only
         return (f"program {self.program} ({self.program_name}) "
@@ -351,6 +378,7 @@ def collect(bridge, *, programs: Optional[Sequence[str]] = None,
                  else bridge.program_list(timeout=timeout))
     groups_field = p.lookup(("program", "GROUPS"))
     offsets = [p.lookup(("keygroup", f)).offset for f in ZONE_FIELDS]
+    key_offset = p.lookup(("keygroup", "LONOTE")).offset
 
     for index, program_name in enumerate(names):
         try:
@@ -360,6 +388,15 @@ def collect(bridge, *, programs: Optional[Sequence[str]] = None,
             audit.unread.append((index, program_name))
             continue
         for keygroup in range(count):
+            # LONOTE and HINOTE are adjacent, so the keygroup's key range is
+            # one 2-byte read -- once per keygroup, not once per zone.
+            try:
+                keys = bridge.get_header_bytes("keygroup", index, key_offset,
+                                               2, selector=keygroup,
+                                               timeout=timeout)
+                lo_note, hi_note = int(keys[0]), int(keys[1])
+            except Exception:
+                lo_note, hi_note = 0, 127
             for zone, offset in enumerate(offsets, start=1):
                 try:
                     info = _zone_info(bridge, index, keygroup, offset, timeout)
@@ -371,7 +408,8 @@ def collect(bridge, *, programs: Optional[Sequence[str]] = None,
                 audit.references.append(
                     ZoneRef(program=index, program_name=program_name,
                             keygroup=keygroup, zone=zone, sample=name,
-                            lo_vel=lo_vel, hi_vel=hi_vel))
+                            lo_vel=lo_vel, hi_vel=hi_vel,
+                            lo_note=lo_note, hi_note=hi_note))
         if progress is not None:
             progress(index + 1, len(names))
     return audit

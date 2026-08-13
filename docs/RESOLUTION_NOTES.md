@@ -6022,10 +6022,41 @@ not the bank. Their measure of the false-positive class removed: trusting the
 name alone invents up to three phantom zones per keygroup, 65% and 67% of two
 discs' zones.
 
-**This is half of reachability.** A keygroup's own key range can also
-exclude a zone, so a reachable zone is the conjunction and only this half is
-established — by either project. A zone reported reachable may still never
-sound.
+**The other half, measured 2026-08-13.** mpc2emu asked for it, and the reason
+was better than curiosity: their writer clamps `lo_key` and `hi_key`
+independently — `_clamp(lo, 24, 127)`, `_clamp(hi, 24, 127)`, no relational
+check — so a malformed source with lo=72 hi=60 is written verbatim. Clamping
+members of a pair separately cannot catch a constraint that exists *between*
+them. The velocity result made that worrying rather than academic: the
+machine had stored `100..50` as written, so it does not defend itself.
+
+Note 60, velocity 100, isolation 52.5 dB:
+
+```
+key range                    stored        RMS
+24..127, spans the note      24..127    0.00711
+72..127, above it            72..127    0.00003
+24..48,  below it             24..48    0.00003
+72..48,  INVERTED             72..48    0.00003
+60..60,  one key ON it        60..60    0.00712
+61..61,  one key beside it    61..61    0.00003
+```
+
+Same three answers as velocity, one level up: an inverted key range is dead,
+a single-key range is alive on its own note, and the pair is stored verbatim
+rather than swapped or clamped — so a reader can see the state, not only a
+writer create it. `verify_isolation` did double duty here, since the way it
+silences a keygroup *is* by moving its key range off the note: without it a
+silent result would have been uninterpretable.
+
+**A dead key range kills the whole keygroup**, so all four of its zones go
+unreachable, where a dead velocity pair kills only its own zone.
+`reachable` is now the conjunction of both, at a cost of one 2-byte read per
+keygroup — `LONOTE` and `HINOTE` are adjacent at offsets 3 and 4.
+
+What is still not covered: whether some *other* keygroup shadows this one,
+and what the machine does with overlapping ranges. Neither project has
+tested that.
 
 ### A third way a name collides with an empty zone
 
