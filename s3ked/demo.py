@@ -281,7 +281,14 @@ class DemoBridge:
     #: bridge it was handed, so the demo has to carry them too -- app.py must
     #: not import s3k.bridge, which pulls in rtmidi.
     DEVICE_TYPES = {0: "FLOPPY", 1: "HARD", 2: "FLASH"}
-    MODES = {0: "SINGLE", 8: "GLOBAL", 10: "LOAD"}
+    MODES = {
+        0: "SINGLE",       1: "SINGLE EDIT",
+        2: "MULTI",        3: "MULTI EDIT",
+        4: "SAMPLE",       5: "SAMPLE EDIT",
+        6: "EFFECTS",      7: "EFFECTS EDIT",
+        8: "GLOBAL",       9: "SAVE",
+        10: "LOAD",
+    }
 
     #: SINGLE, which is where the machine comes up.
     _mode = 0

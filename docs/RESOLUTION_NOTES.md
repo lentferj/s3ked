@@ -6405,3 +6405,70 @@ reads *and* the caller compares it against what was asked, precisely because
 collapsing those into "success" is what the device's own acknowledgement
 does — and that acknowledgement is wrong in both directions on this machine
 (§76). The same shape, arrived at from a different direction.
+
+## §84 — All eleven main-menu pages, named at the panel (2026-08-13)
+
+**Status: settled.** Read off the LCD by a person while the register stepped.
+No eyes-free route exists — §78 killed the only candidate when `RMULTIDATA`
+turned out to answer in every mode.
+
+| value | page | | value | page |
+|---|---|---|---|---|
+| 0 | SINGLE | | 6 | EFFECTS |
+| 1 | SINGLE + EDIT | | 7 | EFFECTS + EDIT |
+| 2 | MULTI | | 8 | GLOBAL |
+| 3 | MULTI + EDIT | | 9 | SAVE |
+| 4 | SAMPLE | | 10 | LOAD |
+| 5 | SAMPLE + EDIT | | | |
+
+### EDIT is a modifier lamp, and that is what makes the count work
+
+The document's "eleven modes available from the eight mode keys" had been
+quoted in this project three times without anyone being able to make eleven
+and eight relate. The panel settles it: **EDIT is not a page.** The eight
+buttons are SINGLE, MULTI, SAMPLE, EFFECTS, EDIT, GLOBAL, SAVE, LOAD — seven
+modes and one modifier, and the modifier lights *alongside* four of them.
+
+```
+7 modes + (EDIT × 4 of them) = 11
+```
+
+Jan supplied that: value 1 showed **both** SINGLE and EDIT lit, and the
+correction — "EDIT is additive to what is selected" — is what turned a
+sequence of names into a structure.
+
+### The prediction, and why it was worth writing down
+
+After value 1 came back as SINGLE + EDIT, the pairing was predicted in full
+before measuring anything else: 2 MULTI, 3 MULTI+EDIT, 4 SAMPLE, 5
+SAMPLE+EDIT, 6 EFFECTS, 7 EFFECTS+EDIT, 9 SAVE. **Every one held.**
+
+That is worth more than the table. A guessed mapping that happens to be right
+is indistinguishable from a wrong one until it is tested; a mapping predicted
+from a structure and then confirmed at seven independent points is a claim
+about how the machine is organised. It also retro-explains the two facts that
+made the enumeration look arbitrary — GLOBAL at 8 where its button position
+would be 5, and the gaps — as base/edit pairs consuming 0-7.
+
+### A revision to §78
+
+§78 attributed the SAVE-page wedge to arriving there with `byte[0]` on FLOPPY
+and no disc in the drive. Value 9 was set again here with HARDDISK selected
+and 30 volumes visible, and **the machine stayed responsive** — same value,
+same register, different device selector. That is the §78 reading confirmed
+rather than assumed: the hazard is the page having nothing to read, not the
+value.
+
+Value 11 remains untested and still costs a power cycle (§79). Whether it is
+past the end or a twelfth page that cannot initialise is now the only open
+question about this register — and with all eleven documented modes accounted
+for, "past the end" is the strong favourite.
+
+### Method note
+
+Stepping the register on a timer and asking afterwards did not work: the
+values were printed to a terminal the reader was not looking at, because the
+reader was looking at the sampler. Setting one value, asking, waiting, then
+setting the next cost eleven exchanges and produced eleven unambiguous
+answers. **Where a person is the instrument, their attention is the
+bottleneck and the loop has to run at their pace, not the bus's.**

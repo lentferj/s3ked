@@ -982,8 +982,16 @@ async def test_the_source_screen_writes_only_through_the_gate():
     assert seen == [3]
 
 
-async def test_the_menu_screen_names_only_the_pages_that_were_observed():
-    """Three of eight. The enumeration has gaps, so the rest are not guessed."""
+async def test_the_menu_screen_offers_every_page_the_register_has():
+    """All eleven, read off the panel 2026-08-13 (§84).
+
+    This test previously asserted the opposite -- that only three were named
+    and the rest were "not guessed". That was right while it was true: the
+    enumeration has gaps (GLOBAL is 8 where its button position would be 5),
+    so guessing was never available. What settled it was a person reading the
+    display while the register stepped, because no eyes-free discriminator
+    exists: RMULTIDATA answers in every mode (§78).
+    """
     from s3ked.app import S3kedApp, MenuScreen
     from s3ked.demo import DemoBridge
 
@@ -999,9 +1007,23 @@ async def test_the_menu_screen_names_only_the_pages_that_were_observed():
         for _ in range(20):
             await pilot.pause()
 
-    assert "SINGLE" in text and "GLOBAL" in text and "LOAD" in text
-    assert "no known value" in text
-    assert app.bridge.mode() == 8, "GLOBAL is 8, not its button position 5"
+    for name in ("SINGLE", "MULTI", "SAMPLE", "EFFECTS", "GLOBAL", "SAVE",
+                 "LOAD", "EDIT"):
+        assert name in text, name
+    assert "modifier" in text, "EDIT is a modifier lamp, not a page"
+    assert app.bridge.mode() == 2, "key 2 selects MULTI, which is value 2"
+
+
+async def test_every_mode_the_bridge_names_is_reachable_from_the_menu():
+    """The screen and the register's own table must not drift apart."""
+    from s3ked.app import MenuScreen
+    from s3ked.demo import DemoBridge
+
+    offered = {value for value, _name in MenuScreen._CHOICES.values()}
+    assert offered == set(DemoBridge.MODES), (
+        f"menu offers {sorted(offered)}, bridge names "
+        f"{sorted(DemoBridge.MODES)}")
+    assert len(offered) == 11, "eight buttons, seven modes, EDIT on four"
 
 
 async def test_no_clr_is_offered_because_the_machine_has_none_to_offer():

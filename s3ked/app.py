@@ -278,12 +278,22 @@ class MenuScreen(ModalScreen[Optional[int]]):
             for key, (value, name) in self._CHOICES.items():
                 yield Label(f"  [b]{key}[/b]  {name}  [dim]({value})[/dim]")
             yield Label("")
-            yield Label("[dim]The other five buttons have no known value — "
-                        "naming one needs\n  somebody reading the display "
-                        "while the register is swept.[/dim]")
+            yield Label("[dim]EDIT is a modifier, not a page: eight buttons, "
+                        "seven modes, and EDIT\n  combines with four of them "
+                        "— which is the eleven the manual counts.[/dim]")
             yield Label("[b]Esc[/b] close")
 
-    _CHOICES = {"1": (0, "SINGLE"), "2": (8, "GLOBAL"), "3": (10, "LOAD")}
+    #: All eleven, keyed 0-9 then a for LOAD. The order is the register's
+    #: own, which is also the panel's: base/edit pairs, then the three
+    #: disk-and-system pages.
+    _CHOICES = {
+        "0": (0, "SINGLE"),   "1": (1, "SINGLE EDIT"),
+        "2": (2, "MULTI"),    "3": (3, "MULTI EDIT"),
+        "4": (4, "SAMPLE"),   "5": (5, "SAMPLE EDIT"),
+        "6": (6, "EFFECTS"),  "7": (7, "EFFECTS EDIT"),
+        "8": (8, "GLOBAL"),   "9": (9, "SAVE"),
+        "a": (10, "LOAD"),
+    }
 
     def on_key(self, event) -> None:
         if event.key in self._CHOICES:

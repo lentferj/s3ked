@@ -1117,11 +1117,26 @@ class S3kBridge:
                               f"writing misc byte {index}")
         return self._misc_byte(index, timeout=timeout)
 
-    #: Main-menu pages, by the value :attr:`_MISC_MODE` takes. Only the three
-    #: that have been observed are named; naming the rest needs somebody
-    #: reading the display, and the one eyes-free candidate did not work --
-    #: RMULTIDATA answers in every mode, so it cannot identify MULTI (§78).
-    MODES = {0: "SINGLE", 8: "GLOBAL", 10: "LOAD"}
+    #: Main-menu pages, by the value :attr:`_MISC_MODE` takes. All eleven
+    #: read off the panel 2026-08-13 (§84); no eyes-free discriminator was
+    #: ever found, and RMULTIDATA answering in every mode killed the only
+    #: candidate (§78).
+    #:
+    #: **EDIT is a modifier lamp, not a page**, which is what makes the
+    #: document's "eleven modes available from the eight mode keys" add up:
+    #: the eight buttons are SINGLE, MULTI, SAMPLE, EFFECTS, EDIT, GLOBAL,
+    #: SAVE and LOAD -- seven modes plus a modifier that combines with four
+    #: of them, so 7 + 4 = 11. The enumeration is base/edit pairs in order,
+    #: then the three disk-and-system pages.
+    MODES = {
+        0: "SINGLE",       1: "SINGLE EDIT",
+        2: "MULTI",        3: "MULTI EDIT",
+        4: "SAMPLE",       5: "SAMPLE EDIT",
+        6: "EFFECTS",      7: "EFFECTS EDIT",
+        8: "GLOBAL",
+        9: "SAVE",
+        10: "LOAD",
+    }
 
     #: The highest page value the machine survives. The S2000/S3000XL
     #: document says "eleven modes available from the eight mode keys" --
