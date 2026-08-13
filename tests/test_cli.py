@@ -175,3 +175,48 @@ def test_the_readme_examples_are_real(capsys):
 
     out = run(capsys, "--demo", "--allow-write", "set", "ATTAK1", "250ms", "0")
     assert "ATTAK1 = 66 (~258 ms)" in out
+
+
+def test_ports_fails_kindly_with_no_midi_backend(monkeypatch, capsys):
+    """`ports` is the first thing a new user runs, and on a host with no ALSA
+    sequencer -- a container, a headless box, a CI runner -- it answered with
+    a traceback.
+
+    MidiUnavailable subclasses RuntimeError, which main()'s offline branch
+    does not catch; only its device-using branch did, and `ports` does not go
+    through that. Guarded in the command itself rather than in main(), because
+    s3k.bridge imports rtmidi at module scope and the CLI's import of it is
+    deliberately lazy so `params` works with no MIDI stack at all.
+    """
+    import pytest
+    import s3k.bridge as bridge_mod
+
+    class Dead:
+        def __init__(self, *a, **k):
+            raise SystemError("error creating ALSA sequencer client object")
+
+    monkeypatch.setattr(bridge_mod.rtmidi, "MidiIn", Dead)
+    monkeypatch.setattr(bridge_mod.rtmidi, "MidiOut", Dead)
+
+    with pytest.raises(SystemExit) as caught:
+        cli.main(["ports"])
+
+    message = str(caught.value)
+    assert "no MIDI backend" in message
+    assert "ALSA sequencer" in message, "must say what to do about it"
+    assert "Traceback" not in message
+
+
+def test_offline_commands_still_work_without_any_midi(monkeypatch, capsys):
+    """The lazy import is the point: params must not need a MIDI stack."""
+    import s3k.bridge as bridge_mod
+
+    class Dead:
+        def __init__(self, *a, **k):
+            raise SystemError("no sequencer")
+
+    monkeypatch.setattr(bridge_mod.rtmidi, "MidiIn", Dead)
+    monkeypatch.setattr(bridge_mod.rtmidi, "MidiOut", Dead)
+
+    assert cli.main(["params", "--region", "program"]) == 0
+    assert capsys.readouterr().out.strip(), "params printed nothing"

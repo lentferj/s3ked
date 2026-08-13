@@ -52,9 +52,24 @@ def _fmt_table(rows: List[List[str]], headers: List[str]) -> str:
 
 
 def _cmd_ports(_bridge, _args) -> None:
-    from s3k.bridge import list_ports
+    # Guarded here rather than in main(), because s3k.bridge imports rtmidi at
+    # module scope and the import above is deliberately lazy: `params` and
+    # `groups` have to work on a host with no MIDI stack at all.
+    from s3k.bridge import MidiUnavailable, list_ports
 
-    ins, outs = list_ports()
+    try:
+        ins, outs = list_ports()
+    except MidiUnavailable as exc:
+        # `ports` is the first thing a new user runs, and on a host with no
+        # ALSA sequencer -- a container, a headless box, a CI runner -- it
+        # answered with a traceback. The exception subclasses RuntimeError,
+        # which main()'s offline branch does not catch; only its device-using
+        # branch did, and `ports` does not go through that.
+        raise SystemExit(
+            f"error: {exc}\n"
+            f"       s3ked needs a MIDI backend: on Linux an ALSA sequencer "
+            f"(try `modprobe snd-seq`); in a container it must be passed "
+            f"through.") from exc
     for label, names in (("inputs", ins), ("outputs", outs)):
         print(f"{label}:")
         for name in names:

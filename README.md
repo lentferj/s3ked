@@ -98,6 +98,28 @@ fired, because the protocol offers no device-side confirmation and no undo:
 
 <img src="docs/screenshots/master.svg" alt="the Master screen listing destructive operations" width="100%">
 
+### Expansion boards must be declared
+
+Fifteen keygroup fields belong to the optional **IB304F** filter board — the
+second filter, the tone section, and all eight stages of envelope 3 — and the
+effects pages belong to the **EB16**. On a machine without them these are not
+merely inert: the panel refuses to open the pages at all, and this project
+crashed an S3000XL twice in one session while that area was being exercised
+(`docs/RESOLUTION_NOTES.md` §85, §90).
+
+So s3ked refuses to read or write them unless you say the board is there:
+
+```toml
+# config.toml
+ib304f_fitted = true
+eb16_fitted   = false
+```
+
+or press `B` in the TUI. **The machine cannot be asked** — no reply carries a
+fitted-options field, and the mode register will happily open a page the
+panel refuses — so this is a declaration, and the default assumes nothing is
+fitted.
+
 ### What plays silence
 
 A load that overruns memory says "insufficient waveform memory" **once** and
@@ -221,6 +243,7 @@ pass `--exclusive-channel N`. The port pair that answers is remembered in
 | `u` | who uses the selected sample |
 | `s` | load source — SCSI drive, floppy/hard/flash, partition |
 | `g` | main menu — move the machine between its pages |
+| `B` | declare which expansion boards are fitted (see below) |
 | `m` | Master — the destructive operations |
 | `q` | quit |
 

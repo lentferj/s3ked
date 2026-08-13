@@ -98,14 +98,16 @@ whether someone points s3ked at an irreplaceable sampler.
       history work that is long since verified. Delete or keep, but decide.
 - [ ] `HW_PANEL_CHECKS.md` is machine-local via `.git/info/exclude`; confirm
       that is still wanted, since it is useful to anyone with the hardware.
-- [ ] `config.toml` is checked in — confirm it holds nothing machine-specific.
+- [x] `config.toml` is **gitignored and untracked** — verified, so nothing
+      machine-specific ships. This line previously said it *was* checked in,
+      which would have sent a reader hunting for a leak that cannot happen.
 - [ ] CI is green on 3.11, 3.12 and 3.13.
 
 ## 5. Nice to have, not blocking
 
 - [ ] a CHANGELOG, even if its first entry is just "first public beta"
 - [ ] an asciinema cast of a real edit — the screenshots are static
-- [ ] `docs/RESOLUTION_NOTES.md` is 68 sections and ~5000 lines. It is the
+- [ ] `docs/RESOLUTION_NOTES.md` is 91 sections and ~6900 lines. It is the
       most valuable thing in the repository and the least navigable; an index
       at the top would help.
 
