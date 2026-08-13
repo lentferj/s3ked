@@ -6289,3 +6289,60 @@ is 1..99: zero is not a state the device can be in. Third time in two days
 that a fixture asserted something no machine produces (twelve-zero names §80,
 `HIVEL1` at 0 §80), and each time it was invisible until a new check read
 that exact field.
+
+## §83 — The undescribed sample-header tail has visible structure (2026-08-13)
+
+**Status: characterised, not decoded.** Read-only, six library samples from
+one multisample plus the four built-ins as a control.
+
+Our table stops at sample-header offset 141. §14 recorded that real library
+samples carry consistent non-zero structure in 171-191 while machine-authored
+ones are all zero. This pass asks what shape it has, without pretending to
+decode it.
+
+**The built-ins are all zero across 141-191**, confirming §14's control: what
+the machine authors itself puts nothing here.
+
+Six library samples, one multisample, identified by `SPITCH` (their names are
+a commercial library's and are not recorded):
+
+```
+SPITCH  168 169 170 171 172 173 174 175 176 177 178 179 180 181 182..187 188 189 190 191
+   43     0   0   0   0   8   0   0   0 255 255 255 255 251 239 all 255  239 175 255 255
+   51     0   0   0 255 215 223 255 255   0   0   0   0   1  80 all   0    4  68   0   0
+   55     0   0   0 255 223 223 255 255   0   0   0   0   0  80 all   0    4  68   0   0
+   63     0   0   0 255 223 223 255 255   0   0   0   0   0  80 all   0    4  68   0   0
+   71     0   0   0 255 215 223 255 255   0   0   0   0   0  80 all   0    4  68   0   0
+   84     0   0   0   0 130   8   0   0 255 255 255 255 235 191 all 255  254 191 255 255
+```
+
+### Three things the bytes say on their own
+
+**It is signed, and two samples are negative.** Positions holding `0xFF` in
+one group hold `0x00` in the other, which is what sign extension looks like.
+Bytes 182-187 read **exactly 0 or exactly -1** across all six — a six-byte
+run that is only ever all-zero or all-ones is sign extension, not data.
+
+**Byte 188-191 as signed little-endian is identical for four of the six**:
+`17,412` for `SPITCH` 51, 55, 63 and 71, against `-20,497` and `-16,386` for
+43 and 84. A value constant across most samples and different at the extremes
+looks like a default with the outliers carrying something real.
+
+**The split tracks pitch, and specifically the extremes.** The two samples
+that differ are the lowest and highest of the multisample. That is a
+suggestive correlation and nothing more: six samples from one library, and
+"outermost of a multisample" and "negative value" cannot be separated on this
+evidence.
+
+### What this deliberately does not claim
+
+No decoding. The candidate interpretations — 16- and 32-bit, signed and
+unsigned, both endiannesses — were enumerated and none produced sensible
+numbers across both groups except the sign-extension reading above, which
+identifies *structure* rather than *meaning*.
+
+Six samples from one multisample on one disc cannot distinguish a per-sample
+field from a per-volume stamp, nor a library convention from a format rule.
+**mpc2emu has a corpus derived from real media**; this is the shape to match
+against it, and the question for them is whether their headers show the same
+0/-1 six-byte run and the same 17,412 default. Raised in the handoff.
