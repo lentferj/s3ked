@@ -136,10 +136,21 @@ class Audit:
     def ambiguous(self) -> Dict[str, int]:
         """Sample names held more than once, with their counts.
 
-        The machine enforces no name uniqueness (§13a), and a zone names a
-        sample rather than numbering it, so a duplicated name is a reference
-        that cannot be resolved to one sample. Rare, and worth saying out
-        loud when it happens rather than silently picking the first.
+        The machine enforces no name uniqueness -- measured for samples,
+        not merely inherited from §13a's finding about programs: renaming
+        one resident sample to another's name left ten resident with two
+        carrying it. A zone names a sample rather than numbering it, so a
+        duplicated name is a reference that cannot be resolved to one of
+        them. Rare, and worth saying out loud when it happens rather than
+        silently picking the first, because a duplicate the holder of the
+        bank can see is one they can rename.
+
+        **This compares stripped names**, so two names differing only in
+        trailing whitespace are reported as one. The machine pads to twelve
+        characters and its charset has no lowercase, so that cannot arise
+        from material it produced -- but a bank written elsewhere could hold
+        ``BASS`` and ``BASS `` as distinct fields, and this would call them
+        a duplicate.
         """
         counts: Dict[str, int] = {}
         for name in self.resident:

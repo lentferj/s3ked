@@ -5927,6 +5927,37 @@ waveform memory" once and then behaves normally, leaving programs resident
 and selectable whose samples never arrived. They play silence. Nothing on the
 machine distinguishes them from a program that is merely quiet.
 
+### Samples really can share a name (measured 2026-08-13)
+
+`Audit.ambiguous()` was written on the strength of §13a, which made two
+**programs** share a name and saw neither deleted. That says nothing about
+samples, and this project extended it to samples because it seemed obvious --
+then told the sibling mpc2emu so, as a fact, in a handoff they were about to
+build a control against.
+
+Measured instead. Renaming sample 1 to sample 0's name, with ten resident:
+
+```
+before  ['SINE', 'SQUARE', 'SAWTOOTH', 'PULSE', ...]
+after   ['SINE', 'SINE',   'SAWTOOTH', 'PULSE', ...]
+```
+
+Ten before, ten after, two carrying the name. So the duplicate state is real
+and the check guards something that can occur. Right answer, reached the
+wrong way: a parenthetical doing work it had not earned.
+
+### A comparison this project does looser than the sibling
+
+`ambiguous()` compares `name.strip()` -- no case folding, no truncation.
+mpc2emu upper-cases and truncates to 12 before comparing.
+
+Neither difference matters for material the machine produced: the Akai
+charset has no lowercase and names arrive exactly 12 characters. But
+`.strip()` means **two names differing only in trailing whitespace collide
+here and not there.** If a bank writer emits `BASS` and `BASS ` as distinct
+fields, this audit reports one duplicated name and the writer is not at
+fault.
+
 ### What differs from eosed, and why it is not a port
 
 EOS voices reference a sample by **number**, and keep `E4_GEN_SAMPLE = N`
