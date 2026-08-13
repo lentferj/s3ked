@@ -105,7 +105,9 @@ whether someone points s3ked at an irreplaceable sampler.
 
 ## 5. Nice to have, not blocking
 
-- [ ] a CHANGELOG, even if its first entry is just "first public beta"
+- [x] a CHANGELOG — written, with the 0.1.0 entry covering what it does,
+      what it refuses to do and why, and what is known to be unfinished.
+      Every number in it was checked against the code rather than recalled.
 - [ ] an asciinema cast of a real edit — the screenshots are static
 - [ ] `docs/RESOLUTION_NOTES.md` is 91 sections and ~6900 lines. It is the
       most valuable thing in the repository and the least navigable; an index
