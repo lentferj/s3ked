@@ -1147,7 +1147,7 @@ def test_fx_names_enumerates_a_preset_list():
     from s3k import messages as m
 
     handler, _store = _fx_machine()
-    bridge = _bridge_with(handler)
+    bridge = _bridge_with(handler, boards=['EB16'])
     assert bridge.fx_names(m.FxSelector.FX_ENTRY) == [
         "REVERB EQ 1", "RICH CHORUS", "FX TEMPLATE"]
 
@@ -1162,7 +1162,7 @@ def test_fx_names_stops_where_the_charset_does():
     from s3k import messages as m
 
     handler, _store = _fx_machine()
-    bridge = _bridge_with(handler)
+    bridge = _bridge_with(handler, boards=['EB16'])
     names = bridge.fx_names(m.FxSelector.FX_ENTRY, limit=40)
     assert len(names) == 3, "must not run on into the junk"
     assert all("?" not in n for n in names)
@@ -1173,7 +1173,7 @@ def test_fx_names_honours_an_explicit_limit():
     from s3k import messages as m
 
     handler, _store = _fx_machine()
-    bridge = _bridge_with(handler)
+    bridge = _bridge_with(handler, boards=['EB16'])
     assert bridge.fx_names(m.FxSelector.FX_ENTRY, limit=2) == [
         "REVERB EQ 1", "RICH CHORUS"]
 
@@ -1184,7 +1184,7 @@ def test_fx_bytes_round_trips_a_write():
     from s3k import messages as m
 
     handler, store = _fx_machine()
-    bridge = _bridge_with(handler)
+    bridge = _bridge_with(handler, boards=['EB16'])
 
     bridge.set_fx_bytes(m.FxSelector.FX_ENTRY, bytes(m.encode_name("NEW NAME")),
                         1, 0)
@@ -1208,7 +1208,7 @@ def test_fx_bytes_refuses_a_short_reply():
                 data=b"\x01\x02", exclusive_channel=channel).encode()
         return None
 
-    bridge = _bridge_with(stingy)
+    bridge = _bridge_with(stingy, boards=['EB16'])
     with pytest.raises(DeviceError, match="asked for"):
         bridge.fx_bytes(m.FxSelector.FX_ENTRY, 0, 0, 12)
 def test_an_unparseable_config_is_left_alone_rather_than_overwritten(tmp_path, capsys):
@@ -1368,3 +1368,18 @@ def test_declaring_boards_does_not_disturb_other_settings(tmp_path):
 
     assert bridge_mod.load_exclusive_channel(path) == 4
     assert bridge_mod.load_boards(path) == {"EB16"}
+
+
+def test_the_effects_structure_is_fenced_without_the_eb16():
+    """Readable and writable without the board (§88), and the panel refuses
+    the page entirely (§86) -- so it is declared, not assumed."""
+    import pytest
+    from s3k import messages as m
+    from s3k.bridge import BoardNotFitted
+
+    handler, _store = _fx_machine()
+    bridge = _bridge_with(handler)
+    with pytest.raises(BoardNotFitted, match="EB16"):
+        bridge.fx_bytes(m.FxSelector.FX_ENTRY, 0, 0, 12)
+    with pytest.raises(BoardNotFitted, match="EB16"):
+        bridge.set_fx_bytes(m.FxSelector.FX_ENTRY, b"\x00" * 12, 0, 0)

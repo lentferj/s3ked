@@ -1623,6 +1623,13 @@ class S3kBridge:
         error, exactly as it does for the header regions (§11), which is why
         :meth:`fx_names` stops on a repeat instead of on a failure.
         """
+        if "EB16" not in self.boards:
+            raise BoardNotFitted(
+                "the effects structure needs the EB16 board, which is not "
+                "declared fitted. The data is readable and writable without "
+                "it (§88) and the panel refuses the page entirely (§86), so "
+                "it is fenced by default -- declare boards=['EB16'] to author "
+                "effects for a machine that has one.")
         frame = m.HeaderRequest(
             command=m.Command.RFXDATA, index=index, selector=int(selector),
             offset=offset, count=count,
@@ -1651,6 +1658,13 @@ class S3kBridge:
         with more force: nothing here knows the structure, so an offset is
         only as good as the caller's evidence for it. Read the bytes first.
         """
+        if "EB16" not in self.boards:
+            raise BoardNotFitted(
+                "the effects structure needs the EB16 board, which is not "
+                "declared fitted. The data is readable and writable without "
+                "it (§88) and the panel refuses the page entirely (§86), so "
+                "it is fenced by default -- declare boards=['EB16'] to author "
+                "effects for a machine that has one.")
         frame = m.HeaderData(
             command=m.Command.FXDATA, index=index, selector=int(selector),
             offset=offset, data=bytes(data),

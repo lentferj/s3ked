@@ -6839,3 +6839,53 @@ This was found by testing a value that no previous sweep had reason to try.
 every rung a whole semitone, and the quantisation is invisible from all of
 them. The +1 came from asking a different question: not "what does this
 field mean" but "can the display represent everything the byte can hold".
+
+## §90 — A second crash with the same signature, and the fence it argued for (2026-08-13)
+
+**Status: hazard recorded, cause NOT established.**
+
+While restoring keygroup fields after the offset-identity session — filter
+fields, matrix depths, then all eight envelope-3 fields — the machine crashed
+with **the same flooding `0054` display** as §85's value-11 crash. It was also
+frozen to its front panel, and needed a power cycle.
+
+**No write is blamed.** All fourteen restores reported their values back
+before the timeout, so there is no failing call to point at, and the
+candidates — an envelope-3 write, the `select_mode(0)` that followed, a
+delayed effect from the gated ENV3 page having just been opened — are not
+separable from here. Guessing between them is precisely the error §85 already
+made once tonight.
+
+### What the second crash does establish
+
+**`0054` is a generic crash indicator, not a clue.** Two crashes, two
+unrelated causes, one identical display. §85 read the flooding as evidence
+about value 11's *nature* and reasoned from the manner of the failure to its
+cause. That reasoning is now worth less: if this firmware shows `0054`
+whenever it dies, the display says "dead" and nothing more.
+
+**And the envelope-3 area is not safe to poke on a board-less machine.** That
+is a weaker claim than "these writes crash it" and a stronger one than
+nothing: two crashes in one evening, both while this region was in play, on a
+machine whose panel refuses to open the corresponding pages at all.
+
+### The fence
+
+Fifteen keygroup fields need the IB304F — the second filter, the tone
+section, and all eight envelope-3 stages. Reads and writes to them are now
+refused unless the board is **declared fitted**, in `config.toml` or with `B`
+in the TUI.
+
+It has to be declared because the device cannot be asked: no reply carries a
+fitted-options field, and the mode register opens pages the panel refuses
+(§86), so nothing observable separates a fitted board from an absent one. The
+default is to assume none.
+
+**This is not the same claim as §87.** Envelope 3 demonstrably *works*
+without the board — §50 and §63 measured every stage, routed to filter 1
+through the assignable matrix, and §87 corrected `params.py` for saying
+otherwise. Both are true: the fields do something, and the area is dangerous.
+The fence is a safety interlock over a working capability, which is why it is
+a declaration a user can lift rather than a refusal they cannot.
+
+Calibration is the caller that should lift it, deliberately.
