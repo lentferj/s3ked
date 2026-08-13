@@ -72,8 +72,11 @@ rather than the author before tagging, because it is the page that decides
 whether someone points s3ked at an irreplaceable sampler.
 
 - [ ] read DISCLAIMER.md end to end, as a stranger
-- [ ] confirm the version number: `0.1.0` is right for a first beta
-- [ ] decide whether `Development Status :: 3 - Alpha` should become `4 - Beta`
+- [x] version `0.1.0` — right for a first beta on a 0.x line, and the
+      maintenance branch `release/0.1.x` takes 0.1.1 onward.
+- [x] `Development Status :: 4 - Beta` — it was Alpha while the CHANGELOG
+      called this a first public beta. A test now pins version, classifier
+      and CHANGELOG heading together so they cannot drift apart again.
 
 ## 3. Things a stranger will hit in the first ten minutes
 

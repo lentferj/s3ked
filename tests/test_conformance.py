@@ -224,3 +224,30 @@ def test_extent_finds_the_edge_of_a_short_structure():
 
 def test_dry_run_completes_against_the_demo_sampler():
     assert cf.main(["--dry-run"]) == 0
+
+
+def test_the_version_and_the_development_status_agree():
+    """Three places describe how finished this is, and they must not drift.
+
+    pyproject's version, its Development Status classifier, and the
+    CHANGELOG's own heading were briefly inconsistent -- 0.1.0 with an Alpha
+    classifier while the changelog called it a first public beta. A reader
+    deciding whether to trust it near a sampler with no undo should not have
+    to work out which of the three to believe.
+    """
+    import pathlib
+    import tomllib
+
+    root = pathlib.Path(__file__).resolve().parent.parent
+    meta = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    version = meta["project"]["version"]
+    statuses = [c for c in meta["project"]["classifiers"]
+                if c.startswith("Development Status")]
+
+    assert statuses == ["Development Status :: 4 - Beta"], statuses
+    assert version.startswith("0.1."), version
+
+    changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert f"## [{version}]" in changelog, \
+        f"CHANGELOG has no entry for the version in pyproject ({version})"
+    assert "beta" in changelog.split("## [")[1].lower()

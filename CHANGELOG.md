@@ -32,6 +32,10 @@ Work after the 0.1 line was frozen. `release/0.1.x` takes bug fixes only; see
 
 ## [0.1.0] — unreleased, first public beta
 
+Version `0.1.0`, `Development Status :: 4 - Beta`. Those two and the line
+above are meant to agree: a first public beta, on a 0.x line whose interfaces
+may still move, cut from `main` and maintained on `release/0.1.x`.
+
 First release. An editor and librarian for the Akai S1000/S3000 family over
 MIDI SysEx, developed against an S3000XL.
 

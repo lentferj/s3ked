@@ -17,7 +17,7 @@ keywords = ["midi", "sysex", "sampler", "akai", "s3000", "s3000xl", "s2000", "tu
 # No "License :: OSI Approved :: ..." entry: the `license` field above already
 # carries the SPDX expression, and PEP 639 deprecates stating it twice.
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: End Users/Desktop",
     "Operating System :: POSIX :: Linux",
