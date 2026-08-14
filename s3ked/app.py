@@ -282,6 +282,15 @@ class SourceScreen(ModalScreen[None]):
             yield Label("  Volume          [dim]panel only — no register "
                         "exists for it[/dim]")
             yield Label("")
+            yield Label("[b]Volumes on this drive and partition[/b]",
+                        id="source-vols-title")
+            # Cheap enough to re-read on every change: the volume list pages
+            # sixteen records a request, so a 30-volume disc is two round
+            # trips. The DIRECTORY is the expensive one -- one request per
+            # entry -- and is still deferred to when this closes.
+            with VerticalScroll(id="source-vols"):
+                yield Label("", id="source-vols-body")
+            yield Label("")
             yield Label("[dim]Each key writes to the machine at once. The "
                         "directory is re-read when\n  this closes, not after "
                         "every change.[/dim]")
@@ -305,6 +314,31 @@ class SourceScreen(ModalScreen[None]):
         # through as plain text.
         return (f"  Partition       [b]{shown}[/b]"
                 "        [b]\\[[/b] and [b]][/b] here, or in the panes")
+
+    def update_volumes(self, volumes) -> None:
+        """List what is on the drive and partition now selected.
+
+        The point is finding the disc you meant: stepping the SCSI ID with
+        nothing to show is guesswork, and this family gives no other way to
+        tell one drive from another without loading from it.
+        """
+        try:
+            body = self.query_one("#source-vols-body", Label)
+        except Exception:
+            return
+        if volumes is None:
+            body.update("  [dim]could not be read[/dim]")
+            return
+        if not volumes:
+            body.update("  [dim]nothing here[/dim]")
+            return
+        body.update("\n".join(
+            f"  [b]v{v.index}[/b]  {v.name.strip()}" for v in volumes))
+        try:
+            self.query_one("#source-vols-title", Label).update(
+                f"[b]Volumes here[/b]  [dim]({len(volumes)})[/dim]")
+        except Exception:
+            pass
 
     def update_source(self, source: Dict[str, int]) -> None:
         """Re-render the rows from what the machine now reports."""
@@ -857,8 +891,39 @@ class S3kedApp(App):
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"disk: {exc}")
             return
+        # A load -- from `l`, or from the front panel while this was open --
+        # changes what is resident, and the machine announces nothing. Jan hit
+        # exactly this: loaded a volume, and the program list still showed the
+        # seven from before. Two extra requests, taken whenever the user is
+        # already doing disk work, which is when a load is likely to have
+        # happened.
+        try:
+            with self._bridge_lock:
+                programs = self.bridge.program_list()
+                samples = self.bridge.sample_list()
+        except Exception:
+            programs = samples = None
         self.call_from_thread(self._show_volumes, volumes, entries, source,
                               source_error)
+        if programs is not None:
+            self.call_from_thread(self._refresh_catalog_lists, programs, samples)
+
+    def _refresh_catalog_lists(self, programs, samples) -> None:
+        """Re-fill the program list if it has gone stale under us."""
+        if programs == self._programs and samples == self._samples:
+            return
+        previous = len(self._programs)
+        self._programs, self._samples = list(programs), list(samples)
+        table = self.query_one("#programs", DataTable)
+        row = table.cursor_row
+        table.clear()
+        for index, name in enumerate(self._programs):
+            table.add_row(str(index), name)
+        if row is not None and row < table.row_count:
+            table.move_cursor(row=row)
+        self.notify_status(
+            f"catalog changed while you were away: {previous} → "
+            f"{len(self._programs)} program(s), {len(self._samples)} sample(s)")
 
     @staticmethod
     def _describe_source(source) -> str:
@@ -992,6 +1057,8 @@ class S3kedApp(App):
             self.notify_status(f"load source unavailable: {exc}")
             return
 
+        self._source_volumes_worker()
+
         def closed(_result) -> None:
             # One disk re-read when the dialog closes, not one per keypress.
             # Each is seven round trips, and a user setting a drive and a
@@ -1003,6 +1070,21 @@ class S3kedApp(App):
         self.push_screen(
             SourceScreen(source, self.bridge.DEVICE_TYPES), closed
         )
+
+    @work(thread=True)
+    def _source_volumes_worker(self) -> None:
+        """Fill the dialog's listing when it opens, not only after a change."""
+        try:
+            with self._bridge_lock:
+                volumes = self.bridge.volume_list()
+        except Exception:
+            volumes = None
+        self.call_from_thread(self._fill_source_volumes, volumes)
+
+    def _fill_source_volumes(self, volumes) -> None:
+        screen = self.screen_stack[-1] if self.screen_stack else None
+        if isinstance(screen, SourceScreen):
+            screen.update_volumes(volumes)
 
     def apply_source_change(self, what: str, value: int) -> None:
         """Apply one change from the open Load source dialog.
@@ -1028,16 +1110,22 @@ class S3kedApp(App):
                     current = self.bridge.load_source()["partition"]
                     source = self.bridge.select_partition(
                         max(0, min(7, current + value)))
+            try:
+                with self._bridge_lock:
+                    volumes = self.bridge.volume_list()
+            except Exception:
+                volumes = None
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"{what}: {exc}",
                                   refused=True)
             return
-        self.call_from_thread(self._refresh_source_dialog, source)
+        self.call_from_thread(self._refresh_source_dialog, source, volumes)
 
-    def _refresh_source_dialog(self, source) -> None:
+    def _refresh_source_dialog(self, source, volumes=None) -> None:
         screen = self.screen_stack[-1] if self.screen_stack else None
         if isinstance(screen, SourceScreen):
             screen.update_source(source)
+            screen.update_volumes(volumes)
         part = source.get("partition")
         self.notify_status(
             f"source: SCSI {source.get('scsi_drive_id')}, "

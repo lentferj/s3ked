@@ -1615,3 +1615,65 @@ async def test_the_source_dialog_renders_its_bracket_hint():
 
     assert "[/b]" not in text, f"markup leaked into the display: {text!r}"
     assert "[ and ]" in text, f"bracket hint not rendered: {text!r}"
+
+
+async def test_the_source_dialog_lists_the_volumes_on_the_selected_drive():
+    """Stepping the SCSI ID with nothing on screen is guesswork.
+
+    This family gives no other way to tell one drive from another without
+    loading from it, so the dialog shows what is there. The volume list pages
+    sixteen records a request -- two round trips for a 30-volume disc -- and
+    is cheap enough to re-read on every change. The DIRECTORY is the
+    expensive one and stays deferred to when the dialog closes.
+    """
+    from textual.widgets import Label
+    from s3ked.app import S3kedApp, SourceScreen
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(110, 40)) as pilot:
+        await pilot.pause()
+        for _ in range(20):
+            await pilot.pause()
+        await pilot.press("s")
+        for _ in range(30):
+            await pilot.pause()
+
+        screen = app.screen_stack[-1]
+        assert isinstance(screen, SourceScreen)
+        listing = str(screen.query_one("#source-vols-body", Label).render())
+        assert listing.strip() and "nothing here" not in listing, listing
+        assert "v0" in listing, f"no volume rows: {listing!r}"
+
+
+async def test_reading_the_disk_notices_a_catalog_that_changed_underneath():
+    """A load -- from `l`, or from the front panel -- changes what is
+    resident, and the machine announces nothing.
+
+    Reported: loaded a volume, and the program list still showed the seven
+    from before. The disk read now re-checks, because that is exactly when a
+    load is likely to have happened.
+    """
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(110, 40)) as pilot:
+        await pilot.pause()
+        for _ in range(25):
+            await pilot.pause()
+        before = app.query_one("#programs", DataTable).row_count
+        assert before, "no programs to begin with"
+
+        # something loads a volume while the editor is sitting there
+        app.bridge._programs = list(app.bridge._programs) + ["NEW ARRIVAL"]
+
+        await pilot.press("d")
+        for _ in range(40):
+            await pilot.pause()
+        after = app.query_one("#programs", DataTable).row_count
+        status = app.last_status
+
+    assert after == before + 1, f"program list still stale: {before} -> {after}"
+    assert "catalog changed" in status, status
