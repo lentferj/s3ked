@@ -305,6 +305,8 @@ pass `--exclusive-channel N`. The port pair that answers is remembered in
 | `e`, `Enter` | edit the selected parameter |
 | `w` | toggle the write gate (shown in the header when armed) |
 | `z` | undo the last write |
+| `Z` | undo everything written this session |
+| `h` | change history — every write, with where it went |
 | `r` | re-read the catalog |
 | `d` | read the disk and show the browser |
 | `l` | open the browser; from inside it, offer the load |
@@ -320,6 +322,34 @@ pass `--exclusive-channel N`. The port pair that answers is remembered in
 | `m` | Master — the destructive operations |
 | `Esc` | leave the disk browser, or close a dialog |
 | `q` | quit |
+
+### Editing, and putting it back
+
+Editing is `e` (or `Enter`) on a parameter row, type the value, `Enter`. The
+editor shows the field's range and the specification's own wording for it, so
+a value can be checked against the document without leaving the screen.
+
+Every write is logged with the value it replaced and **where it went** —
+region, item index and keygroup. That last part matters: the same parameter
+name at two different keygroups is two genuinely different fields.
+
+- **`z`** steps back one change at a time.
+- **`Z`** undoes everything written this session, newest first — two edits to
+  one field have to land in reverse order or the older value wins.
+- **`h`** opens the log as a `# | where | parameter | old | new` table.
+
+An undo is a write like any other, so all of it is gated behind the write
+gate. A pending count shows in the header rather than the status line, which
+any catalog re-read would otherwise scroll away. If a write fails part-way
+through `Z`, the remaining log is **kept** rather than discarded, so it can be
+retried.
+
+The log is in-memory and lasts the session. That is not much of a limitation:
+a remote edit only lives in the sampler's RAM until you save to disc *on the
+machine itself*, so reloading or power-cycling is the real undo-everything.
+
+This follows the sibling [eosed](https://github.com/lentferj/eosed), which
+had `z`/`Z`/`h` first; s3ked had only `z` until 2026-08-15.
 
 **Dialogs stay open until you leave them.** The SCSI screen, the main-menu
 screen and the load screen all apply each keypress immediately and wait for

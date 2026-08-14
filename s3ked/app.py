@@ -404,8 +404,7 @@ class ReportScreen(ModalScreen[None]):
             with VerticalScroll(id="report-scroll"):
                 yield Static(self.body, id="report-body")
             yield Label(self.footer, id="report-footer")
-            yield Label("[b]Esc[/b] close  [dim]— the page changes as you "
-                        "press, and this stays open[/dim]")
+            yield Label("[b]Esc[/b] close")
 
     def action_close(self) -> None:
         self.dismiss(None)
@@ -801,6 +800,8 @@ class S3kedApp(App):
         Binding("e", "edit", "Edit value"),
         Binding("w", "toggle_write", "Write gate"),
         Binding("z", "undo", "Undo"),
+        Binding("Z", "undo_all", "Undo all"),
+        Binding("h", "history", "History"),
         Binding("m", "master", "Master"),
         Binding("d", "disk", "Read disk"),
         Binding("[", "partition_prev", "Prev partition", show=False),
@@ -1945,7 +1946,8 @@ class S3kedApp(App):
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"error: {exc}")
             return
-        self.call_from_thread(self._after_write, param, index, old, value, header)
+        self.call_from_thread(self._after_write, param, index, old, value,
+                              header, keygroup)
 
     def _write_param(self, param: p.Parameter, current, raw: str) -> None:
         # Through the pane's own context, not the selected program. The two
@@ -1996,12 +1998,19 @@ class S3kedApp(App):
         old,
         new,
         header: Dict[str, object],
+        keygroup: int = 0,
     ) -> None:
+        # The KEYGROUP the write actually went to, not 0. This recorded a
+        # hardcoded zero until 2026-08-15, so undoing an edit made on
+        # keygroup 3 wrote the old value into keygroup 0 -- a silent wrong
+        # write, in the one path whose whole job is putting things back.
+        # `_write_param` had threaded the real keygroup through correctly the
+        # entire time; only the log dropped it.
         self._undo.append(
             _Change(
                 region=param.region,
                 index=index,
-                keygroup=0,
+                keygroup=keygroup,
                 name=param.name,
                 old=old,
                 new=new,
@@ -2026,8 +2035,79 @@ class S3kedApp(App):
         change = self._undo.pop()
         param = p.lookup((change.region, change.name))
         self._write_param_worker(param, change.index, change.old,
-                                 change.new, getattr(change, 'keygroup', 0))
+                                 change.new, change.keygroup)
         self._refresh_write_badge()
+
+    def action_undo_all(self) -> None:
+        """Put everything back, newest first. **This writes, repeatedly.**
+
+        The sibling eosed offers `Z` alongside `z` and this did not. Replayed
+        backwards because two edits to the same field must land in reverse
+        order or the older value wins.
+        """
+        if not self._undo:
+            self.notify_status("nothing to undo")
+            return
+        if not self.allow_write:
+            self.notify_status(
+                "write gate is locked — undo is a write", refused=True)
+            return
+        self.notify_status(f"undoing {len(self._undo)} change(s)…")
+        self._undo_all_worker()
+
+    @work(thread=True)
+    def _undo_all_worker(self) -> None:
+        done, failed = 0, None
+        while self._undo:
+            change = self._undo[-1]
+            param = p.lookup((change.region, change.name))
+            try:
+                with self._bridge_lock:
+                    self.bridge.set_parameter(param, change.index, change.old,
+                                              keygroup=change.keygroup)
+            except Exception as exc:
+                failed = f"{change.name}: {exc}"
+                break
+            # Popped only after the write lands, so a failure part-way leaves
+            # the rest of the log intact and retryable rather than discarded.
+            self._undo.pop()
+            done += 1
+        message = f"undid {done} change(s)"
+        if failed:
+            message += f"; stopped at {failed}"
+        self.call_from_thread(self.notify_status, message)
+        self.call_from_thread(self._refresh_write_badge)
+        self._load_catalog(announce=False)
+
+    def action_history(self) -> None:
+        """Every write this session, with where it went.
+
+        Region, index and keygroup are shown as their own column for the
+        reason eosed shows scope: the same parameter name at two different
+        keygroups is two genuinely different fields, and a list that omits
+        that is a list of things you cannot tell apart.
+        """
+        if not self._undo:
+            self.push_screen(ReportScreen(
+                "Change history",
+                "  nothing written this session.",
+                "Edits are logged here with the value they replaced."))
+            return
+        lines = [f"  {'#':>3}  {'where':<22}  {'parameter':<10}  "
+                 f"{'old':>12}  {'new':>12}", "  " + "-" * 68]
+        for number, change in enumerate(self._undo, 1):
+            where = f"{change.region} {change.index}"
+            if change.region == "keygroup":
+                where += f" kg {change.keygroup}"
+            param = p.lookup((change.region, change.name))
+            lines.append(
+                f"  {number:>3}  {where:<22}  {change.name:<10}  "
+                f"{p.describe_value(param, change.old):>12}  "
+                f"{p.describe_value(param, change.new):>12}")
+        self.push_screen(ReportScreen(
+            "Change history",
+            "\n".join(lines),
+            f"{len(self._undo)} change(s) — z undoes the last, Z undoes all"))
 
     def action_master(self) -> None:
         index = self._selected_program()

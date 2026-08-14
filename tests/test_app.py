@@ -2790,3 +2790,150 @@ def test_shutdown_does_not_hang_forever_on_a_stuck_worker():
 
     assert closed, "it closes anyway rather than hanging"
     assert elapsed < 3.0, elapsed
+
+
+async def test_undo_puts_a_keygroup_edit_back_on_the_RIGHT_keygroup():
+    """It recorded keygroup 0 unconditionally until 2026-08-15.
+
+    `_write_param` threaded the real keygroup through to the device the whole
+    time; only the undo log dropped it. So editing keygroup 3 and pressing z
+    wrote the old value into keygroup 0 -- a silent wrong write, in the one
+    path whose entire job is putting things back.
+    """
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+    from s3k import params as p
+
+    writes = []
+
+    class Watch(DemoBridge):
+        def set_parameter(self, param, index, value, *, keygroup=0, **kw):
+            writes.append((param.name, index, keygroup, value))
+            return super().set_parameter(param, index, value,
+                                         keygroup=keygroup, **kw)
+
+    app = S3kedApp(Watch(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        # a program with several keygroups, and a keygroup field on one of them
+        app._param_context = ("keygroup", 2, 3)
+        param = p.lookup(("keygroup", "LONOTE"))
+        app._write_param(param, 21, "40")
+        for _ in range(40):
+            await pilot.pause()
+
+        assert app._undo, "the edit must be logged"
+        assert app._undo[-1].keygroup == 3, (
+            f"logged keygroup {app._undo[-1].keygroup}, wrote to 3")
+
+        await pilot.press("z")
+        for _ in range(40):
+            await pilot.pause()
+
+    kg_writes = [w for w in writes if w[0] == "LONOTE"]
+    assert len(kg_writes) == 2, kg_writes
+    assert kg_writes[1][2] == 3, (
+        f"the undo went to keygroup {kg_writes[1][2]}, not the 3 it edited")
+    assert kg_writes[1][3] == 21, "and it put the old value back"
+
+
+async def test_Z_undoes_everything_newest_first():
+    """Two edits to one field must land in reverse order or the older wins."""
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+    from s3k import params as p
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        param = p.lookup(("program", "PRIORT"))
+        started_at = app.bridge.get_parameter("PRIORT", 0)
+        app._param_context = ("program", 0, 0)
+        for value in ("2", "3"):
+            app._write_param(param, app.bridge.get_parameter("PRIORT", 0), value)
+            for _ in range(30):
+                await pilot.pause()
+        assert len(app._undo) == 2
+        assert app.bridge.get_parameter("PRIORT", 0) == 3
+
+        await pilot.press("Z")
+        for _ in range(60):
+            await pilot.pause()
+        ended_at = app.bridge.get_parameter("PRIORT", 0)
+
+    assert ended_at == started_at, (
+        f"Z must return the field to {started_at}, got {ended_at}")
+    assert not app._undo, "and empty the log"
+
+
+async def test_Z_is_gated_and_keeps_the_log_when_a_write_fails():
+    """A failure part-way must leave the rest retryable, not discarded."""
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+    from s3k import params as p
+
+    class Breaks(DemoBridge):
+        def set_parameter(self, param, index, value, *, keygroup=0, **kw):
+            if getattr(self, "_armed", False):
+                raise RuntimeError("device said no")
+            return super().set_parameter(param, index, value,
+                                         keygroup=keygroup, **kw)
+
+    app = S3kedApp(Breaks(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        app.allow_write = True
+        param = p.lookup(("program", "PRIORT"))
+        app._param_context = ("program", 0, 0)
+        app._write_param(param, app.bridge.get_parameter("PRIORT", 0), "2")
+        for _ in range(30):
+            await pilot.pause()
+        assert len(app._undo) == 1
+
+        app.allow_write = False
+        await pilot.press("Z")
+        for _ in range(20):
+            await pilot.pause()
+        assert len(app._undo) == 1, "gated: the log must survive"
+        assert "write gate is locked" in app.last_status
+
+        app.allow_write = True
+        app.bridge._armed = True
+        await pilot.press("Z")
+        for _ in range(40):
+            await pilot.pause()
+
+    assert len(app._undo) == 1, "the failed change stays, retryable"
+    assert "stopped at" in app.last_status, app.last_status
+
+
+async def test_h_lists_the_changes_with_where_they_went():
+    """The same parameter at two keygroups is two different fields."""
+    from textual.widgets import Static
+    from s3ked.app import ReportScreen, S3kedApp
+    from s3ked.demo import DemoBridge
+    from s3k import params as p
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        await pilot.press("h")
+        await pilot.pause()
+        empty = str(app.screen_stack[-1].query_one("#report-body", Static).render())
+        await pilot.press("escape")
+        await pilot.pause()
+
+        app._param_context = ("keygroup", 0, 1)
+        app._write_param(p.lookup(("keygroup", "LONOTE")), 21, "40")
+        for _ in range(40):
+            await pilot.pause()
+
+        await pilot.press("h")
+        await pilot.pause()
+        screen = app.screen_stack[-1]
+        assert isinstance(screen, ReportScreen)
+        body = str(screen.query_one("#report-body", Static).render())
+
+    assert "nothing written" in empty
+    assert "LONOTE" in body
+    assert "kg 1" in body, f"the keygroup must be shown: {body!r}"
