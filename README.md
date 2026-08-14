@@ -11,16 +11,52 @@ S2800, S3000, S3000XL, S3200, S3200XL — over MIDI System Exclusive.
 Browse programs, keygroups and samples; read and edit any documented header
 parameter; all from a Textual TUI or a small CLI.
 
-> ### Read this first
->
-> **Nothing in this project has ever been run against real hardware.** It is
-> built entirely against the published protocol documents and tested
-> synthetically. The parameter byte offsets come from a third-party hand
-> transcription of an Akai document, so a wrong offset writing to the wrong
-> parameter is a realistic failure mode, not a theoretical one.
->
-> The write gate is **off by default** for that reason. Back up anything you
-> care about to disk first, and read [DISCLAIMER.md](DISCLAIMER.md).
+## ⚠️ Use at your own risk — back up first, hardware verification is extensive but partial
+
+s3ked is provided **as is, with absolutely no warranty and no liability** for
+data loss or **hardware damage**. You assume all risk. Full terms:
+[DISCLAIMER.md](DISCLAIMER.md).
+
+**This has been driven hard against a real S3000XL.** The read paths, the
+write path, the physical-unit laws and the whole disk workflow have been
+exercised on hardware, along with the program and sample deletes. Deleting a
+single **keygroup** (`DELK`) has never been fired at a real machine and is
+listed as unverified rather than quietly included here. `docs/RESOLUTION_NOTES.md` records
+each measurement — including the ones that
+turned out to be wrong and were retracted. Live use is what found most of the
+interesting bugs; no amount of reading the specification would have surfaced
+them.
+
+**What that verification cost, stated plainly, because it is the honest
+warning:** this project has crashed an S3000XL twice by writing a register out
+of range, and wedged it twice more by killing its own client mid-exchange. All
+four needed a power cycle. Nothing was lost — the machine's RAM is volatile
+and nothing was written to disc — but a sampler that stops answering until you
+reach behind it is exactly the failure mode to expect while pointing this at
+something you care about.
+
+The parameter byte offsets come from a third-party hand transcription of an
+Akai document. Most are now confirmed, and the ones that are not are listed in
+[TODO.md](TODO.md) rather than implied to be safe. A wrong offset writing to
+the wrong parameter remains a realistic failure mode.
+
+The write gate is **off by default** for those reasons. Back up anything you
+care about, and read [DISCLAIMER.md](DISCLAIMER.md).
+
+## AI assistance & human authorship
+
+s3ked was built by its human author, **Jan Lentfer**, together with
+Anthropic's **Claude**. The **ideas, the project vision, and every feature**
+came from the human author; Claude assisted with **writing the code** and the
+docs. Crucially, the **reverse engineering rests on hands-on human work** —
+every protocol behaviour this depends on was established against a real
+S3000XL, and the readings that only a person at the front panel can make are
+the ones the whole disk workflow turned on: the load-type list, the volume
+register, the directory cursor, and the LCD confirming that a write had moved
+the machine rather than merely being stored. Full account in
+[DISCLAIMER.md](DISCLAIMER.md).
+
+---
 
 ## Is this the screen mirror you were looking for?
 
@@ -74,24 +110,58 @@ it, so a value can be checked against the document without leaving the screen:
 
 <img src="docs/screenshots/edit.svg" alt="editing PRIORT, showing range 0..3 and the transcription note" width="100%">
 
-`d` reads the volume list off the attached SCSI disk — a ZuluSCSI, a real
-drive, whatever is bolted on:
+### The disk, driven entirely from the terminal
 
-<img src="docs/screenshots/disk.svg" alt="the disk pane listing volumes read from the attached SCSI disk" width="100%">
+This is the part worth having. **The whole of the sampler's LOAD page is
+reachable over MIDI** — SCSI drive, device, partition, volume, what to load
+and the load itself — so a disc can be browsed and pulled into memory without
+touching the machine.
 
-`[` and `]` step the partition, and `l` loads the selected volume — both write
-to the machine, so both need the write gate. The load confirms first and says
-whether the volume **fits in free memory**, which is the one thing the sampler
-will not tell you until it has already half-loaded and stopped with
-"insufficient waveform memory", leaving programs whose samples never arrived
-playing silence.
+<img src="docs/screenshots/disk.svg" alt="the disk browser listing volumes and the selected volume's contents" width="100%">
 
-The volume itself is the one part that stays manual: there is no volume
-register to write, so choose it at the panel. `s3kcli` and the pane read
-whichever one the panel last selected.
+`d` or `l` opens the browser in the right-hand pane, showing the volumes on
+the current partition and, below a divider, the contents of the selected one.
+`[` and `]` step the partition; `Enter` on a volume selects it.
 
-The read is 7 round trips for a 100-volume disk, about 1.3 seconds, which is
-why it happens on `d` rather than at startup.
+`l` from inside the browser offers the load, and there is more to choose than
+there sounds:
+
+<img src="docs/screenshots/load.svg" alt="the load screen: load type, add or clear first, and renumber" width="100%">
+
+
+| | |
+|---|---|
+| **all eight load types** | `ENTIRE VOLUME`, `ALL PROGS+SAMPLES`, `programs only`, `all samples`, the two cursor variants, `Multi+progs+Samps` — `t` cycles them |
+| **one item at a time** | put the cursor on a program or sample row and the load aims at exactly that, by writing the machine's own directory highlight |
+| **onto what is there, or onto an emptied machine** | loads append, so building a bank from several volumes needs the *sum* to fit |
+| **renumber afterwards** | because loads append and each volume's programs keep the numbers they were saved with |
+
+The load confirms first and says whether it **fits in free memory** — the one
+thing the sampler will not tell you until it has already half-loaded and
+stopped with "insufficient waveform memory", leaving programs whose samples
+never arrived playing silence.
+
+Everything here writes to the machine, so all of it needs the write gate.
+
+> **Why the renumbering matters.** `PRGNUM` — the MIDI program number — is
+> stored *inside* each program and reloaded verbatim, and volumes authored
+> independently all start at 1. Load four of them and four programs claim
+> number 1; they do not overwrite each other, they **stack**, so one program
+> change fires all four at once. The panel's `RNUM` → `SEQU` fixes it and so
+> does this, in one keystroke.
+
+The volume list is 7 round trips for a 100-volume disk, about 1.3 seconds,
+which is why it happens on `d` rather than at startup.
+
+`Operating System` is the one load type the TUI will not offer: it loads an OS
+off the disc over the running one, and the bridge refuses it without an
+explicit flag.
+
+The samples pane shows what the selected program references; `a` swaps it for
+everything the machine holds, which is the view the integrity work is done
+from:
+
+<img src="docs/screenshots/all-samples.svg" alt="the samples pane listing every resident sample" width="100%">
 
 Deleting anything lives behind a separate screen that has to be armed and then
 fired, because the protocol offers no device-side confirmation and no undo:
@@ -236,16 +306,25 @@ pass `--exclusive-channel N`. The port pair that answers is remembered in
 | `w` | toggle the write gate (shown in the header when armed) |
 | `z` | undo the last write |
 | `r` | re-read the catalog |
-| `d` | read the disk — volumes and the loaded volume's contents |
+| `d` | read the disk and show the browser |
+| `l` | open the browser; from inside it, offer the load |
+| `t` | *(in the load screen)* cycle the eight load types |
 | `[` `]` | step the partition (writes) |
-| `l` | load the selected volume (writes, confirms, checks it fits) |
+| `Enter` | *(disk pane)* select that volume · *(programs pane)* make that the active program |
+| `a` | samples pane: this program's, or everything resident |
 | `i` | integrity — which zones name a sample that is not there |
 | `u` | who uses the selected sample |
-| `s` | load source — SCSI drive, floppy/hard/flash, partition |
+| `s` | SCSI — drive, floppy/hard/flash, partition |
 | `g` | main menu — move the machine between its pages |
 | `B` | declare which expansion boards are fitted (see below) |
 | `m` | Master — the destructive operations |
+| `Esc` | leave the disk browser, or close a dialog |
 | `q` | quit |
+
+**Dialogs stay open until you leave them.** The SCSI screen, the main-menu
+screen and the load screen all apply each keypress immediately and wait for
+`Esc`, rather than closing on the first key that matches. Picking the wrong
+one should cost a keypress, not a re-open.
 
 **Destructive operations are never a single keypress.** Deleting a program,
 keygroup or sample is reachable only through the Master screen, which requires

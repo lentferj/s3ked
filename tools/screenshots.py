@@ -59,16 +59,35 @@ OUT = ROOT / "docs" / "screenshots"
 SIZE = (100, 30)
 
 #: name -> (keys, allow_write, parameter to select, text the image must contain)
+#: name -> (keys to press, write gate, parameter to select, text that MUST
+#: appear in the result). The last field is the point: an SVG carries its own
+#: text, so a screenshot captioned with something it does not show fails the
+#: run instead of shipping.
+#:
+#: `settle` is how many extra pauses to allow before capturing. The disk
+#: browser reads volumes and a directory in a worker, and a screenshot taken
+#: before that lands shows an empty pane -- which is exactly the picture the
+#: README must not carry.
 SHOTS = {
-    "catalog": ((), False, None, "Programs"),
-    "parameters": (("down", "down", "tab"), False, None, "Parameters"),
-    "write-gate": (("w",), False, None, "write ARMED"),
-    "edit": (("w", "e"), False, "PRIORT", "range:"),
-    "master": (("m",), True, None, "Destructive operations"),
-    "disk": (("d",), False, None, "volume"),
+    "catalog": ((), False, None, "Programs", 0),
+    "parameters": (("down", "down", "tab"), False, None, "Parameters", 0),
+    "write-gate": (("w",), False, None, "write ARMED", 0),
+    "edit": (("w", "e"), False, "PRIORT", "range:", 0),
+    "master": (("m",), True, None, "Destructive operations", 0),
+    # The disk browser now owns the right-hand column rather than a quarter of
+    # the left one, so this is `d` plus time for the worker to answer.
+    # NOT the "in the selected volume" divider: it sits below all 34 demo
+    # volumes and is off-screen. Asserting text that is present in the DOM but
+    # scrolled out of view is a check that passes for the wrong reason.
+    "disk": (("d",), False, None, "HARD-:A", 40),
+    # The load screen: eight types, add-vs-clear, renumber. `l` from inside
+    # the browser is the one that offers it.
+    "load": (("d", "l"), True, None, "clear first", 60),
     # the check that finds programs whose samples never arrived; the demo
     # carries one dangling reference on purpose so this has something to show
-    "integrity": (("i",), False, None, "silent zone"),
+    "integrity": (("i",), False, None, "silent zone", 0),
+    # every resident sample, not just the selected program's
+    "all-samples": (("a",), False, None, "All samples", 10),
 }
 
 
@@ -77,7 +96,7 @@ def _text(svg: Path) -> str:
     return raw.replace("&#160;", " ").replace("&quot;", '"')
 
 
-async def shoot(name: str, keys, allow_write: bool, param) -> None:
+async def shoot(name: str, keys, allow_write: bool, param, settle: int = 0) -> None:
     app = S3kedApp(DemoBridge(), allow_write=allow_write)
     async with app.run_test(size=SIZE) as pilot:
         await pilot.pause()
@@ -94,6 +113,8 @@ async def shoot(name: str, keys, allow_write: bool, param) -> None:
         for key in keys:
             await pilot.press(key)
             await pilot.pause()
+        for _ in range(settle):
+            await pilot.pause()
         await pilot.pause()
         app.save_screenshot(str(OUT / f"{name}.svg"))
 
@@ -101,8 +122,8 @@ async def shoot(name: str, keys, allow_write: bool, param) -> None:
 async def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     bad = []
-    for name, (keys, allow_write, param, must_contain) in SHOTS.items():
-        await shoot(name, keys, allow_write, param)
+    for name, (keys, allow_write, param, must_contain, settle) in SHOTS.items():
+        await shoot(name, keys, allow_write, param, settle)
         if must_contain not in _text(OUT / f"{name}.svg"):
             bad.append(f"{name}.svg does not contain {must_contain!r}")
         print(f"  {name}.svg", "ok" if not bad or bad[-1].split()[0] != f"{name}.svg"
