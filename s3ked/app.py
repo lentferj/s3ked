@@ -514,6 +514,7 @@ class S3kedApp(App):
         self._programs: List[str] = []
         self._samples: List[str] = []
         self._keygroups: int = 0
+        self._program_keygroups: List[dict] = []
         self._disk_entries: List[object] = []
         self._words_free: Optional[int] = None
         self._total_words: Optional[int] = None
@@ -532,7 +533,8 @@ class S3kedApp(App):
                 yield DataTable(id="programs", cursor_type="row")
                 yield Static("Keygroups", classes="pane-title")
                 yield DataTable(id="keygroups", cursor_type="row")
-                yield Static("Samples", classes="pane-title")
+                yield Static("Samples used", classes="pane-title",
+                             id="progsamples-title")
                 yield DataTable(id="samples", cursor_type="row")
                 yield Static("Disk", classes="pane-title", id="disk-title")
                 yield DataTable(id="volumes", cursor_type="row")
@@ -551,8 +553,8 @@ class S3kedApp(App):
         self.sub_title = self.bridge.description
         for table_id, columns in (
             ("programs", ("num", "name")),
-            ("keygroups", ("kg", "range")),
-            ("samples", ("num", "name")),
+            ("keygroups", ("kg", "range", "samples")),
+            ("samples", ("sample", "status")),
             ("volumes", ("vol", "name")),
             ("parameters", ("off", "name", "value")),
         ):
@@ -601,10 +603,9 @@ class S3kedApp(App):
         table.clear()
         for index, name in enumerate(programs):
             table.add_row(str(index), name)
-        table = self.query_one("#samples", DataTable)
-        table.clear()
-        for index, name in enumerate(samples):
-            table.add_row(str(index), name)
+        # The #samples pane is the SELECTED PROGRAM's samples now, filled by
+        # _fill_program_samples. The global resident list stays in
+        # self._samples, which the integrity check and `u` both use.
         # A refresh triggered by a write must not clobber that write's
         # confirmation -- the catalog reload finishes last, so without this
         # the user only ever sees the program count.
@@ -620,68 +621,129 @@ class S3kedApp(App):
         try:
             with self._bridge_lock:
                 header = self.bridge.get_header("program", index)
-                ranges = self._read_key_ranges(index, header)
+                keygroups = self._read_keygroups(index, header)
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"error: {exc}")
             return
-        self.call_from_thread(self._apply_program, index, header, ranges)
+        self.call_from_thread(self._apply_program, index, header,
+                              keygroups)
 
-    def _read_key_ranges(self, program: int, header) -> List[Tuple[int, int]]:
-        """Each keygroup's ``LONOTE``..``HINOTE``. Caller holds the lock.
+    def _read_keygroups(self, program: int, header) -> List[dict]:
+        """Each keygroup's key range and the samples its zones name.
 
-        One 2-byte read per keygroup, because the two are adjacent at offsets
-        3 and 4 -- so a 61-keygroup program costs 61 round trips, under a
-        second at the measured rate.
+        **One read per keygroup, not five.** The whole 192-byte header comes
+        back in a single request, so the key range and all four zone names
+        cost exactly what the range alone used to. A 61-keygroup program is
+        61 round trips.
 
-        The pane showed a literal ``-`` until now, and `TODO.md` said why:
-        the offsets should be trusted before spending the reads. They now
-        are. §81 wrote this pair while measuring whether overlapping
-        keygroups layer, and the machine sounded or stayed silent exactly as
-        predicted across six settings -- including an inverted range and a
-        single-key range. That is behavioural confirmation of offsets 3 and
-        4, which is the only kind available for a field with no panel readout
-        of its own.
+        The offsets are good: §81 wrote ``LONOTE``/``HINOTE`` while measuring
+        whether overlapping keygroups layer, and the machine sounded or
+        stayed silent exactly as predicted across six settings. The zone
+        names are the same field `analysis.collect` walks.
 
-        A keygroup that will not read leaves its own row blank rather than
-        failing the pane: a partial answer about the others is worth more
-        than none.
+        A keygroup that will not read yields a row marked unreadable rather
+        than failing the pane: a partial answer about the others is worth
+        more than none.
         """
         count = int(header.get("GROUPS", 0) or 0)
-        offset = p.lookup(("keygroup", "LONOTE")).offset
-        out: List[Tuple[int, int]] = []
+        size = p.REGION_SIZES["keygroup"]
+        lo_off = p.lookup(("keygroup", "LONOTE")).offset
+        hi_off = p.lookup(("keygroup", "HINOTE")).offset
+        zone_offs = [p.lookup(("keygroup", n)).offset
+                     for n in ("SNAME1", "SNAME2", "SNAME3", "SNAME4")]
+        out: List[dict] = []
         for kg in range(count):
             try:
                 raw = self.bridge.get_header_bytes(
-                    "keygroup", program, offset, 2, selector=kg)
-                out.append((int(raw[0]), int(raw[1])))
+                    "keygroup", program, 0, size, selector=kg)
             except Exception:
-                out.append((-1, -1))
+                out.append({"lo": -1, "hi": -1, "samples": [], "read": False})
+                continue
+            names = []
+            for off in zone_offs:
+                chunk = raw[off:off + m.NAME_LENGTH]
+                if not any(chunk):
+                    continue                     # unwritten
+                name = m.decode_name(list(chunk))
+                if name.strip():                 # twelve spaces = unassigned
+                    names.append(name.strip())
+            out.append({"lo": int(raw[lo_off]), "hi": int(raw[hi_off]),
+                        "samples": names, "read": True})
         return out
 
     def _load_program(self, index: int) -> None:
         self._load_program_worker(index)
 
     def _apply_program(self, index: int, header: Dict[str, object],
-                       ranges=None) -> None:
+                       keygroups=None) -> None:
+        """Fill the keygroup pane and the samples-used pane for one program.
+
+        The panes are program-centric on purpose. The samples pane used to be
+        the machine's whole `SLIST` -- a global inventory, which answers "what
+        is in memory" rather than "what does this program need". Work here is
+        program-first, so the pane now lists what the selected program
+        references and says which of those the machine does not hold.
+        """
         self._keygroups = int(header.get("GROUPS", 0) or 0)
+        self._program_keygroups = list(keygroups or ())
+
         table = self.query_one("#keygroups", DataTable)
         table.clear()
-        ranges = list(ranges or ())
         for kg in range(self._keygroups):
-            lo, hi = ranges[kg] if kg < len(ranges) else (-1, -1)
-            if lo < 0:
-                shown = "?"                      # this one would not read
-            elif lo > hi:
-                # An inverted range selects nothing, measured (§81). Saying
-                # so beats printing it as though it were a range.
-                shown = f"{p.note_name(lo)}–{p.note_name(hi)}  (dead)"
-            else:
-                shown = f"{p.note_name(lo)}–{p.note_name(hi)}"
-            table.add_row(str(kg), shown)
+            row = (self._program_keygroups[kg]
+                   if kg < len(self._program_keygroups) else None)
+            if row is None or not row["read"]:
+                table.add_row(str(kg), "?", "")
+                continue
+            lo, hi = row["lo"], row["hi"]
+            # An inverted range selects nothing, measured (§81). Printing it
+            # as a range would read as a keygroup spanning it backwards.
+            span = (f"{p.note_name(lo)}–{p.note_name(hi)}"
+                    + ("  (dead)" if lo > hi else ""))
+            table.add_row(str(kg), span, ", ".join(row["samples"]) or "—")
+
+        self._fill_program_samples()
         self.query_one("#param-title", Static).update(
             f"Parameters — program {index} ({header.get('PRNAME', '')})"
         )
         self._show_params("program", header)
+
+    def _fill_program_samples(self) -> None:
+        """What this program references, and which of it the machine lacks.
+
+        Missing first, because that is the only thing here with no other
+        indicator: an over-budget load reports "insufficient waveform memory"
+        once and then behaves normally, leaving programs resident, selectable
+        and silent (§73). Everything else in this pane the sampler will tell
+        you itself.
+
+        A zone that cannot sound is not counted as missing -- an inverted or
+        zero-height velocity range keeps whatever name it last held (§81),
+        and reporting that as a fault is a problem the user cannot act on and
+        did not cause.
+        """
+        table = self.query_one("#samples", DataTable)
+        table.clear()
+        resident = {s.strip() for s in self._samples}
+
+        used: List[str] = []
+        for row in self._program_keygroups:
+            for name in row.get("samples", ()):
+                if name not in used:
+                    used.append(name)
+
+        missing = [n for n in used if n not in resident]
+        present = [n for n in used if n in resident]
+        for name in missing:
+            table.add_row(name, "MISSING")
+        for name in present:
+            table.add_row(name, "ok")
+
+        title = self.query_one("#progsamples-title", Static)
+        if missing:
+            title.update(f"Samples used — {len(missing)} MISSING of {len(used)}")
+        else:
+            title.update(f"Samples used — {len(used)}")
 
     def _show_params(self, region: str, values: Dict[str, object]) -> None:
         self._param_values = values
@@ -792,13 +854,19 @@ class S3kedApp(App):
         self._audit_worker(None)
 
     def action_usage(self) -> None:
-        """Every zone naming the selected sample."""
+        """Every zone naming the selected sample, across all programs.
+
+        The name comes from the row, not from indexing the global sample
+        list. That list and this pane were the same thing until the pane
+        became program-centric; indexing one by the other's cursor now picks
+        a different sample entirely, and would do it silently.
+        """
         table = self.query_one("#samples", DataTable)
         row = table.cursor_row
-        if row is None or row >= len(self._samples):
+        if row is None or row >= table.row_count:
             self.notify_status("select a sample first")
             return
-        name = self._samples[row]
+        name = str(table.get_row_at(row)[0]).strip()
         self.notify_status(f"looking for uses of {name!r}…")
         self._audit_worker(name)
 

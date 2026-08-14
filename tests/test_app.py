@@ -1294,7 +1294,7 @@ async def test_a_keygroup_that_will_not_read_blanks_only_its_own_row():
     class Flaky(DemoBridge):
         def get_header_bytes(self, region, index, offset, count, *,
                              selector=0, timeout=None):
-            if region == "keygroup" and count == 2 and selector == 0:
+            if region == "keygroup" and selector == 0 and count > 2:
                 raise RuntimeError("no reply")
             return super().get_header_bytes(region, index, offset, count,
                                             selector=selector, timeout=timeout)
@@ -1321,8 +1321,12 @@ async def test_an_inverted_key_range_is_labelled_dead():
     class Inverted(DemoBridge):
         def get_header_bytes(self, region, index, offset, count, *,
                              selector=0, timeout=None):
-            if region == "keygroup" and count == 2:
-                return bytes([72, 48])
+            if region == "keygroup" and count > 2:
+                raw = bytearray(super().get_header_bytes(
+                    region, index, offset, count,
+                    selector=selector, timeout=timeout))
+                raw[3], raw[4] = 72, 48          # inverted: lo > hi
+                return bytes(raw)
             return super().get_header_bytes(region, index, offset, count,
                                             selector=selector, timeout=timeout)
 
@@ -1335,3 +1339,45 @@ async def test_an_inverted_key_range_is_labelled_dead():
         first = str(app.query_one("#keygroups", DataTable).get_row_at(0)[1])
 
     assert "dead" in first, f"inverted range not flagged: {first!r}"
+
+
+async def test_who_uses_reads_the_row_not_the_global_index():
+    """The samples pane lists the PROGRAM's samples now, not the machine's.
+
+    `u` used to take the pane's cursor row and index the global resident list
+    with it. Those were the same list until the pane became program-centric;
+    afterwards the same cursor picks a different sample, silently. So this
+    asserts the report names the ROW's sample, on a program deliberately
+    chosen because its first sample is not the machine's first sample.
+    """
+    from textual.widgets import DataTable, Static
+    from s3ked.app import S3kedApp, ReportScreen
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(120, 36)) as pilot:
+        await pilot.pause()
+        for _ in range(30):
+            await pilot.pause()
+        app.query_one("#programs", DataTable).move_cursor(row=4)
+        for _ in range(40):
+            await pilot.pause()
+
+        pane = app.query_one("#samples", DataTable)
+        assert pane.row_count, "no samples listed for this program"
+        row_name = str(pane.get_row_at(0)[0]).strip()
+        assert row_name != app._samples[0].strip(), (
+            "this test needs a program whose first sample differs from the "
+            "machine's, or it cannot tell the two lookups apart")
+
+        pane.focus()
+        pane.move_cursor(row=0)
+        await pilot.press("u")
+        for _ in range(40):
+            await pilot.pause()
+
+        screen = app.screen_stack[-1]
+        assert isinstance(screen, ReportScreen), screen
+        title = str(screen.query_one("#report-title", Static).render())
+
+    assert row_name in title, f"looked up the wrong sample: {title!r}"
