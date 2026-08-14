@@ -800,3 +800,26 @@ effect.
   range, since it selects nothing.
 - No screenshots in the README yet — worth adding once the TUI has been seen
   against something real.
+
+---
+
+## Client dying mid-exchange wedges the sampler (RESOLVED 2026-08-14)
+
+**Status: cause found and fixed twice over.** Launching the TUI repeatedly
+under `timeout` while diagnosing a blank window killed it mid-handshake, and
+the machine stopped answering `RSTAT` on every port until it was power cycled.
+Nothing held the MIDI port. §71 and §78 both blame a wedge on what was *sent*;
+this one happened because the client stopped listening.
+
+- `install_clean_exit()` turns SIGTERM into `SystemExit`, so the `finally`
+  that closes the bridge runs. Safe for frame integrity because Python
+  delivers signals between bytecodes: a `send_message` already in the C call
+  completes first.
+- `_receive` matches replies to requests — every response is its request's
+  opcode plus one — and skips anything else into `stale_replies`. This is the
+  fix that survives SIGKILL, a crash or a pulled plug, none of which can run
+  a `finally`.
+
+**Operational note, not a code change:** do not run a live SysEx client under
+`timeout`. It is right for a probe that talks and stops, wrong for anything a
+person would otherwise quit. RESOLUTION_NOTES §95.

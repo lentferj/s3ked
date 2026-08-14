@@ -79,6 +79,13 @@ This talks to a sampler that has no undo.
 - **Out-of-range header reads are refused locally.** The device answers them
   with the previous read's buffer instead of an error, so a wrong index comes
   back as plausible data belonging to something else (§11, §82).
+- **Replies are matched to requests.** A client killed mid-exchange leaves the
+  sampler's answer in flight, and the next process to open the port is handed
+  it. Frames that cannot answer what was just sent are skipped and counted
+  rather than decoded as the wrong message (§95).
+- **SIGTERM closes the port.** It used to end the process where it stood,
+  leaving the machine composing an answer nobody would read — which wedged an
+  S3000XL until it was power cycled (§95).
 - **The page register is range-checked.** Writing a value past the end crashes
   the firmware outright — no reply, frozen front panel, power cycle — and
   nothing on the device refuses it (§79, §85).

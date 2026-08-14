@@ -112,6 +112,7 @@ silently wrong one.
 - [§92](#92--btsorts-two-jobs-split-the-flags-rebuild-themselves-the-sort-does-not-2026-08-14) — BTSORT's two jobs split: the flags rebuild themselves, the sort does not (2026-08-14)
 - [§93](#93--the-load-type-is-in-the-trigger-register-and-74-said-it-was-not-2026-08-14) — The load type IS in the trigger register, and §74 said it was not (2026-08-14)
 - [§94](#94--retraction-the-load-register-performs-the-type-you-write-it-2026-08-14) — **RETRACTION**: the load register performs the type you write it (2026-08-14)
+- [§95](#95--the-client-dying-mid-exchange-wedges-the-machine-2026-08-14) — The client dying mid-exchange wedges the machine (2026-08-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -7374,3 +7375,92 @@ from polling a loading machine, so it is not to be turned into one.
 
 **Value 6 is `Operating System`** and was deliberately never written. An OS
 load off the disc is not something to fire while characterising a register.
+
+---
+
+## §95 — The client dying mid-exchange wedges the machine (2026-08-14)
+
+**Status: cause identified, two fixes shipped, one of them structural.**
+
+§71 and §78 both record the sampler going unresponsive, and both attribute it
+to what *we sent* — polling during a load, sweeping pages with absent media.
+This is a third cause, and it is the opposite shape: **the machine wedged
+because the client stopped listening.**
+
+### What happened
+
+The TUI was being launched repeatedly to diagnose a blank window, several
+times under `timeout`, and each launch was killed partway through its startup
+handshake. After a handful of those the sampler stopped answering `RSTAT` on
+every port and every one of s3ked's own probes failed identically. Nothing
+held the MIDI port; the ports enumerated cleanly; the machine simply did not
+answer, and stayed that way until a power cycle.
+
+Twenty minutes earlier the same binary had connected first time.
+
+### Why `timeout` was the wrong instrument
+
+`SIGTERM`'s default action ends the process where it stands. No `finally`
+runs, the port is never closed, and — the part that matters — a request is
+left outstanding on the wire with the sampler still composing an answer to
+it. Repeat that often enough and the machine is left holding a conversation
+with a process that no longer exists.
+
+Using `timeout` on a live SysEx client is the mistake. It is the right tool
+for a probe that talks and stops; it is the wrong tool for anything a person
+would otherwise quit.
+
+### Fix 1: SIGTERM now unwinds
+
+`s3k.bridge.install_clean_exit()` installs handlers that raise `SystemExit`,
+so the `finally` that closes the bridge actually runs. Both entry points call
+it before opening a port.
+
+Raising from a signal handler is safe with respect to frame integrity, and
+that is the reason for this design rather than a happy accident: **Python
+delivers signals between bytecodes**, so a `send_message` already inside the
+C call finishes before the handler runs. The frame on the wire is whole; only
+the conversation is abandoned.
+
+It leaves an existing handler alone. A host application with its own shutdown
+is better at this than we are.
+
+### Fix 2: replies are matched to requests — the structural one
+
+A clean exit cannot be guaranteed. `SIGKILL`, a crash and a pulled plug all
+leave the same mess, so the durable fix is on the *receiving* side.
+
+The failure mode is precise. The dead session's answer is still in flight.
+The next process opens the port, drains — catching nothing, **because the
+answer has not arrived yet** — sends its own request, and is handed the dead
+session's reply. It decodes as the wrong message and the error blames the
+wrong thing:
+
+```
+ValueError: extended data: expected at least a 7-byte body, got 1
+```
+
+That was seen on the *first read of a fresh connection*, and read at the time
+as a stale frame in the buffer. Draining before a send cannot fix it. Only
+checking what came back can.
+
+`_receive` now takes the set of operation codes that could legitimately
+answer what was just sent, and **skips** anything else, counting it in
+`stale_replies`. The pairing is entirely regular and worth writing down,
+since nothing in the source documents states it as a rule:
+
+> **Every response is its request's opcode plus one.** RSTAT 0x00 / STAT
+> 0x01, RPLIST 0x02 / PLIST 0x03, RPHEADER 0x27 / PHEADER 0x28, RMISCDATA
+> 0x33 / MISCDATA 0x34, RMULTIDATA 0x41 / MULTIDATA 0x42.
+
+`REPLY` is always allowed, since any operation can answer with an error
+instead; a *write* accepts `REPLY` and nothing else, so a data frame arriving
+where an acknowledgement belongs is by definition somebody else's.
+
+### The general lesson
+
+Two of this project's three wedges were blamed on what was sent. This one
+could not have been found that way, because nothing was being sent at all —
+the client had stopped existing. When a device stops answering, "what did we
+send it" is only half the question; the other half is "what did we leave it
+waiting for".

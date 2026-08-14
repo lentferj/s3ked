@@ -62,6 +62,7 @@ returns ok/error. :meth:`S3kBridge.set_header_bytes` waits for it by default.
 from __future__ import annotations
 
 import sys
+import signal
 import time
 from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -496,6 +497,55 @@ class MultiIn:
             port.close_port()
             _delete_quiet(port)
         self.ports = []
+
+
+#: A write is answered by REPLY and by nothing else, so a data frame arriving
+#: where an acknowledgement belongs is somebody else's answer -- see
+#: S3kBridge._receive.
+_ONLY_REPLY = frozenset({int(m.Command.REPLY)})
+
+
+def install_clean_exit(signals=(signal.SIGTERM, signal.SIGHUP)) -> None:
+    """Turn termination signals into :class:`SystemExit`, so ports close.
+
+    Ctrl-C already unwinds: it raises ``KeyboardInterrupt`` and any
+    ``finally`` that closes the bridge runs. **SIGTERM does not** -- the
+    default action ends the process where it stands, leaving the MIDI port
+    open and, worse, a request outstanding on the wire that the sampler is
+    still composing an answer to.
+
+    That is not hypothetical. Running this project under ``timeout`` while
+    diagnosing a display problem killed it mid-exchange several times in a
+    row, and the machine stopped answering RSTAT on any port until it was
+    power cycled -- a wedge with a cause this project had not recorded: the
+    *client* dying mid-transfer rather than the machine being over-polled.
+
+    Raising from the handler is safe with respect to frame integrity, and
+    that is the point rather than an accident: Python delivers signals
+    between bytecodes, so a ``send_message`` already inside the C call
+    finishes before the handler runs. The frame on the wire is whole; only
+    the conversation is abandoned.
+
+    Idempotent, and it leaves any handler the caller has already installed
+    for a signal alone -- a host application that has its own shutdown is
+    better at this than we are.
+    """
+    for number in signals:
+        try:
+            existing = signal.getsignal(number)
+        except (ValueError, OSError):        # not available on this platform
+            continue
+        if existing not in (signal.SIG_DFL, None):
+            continue                          # somebody else owns it
+        try:
+            signal.signal(
+                number,
+                lambda signum, _frame: (_ for _ in ()).throw(
+                    SystemExit(128 + signum)),
+            )
+        except (ValueError, OSError):
+            # signal() only works on the main thread of the main interpreter
+            continue
 
 
 # --- the bridge -------------------------------------------------------------
@@ -1020,8 +1070,31 @@ class S3kBridge:
         while self.inp.get_message() is not None:
             pass
 
-    def _receive(self, timeout: Optional[float] = None) -> bytes:
-        """Wait for the next SysEx frame addressed to us."""
+    #: Frames skipped by :meth:`_receive` because they answered a question
+    #: nobody here asked. Non-zero means a previous session died with a
+    #: request outstanding; see :meth:`_receive`.
+    stale_replies: int = 0
+
+    def _receive(self, timeout: Optional[float] = None,
+                 accept: Optional[frozenset] = None) -> bytes:
+        """Wait for the next SysEx frame addressed to us.
+
+        ``accept`` is the set of operation codes that could legitimately
+        answer what was just sent. Frames outside it are **skipped, not
+        returned** -- because a reply on our channel is not necessarily a
+        reply to *us*.
+
+        The case that forced this: a client killed mid-exchange leaves the
+        machine's answer still in flight. The next process opens the port,
+        drains (catching nothing, because the answer has not arrived yet),
+        sends its own request, and is handed the dead session's reply. It
+        decodes as the wrong message and the error names the wrong cause --
+        observed as "extended data: expected at least a 7-byte body, got 1"
+        on the first read of a fresh connection.
+
+        Draining before a send cannot fix that; only checking what came back
+        can.
+        """
         deadline = time.time() + (self.timeout if timeout is None else timeout)
         while time.time() < deadline:
             message = self.inp.get_message()
@@ -1032,20 +1105,39 @@ class S3kBridge:
             if not data or data[0] != m.SOX:
                 continue
             try:
-                channel, _command, _payload = m.parse_frame(data)
+                channel, command, _payload = m.parse_frame(data)
             except ValueError:
                 continue  # somebody else's SysEx on a shared input
             if channel != self.exclusive_channel:
                 continue
+            if accept is not None and command not in accept:
+                self.stale_replies += 1
+                continue
             return data
         raise TimeoutError(f"no reply within {timeout or self.timeout}s")
+
+    @staticmethod
+    def _answers_to(frame: bytes) -> frozenset:
+        """Which operation codes may answer *frame*.
+
+        The pairing is entirely regular: every response is its request's
+        opcode **plus one** -- RSTAT 0x00 / STAT 0x01, RPLIST 0x02 / PLIST
+        0x03, RPHEADER 0x27 / PHEADER 0x28, RMISCDATA 0x33 / MISCDATA 0x34,
+        RMULTIDATA 0x41 / MULTIDATA 0x42. REPLY is always allowed, since any
+        operation can answer with an error instead.
+        """
+        try:
+            _channel, command, _payload = m.parse_frame(frame)
+        except ValueError:
+            return frozenset({int(m.Command.REPLY)})
+        return frozenset({int(m.Command.REPLY), command + 1})
 
     def send_and_receive(
         self, frame: bytes, *, timeout: Optional[float] = None
     ) -> bytes:
         self._drain()
         self._send(frame)
-        return self._receive(timeout)
+        return self._receive(timeout, accept=self._answers_to(frame))
 
     def close(self) -> None:
         for port in (self.out, self.inp):
@@ -1213,8 +1305,9 @@ class S3kBridge:
         ).encode()
         self._drain()
         self._send(frame, write=True)
-        self._raise_for_reply(self._receive(timeout),
-                              f"writing misc byte {index}")
+        self._raise_for_reply(
+            self._receive(timeout, accept=_ONLY_REPLY),
+            f"writing misc byte {index}")
         return self._misc_byte(index, timeout=timeout)
 
     #: Main-menu pages, by the value :attr:`_MISC_MODE` takes. All eleven
@@ -1882,7 +1975,8 @@ class S3kBridge:
         self._drain()
         self._send(frame, write=True)
         self._raise_for_reply(
-            self._receive(timeout), f"writing {region} {index} at offset {offset}"
+            self._receive(timeout, accept=_ONLY_REPLY),
+            f"writing {region} {index} at offset {offset}"
         )
 
     def _raise_for_reply(self, frame: bytes, what: str) -> None:
@@ -2179,7 +2273,7 @@ class S3kBridge:
             return
         self._drain()
         self._send(frame, write=True)
-        self._raise_for_reply(self._receive(), what)
+        self._raise_for_reply(self._receive(accept=_ONLY_REPLY), what)
 
     def set_exclusive_channel(self, channel: int) -> None:
         """SETEX -- move the device to another exclusive channel.

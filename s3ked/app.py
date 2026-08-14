@@ -2054,6 +2054,14 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
 
+    # Before any port is opened: SIGTERM otherwise ends the process where it
+    # stands, leaving the port open and the sampler composing an answer
+    # nobody will read. See s3k.bridge.install_clean_exit.
+    if not args.demo:
+        from s3k import bridge as _b
+
+        _b.install_clean_exit()
+
     if args.demo:
         from s3ked.demo import DemoBridge
 

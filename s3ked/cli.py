@@ -441,6 +441,13 @@ def main(argv: Optional[List[str]] = None) -> int:
             sys.exit(f"error: {exc}")
         return 0
 
+    # Before any port is opened. SIGTERM otherwise ends the process where it
+    # stands and leaves the sampler composing an answer nobody will read,
+    # which wedges it until a power cycle. See s3k.bridge.install_clean_exit.
+    from s3k import bridge as _b
+
+    _b.install_clean_exit()
+
     try:
         bridge = _build_bridge(args)
     except Exception as exc:

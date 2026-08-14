@@ -896,7 +896,7 @@ def _misc_machine(initial):
             self.bytes[index] = m.HeaderData.decode(frame).data[0]
             self.writes.append(index)
 
-        def _receive(self, timeout=None):
+        def _receive(self, timeout=None, accept=None):
             return m.Reply(code=m.ReplyCode.OK, exclusive_channel=0).encode()
 
     return Fake()
@@ -953,7 +953,7 @@ def test_select_mode_reports_what_the_register_reads_not_the_ack():
     from s3k import bridge as b
 
     class Contrary(_misc_machine({91: 10}).__class__):
-        def _receive(self, timeout=None):
+        def _receive(self, timeout=None, accept=None):
             from s3k import messages as m
             return m.Reply(code=m.ReplyCode.ERROR, exclusive_channel=0).encode()
 
@@ -1420,3 +1420,104 @@ def test_load_type_name_does_not_invent_a_name():
     assert Fake(1).load_type_name() == "1 (ALL PROGS+SAMPLES)"
     assert Fake(0).load_type_name() == "0 (ENTIRE VOLUME)"
     assert Fake(99).load_type_name() == "99 (unnamed)"
+
+
+def test_a_reply_to_somebody_elses_question_is_skipped():
+    """A frame on our channel is not necessarily a frame for us.
+
+    A client killed mid-exchange leaves the machine's answer in flight. The
+    next process opens the port, drains (catching nothing, because the answer
+    has not arrived yet), sends its own request, and is handed the dead
+    session's reply -- which decodes as the wrong message and blames the
+    wrong thing. Draining before a send cannot fix it; checking what came
+    back can.
+    """
+    from s3k import bridge as b
+    from s3k import messages as m
+
+    stale = m.ProgramList(names=["LEFTOVER"], exclusive_channel=0).encode()
+    wanted = m.Status(
+        version_major=1, version_minor=0, max_blocks=1, free_blocks=1,
+        max_words=1, free_words=1, exclusive_channel_setting=0,
+        exclusive_channel=0,
+    ).encode()
+
+    class Wire:
+        def __init__(self):
+            self.queue = [[list(stale), 0.0], [list(wanted), 0.0]]
+
+        def get_message(self):
+            return self.queue.pop(0) if self.queue else None
+
+    class Bare(b.S3kBridge):
+        def __init__(self):
+            self.inp = Wire()
+            self.exclusive_channel = 0
+            self.timeout = 1.0
+            self.stale_replies = 0
+
+    bridge = Bare()
+    request = m.RequestStatus(exclusive_channel=0).encode()
+    got = bridge._receive(accept=bridge._answers_to(request))
+
+    assert got == wanted, "the STAT we asked for, not the PLIST we did not"
+    assert bridge.stale_replies == 1, "and it must be counted, not hidden"
+
+
+def test_every_response_is_its_request_plus_one():
+    """The pairing the reply matcher rests on, checked against the enum."""
+    from s3k import messages as m
+
+    pairs = [
+        ("RSTAT", "STAT"), ("RPLIST", "PLIST"), ("RSLIST", "SLIST"),
+        ("RPDATA", "PDATA"), ("RKDATA", "KDATA"), ("RSDATA", "SDATA"),
+        ("RPHEADER", "PHEADER"), ("RKHEADER", "KHEADER"),
+        ("RSHEADER", "SHEADER"), ("RFXDATA", "FXDATA"),
+    ]
+    for request, response in pairs:
+        assert int(getattr(m.Command, request)) + 1 == int(
+            getattr(m.Command, response)
+        ), f"{request}/{response} breaks the +1 pairing"
+
+
+def test_a_write_only_accepts_an_acknowledgement():
+    """A data frame where an ack belongs is somebody else's answer."""
+    from s3k import bridge as b
+
+    assert b._ONLY_REPLY == frozenset({0x16})
+
+
+def test_install_clean_exit_leaves_an_existing_handler_alone():
+    """A host application's own shutdown beats ours."""
+    import signal
+    from s3k import bridge as b
+
+    def mine(signum, frame):
+        pass
+
+    previous = signal.getsignal(signal.SIGTERM)
+    signal.signal(signal.SIGTERM, mine)
+    try:
+        b.install_clean_exit()
+        assert signal.getsignal(signal.SIGTERM) is mine
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
+def test_install_clean_exit_raises_system_exit_so_finally_runs():
+    """SIGTERM must unwind, not end the process where it stands."""
+    import signal
+    import pytest
+    from s3k import bridge as b
+
+    previous = signal.getsignal(signal.SIGTERM)
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    try:
+        b.install_clean_exit(signals=(signal.SIGTERM,))
+        handler = signal.getsignal(signal.SIGTERM)
+        assert callable(handler)
+        with pytest.raises(SystemExit) as caught:
+            handler(signal.SIGTERM, None)
+        assert caught.value.code == 128 + int(signal.SIGTERM)
+    finally:
+        signal.signal(signal.SIGTERM, previous)
