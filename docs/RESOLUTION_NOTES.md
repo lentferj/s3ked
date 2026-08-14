@@ -7281,6 +7281,35 @@ out of list order has to say so. It is the sequential-in-list-order case that
 is self-consistent, and that is the case because of how the numbers are
 chosen, not because of anything the machine does.
 
+### Confirmed six deep, and `renumber_programs()` run on hardware (2026-08-14)
+
+§92's reflagging was measured on a collision two deep — one program given
+another's number. `renumber_programs()` had never been fired against a real
+machine at all, only synthetically.
+
+Six programs were loaded from six volumes with `programs only`, all arriving
+with `PRGNUM` 0, so the panel read `1 1 1 1 1 1` and **`6 now active`**: one
+program change would have fired all six. Then the remote renumber, six writes
+in **0.5 s**:
+
+```
+before   PRGNUMs [0,0,0,0,0,0]   panel 1 1 1 1 1 1   6 now active
+after    PRGNUMs [0,1,2,3,4,5]   panel 1 2 3 4 5 6   1 now active
+```
+
+The panel confirmed all of it without being touched: the last program showing
+number **6**, and the count down to **1 now active** with no star on it,
+`PROGRAM NUMBER` still being 1.
+
+So the automatic reflagging holds at six deep, not just two — and the list
+needed no sort, because the numbers were assigned in list order and were
+therefore already in number order when it finished. The caveat §92 declined
+to ship is still not needed.
+
+The five-rows-from-the-cursor trap appeared again in the same screenshot: one
+visible row and four blank lines, with the cursor on the last of six
+programs. It reads as an emptied list and is nothing of the kind.
+
 ### A panel-reading trap, recorded because it cost a minute
 
 The `SLCT` list draws five rows **from the cursor downwards**. With the cursor

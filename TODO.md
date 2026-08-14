@@ -931,3 +931,22 @@ the cursor is on", and during this measurement the cursor was on
 `PROGRAM NUMBER` while `byte[49]` read 0 and moved for nothing. Whatever it
 follows, it is not the focused field on any page — every observation behind
 §70 was made on the LOAD page. RESOLUTION_NOTES §101.
+
+
+---
+
+## `renumber_programs()` verified on hardware (CLOSED 2026-08-14)
+
+Never fired against a real machine until now, only synthetically. Six programs
+loaded from six volumes all arrived carrying `PRGNUM` 0 — the panel read
+`6 now active`, and one program change would have fired all six.
+
+The remote renumber took **0.5 s** for six writes and the panel followed
+without being touched: numbers `1 2 3 4 5 6`, count down to `1 now active`.
+
+That also confirms §92's automatic reflagging at a **six-deep** collision,
+where it had only been measured two deep, and confirms that the missing
+BTSORT sort is a no-op for this write — numbers assigned in list order leave
+the list already in number order.
+
+RESOLUTION_NOTES §92.
