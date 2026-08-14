@@ -356,6 +356,13 @@ class DemoBridge:
             for index in range(len(self._programs))
         ]
 
+    #: What the LOAD page is set to. The demo starts on 1, the only value
+    #: that loads anything on a real machine (§93).
+    _load_type = 1
+
+    def load_type(self, *, timeout: Optional[float] = None) -> int:
+        return self._load_type
+
     def mode(self, *, timeout: Optional[float] = None) -> int:
         return self._mode
 

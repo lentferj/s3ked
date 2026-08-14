@@ -105,8 +105,10 @@ def sweep(bridge, indices):
 
 
 def main():
+    duration = float(sys.argv[1]) if len(sys.argv) > 1 else 180.0
     bridge = b.S3kBridge.autodetect(channels=(0,))
-    print("baseline sweep…", flush=True)
+    print(f"baseline sweep… (watching for {duration:.0f} s, "
+          f"or until Ctrl-C)", flush=True)
     baseline = sweep(bridge, range(HIGHEST + 1))
     live = sorted(baseline)
     print(f"  {len(live)} readable indices, 0-{max(live)}\n", flush=True)
@@ -119,7 +121,7 @@ def main():
     moved = {}
     started = time.time()
     try:
-        while True:
+        while time.time() - started < duration:
             time.sleep(GAP)
             current = sweep(bridge, live)
             for index in live:

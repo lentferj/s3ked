@@ -109,6 +109,8 @@ silently wrong one.
 - [§89](#89--tuning-is-settable-in-cents-not-in-1256ths-and-56-never-tested-that-2026-08-13) — Tuning is settable in CENTS, not in 1/256ths, and §56 never tested that (2026-08-13)
 - [§90](#90--a-second-crash-with-the-same-signature-and-the-fence-it-argued-for-2026-08-13) — A second crash with the same signature, and the fence it argued for (2026-08-13)
 - [§91](#91--prgnum-collides-after-multi-volume-loads-and-the-panels-remedy-2026-08-14) — `PRGNUM` collides after multi-volume loads, and the panel's remedy (2026-08-14)
+- [§92](#92--btsorts-two-jobs-split-the-flags-rebuild-themselves-the-sort-does-not-2026-08-14) — BTSORT's two jobs split: the flags rebuild themselves, the sort does not (2026-08-14)
+- [§93](#93--the-load-type-is-in-the-trigger-register-and-74-said-it-was-not-2026-08-14) — The load type IS in the trigger register, and §74 said it was not (2026-08-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -7094,3 +7096,148 @@ the active flags may not settle until the panel is touched.
 **To close:** write `PRGNUM` over SysEx on a machine with a known collision
 and read the panel; that decides whether a `renumber()` can be offered
 without a caveat. Independently, §5's Data Index hunt.
+
+---
+
+## §92 — BTSORT's two jobs split: the flags rebuild themselves, the sort does not (2026-08-14)
+
+**Status: settled.** Measured 2026-08-14 with `probes/btsort.py`, RAM only,
+one byte written and restored with read-back confirmation.
+
+§91 left the question open: the specification says BTSORT "should be
+triggered" after writing `PRGNUM`, "to resort the list of programs into order
+and to flag active programs", and s3ked cannot trigger it because the Data
+Index is missing from the transcription (§5). Whether that matters depends on
+what the machine does by itself for a write arriving over SysEx, which nobody
+had looked at.
+
+### The experiment
+
+Fifteen programs resident, numbered 0…14 — one per position, no collisions.
+The **last** program was given the **first** one's number, manufacturing
+exactly the collision four loaded volumes produce. The last was chosen because
+a re-sort has to move it a long way to be visible: "did it move to the top"
+is a much stronger reading than "did anything happen".
+
+```
+before   PRGNUM  [0, 1, 2, …, 12, 13, 14]
+after    PRGNUM  [0, 1, 2, …, 12, 13,  0]
+```
+
+### The two halves disagree
+
+**The sort does NOT happen.** `RPLIST` came back in the same order, the
+renumbered program still last. Read over MIDI, so this half needed nobody at
+the machine.
+
+**The flags DO.** With `PROGRAM NUMBER: 1` selected, the panel's count went
+from `1 now active` to `2 now active` — and back to 1 when the byte was
+restored. Nothing triggered BTSORT; the machine reflagged on its own.
+
+So the two things the specification bundles into one function are not bundled
+in the firmware, and only one of them is missing.
+
+### What this means for `renumber_programs()` — no caveat needed
+
+The obvious conclusion is that a remote renumber ships with "the list order
+may not settle until you touch the panel". That is wrong, and it is worth
+following through rather than shipping the caution reflexively.
+
+`renumber_programs()` assigns numbers **in `RPLIST` order**: position *i* gets
+number *i*. A list whose numbers ascend with position is *already* in
+program-number order — the sort it would trigger has nothing to do. So the
+missing half of BTSORT is a no-op for the one write s3ked makes, and the half
+that does work is the half that matters, since the `*` flags are what tell a
+person which programs will sound.
+
+**Stated generally, so this is not read as more than it is:** an *arbitrary*
+`PRGNUM` write does leave `RPLIST` unsorted, and anything that writes numbers
+out of list order has to say so. It is the sequential-in-list-order case that
+is self-consistent, and that is the case because of how the numbers are
+chosen, not because of anything the machine does.
+
+### A panel-reading trap, recorded because it cost a minute
+
+The `SLCT` list draws five rows **from the cursor downwards**. With the cursor
+on the last program the pane shows one row and four blank lines, which reads
+as "the list has been emptied" and is nothing of the kind. The count in the
+right-hand column is the reliable reading; the visible rows are a window.
+
+---
+
+## §93 — The load type IS in the trigger register, and §74 said it was not (2026-08-14)
+
+**Status: the register is identified. The names of its values are not.**
+Measured 2026-08-14 with `probes/loadtype.py`, read-only.
+
+### What was run
+
+The question was whether the LOAD page's type setting — ENTIRE VOLUME, ALL
+PROGS + SAMPLES, one program — is readable anywhere. The method is §70's, the
+one that found the partition byte: sweep the whole miscellaneous byte bank
+while a person changes the setting at the panel, and see which index tracks
+it. Continuously rather than snapshot-change-snapshot, so the operator can
+work at the panel and never look at the terminal.
+
+### The answer, and it is a register this project had already dismissed
+
+**Bytes 6-9 — the load trigger — are the load type.** All four moved in
+lockstep, timed to each keypress, through five values:
+
+```
+   19s   1 -> 0        46s   2 -> 3
+   28s   0 -> 1        59s   3 -> 4
+   35s   1 -> 2        72s   4 -> 0
+                       74s   0 -> 1
+```
+
+Lockstep across all four is the known mirroring and is *not* what a read
+artefact produces — the artefact in this same log makes each index take its
+neighbour's value, never four indices take the same new one.
+
+`byte[49]` behaved exactly as §70 predicts and is worth recording as a
+non-answer: it tracked the cursor moving on and off the field, 3↔5, rather
+than the setting.
+
+### Why §74 missed it, which is the part worth keeping
+
+§74 wrote every value 0-7 into this register, waited each one out, and found
+that only 1 loads anything. That measurement is correct and stands. The
+conclusion drawn from it — "a trigger that happens to keep its last value,
+not a load-type selector" — does not follow from it. **Absence of a second
+*action* is not absence of *meaning*.** The register was only ever written
+to, and a register that the panel writes and the machine reads is invisible
+to a test that writes and looks for an effect.
+
+The general form: a sweep that writes and watches finds what a value *does*.
+Finding what a register *is* needs the other direction — drive the machine
+by hand and watch the register. §70 did that and found four bytes; §74 did
+not and lost one of them for two days.
+
+### What follows for s3ked
+
+1. **The type is readable.** `S3kBridge.load_type()`.
+2. **Only type 1 is triggerable**, because triggering is writing 1 and
+   writing 1 sets the type. Every load this project fires is type 1.
+3. **Firing a load overwrites the panel's selection.** It has done so since
+   the load was implemented, silently, including during §73's and §74's own
+   measurements. Nothing was harmed by it — the loads measured are the loads
+   that happened — but it was never disclosed, and now is.
+4. **Setting the type is NOT offered.** Writing 0 or 2-4 stores cleanly, and
+   whether that moves the panel's displayed selection or is a number the
+   machine never reads back is untested. `byte[49]` is the standing warning:
+   the panel writes it and the machine ignores it.
+
+### Open: the names
+
+Values 0-4 are an opaque index. Mapping them needs somebody to step the
+setting and record which name is on screen at each number. It is a
+thirty-second job at the machine and nothing here can guess it: the list's
+order is a property of the firmware's menu, not of anything transcribed.
+
+### Also open: whether a write moves the panel
+
+Write 3, look at the LOAD page. If the displayed type changes, s3ked can
+offer the setting; if it does not, the register is read-only in practice and
+the type stays a front-panel job. Same shape of test as the one that settled
+`byte[49]`, and it costs one write.

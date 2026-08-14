@@ -1806,13 +1806,14 @@ async def test_the_loading_dialog_sends_nothing_while_it_waits():
 # --- how to load: the two questions that have answers -----------------------
 
 
-async def test_the_load_screen_does_not_offer_a_load_type():
-    """What to load is a panel setting, and no menu here can change it.
+async def test_the_load_screen_offers_no_way_to_choose_a_load_type():
+    """It can show the panel's type. It must not pretend to set it.
 
-    The trigger register acts on the value 1 and stores 0 and 2-7 without
-    doing anything (§74), so ENTIRE VOLUME / ALL PROGS + SAMPLES is not
-    reachable. A dropdown offering the choice would silently do one thing
-    whatever was picked, so the screen says where the setting lives instead.
+    Triggering a load IS writing the type register, and the value that loads
+    is 1 -- so no key here could select a type and then load it (§93).
+    Whether writing 0 or 2-4 even moves the panel is untested, which is the
+    byte[49] trap: the panel writes it and the machine may never read it
+    back. So the screen reports and does not offer.
     """
     from textual.widgets import Label
     from s3ked.app import LoadOptionsScreen, S3kedApp
@@ -1825,13 +1826,16 @@ async def test_the_load_screen_does_not_offer_a_load_type():
         for _ in range(20):
             await pilot.pause()
         await pilot.press("l")
-        await pilot.pause()
+        for _ in range(20):
+            await pilot.pause()
         screen = app.screen_stack[-1]
         assert isinstance(screen, LoadOptionsScreen)
         what = str(screen.query_one("#loadopts-what", Label).render())
+        actions = {b.action for b in screen.BINDINGS}
 
-    assert "LOAD page" in what
-    assert "not settable over MIDI" in what
+    assert "LOAD page type" in what
+    assert not any("type" in a for a in actions), (
+        f"no binding may claim to change the load type: {actions}")
 
 
 async def test_clearing_first_deletes_then_loads_and_says_so():
@@ -2062,3 +2066,68 @@ def test_renumbering_stops_at_program_128():
     assert result["renumbered"] == 128
     assert result["beyond_range"] == 12
     assert calls == list(range(128)), "the first 128, and no write past them"
+
+
+async def test_the_load_screen_shows_the_panels_load_type():
+    """Readable, not choosable -- and it says which when they differ.
+
+    The panel writes its LOAD-page selection into the trigger register, so
+    this can show it. It cannot offer it: triggering IS writing that
+    register and the value that loads is 1, so a load fired here is always
+    type 1 and drags the panel's selection with it (§93).
+    """
+    from textual.widgets import Label
+    from s3ked.app import LoadOptionsScreen, S3kedApp
+    from s3ked.demo import DemoBridge
+
+    seen = {}
+    for panel_type in (1, 3):
+        class Panel(DemoBridge):
+            _load_type = panel_type
+
+        app = S3kedApp(Panel(), allow_write=True)
+        async with app.run_test(size=(130, 44)) as pilot:
+            await pilot.pause()
+            await pilot.press("d")
+            for _ in range(20):
+                await pilot.pause()
+            await pilot.press("l")
+            for _ in range(20):
+                await pilot.pause()
+            screen = app.screen_stack[-1]
+            assert isinstance(screen, LoadOptionsScreen), panel_type
+            seen[panel_type] = str(
+                screen.query_one("#loadopts-what", Label).render())
+
+    assert "1" in seen[1]
+    assert "fires type 1" not in seen[1], (
+        "no warning is needed when the panel is already on the type we fire")
+    assert "3" in seen[3]
+    assert "fires type 1" in seen[3], (
+        "firing changes the panel's selection, and must say so")
+
+
+async def test_an_unreadable_load_type_does_not_block_the_load():
+    """One optional round trip must not cost the whole feature."""
+    from textual.widgets import Label
+    from s3ked.app import LoadOptionsScreen, S3kedApp
+    from s3ked.demo import DemoBridge
+
+    class Mute(DemoBridge):
+        def load_type(self, *, timeout=None):
+            raise RuntimeError("no answer")
+
+    app = S3kedApp(Mute(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("d")
+        for _ in range(20):
+            await pilot.pause()
+        await pilot.press("l")
+        for _ in range(20):
+            await pilot.pause()
+        screen = app.screen_stack[-1]
+        assert isinstance(screen, LoadOptionsScreen)
+        what = str(screen.query_one("#loadopts-what", Label).render())
+
+    assert "could not be read" in what

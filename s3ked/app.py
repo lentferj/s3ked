@@ -114,13 +114,13 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
 
     Three things could be asked here and only two can be answered.
 
-    **What to load is not one of them.** ENTIRE VOLUME, ALL PROGS + SAMPLES,
-    a single program — that is a setting on the panel's LOAD page, and this
-    protocol does not reach it. The trigger register acts on the value 1 and
-    stores 0 and 2–7 without doing anything at all (§74), so the load does
-    whatever the panel is showing. Offering a menu of load types here would
-    be a control that silently always does the same thing, so the screen says
-    where the setting lives instead.
+    **What to load is readable but not choosable.** ENTIRE VOLUME, ALL PROGS
+    + SAMPLES, a single program — that is a setting on the panel's LOAD page,
+    and the panel writes its selection into the trigger register, so this can
+    show it (§93). It cannot offer it: triggering a load *is* writing that
+    register, and the value that loads is 1, so every load fired from here is
+    type 1 and moves the panel's selection to match. The screen shows what
+    the panel is set to and says plainly when firing will change it.
 
     The other two are real:
 
@@ -141,11 +141,13 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
         Binding("n", "toggle_renumber", "Renumber"),
     ]
 
-    def __init__(self, *, resident_programs: int = 0) -> None:
+    def __init__(self, *, resident_programs: int = 0,
+                 load_type: Optional[int] = None) -> None:
         super().__init__()
         self.clear_first = False
         self.renumber = False
         self.resident_programs = resident_programs
+        self.load_type = load_type
 
     def compose(self) -> ComposeResult:
         with Vertical(id="loadopts-box"):
@@ -162,10 +164,21 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
         self._redraw()
 
     def _redraw(self) -> None:
-        # Not a choice, and saying so beats a menu that does nothing.
-        self.query_one("#loadopts-what", Label).update(
-            "  [dim]what:[/dim] whatever the sampler's LOAD page is set to "
-            "[dim]— not settable over MIDI[/dim]")
+        # Readable, not settable: the panel writes its selection into the
+        # trigger register, and triggering IS writing that register, so
+        # firing a load always sets the type to 1 (§93). Showing the value
+        # and what firing will do to it beats a menu that cannot reach it.
+        if self.load_type is None:
+            what = ("  [dim]what:[/dim] whatever the sampler's LOAD page is "
+                    "set to [dim]— could not be read[/dim]")
+        elif self.load_type == 1:
+            what = (f"  [dim]what:[/dim] LOAD page type [b]{self.load_type}"
+                    f"[/b] [dim]— which is what this fires[/dim]")
+        else:
+            what = (f"  [dim]what:[/dim] LOAD page type [b]{self.load_type}"
+                    f"[/b] — [b]loading here fires type 1[/b] and moves the "
+                    f"panel to it")
+        self.query_one("#loadopts-what", Label).update(what)
 
         mark = lambda on: "[b]>[/b]" if on else " "
         self.query_one("#loadopts-where", Label).update(
@@ -1374,13 +1387,29 @@ class S3kedApp(App):
             self.notify_status("no volume read yet — press d first")
             return
 
+        self._open_load_options()
+
+    @work(thread=True)
+    def _open_load_options(self) -> None:
+        # Read the panel's load type fresh rather than caching it: it is a
+        # front-panel setting and the person may have changed it since the
+        # disk was read. One round trip, ~10 ms.
+        try:
+            with self._bridge_lock:
+                current = self.bridge.load_type()
+        except Exception:
+            current = None
+        self.call_from_thread(self._show_load_options, current)
+
+    def _show_load_options(self, current_type) -> None:
         def chosen(options) -> None:
             if options is None:
                 return
             self._confirm_load(*options)
 
         self.push_screen(
-            LoadOptionsScreen(resident_programs=len(self._programs)), chosen)
+            LoadOptionsScreen(resident_programs=len(self._programs),
+                              load_type=current_type), chosen)
 
     def _confirm_load(self, clear_first: bool, renumber: bool) -> None:
         """Show what the load costs, then fire it.

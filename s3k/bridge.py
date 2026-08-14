@@ -1169,16 +1169,25 @@ class S3kBridge:
 
     #: Bytes 6-9 mirror one another -- writing any one moves all four, and
     #: writing **1** starts a load of the selected volume. That value is the
-    #: whole of it: 0 and 2-7 were each written and waited out, and every one
-    #: stored cleanly and did nothing at all (§74).
+    #: whole of it as far as *acting* goes: 0 and 2-7 were each written and
+    #: waited out, and every one stored cleanly and loaded nothing (§74).
     #:
-    #: So this is a trigger that happens to keep its last value, not a "load
-    #: type" selector. The value it keeps is not persisted: it read 7 before a
-    #: power cycle and 0 after, so 0 is the power-on default (§77).
+    #: **But it IS the load type, and this note said otherwise for two days.**
+    #: §93 watched the whole byte bank while a person stepped the LOAD page's
+    #: type setting, and these four moved in lockstep through 0, 1, 2, 3, 4,
+    #: timed to each keypress. The panel writes its selection here. §74 swept
+    #: the register looking for a second *action* and correctly found none,
+    #: then concluded from that absence that the register had no meaning
+    #: beyond the trigger -- which does not follow, and reading it while
+    #: somebody drove the panel is what showed it does.
     #:
-    #: It was called a load-type selector here for a while, on the strength of
-    #: the LOAD page having a type setting on screen; the register does not
-    #: reach it.
+    #: So: readable as the current type, and the only load this project can
+    #: trigger is type 1, because triggering is writing 1 and writing 1 sets
+    #: the type. A load fired from here therefore CHANGES the panel's
+    #: selection as a side effect.
+    #:
+    #: The value is not persisted: it read 7 before a power cycle and 0 after,
+    #: so 0 is the power-on default (§77).
     #:
     #: The load **appends**. §73 loaded a 15.30 MB volume onto 3.70 MB of
     #: resident data and finished with 19.00 MB, the sum to within 630 words,
@@ -1286,14 +1295,35 @@ class S3kBridge:
             pass          # the write may well have taken; the read decides
         return self._misc_byte(self._MISC_MODE, timeout=timeout)
 
+    def load_type(self, *, timeout: Optional[float] = None) -> int:
+        """Which kind of load the panel's LOAD page is set to.
+
+        The panel writes its selection into the trigger register, so this
+        reads what is on screen. Values 0-4 were seen stepping through the
+        list; **what they are called is not established** -- the mapping needs
+        somebody to read the LOAD page while the numbers are recorded, and
+        until then this is an opaque index (§93).
+
+        Reading is free of side effects. Setting is not offered: writing 1
+        fires a load, and whether writing 0 or 2-4 moves the panel's
+        displayed selection or merely stores a number the machine ignores is
+        untested -- the same trap as ``byte[49]``, which the panel writes and
+        the machine never reads back (§70).
+        """
+        return self._misc_byte(self._MISC_LOAD_TYPE[0], timeout=timeout)
+
     def trigger_load(self, load_type: int = 1, *,
                      timeout: Optional[float] = None) -> None:
         """Load the selected volume into the machine. **This writes and acts.**
 
-        ``load_type`` is the value written to the trigger register, and 1 is
-        the only value that does anything. It is exposed at all so that a
-        caller can pass a value found later; passing anything else today
-        stores it and loads nothing.
+        ``load_type`` is the value written to the register, and 1 is the only
+        value that loads anything; the rest store and do nothing (§74).
+
+        **This changes the panel's load-type selection as a side effect.** The
+        register is the LOAD page's type setting (§93), so firing a load sets
+        that setting to 1 whatever it was before. There is no way around it
+        from here: triggering *is* writing the type. Use :meth:`load_type` to
+        read what the panel had first if that matters.
 
         The load **appends** to what is already in memory. That is not the
         safe-and-boring option it sounds like: a bank built from several
@@ -2070,13 +2100,20 @@ class S3kBridge:
         program changes at this machine will address different programs
         afterwards.
 
-        **The list may not settle until the panel is touched.** The
+        **No BTSORT is needed for this particular write, measured.** The
         specification says BTSORT "should be triggered" after writing
-        `PRGNUM`, to resort the list and reflag the active programs, and the
-        Data Index that invokes BTSORT is missing from the transcription
-        (§5). Whether the machine does it by itself for a write arriving over
-        SysEx has not been tested (§91). So the numbers are right immediately
-        and the ordering and the panel's `*` flags may lag.
+        `PRGNUM`, to resort the list and reflag the active programs, and s3ked
+        cannot trigger it because the Data Index is missing from the
+        transcription (§5). §92 tested what the machine does by itself: it
+        **reflags on its own** -- the panel's "now active" count follows a
+        SysEx write immediately -- and it does **not** re-sort. The sort is
+        the half that is missing, and it is the half this method does not
+        need: numbers are assigned in list order, so the list is already in
+        program-number order when it finishes.
+
+        A caller writing `PRGNUM` out of list order does not get that for
+        free, and has to live with an unsorted list until the panel is
+        touched.
 
         Returns what it did: how many programs were renumbered, and how many
         were past :attr:`_PRGNUM_MAX` and had to be left alone.

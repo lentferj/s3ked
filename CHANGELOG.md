@@ -41,8 +41,8 @@ docs; this tool implements the editor half.
   drive, device and partition. Loading a volume is triggerable, with a fit
   check against free memory beforehand (§70–§74). The load asks how: onto what
   is resident or onto an emptied machine, and whether to renumber afterwards.
-  *What* to load is a panel setting this protocol does not reach, and the
-  screen says so rather than offering a menu that cannot change it.
+  *What* to load is shown, read from the panel, and not offered as a choice
+  — see *Known limitations*.
 - **Renumbering**, the remote equivalent of the panel's `RNUM` → `SEQU`. It
   matters because loads append and `PRGNUM` is stored in the program and
   reloaded verbatim: load four volumes and four programs claim number 1, and
@@ -90,10 +90,12 @@ This talks to a sampler that has no undo.
   deletes that program first.
 - **Choosing a volume is a front-panel job.** There is no volume register; the
   drive, device and partition are settable and the volume is not (§72).
-- **The kind of load is a front-panel job too.** ENTIRE VOLUME versus ALL
-  PROGS + SAMPLES is a setting on the LOAD page with no register found, so a
-  load does whatever the panel is showing and this cannot read or change it
-  (§74, §91).
+- **The kind of load can be read, not chosen.** ENTIRE VOLUME versus ALL
+  PROGS + SAMPLES lives in the same register the load trigger uses, so the
+  current setting is readable — but triggering a load *is* writing that
+  register, and the value that loads is 1. So every load fired from here is
+  type 1 and moves the panel's selection to match, which the load screen says
+  when they differ. What the values are called is not established (§93).
 - **Every byte offset is a transcription** from Akai's own documents and is
   unverified except where a panel check confirmed it. A write that changes the
   sound proves *some* parameter moved (§2).

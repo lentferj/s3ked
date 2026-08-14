@@ -140,10 +140,15 @@ being wire-bound at ~128 ms. Use single-parameter frames. RESOLUTION_NOTES §6.
 message shape is implemented, but no table of index values exists in the
 transcription.
 
-The practical cost is `BTSORT`: the spec says twice that it should be
-triggered after writing `PRGNUM`, and never says with what index. So s3ked
-cannot offer `trigger_btsort()`; `PRGNUM`'s description records that the user
-must do it from the panel.
+The named cost is `BTSORT`: the spec says twice that it should be triggered
+after writing `PRGNUM`, and never says with what index, so s3ked cannot offer
+`trigger_btsort()`.
+
+That cost is now measured and is smaller than it read. §92 found the machine
+does BTSORT's *flagging* half by itself for a SysEx write and only its
+*sorting* half is missing — and the sort is a no-op for the one write s3ked
+makes, which assigns numbers in list order. The index is still worth finding;
+nothing currently depends on it.
 
 **To close this:** find a fuller copy of the Akai document, or capture what
 MESA sends when it renumbers a program.
@@ -152,45 +157,47 @@ MESA sends when it renumbers a program.
 
 ---
 
-## Can the LOAD page's *type* setting be read, or set? (OPEN, needs a person)
+## The load type: register found, values unnamed (PARTLY RESOLVED 2026-08-14)
 
-**Status:** s3ked can fire a load and cannot say what kind of load it will be.
-The trigger register is not it — value 1 acts and 0 and 2–7 store cleanly and
-do nothing (§74) — so the load does whatever the panel's LOAD page is showing:
-ENTIRE VOLUME, ALL PROGS + SAMPLES, one program. No register for that setting
-has been found, so it is neither readable nor settable, and the TUI says where
-the setting lives rather than offering a menu that cannot reach it.
+**Status:** the register is **bytes 6-9**, the same ones this project had
+written off as a bare trigger. They track the panel's LOAD page selection,
+measured through five values as a person stepped it (§93). `load_type()`
+reads it.
 
-`byte[49]` will look like the answer and is not: it holds the value of
-whichever field the panel's cursor is on (§70), so it tracks the load type
-only while the cursor sits there.
+Two things are still open, both cheap and both needing a person:
 
-**To close this:** `probes/loadtype.py`, which is the method that found the
-partition byte — sweep the whole byte bank while a person changes the setting
-at the panel, and see which index tracks it across **two** different values.
-One value proves nothing.
+1. **What the values are called.** 0-4 is an opaque index; mapping it needs
+   somebody to step the setting and write down the name on screen at each
+   number. Thirty seconds at the machine, unguessable from here.
+2. **Whether writing it moves the panel.** Write 3, look at the LOAD page. If
+   the display follows, s3ked can offer the setting; if it does not, the
+   register is read-only in practice — the `byte[49]` trap, where the panel
+   writes and the machine never reads back (§70).
 
-**Blocked on:** a person at the panel.
+Settled and not re-openable: only type 1 is triggerable, because triggering
+is writing 1 and writing 1 sets the type — so every load s3ked fires is type
+1 and overwrites the panel's selection as it goes.
+
+**Blocked on:** a person at the panel, for both.
 
 ---
 
-## Does a `PRGNUM` write over SysEx re-sort and re-flag by itself? (OPEN, needs a person)
+## Does a `PRGNUM` write over SysEx re-sort and re-flag by itself? (RESOLVED 2026-08-14)
 
-**Status:** loading several volumes without `CLR` leaves programs sharing a
-MIDI program number — four programs numbered 1 was observed — and they stack,
-so one program change fires all of them. The panel's `RNUM` page fixes it with
-`SEQU`. s3ked could do the same as a loop of `PRGNUM` writes, but the spec says
-BTSORT "should be triggered" afterwards and s3ked cannot trigger it (above).
+**Status: settled, and the answer is half each.** Measured with
+`probes/btsort.py`: the machine **reflags** on its own — the panel's "now
+active" count followed a SysEx write immediately, 1 to 2 and back on restore
+— and it does **not** re-sort; `RPLIST` came back in the same order with the
+renumbered program still last.
 
-Unknown whether that matters: the machine may re-sort and re-flag on its own
-for a write arriving over SysEx. Nobody has looked.
+The missing half turns out to be the half `renumber_programs()` does not
+need. It assigns numbers in list order, so the list is already in
+program-number order when it finishes and the sort has nothing to do. The
+caveat that was drafted for it was dropped rather than shipped.
 
-**To close this:** write `PRGNUM` over SysEx into a known collision and read
-the panel's `SLCT` page — does the order settle, do the `*` flags follow? A
-yes means a `renumber()` can be offered plainly; a no means it ships with a
-caveat, or not at all.
+A caller writing `PRGNUM` **out of** list order does not get that for free.
 
-**Blocked on:** a person at the panel. RESOLUTION_NOTES §91.
+RESOLUTION_NOTES §92.
 
 ---
 
