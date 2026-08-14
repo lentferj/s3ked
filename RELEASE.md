@@ -88,12 +88,14 @@ whether someone points s3ked at an irreplaceable sampler.
       moved to `probes/`, numpy is a `bench` extra, and nothing that ships
       imports it. Re-verified: clean clone, empty venv, no system packages, no
       numpy, editor fully working.
-- [ ] `s3kcli ports` with no MIDI device attached — does it fail kindly?
+- [x] `s3kcli ports` with no MIDI backend — fails kindly now. It used to
+      raise; the guard and a CI step that forbids a traceback are in.
 - [x] the built wheel carries both licence files and only the nine modules it
       should (checked 2026-08-12)
 - [ ] autodetect against a machine on a non-zero exclusive channel
 - [ ] a terminal without truecolour, and one with a light background
-- [ ] `s3ked` with no `config.toml` present
+- [x] `s3ked` with no `config.toml` — starts clean, and writing a setting
+      creates the file correctly. Verified in an empty directory.
 
 ## 4. Repository hygiene
 
@@ -112,9 +114,9 @@ whether someone points s3ked at an irreplaceable sampler.
       what it refuses to do and why, and what is known to be unfinished.
       Every number in it was checked against the code rather than recalled.
 - [ ] an asciinema cast of a real edit — the screenshots are static
-- [ ] `docs/RESOLUTION_NOTES.md` is 91 sections and ~6900 lines. It is the
-      most valuable thing in the repository and the least navigable; an index
-      at the top would help.
+- [x] `docs/RESOLUTION_NOTES.md` has an index — all 91 sections, linked, with
+      a test asserting it matches the headings. The file is append-only, so
+      an index without that test would drift on the next finding.
 
 ## What is genuinely open, and should be said out loud in the release notes
 

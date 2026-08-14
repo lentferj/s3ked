@@ -259,3 +259,43 @@ def test_the_version_and_the_development_status_agree():
     section = changelog[changelog.index(marker):]
     section = section.split("\n## [")[0]
     assert "beta" in section.lower(), section[:200]
+
+
+def _notes_anchor(heading: str) -> str:
+    """GitHub's rule: lowercase, keep alphanumerics/space/hyphen, space->hyphen."""
+    a = "".join(c for c in heading.lower() if c.isalnum() or c in " -")
+    return a.replace(" ", "-")
+
+
+def test_the_resolution_notes_index_matches_the_sections():
+    """91 sections, referenced from code as `RESOLUTION_NOTES §N`.
+
+    An index that has drifted is worse than none: it sends a reader to a
+    section that is not there, and the file is append-only so it drifts on
+    every finding. Regenerate with tools/, or add the entry by hand -- but
+    this fails first.
+    """
+    import pathlib
+    import re
+    from collections import Counter
+
+    notes = (pathlib.Path(__file__).resolve().parent.parent
+             / "docs" / "RESOLUTION_NOTES.md").read_text(encoding="utf-8")
+
+    headings = [m.group(1) for m in
+                re.finditer(r"^## (§\d+[a-z]? — .+)$", notes, re.M)]
+    linked = re.findall(r"^- \[§[\da-z]+\]\(#([^)]+)\)", notes, re.M)
+
+    assert headings, "no numbered sections found at all"
+    assert len(linked) == len(headings), (
+        f"{len(headings)} sections but {len(linked)} index entries")
+
+    anchors = [_notes_anchor(h) for h in headings]
+    dupes = [a for a, n in Counter(anchors).items() if n > 1]
+    assert not dupes, f"duplicate anchors GitHub would suffix: {dupes[:3]}"
+
+    missing = [a for a in linked if a not in set(anchors)]
+    assert not missing, f"index links to nothing: {missing[:3]}"
+
+    absent = [h for h, a in zip(headings, anchors) if a not in set(linked)]
+    assert not absent, f"sections missing from the index: {absent[:3]}"
