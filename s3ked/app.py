@@ -54,7 +54,6 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import (
     DataTable,
-    Footer,
     Header,
     Input,
     Label,
@@ -162,6 +161,63 @@ class MasterScreen(ModalScreen[Optional[str]]):
         self.dismiss(None)
 
 
+#: Separator between key hints in the legend, matching k2kremote and eosed.
+_LEGEND_SEP = " · "
+
+
+def wrap_blocks(blocks, width: int, sep: str = _LEGEND_SEP) -> str:
+    """Pack ``blocks`` into lines no wider than ``width``, joined by ``sep``.
+
+    Ported from the sibling k2kremote via eosed (same author,
+    GPL-2.0-or-later), which solved the identical problem for their own key
+    legends. Breaks happen only *between* blocks, so a hint like
+    ``l Load volume`` is never split mid-label; a block wider than ``width``
+    on its own simply takes its own line rather than being cut.
+    """
+    lines, current = [], ""
+    for block in blocks:
+        candidate = block if not current else current + sep + block
+        if width and len(candidate) > width and current:
+            lines.append(current)
+            current = block
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    return "\n".join(lines)
+
+
+class KeyHints(Static):
+    """The key legend, folded to the terminal's width over as many lines as it needs.
+
+    **Replaces Textual's ``Footer``**, which is hardcoded to one line and
+    truncates rather than wrapping. At 80x24 -- the smallest size this project
+    claims to support -- it showed six of thirteen bindings and silently cut
+    the rest, so the disk, load, menu, boards and audit keys were
+    undiscoverable to anyone who had not read the README. Neither
+    ``height: auto`` nor a grid layout changes that; both were measured.
+
+    The approach is k2kremote's and eosed's, ported rather than reinvented:
+    one line on a wide terminal, more on a narrow one, and nothing ever
+    hidden.
+    """
+
+    DEFAULT_CSS = "KeyHints { height: auto; }"
+
+    def __init__(self, blocks, *, id=None):
+        super().__init__(id=id)
+        self._blocks = list(blocks)
+
+    def on_mount(self) -> None:
+        self._render_hints()
+
+    def on_resize(self, event) -> None:
+        self._render_hints()
+
+    def _render_hints(self) -> None:
+        self.update(wrap_blocks(self._blocks, self.size.width))
+
+
 class ReportScreen(ModalScreen[None]):
     """A read-only result: integrity, or who uses a sample."""
 
@@ -245,49 +301,6 @@ class SourceScreen(ModalScreen[Optional[Tuple[str, int]]]):
         event.stop()
 
     def action_cancel(self) -> None:
-        self.dismiss(None)
-
-
-class HelpScreen(ModalScreen[None]):
-    """Every key, generated from the app's own BINDINGS.
-
-    Exists because the footer cannot show them. Textual's Footer truncates
-    rather than reflowing, and at 80x24 it displayed six of thirteen -- so the
-    disk, load, menu, boards and audit keys were unreachable unless you had
-    read the README.
-
-    Generated rather than written out, because a hand-kept list of keys is
-    the thing this project has already found stale twice in sibling code.
-    """
-
-    BINDINGS = [
-        Binding("escape", "close", "Close"),
-        Binding("question_mark", "close", "Close"),
-        Binding("q", "close", "Close"),
-    ]
-
-    def __init__(self, bindings) -> None:
-        super().__init__()
-        self.rows = [(b.key, b.description) for b in bindings
-                     if b.description and b.action != "help"]
-
-    def compose(self) -> ComposeResult:
-        pretty = {"question_mark": "?", "tab": "tab", "escape": "esc"}
-        with Vertical(id="help-box"):
-            yield Label("[b]Keys[/b]", id="help-title")
-            # Scrollable because the list is longer than the smallest
-            # supported terminal is tall -- the same 80x24 that made this
-            # screen necessary in the first place.
-            with VerticalScroll(id="help-scroll"):
-                for key, description in self.rows:
-                    shown = pretty.get(key, key)
-                    yield Label(f"  [b]{shown:<5}[/b] {description}")
-            yield Label("")
-            yield Label("[dim]The footer shows only what fits; this is all of "
-                        "them.[/dim]")
-            yield Label("[b]esc[/b] close")
-
-    def action_close(self) -> None:
         self.dismiss(None)
 
 
@@ -469,33 +482,23 @@ class S3kedApp(App):
 
     BINDINGS = [
         Binding("q", "quit", "Quit"),
-        Binding("r", "refresh", "Reload"),
+        Binding("r", "refresh", "Refresh"),
         # Not Enter: a focused DataTable consumes it for row selection, so an
         # app-level Enter binding never fires. Enter still works, via
         # on_data_table_row_selected below.
-        Binding("e", "edit", "Edit"),
-        Binding("w", "toggle_write", "Gate"),
+        Binding("e", "edit", "Edit value"),
+        Binding("w", "toggle_write", "Write gate"),
         Binding("z", "undo", "Undo"),
         Binding("m", "master", "Master"),
-        # Everything below is hidden from the footer and listed by `?`.
-        #
-        # Textual's Footer does not reflow: at 80x24 -- the smallest size this
-        # project claims to support -- it rendered six of thirteen bindings and
-        # silently truncated the rest, so `d`, `l`, `s`, `g`, `B`, `i` and `u`
-        # were undiscoverable. Neither `height: auto` nor a grid layout fixes
-        # it; the widget simply cuts. Thirteen entries cannot fit in eighty
-        # columns at any sensible wording, so the footer shows the handful a
-        # user reaches for constantly and `?` shows all of them.
-        Binding("question_mark", "help", "Keys"),
-        Binding("d", "disk", "Read disk", show=False),
+        Binding("d", "disk", "Read disk"),
         Binding("[", "partition_prev", "Prev partition", show=False),
         Binding("]", "partition_next", "Next partition", show=False),
-        Binding("l", "load_volume", "Load volume", show=False),
-        Binding("s", "source", "Load source", show=False),
-        Binding("g", "menu", "Main menu", show=False),
-        Binding("B", "boards", "Boards fitted", show=False),
-        Binding("i", "integrity", "Integrity", show=False),
-        Binding("u", "usage", "Who uses", show=False),
+        Binding("l", "load_volume", "Load volume"),
+        Binding("s", "source", "Load source"),
+        Binding("g", "menu", "Main menu"),
+        Binding("B", "boards", "Boards fitted"),
+        Binding("i", "integrity", "Integrity"),
+        Binding("u", "usage", "Who uses"),
         Binding("tab", "focus_next", "Next pane", show=False),
     ]
 
@@ -537,7 +540,11 @@ class S3kedApp(App):
                 yield Static("Parameters", classes="pane-title", id="param-title")
                 yield DataTable(id="parameters", cursor_type="row")
         yield Static("", id="status")
-        yield Footer()
+        # Not Footer(): it is one line and truncates. See KeyHints.
+        yield KeyHints(
+            [f"{b.key} {b.description}"
+             for b in self.BINDINGS if b.description and b.show],
+            id="keyhints")
 
     def on_mount(self) -> None:
         self.title = "s3ked"
@@ -840,10 +847,6 @@ class S3kedApp(App):
                 f"{what}: asked for {value}, machine reads {got}")
             return
         self.call_from_thread(self.action_disk)
-
-    def action_help(self) -> None:
-        """Show every key, since the footer can only show some of them."""
-        self.push_screen(HelpScreen(self.BINDINGS))
 
     def action_boards(self) -> None:
         """Declare which expansion boards this machine has. Saved to config.
