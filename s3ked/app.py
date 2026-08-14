@@ -324,21 +324,24 @@ class SourceScreen(ModalScreen[None]):
         """
         try:
             body = self.query_one("#source-vols-body", Label)
+            title = self.query_one("#source-vols-title", Label)
         except Exception:
             return
+
+        # The title is set on EVERY path. Updating it only when there were
+        # volumes left the old count sitting above "nothing here", so an
+        # empty partition read as though it still held the previous disc's
+        # eighteen.
         if volumes is None:
+            title.update("[b]Volumes here[/b]")
             body.update("  [dim]could not be read[/dim]")
-            return
-        if not volumes:
-            body.update("  [dim]nothing here[/dim]")
-            return
-        body.update("\n".join(
-            f"  [b]v{v.index}[/b]  {v.name.strip()}" for v in volumes))
-        try:
-            self.query_one("#source-vols-title", Label).update(
-                f"[b]Volumes here[/b]  [dim]({len(volumes)})[/dim]")
-        except Exception:
-            pass
+        elif not volumes:
+            title.update("[b]Volumes here[/b]  [dim](none)[/dim]")
+            body.update("  [dim]nothing on this partition[/dim]")
+        else:
+            title.update(f"[b]Volumes here[/b]  [dim]({len(volumes)})[/dim]")
+            body.update("\n".join(
+                f"  [b]v{v.index}[/b]  {v.name.strip()}" for v in volumes))
 
     def update_source(self, source: Dict[str, int]) -> None:
         """Re-render the rows from what the machine now reports."""
@@ -371,6 +374,36 @@ class SourceScreen(ModalScreen[None]):
         self.app.apply_source_change(*change)
 
     def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class LoadingScreen(ModalScreen[None]):
+    """Held open while the sampler loads, because nothing else can tell us.
+
+    There is no completion signal. `STAT` carries no busy flag, and the only
+    way to watch progress is to poll -- which is what preceded the machine
+    sitting at BUSY until a power cycle (§71). So the person watching the
+    front panel is the sensor, and closing this is the signal.
+
+    Deliberately short. It is read while waiting for a machine, not studied.
+    """
+
+    BINDINGS = [
+        Binding("escape", "done", "Done"),
+        Binding("enter", "done", "Done"),
+        Binding("q", "done", "Done"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="loading-box"):
+            yield Label("[b]Loading[/b]")
+            yield Label("")
+            yield Label("Close when the sampler has finished.")
+            yield Label("[dim]Nothing is being sent to it meanwhile.[/dim]")
+            yield Label("")
+            yield Label("[b]Esc[/b] — then the lists refresh")
+
+    def action_done(self) -> None:
         self.dismiss(None)
 
 
@@ -1274,10 +1307,21 @@ class S3kedApp(App):
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"load: {exc}")
             return
-        self.call_from_thread(
-            self.notify_status,
-            "load started. The machine is busy — nothing is being sent to it. "
-            "Press r when the display settles.")
+        self.call_from_thread(self._await_load)
+
+    def _await_load(self) -> None:
+        """Wait for the person to say the load finished, then refresh.
+
+        The alternative is polling, and a 58.7 MB load probed every eight
+        seconds ran in stop-start bursts and ended sitting at BUSY until the
+        machine was power cycled (§71). Whether the probing caused that is
+        not established -- which is reason enough not to repeat it.
+        """
+        def done(_result) -> None:
+            self.notify_status("re-reading after the load…")
+            self._load_catalog()
+
+        self.push_screen(LoadingScreen(), done)
 
     def _show_volumes(self, volumes, entries, source=None,
                       source_error=None) -> None:

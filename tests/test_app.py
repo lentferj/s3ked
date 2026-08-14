@@ -884,7 +884,12 @@ async def test_the_app_does_not_poll_a_loading_machine():
     assert "self.bridge.status(" not in src
     assert "self.bridge.hd_directory(" not in src
     assert "self.bridge.volume_list(" not in src
-    assert "Press r" in src
+    # It used to end by asking the user to press r. That relied on them
+    # judging when the load had finished with nothing to judge from, and
+    # pressing r too early left the program list stale -- which is how this
+    # was reported. It now hands off to LoadingScreen, which waits.
+    assert "_await_load" in src
+    assert "Press r" not in src
 
 
 async def test_free_memory_comes_from_the_machine_not_a_constant():
@@ -1677,3 +1682,106 @@ async def test_reading_the_disk_notices_a_catalog_that_changed_underneath():
 
     assert after == before + 1, f"program list still stale: {before} -> {after}"
     assert "catalog changed" in status, status
+
+
+async def test_an_empty_partition_clears_the_volume_count_too():
+    """The title kept the previous count above "nothing here".
+
+    So stepping onto an empty partition read as though it still held the
+    last disc's volumes -- the one number a user scanning for the right
+    drive is most likely to look at.
+    """
+    from textual.widgets import Label
+    from s3ked.app import S3kedApp, SourceScreen
+    from s3ked.demo import DemoBridge
+
+    class Emptying(DemoBridge):
+        empty = False
+
+        def volume_list(self, *, limit=512, timeout=None):
+            if self.empty:
+                return []
+            return super().volume_list(limit=limit, timeout=timeout)
+
+    app = S3kedApp(Emptying(), allow_write=True)
+    async with app.run_test(size=(110, 40)) as pilot:
+        await pilot.pause()
+        for _ in range(25):
+            await pilot.pause()
+        await pilot.press("s")
+        for _ in range(30):
+            await pilot.pause()
+        screen = app.screen_stack[-1]
+        assert isinstance(screen, SourceScreen)
+        title = str(screen.query_one("#source-vols-title", Label).render())
+        assert "(" in title, f"expected a count to begin with: {title!r}"
+
+        app.bridge.empty = True
+        await pilot.press("]")
+        for _ in range(30):
+            await pilot.pause()
+        title = str(screen.query_one("#source-vols-title", Label).render())
+        body = str(screen.query_one("#source-vols-body", Label).render())
+
+    assert "none" in title, f"stale count left in the title: {title!r}"
+    assert "nothing on this partition" in body, body
+
+
+async def test_a_load_holds_a_dialog_until_the_person_says_it_finished():
+    """There is no completion signal to wait on.
+
+    STAT carries no busy flag, and the only way to watch progress is to
+    poll -- which preceded the machine sitting at BUSY until a power cycle
+    (§71). So the person watching the front panel is the sensor, and closing
+    the dialog is the signal. Reported as: loaded a volume, pressed r too
+    early, program list still stale.
+    """
+    from s3ked.app import S3kedApp, LoadingScreen
+    from s3ked.demo import DemoBridge
+
+    fired = []
+
+    class Watch(DemoBridge):
+        def trigger_load(self, load_type=1, *, timeout=None):
+            fired.append(load_type)
+
+    app = S3kedApp(Watch(), allow_write=True)
+    async with app.run_test(size=(110, 40)) as pilot:
+        await pilot.pause()
+        for _ in range(25):
+            await pilot.pause()
+        await pilot.press("d")
+        for _ in range(40):
+            await pilot.pause()
+        await pilot.press("l")
+        await pilot.pause()
+        await pilot.press("y")
+        for _ in range(40):
+            await pilot.pause()
+
+        assert fired == [1], "the load must actually have been triggered"
+        assert isinstance(app.screen_stack[-1], LoadingScreen), (
+            "the dialog must hold until the user closes it")
+
+        # a program arrives while the dialog is up, as one would during a load
+        app.bridge._programs = list(app.bridge._programs) + ["ARRIVED"]
+        await pilot.press("escape")
+        for _ in range(40):
+            await pilot.pause()
+        names = app._programs
+
+    assert "ARRIVED" in names, "closing the dialog must re-read the catalog"
+
+
+async def test_the_loading_dialog_sends_nothing_while_it_waits():
+    """Polling a loading machine is the one thing this must not do."""
+    import inspect
+    from s3ked.app import LoadingScreen, S3kedApp
+
+    source = inspect.getsource(LoadingScreen)
+    for forbidden in ("bridge", "status(", "program_list", "hd_directory"):
+        assert forbidden not in source, (
+            f"the waiting dialog touches {forbidden!r}")
+
+    waiter = inspect.getsource(S3kedApp._await_load)
+    assert "self.bridge" not in waiter, "the waiter must not talk to the device"
