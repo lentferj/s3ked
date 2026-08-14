@@ -673,20 +673,64 @@ class S3kedApp(App):
         try:
             with self._bridge_lock:
                 header = self.bridge.get_header("program", index)
+                ranges = self._read_key_ranges(index, header)
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"error: {exc}")
             return
-        self.call_from_thread(self._apply_program, index, header)
+        self.call_from_thread(self._apply_program, index, header, ranges)
+
+    def _read_key_ranges(self, program: int, header) -> List[Tuple[int, int]]:
+        """Each keygroup's ``LONOTE``..``HINOTE``. Caller holds the lock.
+
+        One 2-byte read per keygroup, because the two are adjacent at offsets
+        3 and 4 -- so a 61-keygroup program costs 61 round trips, under a
+        second at the measured rate.
+
+        The pane showed a literal ``-`` until now, and `TODO.md` said why:
+        the offsets should be trusted before spending the reads. They now
+        are. §81 wrote this pair while measuring whether overlapping
+        keygroups layer, and the machine sounded or stayed silent exactly as
+        predicted across six settings -- including an inverted range and a
+        single-key range. That is behavioural confirmation of offsets 3 and
+        4, which is the only kind available for a field with no panel readout
+        of its own.
+
+        A keygroup that will not read leaves its own row blank rather than
+        failing the pane: a partial answer about the others is worth more
+        than none.
+        """
+        count = int(header.get("GROUPS", 0) or 0)
+        offset = p.lookup(("keygroup", "LONOTE")).offset
+        out: List[Tuple[int, int]] = []
+        for kg in range(count):
+            try:
+                raw = self.bridge.get_header_bytes(
+                    "keygroup", program, offset, 2, selector=kg)
+                out.append((int(raw[0]), int(raw[1])))
+            except Exception:
+                out.append((-1, -1))
+        return out
 
     def _load_program(self, index: int) -> None:
         self._load_program_worker(index)
 
-    def _apply_program(self, index: int, header: Dict[str, object]) -> None:
+    def _apply_program(self, index: int, header: Dict[str, object],
+                       ranges=None) -> None:
         self._keygroups = int(header.get("GROUPS", 0) or 0)
         table = self.query_one("#keygroups", DataTable)
         table.clear()
+        ranges = list(ranges or ())
         for kg in range(self._keygroups):
-            table.add_row(str(kg), "-")
+            lo, hi = ranges[kg] if kg < len(ranges) else (-1, -1)
+            if lo < 0:
+                shown = "?"                      # this one would not read
+            elif lo > hi:
+                # An inverted range selects nothing, measured (§81). Saying
+                # so beats printing it as though it were a range.
+                shown = f"{p.note_name(lo)}–{p.note_name(hi)}  (dead)"
+            else:
+                shown = f"{p.note_name(lo)}–{p.note_name(hi)}"
+            table.add_row(str(kg), shown)
         self.query_one("#param-title", Static).update(
             f"Parameters — program {index} ({header.get('PRNAME', '')})"
         )

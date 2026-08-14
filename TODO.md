@@ -739,8 +739,13 @@ effect.
 - `HW_CHECKLIST.md` and `HW_CALIBRATION.md` are machine-local, excluded via
   `.git/info/exclude` rather than `.gitignore`, matching the sibling eosed
   project.
-- The keygroup pane currently shows a placeholder range per keygroup rather
-  than reading each keygroup's `LONOTE`/`HINOTE`; it costs one request per
-  keygroup and should wait until the offsets are known good.
+- **Done 2026-08-14.** The keygroup pane reads each keygroup's
+  `LONOTE`/`HINOTE` and shows the range as note names. The offsets are good:
+  §81 wrote this pair while measuring whether overlapping keygroups layer,
+  and the machine sounded or stayed silent exactly as predicted across six
+  settings, including an inverted range and a single-key range. One 2-byte
+  read per keygroup, so a 61-keygroup program costs 61 round trips -- under a
+  second. An inverted range is labelled `(dead)` rather than printed as a
+  range, since it selects nothing.
 - No screenshots in the README yet — worth adding once the TUI has been seen
   against something real.
