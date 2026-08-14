@@ -801,6 +801,9 @@ class S3kedApp(App):
         Binding("w", "toggle_write", "Write gate"),
         Binding("z", "undo", "Undo"),
         Binding("Z", "undo_all", "Undo all"),
+        Binding("plus", "nudge_up", "Nudge +", show=False),
+        Binding("minus", "nudge_down", "Nudge -", show=False),
+        Binding("equals_sign", "nudge_up", "Nudge +", show=False),
         Binding("h", "history", "History"),
         Binding("m", "master", "Master"),
         Binding("d", "disk", "Read disk"),
@@ -852,6 +855,9 @@ class S3kedApp(App):
         #: its event, the handler runs after the guard has been cleared, and
         #: the reload lands anyway. Comparing state works whenever it runs.
         self._loaded_program = None
+        #: Set for the duration of a nudge's write, so _after_write can
+        #: collapse a run into one undo entry and skip the catalog re-read.
+        self._nudging = None
         #: Whether the samples pane lists everything resident or only what
         #: the selected program references. The program-centric redesign
         #: dropped the global list entirely, which lost the view the audit
@@ -1195,6 +1201,15 @@ class S3kedApp(App):
         self._param_context = (region, index, keygroup)
         self._param_rows = p.region_params(region)
         table = self.query_one("#parameters", DataTable)
+        # Keep the cursor on the same PARAMETER across a rebuild. clear()
+        # resets it to row 0, and this runs after every write -- so an edit
+        # bounced the cursor onto PRIDENT, a read-only block address, and a
+        # held nudge stepped its field once and then refused for as long as
+        # the key was down. Remembered by NAME, since the row set changes
+        # with the region.
+        was_on = None
+        if 0 <= table.cursor_row < len(self._param_rows):
+            was_on = self._param_rows[table.cursor_row].name
         table.clear()
         for param in self._param_rows:
             table.add_row(
@@ -1202,6 +1217,11 @@ class S3kedApp(App):
                 param.name,
                 p.describe_value(param, values.get(param.name)),
             )
+        if was_on is not None:
+            for row, param in enumerate(self._param_rows):
+                if param.name == was_on:
+                    table.move_cursor(row=row)
+                    break
 
     # -- actions ------------------------------------------------------------
 
@@ -1985,6 +2005,59 @@ class S3kedApp(App):
 
         self.push_screen(EditValueScreen(param, current), apply)
 
+    def action_nudge_up(self) -> None:
+        self._nudge(+1)
+
+    def action_nudge_down(self) -> None:
+        self._nudge(-1)
+
+    def _nudge(self, delta: int) -> None:
+        """Step the selected parameter by one. **This writes.**
+
+        Held down, the terminal's own key repeat drives it, so this has to be
+        cheap: an ordinary edit ends by re-reading the whole catalog, which is
+        two list requests and is nowhere near fast enough to sit under a
+        repeating key. A nudge cannot change a name -- it is refused on text
+        and array fields -- so the catalog cannot have gone stale and the
+        re-read is skipped.
+
+        Consecutive nudges of one field **collapse into a single undo entry**,
+        keeping the value the run started from. Ten taps of `+` should be one
+        thing to undo, not ten; the sibling eosed does the same.
+        """
+        param = self._selected_param()
+        if param is None:
+            self.notify_status("no parameter selected")
+            return
+        if not param.writable:
+            why = "read-only" if param.readonly else "an internal block address"
+            self.notify_status(f"{param.name} is {why}", refused=True)
+            return
+        if not self.allow_write:
+            self.notify_status(
+                "write gate is locked — press w to arm it", refused=True)
+            return
+        if param.kind == "text" or param.is_array:
+            self.notify_status(
+                f"{param.name} is not a number — use e", refused=True)
+            return
+        current = self._param_values.get(param.name)
+        if not isinstance(current, int):
+            self.notify_status(f"{param.name} has no value to step yet")
+            return
+
+        value = current + delta
+        if not param.minimum <= value <= param.maximum:
+            self.notify_status(
+                f"{param.name} is at its "
+                f"{'maximum' if delta > 0 else 'minimum'} "
+                f"({p.describe_value(param, current)})", refused=True)
+            return
+
+        region, index, keygroup = self._param_context
+        self._nudging = (region, index, keygroup, param.name)
+        self._write_param_worker(param, index, value, current, keygroup)
+
     @work(thread=True)
     def _write_param_worker(
         self, param: p.Parameter, index: int, value, old, keygroup: int = 0,
@@ -2064,6 +2137,20 @@ class S3kedApp(App):
         # The KEYGROUP is the one the write actually went to, not 0. This
         # recorded a hardcoded zero until 2026-08-15, so undoing an edit made
         # on keygroup 3 put the old value into keygroup 0.
+        nudge = self._nudging
+        self._nudging = None
+        if record and nudge and self._undo:
+            last = self._undo[-1]
+            same = (last.region, last.index, last.keygroup, last.name)
+            if same == nudge and last.new == old:
+                # Extend the run rather than logging every tap: the entry
+                # keeps the value the run STARTED from, so one undo puts the
+                # whole run back.
+                self._undo[-1] = _Change(
+                    region=last.region, index=last.index,
+                    keygroup=last.keygroup, name=last.name,
+                    old=last.old, new=new)
+                record = False
         if record:
             self._undo.append(
                 _Change(
@@ -2085,7 +2172,11 @@ class S3kedApp(App):
         self._show_params(param.region, header, index, keygroup)
         self._refresh_write_badge()
         self.notify_status(f"{param.name} = {p.describe_value(param, new)}")
-        self._load_catalog(announce=False)
+        if nudge is None:
+            # A nudge cannot rename anything -- text and array fields are
+            # refused -- so the catalog cannot be stale, and re-reading it
+            # under a repeating key would make the whole thing unusable.
+            self._load_catalog(announce=False)
 
     def action_undo(self) -> None:
         if not self._undo:

@@ -3013,3 +3013,194 @@ async def test_a_write_does_not_reset_the_pane_to_keygroup_zero():
 
     assert [w[2] for w in writes] == [3, 3], (
         f"the second edit went to keygroup {writes[1][2]}, not 3")
+
+
+async def test_nudge_steps_the_selected_parameter_both_ways():
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+    from s3k import params as p
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        row = next(i for i, x in enumerate(app._param_rows) if x.name == "PRIORT")
+        app.query_one("#parameters", DataTable).move_cursor(row=row)
+        await pilot.pause()
+        started = app.bridge.get_parameter("PRIORT", 0)
+
+        await pilot.press("plus")
+        for _ in range(60):
+            await pilot.pause()
+        up = app.bridge.get_parameter("PRIORT", 0)
+
+        await pilot.press("minus")
+        for _ in range(60):
+            await pilot.pause()
+        back = app.bridge.get_parameter("PRIORT", 0)
+
+    assert up == started + 1, f"{started} -> {up}"
+    assert back == started
+
+
+async def test_a_run_of_nudges_is_one_undo():
+    """Ten taps of + should be one thing to undo, not ten."""
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        row = next(i for i, x in enumerate(app._param_rows) if x.name == "PLAYLO")
+        app.query_one("#parameters", DataTable).move_cursor(row=row)
+        await pilot.pause()
+        started = app.bridge.get_parameter("PLAYLO", 0)
+
+        for _ in range(3):
+            await pilot.press("plus")
+            for _ in range(60):
+                await pilot.pause()
+        assert app.bridge.get_parameter("PLAYLO", 0) == started + 3
+        assert len(app._undo) == 1, f"a run must collapse: {app._undo}"
+        assert app._undo[0].old == started, "keeping the value it started from"
+
+        await pilot.press("z")
+        for _ in range(40):
+            await pilot.pause()
+        ended = app.bridge.get_parameter("PLAYLO", 0)
+
+    assert ended == started, "one undo puts the whole run back"
+    assert not app._undo
+
+
+async def test_nudging_a_different_field_starts_a_new_entry():
+    """Collapsing must not swallow an unrelated edit in between."""
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        table = app.query_one("#parameters", DataTable)
+        for name in ("PRIORT", "PLAYLO", "PRIORT"):
+            row = next(i for i, x in enumerate(app._param_rows)
+                       if x.name == name)
+            table.move_cursor(row=row)
+            await pilot.pause()
+            await pilot.press("plus")
+            for _ in range(60):
+                await pilot.pause()
+
+    assert [c.name for c in app._undo] == ["PRIORT", "PLAYLO", "PRIORT"], (
+        [c.name for c in app._undo])
+
+
+async def test_nudge_stops_at_the_range_ends_and_says_so():
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+    from s3k import params as p
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        param = p.lookup(("program", "PRIORT"))
+        app._param_context = ("program", 0, 0)
+        app._write_param(param, app.bridge.get_parameter("PRIORT", 0),
+                         str(param.maximum))
+        for _ in range(40):
+            await pilot.pause()
+        row = next(i for i, x in enumerate(app._param_rows) if x.name == "PRIORT")
+        app.query_one("#parameters", DataTable).move_cursor(row=row)
+        await pilot.pause()
+
+        await pilot.press("plus")
+        for _ in range(60):
+            await pilot.pause()
+
+    assert app.bridge.get_parameter("PRIORT", 0) == param.maximum
+    assert "maximum" in app.last_status
+
+
+async def test_nudge_is_refused_on_text_and_needs_the_gate():
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        row = next(i for i, x in enumerate(app._param_rows) if x.name == "PRIORT")
+        app.query_one("#parameters", DataTable).move_cursor(row=row)
+        await pilot.pause()
+        await pilot.press("plus")
+        for _ in range(60):
+            await pilot.pause()
+        assert "write gate is locked" in app.last_status
+
+        app.allow_write = True
+        row = next(i for i, x in enumerate(app._param_rows) if x.name == "PRNAME")
+        app.query_one("#parameters", DataTable).move_cursor(row=row)
+        await pilot.pause()
+        await pilot.press("plus")
+        for _ in range(60):
+            await pilot.pause()
+
+    assert "not a number" in app.last_status
+
+
+async def test_a_nudge_does_not_re_read_the_catalog():
+    """Held down, key repeat drives this; two list requests per tap would
+    make it unusable. A nudge cannot rename anything, so nothing goes stale."""
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    reads = []
+
+    class Watch(DemoBridge):
+        def program_list(self, *, timeout=None):
+            reads.append("p")
+            return super().program_list(timeout=timeout)
+
+    app = S3kedApp(Watch(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        row = next(i for i, x in enumerate(app._param_rows) if x.name == "PRIORT")
+        app.query_one("#parameters", DataTable).move_cursor(row=row)
+        await pilot.pause()
+        reads.clear()
+        await pilot.press("plus")
+        for _ in range(60):
+            await pilot.pause()
+
+    assert reads == [], f"a nudge re-read the catalog {len(reads)} time(s)"
+
+
+async def test_the_parameter_cursor_survives_a_write():
+    """_show_params rebuilds the table after every write and clear() resets
+    the cursor to row 0 -- which is PRIDENT, a read-only block address. So an
+    edit bounced the cursor off the field just edited, and a held nudge
+    stepped once and then refused for as long as the key was down.
+
+    Third instance today of the same defect: rebuilding a table moves the
+    user. The disk pane and the program list had it too.
+    """
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        table = app.query_one("#parameters", DataTable)
+        row = next(i for i, x in enumerate(app._param_rows) if x.name == "PLAYLO")
+        table.move_cursor(row=row)
+        await pilot.pause()
+
+        started = app.bridge.get_parameter("PLAYLO", 0)
+        for _ in range(3):
+            await pilot.press("plus")
+            for _ in range(60):
+                await pilot.pause()
+        landed = app.bridge.get_parameter("PLAYLO", 0)
+        still_on = app._param_rows[table.cursor_row].name
+
+    assert still_on == "PLAYLO", f"the cursor moved to {still_on}"
+    assert landed == started + 3, (
+        f"three nudges must all land: {started} -> {landed}")

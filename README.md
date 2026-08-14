@@ -304,6 +304,7 @@ pass `--exclusive-channel N`. The port pair that answers is remembered in
 |---|---|
 | `e`, `Enter` | edit the selected parameter |
 | `w` | toggle the write gate (shown in the header when armed) |
+| `+` `-` | step the selected parameter by one (hold to repeat) |
 | `z` | undo the last write |
 | `Z` | undo everything written this session |
 | `h` | change history — every write, with where it went |
@@ -328,6 +329,13 @@ pass `--exclusive-channel N`. The port pair that answers is remembered in
 Editing is `e` (or `Enter`) on a parameter row, type the value, `Enter`. The
 editor shows the field's range and the specification's own wording for it, so
 a value can be checked against the document without leaving the screen.
+
+`+` and `-` step a numeric parameter by one, and the terminal's own key
+repeat means holding one works. A run of them **collapses into a single undo
+entry** keeping the value the run started from, so ten taps are one thing to
+undo rather than ten. Nudging skips the catalog re-read an ordinary edit
+does — it cannot rename anything, so nothing can have gone stale, and two
+list requests per keypress would make it unusable.
 
 Every write is logged with the value it replaced and **where it went** —
 region, item index and keygroup. That last part matters: the same parameter
