@@ -1338,6 +1338,12 @@ class S3kBridge:
             f"writing misc word {index}")
         return self._misc_word(index, timeout=timeout)
 
+    #: How many entries the selected volume's directory holds, as the machine
+    #: counts them. Bounding the walk with this rather than with a guess at
+    #: what junk looks like is what stopped `hd_directory` returning one
+    #: phantom entry per volume (§99).
+    _MISC_DIRECTORY_ENTRIES = 6
+
     #: Which entry of the loaded volume's directory the panel is highlighting,
     #: 0-based, matching :meth:`hd_directory`'s ``index``. Found by watching
     #: the word bank while a person stepped the panel's cursor down an item
@@ -1808,13 +1814,24 @@ class S3kBridge:
         field that reads as spaces on every real entry, and eight more whose
         meaning is not documented and are returned raw rather than guessed at.
 
-        **The end is marked by that extension field, and getting it wrong is
-        expensive.** Past the last entry this layer keeps answering: first with
-        records whose extension is not spaces, then by repeating entry 0 over
-        and over -- the same out-of-range behaviour §11 Finding A found in the
-        header reads. A stop condition of "all bytes zero" never fires, and
-        the first version of this returned 188 entries for a 64-entry
-        directory, two thirds of them junk that looked like names.
+        **The length comes from the machine, not from inspecting the data.**
+        `word[6]` holds the entry count for the selected volume. Everything
+        below about extension fields is a fallback and a floor.
+
+        The history is worth keeping because the fallback was wrong in a way
+        that survived for weeks. Past the last entry this layer keeps
+        answering: first with records whose extension is not spaces, then by
+        repeating entry 0 over and over -- the same out-of-range behaviour
+        §11 Finding A found in the header reads. A stop condition of "all
+        bytes zero" never fires, and the first version of this returned 188
+        entries for a 64-entry directory, two thirds of them junk that looked
+        like names.
+
+        Tightening it to "extension must be blank" cut that to exactly **one**
+        phantom per volume, which is far harder to notice than 124 of them:
+        the record immediately past the end usually has a blank extension, so
+        it sailed through. Measured across 100 volumes, 98 carried the
+        phantom and it was the final entry every time (§99).
 
         A record that repeats one already seen ends the list too. The echo is
         not always of entry 0 -- on the disk here entry 63 came back identical
@@ -1826,6 +1843,22 @@ class S3kBridge:
         ``count`` 48 the second record is the first SAMPLE rather than the
         second program. It looks like paging and produces a different list.
         """
+        # The machine knows how long its own directory is, and asking it is
+        # not a heuristic. `word[6]` is the entry count for the selected
+        # volume; bounding the walk with it removes the phantom entry the
+        # stop conditions below let through (§99).
+        #
+        # The heuristics stay as a floor, not as the authority: they still
+        # catch a short directory, and they are all there is if the register
+        # cannot be read.
+        try:
+            counted = self._misc_word(self._MISC_DIRECTORY_ENTRIES,
+                                      timeout=timeout)
+        except Exception:
+            counted = None
+        if counted is not None and 0 <= counted < limit:
+            limit = counted
+
         out: List[_DirectoryEntry] = []
         seen: set = set()
         for entry in range(limit):

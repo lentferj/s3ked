@@ -116,6 +116,7 @@ silently wrong one.
 - [§96](#96--retraction-the-volume-is-selectable-and-we-had-already-found-the-register-2026-08-14) — **RETRACTION**: the volume IS selectable, and we had already found the register (2026-08-14)
 - [§97](#97--the-disk-listings-cursor-is-word7-and-it-is-writable-2026-08-14) — The disk listing's cursor is `word[7]`, and it is writable (2026-08-14)
 - [§98](#98--free-pks-is-stats-block-count-and-keygroups-are-in-it-2026-08-14) — `free P/K/S` is `STAT`'s block count, and keygroups are in it (2026-08-14)
+- [§99](#99--retraction-the-third-directory-type-was-our-own-phantom-2026-08-14) — **RETRACTION**: the "third directory type" was our own phantom (2026-08-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -7723,6 +7724,11 @@ state. The row, the register and the arithmetic are the same thing.
 
 ### A third directory type, unidentified
 
+> **RETRACTED 2026-08-14 — see §99.** There is no third type. The record was
+> `hd_directory` running one entry past the end, in 98 of 100 volumes, and
+> the claim that it was "real because it satisfies both stop conditions" was
+> circular. The walk is now bounded by the machine's own entry count.
+
 Scanning several volumes' directories found entries that are neither:
 
 ```
@@ -7756,3 +7762,142 @@ target's own `max_blocks` rather than against 1006.
 Also untested, both plausible off-by-ones in the loosening direction: whether
 a program with no keygroups costs 1 or 0, and whether a stereo sample costs
 one object or two.
+
+---
+
+## §99 — RETRACTION: the "third directory type" was our own phantom (2026-08-14)
+
+**Status: settled, and it was a bug in this project.** Measured across 100
+volumes, 2026-08-14.
+
+§98 recorded a third directory entry type — `0x00`, 162 bytes, at most one
+per volume — and called it "a real record and not list junk, because it
+satisfies both of `hd_directory`'s stop conditions".
+
+**That reasoning is circular and the record does not exist.** It is real *by
+the rule that decides where the list ends*, and that rule was exactly what
+was in doubt.
+
+### What gave it away, before any measurement
+
+Not what the record contained: **where it was.** The confirmed instance sat at
+index 54 of 55 — the last entry, which is precisely where a run past the end
+would appear. Index 54 of 55 is not a property of the record; it is a
+property of the record's position in our own output.
+
+### The instrument that settled it
+
+Neither heuristic could settle this, because the question was whether the
+heuristic was right. The machine can: **`word[6]` is the entry count for the
+selected volume**, and it does not walk anything.
+
+```
+100 volumes walked, every populated partition
+
+  we return minus what the machine counts:   +1 in 98,   0 in 2
+  0x00 records found: 98, and all 98 were the FINAL entry
+```
+
+The two volumes with no discrepancy also had no `0x00` record — there the
+byte past the end failed the blank-extension test and the walk stopped
+correctly. One answer, not two.
+
+### Why it survived so long
+
+The first version of this walk returned 188 entries for a 64-entry directory,
+two thirds of them junk. Tightening the stop condition to "extension field
+must be blank" cut that to **exactly one** phantom per volume — and one is
+far harder to notice than 124. It looked like a fix and was a smaller bug.
+
+### The fix
+
+`hd_directory` now takes its length from `word[6]` and keeps the heuristics
+only as a floor and a fallback. Verified on hardware afterwards: 17 volumes
+across three partitions, every count matching the machine's, no `0x00`
+records at all.
+
+**Every item count this project quoted before this was one high**, including
+in §98's own working. The fit check's `audio_words` sum also included the
+phantom's ~6 words, which is negligible and was still wrong.
+
+### Independently confirmed, from a corpus this project cannot reach
+
+VinSamLib walked 21 discs, 1843 volumes, 441 498 directory slots with a
+**length-bounded** reader that structurally cannot manufacture a
+past-the-end record. Of 32 candidates carrying the same `1e 04` tail, 31 sat
+after the last real entry. The single mid-directory instance was a
+zero-typed entry immediately before a real program of identical name and
+identical size — a shadow of its neighbour, and they explicitly declined to
+generalise that explanation from n=1 to the other 31.
+
+Two cautions of theirs are worth carrying here. The raw count of "type 0x00
+with non-zero size" is 27 544 and means nothing — that is unallocated
+directory capacity retaining old bytes, and quoting it would have been the
+wrong-population error again. And their first census printed a clean
+`0 volumes walked` because a `try/except` swallowed an `AttributeError` from
+a misnamed class: **a walk that finds nothing and a walk that never ran
+produce identical output.** That is §74's null in a different medium, and it
+nearly travelled between three projects as corroboration.
+
+### The mechanism, named (VinSamLib, second pass)
+
+Not merely "no such type exists" but why the bytes looked like one.
+`1e 04` **is not a signature; it is a stale tail in a slot whose type byte
+was cleared.** Measured with a boundary chosen so it could not beg the
+question — the first slot with `type == 0 AND size == 0`, independent of any
+type test:
+
+```
+slots past that boundary        375 623
+with a NON-ZERO type byte             0
+```
+
+The type byte is the one field the authoring tools reliably clear; nothing
+else is. Sizes past the boundary run to 0xFFFFFF and the tails take hundreds
+of distinct values. So the record was partially zeroed, and `1e 04` is what
+happened to be left in those bytes — which is why it never appears beside a
+live type: the two are mutually exclusive by construction.
+
+**And the protection is luck, not design.** Keying on the type byte works
+because the tools that wrote these discs clear it thoroughly. That is a
+property of those tools, not of the format. A disc written by something less
+careful would put a length-bounded reader into the phantom case. Unobserved
+across 21 discs is not impossible. The guard that would close it — requiring
+a terminated chain covering the declared size — is recorded in both sibling
+projects and deliberately not implemented in either, being a reader change
+neither can validate.
+
+### Two false zeros, in one afternoon, in the other project
+
+Worth carrying here because neither was caught by testing and both had the
+believable shape.
+
+The first census printed `0 volumes walked` because a `try/except` swallowed
+an `AttributeError` from a misnamed class. The second returned `0/0/0` from
+counts run over "slots after the last real entry", where *real* was
+`type != 0 and size > 0` — but every type being asked about is non-zero, so
+anything satisfying the test was inside the boundary by construction. **The
+filter and the population were the same condition.**
+
+Both would have arrived here as corroboration of a retraction that deserved
+better support, and neither is distinguishable from a genuine negative by
+looking at the output. This is §74's null in two more media: *a search that
+finds nothing and a search that never ran produce identical results.*
+
+The one consolation, in their words: the typo at least crashed something.
+The tautological filter quietly agreed with the hypothesis.
+
+### An agreement worth more than either claim
+
+Their reader's file count over that corpus is 49 984 across 1843 volumes,
+matching the figure mpc2emu had quoted independently. Two readers agreeing
+on a total means neither has been emitting phantoms into its own statistics
+— which is exactly what this section is about.
+
+### The general form, which is §72's mistake mirrored
+
+§72 eliminated the candidates it thought of and concluded the search space
+was empty. This concluded that because our rule fired, the thing must be
+there. Both read a **search procedure** as a **fact about the world**. The
+defence in each case is the same: ask what would have to be true for the
+instrument to be wrong, and find a different instrument.

@@ -741,13 +741,25 @@ def _dir_record(name: str, tail: bytes = b"\x73\x96\x60\x10\xb3\x03\x1e\x09") ->
     return bytes(m.encode_name(name, 12)) + b"\x20\x20\x20\x20" + tail
 
 
-def _directory(records):
-    """A device that keeps answering past the end, the way the machine does."""
+def _directory(records, counted=None):
+    """A device that keeps answering past the end, the way the machine does.
+
+    ``counted`` is what `word[6]` reports -- the machine's own entry count,
+    which is what bounds the walk since §99. Left as None it reports nothing
+    readable, so the stop-condition fallback is what gets exercised; that
+    path still has to work, because the register is one round trip that can
+    fail like any other.
+    """
     from s3k import bridge as b, messages as m
 
     class Fake(b.S3kBridge):
         def __init__(self):
             self.exclusive_channel = 0
+
+        def _misc_word(self, index, value=None, *, timeout=None):
+            if index == b.S3kBridge._MISC_DIRECTORY_ENTRIES and counted is not None:
+                return counted
+            raise RuntimeError("no such register on this fake")
 
         def send_and_receive(self, frame, timeout=None):
             entry = frame[5] | (frame[6] << 7)
@@ -771,6 +783,8 @@ def test_the_directory_stops_at_a_non_blank_extension():
     junk = bytes(12) + b"\xff\xff\x00\x00" + bytes(8)
     bridge = _directory([_dir_record("PROG A"), _dir_record("PROG B"), junk])
 
+    # No entry count from this fake, so the fallback is what runs. It is a
+    # floor now rather than the authority -- see §99.
     entries = bridge.hd_directory(1)
     assert [e.name for e in entries] == ["PROG A", "PROG B"]
 
@@ -1560,3 +1574,33 @@ def test_the_volume_register_is_the_one_that_was_called_a_hold_flag():
 
     assert b.S3kBridge._MISC_VOLUME == 4
     assert b.S3kBridge._MISC_SELECTION_HELD == b.S3kBridge._MISC_VOLUME
+
+
+def test_the_directory_length_comes_from_the_machine_not_the_data():
+    """The stop conditions let exactly one phantom entry through (§99).
+
+    A record one past the end usually has a blank extension field, so it
+    sailed through the heuristic -- in 98 of 100 volumes measured, always as
+    the final entry. One phantom is far harder to notice than the 124 the
+    first version produced, which is why it survived: it looked like a fix
+    and was a smaller bug.
+
+    `word[6]` is the machine's own entry count and cannot run past an end.
+    """
+    phantom = bytes(12) + b"    " + bytes([0x00, 162, 0, 0, 218, 6, 0x1e, 4])
+    records = [_dir_record("PROG A"), _dir_record("PROG B"), phantom]
+
+    # the heuristic alone takes the bait, which is the bug being fixed
+    assert len(_directory(records).hd_directory(1)) == 3
+
+    # the machine's own count does not
+    entries = _directory(records, counted=2).hd_directory(1)
+    assert [e.name for e in entries] == ["PROG A", "PROG B"]
+    assert all(e.item_type in (0x70, 0x73) for e in entries)
+
+
+def test_an_unreadable_entry_count_falls_back_rather_than_returning_nothing():
+    """One round trip that can fail must not empty the listing."""
+    records = [_dir_record("PROG A"), bytes(12) + b"\xff\xff\x00\x00" + bytes(8)]
+    entries = _directory(records).hd_directory(1)
+    assert [e.name for e in entries] == ["PROG A"]
