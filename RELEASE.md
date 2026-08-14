@@ -53,7 +53,10 @@ reason a person still has to look.
 
 Left for a human, because no test can see it:
 
-- [ ] is anything unreadable or truncated at 80×24?
+- [x] 80×24 — panes readable, nothing truncated in them. The **footer was**:
+      Textual's Footer cuts rather than reflowing, so six of thirteen keys
+      showed and the rest were undiscoverable. Fixed by shortening the
+      handful that stay and adding `?` for all of them, with tests for both.
 - [ ] does the status line say useful things at the moment you need them?
 - [ ] is the parameter table navigable when it is 85 rows long?
 - [ ] a terminal without truecolour, and one with a light background

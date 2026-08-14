@@ -1205,3 +1205,69 @@ async def test_the_demo_never_writes_a_config():
 
     assert app._config_path is None
     assert "this session only" in app.last_status
+
+
+async def test_the_footer_fits_at_the_smallest_supported_size():
+    """80x24 is the smallest size this project claims to support.
+
+    Textual's Footer truncates rather than reflowing, and with thirteen
+    bindings it showed six and silently cut the rest -- so the disk, load,
+    menu, boards and audit keys were undiscoverable to anyone who had not
+    read the README. Neither `height: auto` nor a grid layout changes that;
+    the widget simply cuts.
+
+    So the footer carries the handful reached for constantly, and `?` carries
+    all of them. This asserts the handful actually fits, because "it fits" is
+    exactly the claim that was wrong before.
+    """
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        await pilot.pause()
+        rendered = app.export_screenshot()
+
+    for label in ("Quit", "Reload", "Edit", "Gate", "Undo", "Master", "Keys"):
+        assert label in rendered, f"{label!r} truncated out of the footer at 80x24"
+
+
+async def test_the_help_screen_lists_every_binding():
+    """Generated from BINDINGS, so it cannot drift from what the app does.
+
+    A hand-kept key list is the thing this project has already found stale in
+    sibling code; the footer's own omissions are what made this screen
+    necessary.
+    """
+    from s3ked.app import S3kedApp, HelpScreen
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    expected = {b.description for b in S3kedApp.BINDINGS
+                if b.description and b.action != "help"}
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        await pilot.press("question_mark")
+        for _ in range(10):
+            await pilot.pause()
+        screen = app.screen_stack[-1]
+        assert isinstance(screen, HelpScreen)
+        listed = {d for _key, d in screen.rows}
+
+    assert listed == expected, f"help missing {expected - listed}"
+    assert len(listed) >= 13, f"only {len(listed)} bindings described"
+
+
+async def test_every_hidden_binding_is_reachable_from_help():
+    """Hiding a key from the footer must not hide it from the user."""
+    from s3ked.app import S3kedApp, HelpScreen
+
+    hidden = {b.description for b in S3kedApp.BINDINGS
+              if b.description and not b.show}
+    listed = {d for _k, d in
+              HelpScreen(S3kedApp.BINDINGS).rows}
+
+    assert hidden, "no bindings are hidden; this test would be vacuous"
+    assert hidden <= listed, f"hidden and undiscoverable: {hidden - listed}"
