@@ -869,3 +869,35 @@ RESOLUTION_NOTES §96.
 
 Nothing in this project reads these bytes, so this blocks nothing.
 RESOLUTION_NOTES §83b.
+
+---
+
+## Does exceeding the object pool refuse, or half-load? (OPEN, one load away)
+
+**Status:** both s3ked and mpc2emu warn that a volume exceeding the
+1006-object pool "will not load", and **nobody has checked that it refuses**.
+
+The RAM ceiling is known to degrade differently: §73 measured a volume that
+overran memory loading 10 programs and 60 of 88 samples, reporting
+"insufficient waveform memory!" **once** and then behaving normally, leaving
+keygroups pointing at absent samples and playing silence. If the object pool
+does the same, the warning should read "will load incompletely" — a refusal
+is loud, a half-load is a bank that appears to work with silent keygroups in
+it.
+
+**The test does not need an authored volume.** Load type 2, `programs only`,
+brings programs and their keygroups and no samples at all (§93), so
+successive loads exhaust the object pool on essentially zero audio — which is
+the separation the test needs, or it just measures the RAM failure again. A
+partial run reached **free_blocks 2 of 1006 with 31.75 MB of audio RAM still
+free**: 26 programs, 978 keygroups, no samples. One more load crosses it.
+
+**Wants a person at the LCD**, because §73's RAM overrun announced itself with
+a one-time message no register records.
+
+**Corpus context** (mpc2emu, VinSamLib): across 1843 real volumes on 21 discs
+none exceeds 1006, and the largest needs 910. Authored volumes crowd up to the
+ceiling and never cross it, so a user reaches this case only with a conversion
+tool — which is exactly why the wording matters.
+
+Nothing is blocked on it: both projects split before the limit.
