@@ -1383,7 +1383,9 @@ class S3kBridge:
         """What the front panel's LOAD page currently shows.
 
         ``partition`` is 0-based (0 = A) and ``volume`` is 1-based, matching
-        the panel's "HARD-:C" and "Volume 001". ``device_type`` selects
+        the panel's "HARD-:C". **The volume is not in here** -- there is no
+        volume register (§72), and ``cursor_value`` is not one: it holds
+        whatever field the panel's cursor sits on (§70). ``device_type`` selects
         floppy, hard disk or flash -- the volume list's ``BOOT SYSTEM#`` and
         ``FLASH VOLnn`` names belong to the flash device.
         """

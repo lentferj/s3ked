@@ -671,7 +671,9 @@ async def test_the_disk_pane_is_empty_until_asked():
         assert str(table.get_row_at(0)[0]) == "v0"
         labels = [str(table.get_row_at(i)[0]) for i in range(table.row_count)]
         assert any(x.startswith("v") for x in labels)
-        assert any(x.startswith(" ") for x in labels), "directory rows too"
+        assert any(x in ("prog", "samp") for x in labels), (
+            "the volume's directory is a second list and must be labelled "
+            "as one, not run on from the volume rows")
 
 
 async def test_the_disk_pane_reports_a_failure_instead_of_crashing():
@@ -724,7 +726,13 @@ async def test_the_disk_pane_shows_the_load_source():
         title = str(app.query_one("#disk-title", Static).render())
 
     assert "HARD-:A" in title
-    assert "vol 001" in title
+    # "34 vol" is a COUNT and is fine. What must not appear is a selected
+    # volume NUMBER: there is no volume register (§72), and the pane printed
+    # `vol 000` on hardware for as long as it tried.
+    import re
+    assert not re.search(r"vol \d", title), (
+        f"the pane must not print a selected volume number: {title!r}")
+    assert re.search(r"\d+ vol", title), "the volume count is still wanted"
     assert "SCSI 4" in title
 
 
@@ -2110,10 +2118,10 @@ async def test_the_load_screen_shows_the_panels_load_type():
                 screen.query_one("#loadopts-what", Label).render())
 
     assert "ALL PROGS+SAMPLES" in seen[1]
-    assert "what the panel is on" in seen[1], (
+    assert "as on the panel" in seen[1], (
         "opening on the panel's own type needs no warning")
     assert "all samples" in seen[3], "type 3 must be named, not numbered"
-    assert "what the panel is on" in seen[3], (
+    assert "as on the panel" in seen[3], (
         "it opens on the panel's setting whatever that is")
 
 

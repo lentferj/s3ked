@@ -186,11 +186,11 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
         if self.panel_type is None:
             note = "[dim]— panel setting could not be read[/dim]"
         elif self.panel_type == self.load_type:
-            note = "[dim]— what the panel is on[/dim]"
+            note = "[dim]— as on the panel[/dim]"
         else:
-            note = (f"[dim]— panel is on "
-                    f"{m.LOAD_TYPES.get(self.panel_type, self.panel_type)}; "
-                    f"this moves it[/dim]")
+            note = (f"[dim]— panel: "
+                    f"{m.LOAD_TYPES.get(self.panel_type, self.panel_type)}"
+                    f"[/dim]")
         self.query_one("#loadopts-what", Label).update(
             rf"  [dim]what:[/dim]  [b]{name}[/b]  \[[b]t[/b]] {note}")
 
@@ -200,8 +200,8 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
             f"what is resident    {mark(self.clear_first)} [b]c[/b]lear first")
 
         if self.clear_first:
-            note = ("  [dim]clear deletes every resident sample and program; "
-                    "one program always survives[/dim]")
+            note = ("  [dim]clear deletes every sample and program; one "
+                    "program survives[/dim]")
         elif self.renumber:
             note = ("  [dim]renumber:[/dim] [b]on[/b] — every program gets a "
                     "distinct number, in list order")
@@ -715,8 +715,18 @@ class S3kedApp(App):
        emphasis elsewhere -- a warning that looks like decoration is not a
        warning. $error is the theme's red and stays red across themes. */
     Header.-write-armed { background: $error; color: $text; text-style: bold; }
+    /* max-width, not just width: a fixed 70 columns is wider than the
+       window the moment somebody resizes, and the overflow is CLIPPED rather
+       than wrapped -- the same failure the Footer had, which is why KeyHints
+       exists. Reported from live use as truncated dialog text. */
     #confirm-box, #master-box, #edit-box, #loadopts-box {
-        width: 70; padding: 1 2; border: thick $panel; background: $surface;
+        width: 70; max-width: 100%; padding: 1 2;
+        border: thick $panel; background: $surface;
+    }
+    /* And the labels inside must wrap to the box rather than size to their
+       own content and push past it. */
+    #loadopts-box Label, #confirm-box Label, #master-box Label {
+        width: 100%;
     }
     #edit-desc, #edit-note { color: $text-muted; }
     """
@@ -1112,14 +1122,21 @@ class S3kedApp(App):
 
     @staticmethod
     def _describe_source(source) -> str:
-        """The LOAD page as the panel writes it: HARD-:C vol 001."""
+        """The LOAD page as the panel writes it: HARD-:C  (SCSI 3).
+
+        **No volume.** There is no volume register (§72), and this used to
+        print `vol {source.get("volume", 0):03d}` from a key `load_source()`
+        has never returned -- so every reading was the default, and the pane
+        showed `vol 000` on a machine sitting on volume 1. Third time a
+        lookup-with-a-default in this project has turned a wrong name into a
+        plausible number; see §73 on `words_free`.
+        """
         if not source:
             return ""
         device = {0: "FLOPPY", 1: "HARD", 2: "FLASH"}.get(
             source.get("device_type"), f"DEV{source.get('device_type')}")
         letter = chr(65 + source.get("partition", 0))
-        return (f"{device}-:{letter} vol {source.get('volume', 0):03d}"
-                f"  (SCSI {source.get('scsi_drive_id')})")
+        return f"{device}-:{letter}  (SCSI {source.get('scsi_drive_id')})"
 
     def action_partition_prev(self) -> None:
         self._step_partition(-1)
@@ -1235,13 +1252,25 @@ class S3kedApp(App):
                 "write gate is locked — press w to arm it before changing "
                 "the load source", refused=True)
             return
+        self.notify_status("reading the load source…")
+        self._open_source()
+
+    @work(thread=True)
+    def _open_source(self) -> None:
+        # Same reason as _open_menu: a bridge read on the UI thread stalls
+        # the app behind any worker holding the lock, and reads as a dead key.
         try:
             with self._bridge_lock:
                 source = self.bridge.load_source()
         except Exception as exc:
-            self.notify_status(f"load source unavailable: {exc}")
+            self.call_from_thread(
+                self.notify_status, f"load source unavailable: {exc}",
+                refused=True)
             return
+        self.call_from_thread(self._show_source, source)
 
+    def _show_source(self, source) -> None:
+        self.notify_status("")
         self._source_volumes_worker()
 
         def closed(_result) -> None:
@@ -1377,18 +1406,33 @@ class S3kedApp(App):
                 "write gate is locked — press w to arm it before changing "
                 "the main menu", refused=True)
             return
+        self.notify_status("reading the current page…")
+        self._open_menu()
+
+    @work(thread=True)
+    def _open_menu(self) -> None:
+        # In a worker, not inline. Reading the page is a MIDI round trip, and
+        # taking the bridge lock on the UI thread blocks the whole app for as
+        # long as any background worker holds it -- which looks exactly like
+        # the key doing nothing. Reported twice as "g Main Menu does nothing";
+        # the first fix moved the write-gate check earlier and left this.
         try:
             with self._bridge_lock:
                 current = self.bridge.mode()
         except Exception as exc:
-            self.notify_status(f"main menu unavailable: {exc}")
+            self.call_from_thread(
+                self.notify_status, f"main menu unavailable: {exc}",
+                refused=True)
             return
+        self.call_from_thread(self._show_menu, current)
 
+    def _show_menu(self, current: int) -> None:
         def chosen(value: Optional[int]) -> None:
             if value is None:
                 return
             self._select_mode_worker(value)
 
+        self.notify_status("")
         self.push_screen(MenuScreen(current, self.bridge.MODES), chosen)
 
     @work(thread=True)
@@ -1560,8 +1604,15 @@ class S3kedApp(App):
         table.clear()
         for volume in volumes:
             table.add_row(f"v{volume.index}", volume.name)
+        # The rows below are a DIFFERENT list: the directory of whichever
+        # volume the panel has selected, not more volumes. Concatenated with
+        # no divider they read as volumes with odd numbering -- asked in live
+        # use as "what are these entries below v8?".
+        if entries:
+            table.add_row("", "── in the selected volume ──")
         for entry in entries:
-            table.add_row(f"  {entry.index}", entry.name)
+            kind = "prog" if getattr(entry, "is_program", False) else "samp"
+            table.add_row(f"{kind}", entry.name)
         self._disk_entries = list(entries or [])
         self._disk_read = True
         try:
@@ -1968,6 +2019,14 @@ class S3kedApp(App):
         # Enter on the parameters table means "edit this one".
         if event.data_table.id == "parameters":
             self.action_edit()
+        elif event.data_table.id == "volumes":
+            # Enter here looks like it should select the volume, and nothing
+            # in this protocol can: the drive, device and partition are
+            # settable and the volume is not (§72). Silence reads as a broken
+            # key, so say it.
+            self.notify_status(
+                "choosing a volume is a front-panel job — there is no volume "
+                "register (§72). [ and ] step the partition.", refused=True)
 
 
 def build_parser() -> argparse.ArgumentParser:

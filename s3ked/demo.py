@@ -382,9 +382,19 @@ class DemoBridge:
         return self.load_source()
 
     def load_source(self, *, timeout: Optional[float] = None):
+        """The same keys S3kBridge.load_source returns. **The same, exactly.**
+
+        This used to include ``"volume": 1``, which the real bridge has never
+        returned -- there is no volume register (§72). The application read
+        it with a default, so against hardware it silently showed `vol 000`
+        and against the demo it showed `vol 001`, and the tests agreed with
+        the demo. A stand-in that is more generous than the machine hides the
+        bug it exists to expose.
+        """
         return {"scsi_drive_id": self._scsi_drive_id, "scsi_local_id": 6,
                 "device_type": self._device_type,
-                "partition": getattr(self, "_partition", 0), "volume": 1}
+                "partition": getattr(self, "_partition", 0),
+                "cursor_value": 0, "mode": self._mode}
 
     def select_partition(self, partition: int, *, timeout: Optional[float] = None):
         self._partition = max(0, min(7, int(partition)))
