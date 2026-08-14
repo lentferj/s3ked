@@ -36,8 +36,15 @@ Version `0.1.0`, `Development Status :: 4 - Beta`. Those two and the line
 above are meant to agree: a first public beta, on a 0.x line whose interfaces
 may still move, cut from `main` and maintained on `release/0.1.x`.
 
-First release. An editor and librarian for the Akai S1000/S3000 family over
-MIDI SysEx, developed against an S3000XL.
+First release. A terminal editor for the Akai S1000/S3000 family over MIDI
+SysEx, developed against an S3000XL.
+
+**Not a librarian.** It edits the machine in place and navigates the
+sampler's own disk; it does not keep a patch library on your computer. There
+is no export, no import, no file format, and sample audio is not transferred
+at all — see *Known limitations*. The protocol Akai provides is of the
+editor/librarian class, which is where the word appears elsewhere in these
+docs; this tool implements the editor half.
 
 ### What it does
 
