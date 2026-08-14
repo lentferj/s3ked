@@ -913,3 +913,21 @@ generate images for this and the offer was declined as unnecessary; it was
 not.
 
 Nothing is blocked on it: both projects split before the limit.
+
+
+---
+
+## The active program is selectable (RESOLVED 2026-08-14)
+
+`byte[55]` holds the selected MIDI program number, 0-based, shown 1-based on
+SINGLE's `SLCT` page. Reading tracked a person stepping the field across four
+values; writing it moved the panel and its "now active" count. It was the only
+register that moved in a 224-entry sweep across three banks.
+
+`select_program_number()`, and Enter on a Programs-pane row.
+
+Narrowed in passing: §70 describes `byte[49]` as "the value of whichever field
+the cursor is on", and during this measurement the cursor was on
+`PROGRAM NUMBER` while `byte[49]` read 0 and moved for nothing. Whatever it
+follows, it is not the focused field on any page — every observation behind
+§70 was made on the LOAD page. RESOLUTION_NOTES §101.

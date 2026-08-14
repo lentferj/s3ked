@@ -2251,6 +2251,47 @@ class S3kedApp(App):
             self.action_edit()
         elif event.data_table.id == "volumes":
             self._select_volume_row(event)
+        elif event.data_table.id == "programs":
+            self._activate_program_row(event)
+
+    def _activate_program_row(self, event) -> None:
+        """Enter on a program row makes it the active one. **This writes.**
+
+        It selects a NUMBER, not a program: the machine's `PROGRAM NUMBER`
+        register takes the row's `PRGNUM`, and every resident program sharing
+        that number becomes active and sounds with it (§91). That is not a
+        limitation of this code -- it is what the field means -- so when it
+        happens the status line says how many will sound.
+        """
+        if not self.allow_write:
+            self.notify_status(
+                "write gate is locked — press w to arm it before changing "
+                "the active program", refused=True)
+            return
+        row = event.cursor_row
+        if not 0 <= row < len(self._programs):
+            return
+        self._activate_program_worker(row)
+
+    @work(thread=True)
+    def _activate_program_worker(self, index: int) -> None:
+        try:
+            with self._bridge_lock:
+                number = self.bridge.get_header_bytes(
+                    "program", index, p.lookup(("program", "PRGNUM")).offset, 1
+                )[0]
+                self.bridge.select_program_number(number)
+                sharing = self.bridge.program_numbers().count(number)
+        except Exception as exc:
+            self.call_from_thread(
+                self.notify_status, f"active program: {exc}", refused=True)
+            return
+        # 1-based, because that is what the machine's own display says.
+        message = f"active program number {number + 1}"
+        if sharing > 1:
+            message += (f" — {sharing} programs share it and will all sound "
+                        f"(press i, or renumber)")
+        self.call_from_thread(self.notify_status, message)
 
 
 def build_parser() -> argparse.ArgumentParser:

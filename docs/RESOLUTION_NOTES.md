@@ -118,6 +118,7 @@ silently wrong one.
 - [§98](#98--free-pks-is-stats-block-count-and-keygroups-are-in-it-2026-08-14) — `free P/K/S` is `STAT`'s block count, and keygroups are in it (2026-08-14)
 - [§99](#99--retraction-the-third-directory-type-was-our-own-phantom-2026-08-14) — **RETRACTION**: the "third directory type" was our own phantom (2026-08-14)
 - [§100](#100--a-load-replaces-a-resident-program-of-the-same-name-and-this-disc-cannot-fill-the-object-pool-2026-08-14) — A load REPLACES a resident program of the same name; and this disc cannot fill the object pool (2026-08-14)
+- [§101](#101--byte55-is-the-selected-program-number-and-it-is-writable-2026-08-14) — `byte[55]` is the selected PROGRAM NUMBER, and it is writable (2026-08-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -8078,3 +8079,87 @@ A search that never ran and a search that found nothing produce identical
 output. That has been the day's recurring lesson in three other projects; it
 is recorded here as having also happened in this one, twice, and having cost
 a wrong contradiction of somebody who was right.
+
+---
+
+## §101 — `byte[55]` is the selected PROGRAM NUMBER, and it is writable (2026-08-14)
+
+**Status: settled. Read confirmed at four values, write confirmed on the
+panel.**
+
+The question behind it: the TUI's Programs pane offers no way to make a
+program the active one, and the panel does that on SINGLE's `SLCT` page with
+its `PROGRAM NUMBER` field.
+
+### The read
+
+Every sweep before this had been run on the LOAD page, so the `SLCT` page's
+fields had never been watched. Sweeping all three banks while a person
+stepped `PROGRAM NUMBER`:
+
+```
+   68s   byte[55]  0 -> 1      panel 1 -> 2
+   87s   byte[55]  1 -> 2      panel 2 -> 3
+   later byte[55]       3      panel      4
+```
+
+**0-based in the register, 1-based on the panel** — the same convention as
+`PRGNUM` (§91), the volume (§96) and the item cursor (§97). Four registers
+now share it, which is worth treating as the family's habit rather than a
+coincidence to be rediscovered each time.
+
+### `byte[49]` did not track it, and §70's model is narrower than stated
+
+§70 describes `byte[49]` as holding "the value of whichever field the panel's
+cursor is on". During this measurement the cursor was **on** `PROGRAM NUMBER`
+and `byte[49]` read 0 throughout, moving for nothing.
+
+So that description is too general. Whatever `byte[49]` follows, it is not
+simply "the focused field on any page" — the observations behind §70 were all
+made on the LOAD page. Recorded as a narrowing, not a retraction: nothing
+here shows what it *does* follow.
+
+### Writing it moves the machine (confirmed)
+
+Announced beforehand and watched, because `byte[49]` reads back whatever is
+written to it and the machine ignores it entirely (§70, §72) — a register
+agreeing with itself proves only that something stored the value.
+
+Written `byte[55] = 0` on a machine showing `PROGRAM NUMBER 4`:
+
+```
+panel before   PROGRAM NUMBER 4     0 now active
+panel after    PROGRAM NUMBER 1     6 now active
+```
+
+Two signals, not one. Six programs were resident all carrying number 1, so a
+register that were merely stored would have moved neither the field nor the
+count. Both moved.
+
+### The cleanest identification in the project
+
+The sweep's own summary, over 224 entries across three banks:
+
+```
+  bank  index  values seen           verdict
+  byte     55  [1, 2, 3]             tracked across 3 values
+```
+
+**One mover.** Nothing else in any bank shifted while the field was stepped.
+Compare §93, where the load type had to be picked out of a log full of
+past-the-end noise, and §96, where the answer sat under a wrong name among
+annotated indices. Two things made the difference: replies are now matched to
+requests so the sweep does not desynchronise (§95, `stale replies skipped: 2`
+and correctly discarded), and the field being stepped was the only thing
+changing on the machine.
+
+### What it buys
+
+`program_number()` and `select_program_number()`, and Enter on a row of the
+TUI's Programs pane.
+
+**It selects a NUMBER, not a program**, which is the field's meaning and not
+a limitation of the code: every resident program sharing that number becomes
+active and sounds with it. So the status line reports how many will sound
+when it is more than one, and points at the audit and the renumber rather
+than leaving a user to discover a five-program stack by ear.

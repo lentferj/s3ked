@@ -46,6 +46,9 @@ docs; this tool implements the editor half.
   the cursor and multi variants — are performable over MIDI, and the screen
   opens on whatever the panel is set to (§93, §94). `Operating System` is
   guarded behind an explicit flag and is not offered in the TUI.
+- **The active program is selectable** — Enter on a row in the Programs pane.
+  It selects a *number*, which is what the machine's field means, so the
+  status line says how many programs share it and will sound together (§101).
 - **Renumbering**, the remote equivalent of the panel's `RNUM` → `SEQU`. It
   matters because loads append and `PRGNUM` is stored in the program and
   reloaded verbatim: load four volumes and four programs claim number 1, and

@@ -2561,3 +2561,76 @@ async def test_the_main_menu_repaints_from_the_read_back():
         here = str(screen.query_one("#menu-here", Label).render())
 
     assert "SAVE" in here, f"the dialog must follow the machine: {here!r}"
+
+
+async def test_enter_on_a_program_row_selects_that_program_number():
+    """The Programs pane sets the active program (§101).
+
+    It selects a NUMBER, not a program: the register takes the row's PRGNUM.
+    """
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        table = app.query_one("#programs", DataTable)
+        table.focus()
+        table.move_cursor(row=3)
+        await pilot.pause()
+        await pilot.press("enter")
+        for _ in range(30):
+            await pilot.pause()
+        chosen = app.bridge.program_number()
+
+    # the demo numbers its programs 0..4, so row 3 carries PRGNUM 3
+    assert chosen == 3, f"the row's own PRGNUM, not its position: {chosen}"
+    assert "number 4" in app.last_status, (
+        f"reported 1-based as the machine shows it: {app.last_status!r}")
+
+
+async def test_activating_a_shared_number_says_how_many_will_sound():
+    """Programs sharing a number all sound. Silence about that is the bug."""
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    bridge = DemoBridge()
+    for index in range(len(bridge.program_list())):
+        bridge.set_header_bytes("program", index, 15, bytes([1]))
+
+    app = S3kedApp(bridge, allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        table = app.query_one("#programs", DataTable)
+        table.focus()
+        table.move_cursor(row=1)
+        await pilot.pause()
+        await pilot.press("enter")
+        for _ in range(30):
+            await pilot.pause()
+        status = app.last_status
+
+    assert "share it" in status and "sound" in status, status
+    assert "5 programs" in status, status
+
+
+async def test_activating_a_program_needs_the_write_gate():
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        table = app.query_one("#programs", DataTable)
+        table.focus()
+        table.move_cursor(row=2)
+        await pilot.pause()
+        await pilot.press("enter")
+        for _ in range(20):
+            await pilot.pause()
+
+    assert app.bridge.program_number() == 0
+    assert "write gate is locked" in app.last_status

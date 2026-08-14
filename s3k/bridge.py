@@ -1338,6 +1338,15 @@ class S3kBridge:
             f"writing misc word {index}")
         return self._misc_word(index, timeout=timeout)
 
+    #: The **selected MIDI program number**, 0-based; the panel shows it
+    #: 1-based on SINGLE's `SLCT` page. Watched while a person stepped that
+    #: field -- it read 0, 1, 2, 3 against a panel reading 1, 2, 3, 4 -- and
+    #: writing it moves the panel, confirmed by eye (§101).
+    #:
+    #: It was the ONLY register that moved in a 224-entry sweep across three
+    #: banks, which is as clean an identification as this project has made.
+    _MISC_PROGRAM_NUMBER = 55
+
     #: How many entries the selected volume's directory holds, as the machine
     #: counts them. Bounding the walk with this rather than with a guess at
     #: what junk looks like is what stopped `hd_directory` returning one
@@ -1354,6 +1363,41 @@ class S3kBridge:
     #: remotely. Read-only they would be useless to an editor, which can name
     #: the item it wants and could not select it.
     _MISC_ITEM_CURSOR = 7
+
+    def program_number(self, *, timeout: Optional[float] = None) -> int:
+        """Which MIDI program number the machine has selected, 0-based.
+
+        The panel shows it one higher, on SINGLE's `SLCT` page. Every program
+        whose `PRGNUM` equals this is *active* and sounds together -- the
+        panel's "N now active" count (§91).
+        """
+        return self._misc_byte(self._MISC_PROGRAM_NUMBER, timeout=timeout)
+
+    def select_program_number(self, number: int, *,
+                              timeout: Optional[float] = None) -> int:
+        """Choose the active MIDI program number. **This writes.**
+
+        0-based, matching :meth:`program_number` and each program's `PRGNUM`;
+        the panel displays it one higher.
+
+        **This selects a NUMBER, not a program.** Programs sharing a number
+        all become active and sound together, so on a machine where several
+        carry the same one -- which is what loading several volumes produces
+        (§91) -- this activates all of them. :meth:`renumber_programs` is the
+        cure for that, not this.
+
+        Verified by eye rather than by read-back: `byte[49]` reads back
+        whatever is written to it and the machine ignores it entirely (§70),
+        so a register agreeing with itself proves nothing. Writing this one
+        moved the panel from `PROGRAM NUMBER 4` to `1` and the count from
+        `0 now active` to `6 now active` (§101).
+        """
+        if not 0 <= number <= self._PRGNUM_MAX:
+            raise ValueError(
+                f"program number {number} is outside 0-{self._PRGNUM_MAX}")
+        return self._misc_write_verify(
+            self._MISC_PROGRAM_NUMBER, number,
+            "selecting the program number", timeout=timeout)
 
     def item_cursor(self, *, timeout: Optional[float] = None) -> int:
         """Which directory entry the panel is highlighting, 0-based."""

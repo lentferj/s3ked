@@ -277,6 +277,19 @@ class DemoBridge:
     CURSOR_LOAD_TYPES = frozenset({4, 5})
     _MISC_ITEM_CURSOR = 7
 
+    _MISC_PROGRAM_NUMBER = 55
+    _PRGNUM_MAX_SELECT = 127
+
+    def program_number(self, *, timeout: Optional[float] = None) -> int:
+        return getattr(self, "_program_number", 0)
+
+    def select_program_number(self, number: int, *,
+                              timeout: Optional[float] = None) -> int:
+        if not 0 <= number <= self._PRGNUM_MAX_SELECT:
+            raise ValueError(f"program number {number} is out of range")
+        self._program_number = number
+        return number
+
     def item_cursor(self, *, timeout: Optional[float] = None) -> int:
         return getattr(self, "_item_cursor", 0)
 
