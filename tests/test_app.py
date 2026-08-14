@@ -1520,45 +1520,81 @@ async def test_an_edit_writes_through_the_pane_context_not_the_program():
     assert captured == {"param": "FILFRQ", "index": 1, "keygroup": 3}, captured
 
 
-async def test_every_key_the_source_dialog_offers_actually_works():
-    """`[` and `]` did nothing there, and the label was too broken to notice.
+async def test_the_source_dialog_stays_open_and_applies_every_key():
+    """It used to dismiss on each keypress.
 
-    Textual names punctuation keys, so `[` arrives as "left_square_bracket"
-    and `event.key in ("[", "]")` never matched. The same keys worked on the
-    main screen, because a Binding("[") is resolved by Textual rather than
-    compared by hand -- which is why this survived: the feature worked
-    everywhere except the dialog advertising it.
+    Setting a drive and a partition meant opening it twice, and the disk was
+    re-read after each -- seven round trips a time. It stays up now, applies
+    immediately, and re-reads the directory once on close.
+
+    Also covers the keys themselves: `[` and `]` did nothing here at all,
+    because Textual names punctuation keys and `event.key in ("[", "]")`
+    never matched. The same keys worked on the main screen, where Textual
+    resolves the binding rather than this code comparing it.
     """
+    from s3ked.app import S3kedApp, SourceScreen
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(110, 34)) as pilot:
+        await pilot.pause()
+        for _ in range(20):
+            await pilot.pause()
+        await pilot.press("s")
+        await pilot.pause()
+        assert isinstance(app.screen_stack[-1], SourceScreen)
+
+        for key in ("3", "]", "]", "x"):
+            await pilot.press(key)
+            for _ in range(25):
+                await pilot.pause()
+            assert isinstance(app.screen_stack[-1], SourceScreen), (
+                f"{key!r} closed the dialog")
+
+        source = app.bridge.load_source()
+        assert source["scsi_drive_id"] == 3, "a digit selects the SCSI drive"
+        assert source["partition"] == 2, "] steps the partition, twice"
+        assert source["device_type"] == 2, "x selects flash"
+
+        await pilot.press("[")
+        for _ in range(25):
+            await pilot.pause()
+        assert app.bridge.load_source()["partition"] == 1, "[ steps back"
+
+        await pilot.press("escape")
+        for _ in range(30):
+            await pilot.pause()
+        assert len(app.screen_stack) == 1
+
+
+async def test_the_dialog_shows_what_the_machine_reports_not_what_was_asked():
+    """Three of these registers acknowledge an error and write anyway, and
+    one acknowledges OK and ignores the write (§76). The rows follow the
+    read-back, so a refused change cannot look like it took."""
+    from textual.widgets import Label
     from s3ked.app import S3kedApp
     from s3ked.demo import DemoBridge
 
-    async def press(key, field, start_partition=2):
-        app = S3kedApp(DemoBridge(), allow_write=True)
-        async with app.run_test(size=(110, 34)) as pilot:
+    class Stubborn(DemoBridge):
+        def select_drive(self, scsi_id, *, timeout=None):
+            super().select_drive(scsi_id, timeout=timeout)
+            self._scsi_drive_id = 6          # the machine went elsewhere
+            return self.load_source()
+
+    app = S3kedApp(Stubborn(), allow_write=True)
+    async with app.run_test(size=(110, 34)) as pilot:
+        await pilot.pause()
+        for _ in range(20):
             await pilot.pause()
-            for _ in range(20):
-                await pilot.pause()
-            app.bridge.select_partition(start_partition)
-            await pilot.press("s")
+        await pilot.press("s")
+        await pilot.pause()
+        await pilot.press("2")
+        for _ in range(25):
             await pilot.pause()
-            before = app.bridge.load_source()[field]
-            await pilot.press(key)
-            for _ in range(30):
-                await pilot.pause()
-            return before, app.bridge.load_source()[field]
+        row = str(app.screen_stack[-1].query_one("#source-drive", Label).render())
 
-    before, after = await press("]", "partition")
-    assert after == before + 1, "] must step the partition up"
-    before, after = await press("[", "partition")
-    assert after == before - 1, "[ must step the partition down"
-
-    _before, after = await press("3", "scsi_drive_id")
-    assert after == 3, "a digit must select that SCSI drive"
-
-    _before, after = await press("f", "device_type")
-    assert after == 0, "f must select floppy"
-    _before, after = await press("x", "device_type")
-    assert after == 2, "x must select flash"
+    assert "6" in row, f"row should show what the machine reports: {row!r}"
+    assert "2" not in row.split("press")[0], f"showed the request: {row!r}"
 
 
 async def test_the_source_dialog_renders_its_bracket_hint():

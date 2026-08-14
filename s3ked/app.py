@@ -245,8 +245,14 @@ class ReportScreen(ModalScreen[None]):
         self.dismiss(None)
 
 
-class SourceScreen(ModalScreen[Optional[Tuple[str, int]]]):
+class SourceScreen(ModalScreen[None]):
     """Pick what the LOAD page points at: SCSI device, media, partition.
+
+    **Stays open across changes.** It used to dismiss on every keypress, so
+    setting a drive and a partition meant opening it twice -- and the disk was
+    re-read after each, seven round trips a time. Now each key applies
+    immediately, the rows update in place, and the directory is re-read once
+    when the dialog closes.
 
     Every row here is a miscellaneous-data byte found by changing it on the
     front panel and seeing which one moved -- the specification documents the
@@ -261,35 +267,56 @@ class SourceScreen(ModalScreen[Optional[Tuple[str, int]]]):
     def __init__(self, source: Dict[str, int],
                  device_types: Dict[int, str]) -> None:
         super().__init__()
-        self.source = source or {}
+        self.source = dict(source or {})
         # passed in rather than imported: app.py must not import s3k.bridge,
         # which pulls in rtmidi, or --demo stops working without it
         self.device_types = device_types
+        self.changed = False
 
     def compose(self) -> ComposeResult:
-        src = self.source
-        drive = src.get("scsi_drive_id", "?")
-        kind = src.get("device_type")
-        part = src.get("partition")
-        kind_name = self.device_types.get(kind, f"? ({kind})")
         with Vertical(id="source-box"):
             yield Label("[b]Load source[/b]", id="source-title")
-            yield Label(f"  SCSI drive      [b]{drive}[/b]"
-                        "        press [b]0[/b]-[b]7[/b]")
-            yield Label(f"  Device          [b]{kind_name}[/b]"
-                        "     [b]f[/b] floppy   [b]h[/b] hard   [b]x[/b] flash")
-            yield Label("  Partition       "
-                        f"[b]{chr(65 + part) if isinstance(part, int) else '?'}[/b]"
-                        # \[ is Rich's escape for a literal bracket. Writing
-                        # [b][[/b] renders "[/b]" instead: Rich reads [[ as
-                        # the escape and the /b] falls through as plain text.
-                        "        [b]\\[[/b] and [b]][/b] here, or in the panes")
+            yield Label(self._drive_row(), id="source-drive")
+            yield Label(self._device_row(), id="source-device")
+            yield Label(self._partition_row(), id="source-partition")
             yield Label("  Volume          [dim]panel only — no register "
                         "exists for it[/dim]")
             yield Label("")
-            yield Label("[dim]Each of these writes to the machine and "
-                        "re-reads the directory.[/dim]")
-            yield Label("[b]Esc[/b] close")
+            yield Label("[dim]Each key writes to the machine at once. The "
+                        "directory is re-read when\n  this closes, not after "
+                        "every change.[/dim]")
+            yield Label("[b]Esc[/b] close", id="source-close")
+
+    def _drive_row(self) -> str:
+        return (f"  SCSI drive      [b]{self.source.get('scsi_drive_id', '?')}"
+                f"[/b]        press [b]0[/b]-[b]7[/b]")
+
+    def _device_row(self) -> str:
+        kind = self.source.get("device_type")
+        name = self.device_types.get(kind, f"? ({kind})")
+        return (f"  Device          [b]{name}[/b]"
+                "     [b]f[/b] floppy   [b]h[/b] hard   [b]x[/b] flash")
+
+    def _partition_row(self) -> str:
+        part = self.source.get("partition")
+        shown = chr(65 + part) if isinstance(part, int) else "?"
+        # \[ is Rich's escape for a literal bracket. Writing [b][[/b] renders
+        # "[/b]" instead: Rich reads [[ as the escape and the /b] falls
+        # through as plain text.
+        return (f"  Partition       [b]{shown}[/b]"
+                "        [b]\\[[/b] and [b]][/b] here, or in the panes")
+
+    def update_source(self, source: Dict[str, int]) -> None:
+        """Re-render the rows from what the machine now reports."""
+        self.source = dict(source or {})
+        self.changed = True
+        try:
+            self.query_one("#source-drive", Label).update(self._drive_row())
+            self.query_one("#source-device", Label).update(self._device_row())
+            self.query_one("#source-partition", Label).update(
+                self._partition_row())
+        except Exception:
+            pass
 
     def on_key(self, event) -> None:
         # `event.character`, not `event.key`. Textual names punctuation keys:
@@ -299,14 +326,15 @@ class SourceScreen(ModalScreen[Optional[Tuple[str, int]]]):
         # Binding("[") is resolved by Textual rather than compared here.
         key = event.character or event.key
         if key in "01234567" and len(key) == 1:
-            self.dismiss(("drive", int(key)))
+            change = ("drive", int(key))
         elif key in ("f", "h", "x"):
-            self.dismiss(("device", {"f": 0, "h": 1, "x": 2}[key]))
+            change = ("device", {"f": 0, "h": 1, "x": 2}[key])
         elif key in ("[", "]"):
-            self.dismiss(("partition", -1 if key == "[" else +1))
+            change = ("partition", -1 if key == "[" else +1)
         else:
             return
         event.stop()
+        self.app.apply_source_change(*change)
 
     def action_cancel(self) -> None:
         self.dismiss(None)
@@ -964,18 +992,57 @@ class S3kedApp(App):
             self.notify_status(f"load source unavailable: {exc}")
             return
 
-        def chosen(result) -> None:
-            if result is None:
-                return
-            what, value = result
-            if what == "partition":
-                self._step_partition_worker(value)
-            else:
-                self._select_source_worker(what, value)
+        def closed(_result) -> None:
+            # One disk re-read when the dialog closes, not one per keypress.
+            # Each is seven round trips, and a user setting a drive and a
+            # partition would otherwise pay for both before seeing either.
+            if getattr(self, "_source_dirty", False):
+                self._source_dirty = False
+                self.action_disk()
 
         self.push_screen(
-            SourceScreen(source, self.bridge.DEVICE_TYPES), chosen
+            SourceScreen(source, self.bridge.DEVICE_TYPES), closed
         )
+
+    def apply_source_change(self, what: str, value: int) -> None:
+        """Apply one change from the open Load source dialog.
+
+        The dialog stays up, so this writes and then refreshes its rows from
+        what the machine reports -- not from what was asked for. Three of
+        these registers acknowledge an error and perform the write anyway,
+        and one acknowledges OK and ignores it (§76), so the display has to
+        follow the read-back.
+        """
+        self._source_dirty = True
+        self._source_change_worker(what, value)
+
+    @work(thread=True)
+    def _source_change_worker(self, what: str, value: int) -> None:
+        try:
+            with self._bridge_lock:
+                if what == "drive":
+                    source = self.bridge.select_drive(value)
+                elif what == "device":
+                    source = self.bridge.select_device(value)
+                else:
+                    current = self.bridge.load_source()["partition"]
+                    source = self.bridge.select_partition(
+                        max(0, min(7, current + value)))
+        except Exception as exc:
+            self.call_from_thread(self.notify_status, f"{what}: {exc}",
+                                  refused=True)
+            return
+        self.call_from_thread(self._refresh_source_dialog, source)
+
+    def _refresh_source_dialog(self, source) -> None:
+        screen = self.screen_stack[-1] if self.screen_stack else None
+        if isinstance(screen, SourceScreen):
+            screen.update_source(source)
+        part = source.get("partition")
+        self.notify_status(
+            f"source: SCSI {source.get('scsi_drive_id')}, "
+            f"{self.bridge.DEVICE_TYPES.get(source.get('device_type'), '?')}, "
+            f"partition {chr(65 + part) if isinstance(part, int) else '?'}")
 
     @work(thread=True)
     def _select_source_worker(self, what: str, value: int) -> None:
