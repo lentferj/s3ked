@@ -1383,3 +1383,40 @@ def test_the_effects_structure_is_fenced_without_the_eb16():
         bridge.fx_bytes(m.FxSelector.FX_ENTRY, 0, 0, 12)
     with pytest.raises(BoardNotFitted, match="EB16"):
         bridge.set_fx_bytes(m.FxSelector.FX_ENTRY, b"\x00" * 12, 0, 0)
+
+
+def test_every_load_type_the_register_takes_is_named():
+    """0-7 is the whole field, and it is exactly the range §74 swept.
+
+    Every value that sweep wrote was a real load type; it could not have seen
+    that, because what it looked for was a second value that ACTS. A gap here
+    would put the project back to reporting a bare number for a setting the
+    panel spells out.
+    """
+    from s3k import messages as m
+
+    assert sorted(m.LOAD_TYPES) == list(range(8))
+    assert m.LOAD_TYPES[0] == "ENTIRE VOLUME"
+    assert m.LOAD_TYPES[1] == "ALL PROGS+SAMPLES", (
+        "1 is the only value that loads, so it is the one s3ked ever fires")
+    assert len(set(m.LOAD_TYPES.values())) == 8
+
+
+def test_load_type_name_does_not_invent_a_name():
+    """An unknown value must read as unknown, not as the nearest guess."""
+    from s3k import messages as m
+
+    class Fake:
+        LOAD_TYPES = m.LOAD_TYPES
+        load_type_name = __import__(
+            "s3k.bridge", fromlist=["S3kBridge"]).S3kBridge.load_type_name
+
+        def __init__(self, value):
+            self._value = value
+
+        def load_type(self, *, timeout=None):
+            return self._value
+
+    assert Fake(1).load_type_name() == "1 (ALL PROGS+SAMPLES)"
+    assert Fake(0).load_type_name() == "0 (ENTIRE VOLUME)"
+    assert Fake(99).load_type_name() == "99 (unnamed)"

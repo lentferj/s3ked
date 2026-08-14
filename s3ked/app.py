@@ -114,13 +114,14 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
 
     Three things could be asked here and only two can be answered.
 
-    **What to load is readable but not choosable.** ENTIRE VOLUME, ALL PROGS
-    + SAMPLES, a single program — that is a setting on the panel's LOAD page,
-    and the panel writes its selection into the trigger register, so this can
-    show it (§93). It cannot offer it: triggering a load *is* writing that
-    register, and the value that loads is 1, so every load fired from here is
-    type 1 and moves the panel's selection to match. The screen shows what
-    the panel is set to and says plainly when firing will change it.
+    **What to load is readable but not choosable.** The LOAD page's eight
+    types — ENTIRE VOLUME, ALL PROGS+SAMPLES, programs only, and five more —
+    are a panel setting, and the panel writes its selection into the trigger
+    register, so this can name what is on screen (§93). It cannot offer the
+    choice: triggering a load *is* writing that register, and the only value
+    that loads is 1, ALL PROGS+SAMPLES. So every load fired from here is that
+    type and moves the panel's selection to match, which the screen says
+    plainly whenever the two differ.
 
     The other two are real:
 
@@ -168,16 +169,19 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
         # trigger register, and triggering IS writing that register, so
         # firing a load always sets the type to 1 (§93). Showing the value
         # and what firing will do to it beats a menu that cannot reach it.
+        fires = m.LOAD_TYPES.get(1, "type 1")
         if self.load_type is None:
             what = ("  [dim]what:[/dim] whatever the sampler's LOAD page is "
                     "set to [dim]— could not be read[/dim]")
-        elif self.load_type == 1:
-            what = (f"  [dim]what:[/dim] LOAD page type [b]{self.load_type}"
-                    f"[/b] [dim]— which is what this fires[/dim]")
         else:
-            what = (f"  [dim]what:[/dim] LOAD page type [b]{self.load_type}"
-                    f"[/b] — [b]loading here fires type 1[/b] and moves the "
-                    f"panel to it")
+            name = m.LOAD_TYPES.get(self.load_type, "unnamed")
+            if self.load_type == 1:
+                what = (f"  [dim]what:[/dim] [b]{name}[/b] "
+                        f"[dim]— the panel's setting, and what this fires"
+                        f"[/dim]")
+            else:
+                what = (f"  [dim]what:[/dim] panel is on [b]{name}[/b] — "
+                        f"[b]this fires {fires}[/b] and moves the panel to it")
         self.query_one("#loadopts-what", Label).update(what)
 
         mark = lambda on: "[b]>[/b]" if on else " "

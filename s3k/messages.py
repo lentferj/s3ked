@@ -249,6 +249,33 @@ class Postpone(enum.IntFlag):
 ITEM_INDEX_MASK = 0x0FFF
 
 
+#: The LOAD page's "type of load" list, by the value the register takes.
+#: Read off the panel 2026-08-14 by stepping the field one entry at a time
+#: while the register was watched (§93). Value 1 was pinned directly --
+#: photographed on screen as `ALL PROGS+SAMPLES` while the register read 1
+#: -- and the rest follow from the order the field was stepped in.
+#:
+#: Eight values, 0-7, which is exactly the range §74 swept looking for a
+#: second one that ACTS. Every value it wrote was a real load type, and it had
+#: no way to see that.
+#:
+#: These are the *field*, not the actions beside it: the LOAD page's `CLR` and
+#: `GO` are soft keys F7 and F8. `GO` fires the selected type; `CLR` is the
+#: erase-then-load chain that has no remote equivalent (§75). Writing 1 into
+#: this register fires a load without any `GO`, and no other value does --
+#: which is what made the register look like a bare trigger for two days.
+LOAD_TYPES = {
+    0: "ENTIRE VOLUME",
+    1: "ALL PROGS+SAMPLES",
+    2: "programs only",
+    3: "all samples",
+    4: "Cursor Prog+Samps",
+    5: "Cursor Item only",
+    6: "Operating System",
+    7: "Multi+progs+Samps",
+}
+
+
 class FxSelector(enum.IntEnum):
     """Selector byte values for :data:`Command.RFXDATA` / ``FXDATA``."""
 

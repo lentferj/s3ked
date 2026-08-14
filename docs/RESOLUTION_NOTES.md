@@ -7216,7 +7216,8 @@ not and lost one of them for two days.
 
 ### What follows for s3ked
 
-1. **The type is readable.** `S3kBridge.load_type()`.
+1. **The type is readable, and nameable.** `S3kBridge.load_type()` and
+   `load_type_name()`.
 2. **Only type 1 is triggerable**, because triggering is writing 1 and
    writing 1 sets the type. Every load this project fires is type 1.
 3. **Firing a load overwrites the panel's selection.** It has done so since
@@ -7228,14 +7229,46 @@ not and lost one of them for two days.
    machine never reads back is untested. `byte[49]` is the standing warning:
    the panel writes it and the machine ignores it.
 
-### Open: the names
+### The names, read off the panel (2026-08-14)
 
-Values 0-4 are an opaque index. Mapping them needs somebody to step the
-setting and record which name is on screen at each number. It is a
-thirty-second job at the machine and nothing here can guess it: the list's
-order is a property of the firmware's menu, not of anything transcribed.
+Value 1 was pinned directly: photographed on screen as `ALL PROGS+SAMPLES`
+while the register was read over MIDI and answered 1. The rest follow from
+stepping the field one entry at a time with the register watched.
 
-### Also open: whether a write moves the panel
+```
+0   ENTIRE VOLUME            4   Cursor Prog+Samps
+1   ALL PROGS+SAMPLES        5   Cursor Item only
+2   programs only            6   Operating System
+3   all samples              7   Multi+progs+Samps
+```
+
+Eight values, 0-7 — **exactly the range §74 swept**. Every value it wrote was
+a real load type and nothing in that experiment could have shown it, because
+what it looked for was a second value that *acts*.
+
+`s3k.messages.LOAD_TYPES` carries this. It lives in `messages` rather than
+`bridge` so the TUI can name a type without importing the transport, which
+would drag in python-rtmidi.
+
+### These are the field; `CLR` and `GO` are soft keys
+
+Worth stating because §74 ran the two together. The LOAD page's bottom row is
+`LOAD VOLS FIND TAGS SCSI` on F1-F5 and `CLR` `GO` on F7-F8. `GO` fires the
+type the field is showing; `CLR` is the erase-then-load chain with its own
+on-screen prompt, and it is not in this register or any other (§75).
+
+So the panel's model is *select a type, then press GO*. The remote model is
+not the same one: **writing 1 loads with no `GO` involved, and writing any
+other value does not load at all.**
+
+The model that fits every measurement: the byte is the type as far as the
+panel is concerned, and the remote write handler treats an incoming value as
+"do this now" for exactly one of the eight. It is a model, not a measurement
+— what is measured is that 1 acts, 0 and 2-7 do not (§74), and that all eight
+are real types (here). Nothing s3ked does depends on which explanation is
+right.
+
+### Open: whether a write moves the panel
 
 Write 3, look at the LOAD page. If the displayed type changes, s3ked can
 offer the setting; if it does not, the register is read-only in practice and

@@ -90,12 +90,13 @@ This talks to a sampler that has no undo.
   deletes that program first.
 - **Choosing a volume is a front-panel job.** There is no volume register; the
   drive, device and partition are settable and the volume is not (§72).
-- **The kind of load can be read, not chosen.** ENTIRE VOLUME versus ALL
-  PROGS + SAMPLES lives in the same register the load trigger uses, so the
-  current setting is readable — but triggering a load *is* writing that
-  register, and the value that loads is 1. So every load fired from here is
-  type 1 and moves the panel's selection to match, which the load screen says
-  when they differ. What the values are called is not established (§93).
+- **The kind of load can be read, not chosen.** All eight of the LOAD page's
+  types — `ENTIRE VOLUME`, `ALL PROGS+SAMPLES`, `programs only` and five more
+  — live in the same register the load trigger uses, so the current setting is
+  readable and nameable. But triggering a load *is* writing that register, and
+  the only value that loads is 1. So every load fired from here is
+  `ALL PROGS+SAMPLES` and moves the panel's selection to match, which the load
+  screen says whenever the two differ (§93).
 - **Every byte offset is a transcription** from Akai's own documents and is
   unverified except where a panel check confirmed it. A write that changes the
   sound proves *some* parameter moved (§2).

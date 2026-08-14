@@ -1833,7 +1833,8 @@ async def test_the_load_screen_offers_no_way_to_choose_a_load_type():
         what = str(screen.query_one("#loadopts-what", Label).render())
         actions = {b.action for b in screen.BINDINGS}
 
-    assert "LOAD page type" in what
+    assert "ALL PROGS+SAMPLES" in what, (
+        "the panel's type is named, not left as a bare number")
     assert not any("type" in a for a in actions), (
         f"no binding may claim to change the load type: {actions}")
 
@@ -2099,11 +2100,11 @@ async def test_the_load_screen_shows_the_panels_load_type():
             seen[panel_type] = str(
                 screen.query_one("#loadopts-what", Label).render())
 
-    assert "1" in seen[1]
-    assert "fires type 1" not in seen[1], (
+    assert "ALL PROGS+SAMPLES" in seen[1]
+    assert "fires" in seen[1] and "moves the panel" not in seen[1], (
         "no warning is needed when the panel is already on the type we fire")
-    assert "3" in seen[3]
-    assert "fires type 1" in seen[3], (
+    assert "all samples" in seen[3], "type 3 must be named, not numbered"
+    assert "moves the panel to it" in seen[3], (
         "firing changes the panel's selection, and must say so")
 
 

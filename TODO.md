@@ -157,28 +157,29 @@ MESA sends when it renumbers a program.
 
 ---
 
-## The load type: register found, values unnamed (PARTLY RESOLVED 2026-08-14)
+## The load type: register and names found; setting it is untested (PARTLY RESOLVED 2026-08-14)
 
 **Status:** the register is **bytes 6-9**, the same ones this project had
 written off as a bare trigger. They track the panel's LOAD page selection,
 measured through five values as a person stepped it (§93). `load_type()`
 reads it.
 
-Two things are still open, both cheap and both needing a person:
-
-1. **What the values are called.** 0-4 is an opaque index; mapping it needs
-   somebody to step the setting and write down the name on screen at each
-   number. Thirty seconds at the machine, unguessable from here.
-2. **Whether writing it moves the panel.** Write 3, look at the LOAD page. If
-   the display follows, s3ked can offer the setting; if it does not, the
-   register is read-only in practice — the `byte[49]` trap, where the panel
-   writes and the machine never reads back (§70).
+All eight values are named, read off the panel — `ENTIRE VOLUME`,
+`ALL PROGS+SAMPLES`, `programs only`, `all samples`, `Cursor Prog+Samps`,
+`Cursor Item only`, `Operating System`, `Multi+progs+Samps` — in
+`s3k.messages.LOAD_TYPES`. `load_type_name()` renders it.
 
 Settled and not re-openable: only type 1 is triggerable, because triggering
-is writing 1 and writing 1 sets the type — so every load s3ked fires is type
-1 and overwrites the panel's selection as it goes.
+is writing 1 and writing 1 sets the type — so every load s3ked fires is
+`ALL PROGS+SAMPLES` and overwrites the panel's selection as it goes.
 
-**Blocked on:** a person at the panel, for both.
+**One thing still open:** whether writing the register moves the panel. Write
+3, look at the LOAD page. If the display follows, s3ked can offer the setting
+and the load screen becomes a real choice; if it does not, the register is
+read-only in practice — the `byte[49]` trap, where the panel writes and the
+machine never reads back (§70).
+
+**Blocked on:** a person at the panel.
 
 ---
 

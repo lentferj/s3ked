@@ -1295,22 +1295,28 @@ class S3kBridge:
             pass          # the write may well have taken; the read decides
         return self._misc_byte(self._MISC_MODE, timeout=timeout)
 
+    #: The LOAD page's "type of load" list. See :data:`s3k.messages.LOAD_TYPES`.
+    LOAD_TYPES = m.LOAD_TYPES
+
     def load_type(self, *, timeout: Optional[float] = None) -> int:
         """Which kind of load the panel's LOAD page is set to.
 
         The panel writes its selection into the trigger register, so this
-        reads what is on screen. Values 0-4 were seen stepping through the
-        list; **what they are called is not established** -- the mapping needs
-        somebody to read the LOAD page while the numbers are recorded, and
-        until then this is an opaque index (§93).
+        reads what is on screen (§93). :attr:`LOAD_TYPES` names the values.
 
         Reading is free of side effects. Setting is not offered: writing 1
-        fires a load, and whether writing 0 or 2-4 moves the panel's
+        fires a load, and whether writing another value moves the panel's
         displayed selection or merely stores a number the machine ignores is
         untested -- the same trap as ``byte[49]``, which the panel writes and
         the machine never reads back (§70).
         """
         return self._misc_byte(self._MISC_LOAD_TYPE[0], timeout=timeout)
+
+    def load_type_name(self, *, timeout: Optional[float] = None) -> str:
+        """:meth:`load_type`, rendered. Unknown values say so rather than lie."""
+        value = self.load_type(timeout=timeout)
+        name = self.LOAD_TYPES.get(value)
+        return f"{value} ({name})" if name else f"{value} (unnamed)"
 
     def trigger_load(self, load_type: int = 1, *,
                      timeout: Optional[float] = None) -> None:
