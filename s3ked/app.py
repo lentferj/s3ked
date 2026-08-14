@@ -468,7 +468,12 @@ class S3kedApp(App):
     #right { width: 60%; }
     DataTable { height: 1fr; }
     .pane-title { background: $panel; padding: 0 1; }
-    #status { height: 1; padding: 0 1; }
+    #status { height: auto; padding: 0 1; }
+    /* A refusal has to be seen. The gate-locked message sat in the same
+       muted style as "5 program(s), 9 sample(s)", so pressing a key and
+       having nothing happen read as a broken feature rather than a closed
+       gate -- which is exactly how it was reported. */
+    #status.-refused { background: $error; color: $text; text-style: bold; }
     /* Red, not the accent colour. The armed gate is the one state where a
        keypress reaches the hardware, and $accent is also used for ordinary
        emphasis elsewhere -- a warning that looks like decoration is not a
@@ -519,6 +524,12 @@ class S3kedApp(App):
         self._words_free: Optional[int] = None
         self._total_words: Optional[int] = None
         self._param_values: Dict[str, object] = {}
+        #: What the parameter pane is currently showing: (region, index,
+        #: keygroup). The edit path writes through this, not through the
+        #: selected program -- showing keygroup fields while writing to the
+        #: program header would corrupt a different parameter at the same
+        #: offset, silently.
+        self._param_context: Tuple[str, int, int] = ("program", 0, 0)
         self._param_rows: List[p.Parameter] = []
         self._undo: List[_Change] = []
         self.last_status = ""  # exposed for tests
@@ -553,7 +564,7 @@ class S3kedApp(App):
         self.sub_title = self.bridge.description
         for table_id, columns in (
             ("programs", ("num", "name")),
-            ("keygroups", ("kg", "range", "samples")),
+            ("keygroups", ("kg", "range")),
             ("samples", ("sample", "status")),
             ("volumes", ("vol", "name")),
             ("parameters", ("off", "name", "value")),
@@ -565,10 +576,19 @@ class S3kedApp(App):
 
     # -- status / badges ----------------------------------------------------
 
-    def notify_status(self, message: str) -> None:
+    def notify_status(self, message: str, *, refused: bool = False) -> None:
+        """Put a message on the status line.
+
+        ``refused`` marks it as something the user asked for and did not
+        get -- a locked gate, an undeclared board, a guard that fired. Those
+        render on the error colour, because a refusal that looks like a
+        progress report is indistinguishable from the feature being broken.
+        """
         self.last_status = message
         try:
-            self.query_one("#status", Static).update(message)
+            widget = self.query_one("#status", Static)
+            widget.update(message)
+            widget.set_class(refused, "-refused")
         except Exception:
             pass
 
@@ -693,20 +713,20 @@ class S3kedApp(App):
             row = (self._program_keygroups[kg]
                    if kg < len(self._program_keygroups) else None)
             if row is None or not row["read"]:
-                table.add_row(str(kg), "?", "")
+                table.add_row(str(kg), "?")
                 continue
             lo, hi = row["lo"], row["hi"]
             # An inverted range selects nothing, measured (§81). Printing it
             # as a range would read as a keygroup spanning it backwards.
             span = (f"{p.note_name(lo)}–{p.note_name(hi)}"
                     + ("  (dead)" if lo > hi else ""))
-            table.add_row(str(kg), span, ", ".join(row["samples"]) or "—")
+            table.add_row(str(kg), span)
 
         self._fill_program_samples()
         self.query_one("#param-title", Static).update(
             f"Parameters — program {index} ({header.get('PRNAME', '')})"
         )
-        self._show_params("program", header)
+        self._show_params("program", header, index)
 
     def _fill_program_samples(self) -> None:
         """What this program references, and which of it the machine lacks.
@@ -745,8 +765,10 @@ class S3kedApp(App):
         else:
             title.update(f"Samples used — {len(used)}")
 
-    def _show_params(self, region: str, values: Dict[str, object]) -> None:
+    def _show_params(self, region: str, values: Dict[str, object],
+                     index: int = 0, keygroup: int = 0) -> None:
         self._param_values = values
+        self._param_context = (region, index, keygroup)
         self._param_rows = p.region_params(region)
         table = self.query_one("#parameters", DataTable)
         table.clear()
@@ -827,7 +849,8 @@ class S3kedApp(App):
         changes the device belongs behind the same gate as an edit.
         """
         if not self.allow_write:
-            self.notify_status("write gate is locked — press w to arm it")
+            self.notify_status(
+                "write gate is locked — press w to arm it", refused=True)
             return
         self._step_partition_worker(delta)
 
@@ -916,6 +939,16 @@ class S3kedApp(App):
 
     def action_source(self) -> None:
         """Show the load source and let it be changed."""
+        # Checked BEFORE the dialog opens, matching action_load_volume. The
+        # old order pushed the screen, took a keypress, closed, and then
+        # reported the refusal in the status line -- which reads as "pressing
+        # any button just returns without changing anything", because that is
+        # exactly what it looks like.
+        if not self.allow_write:
+            self.notify_status(
+                "write gate is locked — press w to arm it before changing "
+                "the load source", refused=True)
+            return
         try:
             with self._bridge_lock:
                 source = self.bridge.load_source()
@@ -927,9 +960,6 @@ class S3kedApp(App):
             if result is None:
                 return
             what, value = result
-            if not self.allow_write:
-                self.notify_status("write gate is locked — press w to arm it")
-                return
             if what == "partition":
                 self._step_partition_worker(value)
             else:
@@ -989,6 +1019,16 @@ class S3kedApp(App):
 
     def action_menu(self) -> None:
         """Move the machine to another main-menu page."""
+        # Checked BEFORE the dialog opens, matching action_load_volume. The
+        # old order pushed the screen, took a keypress, closed, and then
+        # reported the refusal in the status line -- which reads as "pressing
+        # any button just returns without changing anything", because that is
+        # exactly what it looks like.
+        if not self.allow_write:
+            self.notify_status(
+                "write gate is locked — press w to arm it before changing "
+                "the main menu", refused=True)
+            return
         try:
             with self._bridge_lock:
                 current = self.bridge.mode()
@@ -998,9 +1038,6 @@ class S3kedApp(App):
 
         def chosen(value: Optional[int]) -> None:
             if value is None:
-                return
-            if not self.allow_write:
-                self.notify_status("write gate is locked — press w to arm it")
                 return
             self._select_mode_worker(value)
 
@@ -1037,7 +1074,8 @@ class S3kedApp(App):
         thing the machine will not tell you until it has already half-loaded.
         """
         if not self.allow_write:
-            self.notify_status("write gate is locked — press w to arm it")
+            self.notify_status(
+                "write gate is locked — press w to arm it", refused=True)
             return
         if not self._disk_entries:
             self.notify_status("no volume read yet — press d first")
@@ -1152,10 +1190,11 @@ class S3kedApp(App):
             return
         if not param.writable:
             why = "read-only" if param.readonly else "an internal block address"
-            self.notify_status(f"{param.name} is {why}")
+            self.notify_status(f"{param.name} is {why}", refused=True)
             return
         if not self.allow_write:
-            self.notify_status("write gate is locked — press w to arm it")
+            self.notify_status(
+                "write gate is locked — press w to arm it", refused=True)
             return
         current = self._param_values.get(param.name)
 
@@ -1167,21 +1206,33 @@ class S3kedApp(App):
 
     @work(thread=True)
     def _write_param_worker(
-        self, param: p.Parameter, index: int, value, old
+        self, param: p.Parameter, index: int, value, old, keygroup: int = 0
     ) -> None:
         try:
             with self._bridge_lock:
-                self.bridge.set_parameter(param, index, value)
-                header = self.bridge.get_header(param.region, index)
+                self.bridge.set_parameter(param, index, value,
+                                          keygroup=keygroup)
+                header = self.bridge.get_header(param.region, index,
+                                                keygroup=keygroup)
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"error: {exc}")
             return
         self.call_from_thread(self._after_write, param, index, old, value, header)
 
     def _write_param(self, param: p.Parameter, current, raw: str) -> None:
-        index = self._selected_program()
+        # Through the pane's own context, not the selected program. The two
+        # were the same while the pane only ever showed program fields;
+        # they are not now, and using the program index for a keygroup or
+        # sample field would write to a different structure at the same
+        # offset without any error.
+        region, index, keygroup = self._param_context
+        if param.region != region:
+            self.notify_status(
+                f"{param.name} is a {param.region} field but the pane is "
+                f"showing {region} — refusing rather than guessing", refused=True)
+            return
         if index is None:
-            self.notify_status("no program selected")
+            self.notify_status("nothing selected")
             return
         if param.is_array:
             # One value per element, comma-separated. Without this the field
@@ -1208,7 +1259,7 @@ class S3kedApp(App):
             except ValueError:
                 self.notify_status(f"{raw!r} is not a number")
                 return
-        self._write_param_worker(param, index, value, current)
+        self._write_param_worker(param, index, value, current, keygroup)
 
     def _after_write(
         self,
@@ -1241,11 +1292,13 @@ class S3kedApp(App):
             self.notify_status("nothing to undo")
             return
         if not self.allow_write:
-            self.notify_status("write gate is locked — undo is a write")
+            self.notify_status(
+                "write gate is locked — undo is a write", refused=True)
             return
         change = self._undo.pop()
         param = p.lookup((change.region, change.name))
-        self._write_param_worker(param, change.index, change.old, change.new)
+        self._write_param_worker(param, change.index, change.old,
+                                 change.new, getattr(change, 'keygroup', 0))
         self._refresh_write_badge()
 
     def action_master(self) -> None:
@@ -1273,7 +1326,8 @@ class S3kedApp(App):
         rather than next to the load.
         """
         if not self.allow_write:
-            self.notify_status("write gate is locked — press w to arm it")
+            self.notify_status(
+                "write gate is locked — press w to arm it", refused=True)
             return
         held = (self._total_words - self._words_free
                 if self._total_words and self._words_free is not None else None)
@@ -1313,7 +1367,8 @@ class S3kedApp(App):
             self.notify_status("nothing selected")
             return
         if not self.allow_write:
-            self.notify_status("write gate is locked — press w to arm it")
+            self.notify_status(
+                "write gate is locked — press w to arm it", refused=True)
             return
 
         if action == "delete_keygroup":
@@ -1370,9 +1425,105 @@ class S3kedApp(App):
 
     # -- events -------------------------------------------------------------
 
+    def on_descendant_focus(self, event) -> None:
+        """Moving focus to a pane shows that pane's parameters.
+
+        Without this, tabbing to the keygroup list left the parameter pane
+        describing the program until the cursor happened to move -- and a
+        cursor moved to the row it already occupies fires nothing, so
+        arriving on a single-keygroup program showed the wrong fields
+        indefinitely.
+        """
+        table = getattr(event, "widget", None)
+        table_id = getattr(table, "id", None)
+        if table_id == "keygroups":
+            self._load_keygroup(table.cursor_row)
+        elif table_id == "samples":
+            self._load_sample_row(table.cursor_row)
+        elif table_id == "programs":
+            row = table.cursor_row
+            if row is not None:
+                self._load_program(row)
+
     def on_data_table_row_highlighted(self, event) -> None:
-        if event.data_table.id == "programs":
+        """Follow the cursor: the parameter pane shows whatever is selected.
+
+        **Only when the table has focus.** Filling the keygroup pane after a
+        program loads moves its cursor too, and reacting to that would swap
+        the parameters to a keygroup the moment a program was chosen -- the
+        opposite of what selecting a program means.
+        """
+        table = event.data_table
+        if table.id == "programs":
             self._load_program(event.cursor_row)
+        elif not table.has_focus:
+            return
+        elif table.id == "keygroups":
+            self._load_keygroup(event.cursor_row)
+        elif table.id == "samples":
+            self._load_sample_row(event.cursor_row)
+
+    def _load_keygroup(self, keygroup: int) -> None:
+        program = self._selected_program()
+        if program is None or keygroup is None:
+            return
+        if keygroup >= self._keygroups:
+            return
+        self._load_keygroup_worker(program, keygroup)
+
+    @work(thread=True)
+    def _load_keygroup_worker(self, program: int, keygroup: int) -> None:
+        try:
+            with self._bridge_lock:
+                header = self.bridge.get_header("keygroup", program,
+                                                keygroup=keygroup)
+        except Exception as exc:
+            self.call_from_thread(self.notify_status, f"keygroup: {exc}")
+            return
+        self.call_from_thread(self._apply_keygroup, program, keygroup, header)
+
+    def _apply_keygroup(self, program: int, keygroup: int, header) -> None:
+        self.query_one("#param-title", Static).update(
+            f"Parameters — program {program} keygroup {keygroup}")
+        self._show_params("keygroup", header, program, keygroup)
+
+    def _load_sample_row(self, row: Optional[int]) -> None:
+        """Show the selected sample's own header.
+
+        The pane lists the program's samples by NAME, so the machine's index
+        has to be looked up. Names are not unique -- the sampler enforces no
+        uniqueness and two resident samples can share one (§80) -- so this
+        takes the first match and says so rather than pretending the choice
+        was determined.
+        """
+        table = self.query_one("#samples", DataTable)
+        if row is None or row >= table.row_count:
+            return
+        name = str(table.get_row_at(row)[0]).strip()
+        matches = [i for i, n in enumerate(self._samples) if n.strip() == name]
+        if not matches:
+            self.notify_status(f"{name} is not resident — nothing to show")
+            return
+        if len(matches) > 1:
+            self.notify_status(
+                f"{len(matches)} resident samples are named {name!r}; "
+                f"showing the first")
+        self._load_sample_worker(matches[0], name)
+
+    @work(thread=True)
+    def _load_sample_worker(self, index: int, name: str) -> None:
+        try:
+            with self._bridge_lock:
+                header = self.bridge.get_header("sample", index)
+        except Exception as exc:
+            self.call_from_thread(self.notify_status, f"sample: {exc}")
+            return
+        self.call_from_thread(self._apply_sample, index, name, header)
+
+    def _apply_sample(self, index: int, name: str, header) -> None:
+        self.query_one("#param-title", Static).update(
+            f"Parameters — sample {index} ({name})")
+        self._show_params("sample", header, index)
 
     def on_data_table_row_selected(self, event) -> None:
         # Enter on the parameters table means "edit this one".

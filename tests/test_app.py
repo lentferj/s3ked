@@ -1381,3 +1381,140 @@ async def test_who_uses_reads_the_row_not_the_global_index():
         title = str(screen.query_one("#report-title", Static).render())
 
     assert row_name in title, f"looked up the wrong sample: {title!r}"
+
+
+async def test_a_write_action_refuses_before_opening_its_dialog():
+    """`s` and `g` opened a dialog, took a keypress, closed, and only then
+    reported the locked gate in the status line.
+
+    Reported as "pressing any button just returns w/o changing the
+    parameter", which is exactly what that looks like. action_load_volume
+    always checked first; these two did not.
+    """
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    for key, subject in (("s", "load source"), ("g", "main menu")):
+        app = S3kedApp(DemoBridge(), allow_write=False)
+        async with app.run_test(size=(120, 36)) as pilot:
+            await pilot.pause()
+            for _ in range(15):
+                await pilot.pause()
+            await pilot.press(key)
+            await pilot.pause()
+
+            assert len(app.screen_stack) == 1, (
+                f"{key} opened a dialog with the gate locked")
+            assert "write gate is locked" in app.last_status
+            assert subject in app.last_status, (
+                "the refusal should say what it refused")
+
+
+async def test_a_refusal_is_marked_so_it_cannot_read_as_progress():
+    """A locked gate rendered in the same muted style as "5 program(s)".
+
+    A refusal that looks like a progress report is indistinguishable from
+    the feature being broken.
+    """
+    from textual.widgets import Static
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(120, 36)) as pilot:
+        await pilot.pause()
+        for _ in range(15):
+            await pilot.pause()
+        status = app.query_one("#status", Static)
+        assert "-refused" not in status.classes, "clean at rest"
+
+        await pilot.press("s")
+        for _ in range(5):
+            await pilot.pause()
+        assert "-refused" in status.classes, "a refusal must be marked"
+
+        await pilot.press("w")
+        await pilot.press("r")
+        for _ in range(25):
+            await pilot.pause()
+        assert "-refused" not in status.classes, (
+            "the marker must clear once something ordinary happens")
+
+
+async def test_the_parameter_pane_follows_the_selection():
+    """Program, keygroup and sample each show their own fields.
+
+    It always showed program fields, whatever was selected -- so a keygroup
+    could be highlighted while the pane described the program.
+    """
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(120, 36)) as pilot:
+        await pilot.pause()
+        for _ in range(30):
+            await pilot.pause()
+        assert app._param_context[0] == "program"
+
+        keygroups = app.query_one("#keygroups", DataTable)
+        keygroups.focus()
+        keygroups.move_cursor(row=0)
+        for _ in range(40):
+            await pilot.pause()
+        assert app._param_context[0] == "keygroup", app._param_context
+
+        samples = app.query_one("#samples", DataTable)
+        samples.focus()
+        samples.move_cursor(row=0)
+        for _ in range(40):
+            await pilot.pause()
+        assert app._param_context[0] == "sample", app._param_context
+
+
+async def test_filling_the_keygroup_pane_does_not_hijack_the_parameters():
+    """Loading a program moves the keygroup cursor too.
+
+    Reacting to that would swap the pane to a keygroup the instant a program
+    was chosen -- the opposite of what selecting a program means. The guard
+    is that the table must have focus.
+    """
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(120, 36)) as pilot:
+        await pilot.pause()
+        for _ in range(20):
+            await pilot.pause()
+        programs = app.query_one("#programs", DataTable)
+        programs.focus()
+        programs.move_cursor(row=2)
+        for _ in range(40):
+            await pilot.pause()
+
+    assert app._param_context[0] == "program", app._param_context
+
+
+async def test_an_edit_writes_through_the_pane_context_not_the_program():
+    """Showing keygroup fields while writing to the program header would
+    corrupt a different parameter at the same offset, silently."""
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    app._param_context = ("keygroup", 1, 3)
+    app._param_values = {"FILFRQ": 50}
+
+    from s3k import params as p
+    captured = {}
+
+    def fake_worker(param, index, value, old, keygroup=0):
+        captured.update(param=param.name, index=index, keygroup=keygroup)
+
+    app._write_param_worker = fake_worker
+    app._write_param(p.lookup(("keygroup", "FILFRQ")), 50, "60")
+
+    assert captured == {"param": "FILFRQ", "index": 1, "keygroup": 3}, captured
