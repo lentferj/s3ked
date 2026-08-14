@@ -41,8 +41,11 @@ docs; this tool implements the editor half.
   drive, device and partition. Loading a volume is triggerable, with a fit
   check against free memory beforehand (§70–§74). The load asks how: onto what
   is resident or onto an emptied machine, and whether to renumber afterwards.
-  *What* to load is shown, read from the panel, and not offered as a choice
-  — see *Known limitations*.
+  *What* to load is a real choice: all eight of the sampler's own load types
+  — `ENTIRE VOLUME`, `ALL PROGS+SAMPLES`, `programs only`, `all samples` and
+  the cursor and multi variants — are performable over MIDI, and the screen
+  opens on whatever the panel is set to (§93, §94). `Operating System` is
+  guarded behind an explicit flag and is not offered in the TUI.
 - **Renumbering**, the remote equivalent of the panel's `RNUM` → `SEQU`. It
   matters because loads append and `PRGNUM` is stored in the program and
   reloaded verbatim: load four volumes and four programs claim number 1, and
@@ -90,13 +93,9 @@ This talks to a sampler that has no undo.
   deletes that program first.
 - **Choosing a volume is a front-panel job.** There is no volume register; the
   drive, device and partition are settable and the volume is not (§72).
-- **The kind of load can be read, not chosen.** All eight of the LOAD page's
-  types — `ENTIRE VOLUME`, `ALL PROGS+SAMPLES`, `programs only` and five more
-  — live in the same register the load trigger uses, so the current setting is
-  readable and nameable. But triggering a load *is* writing that register, and
-  the only value that loads is 1. So every load fired from here is
-  `ALL PROGS+SAMPLES` and moves the panel's selection to match, which the load
-  screen says whenever the two differ (§93).
+- **A load cannot be set up and fired separately.** The type register has no
+  `GO`: writing it *is* starting the load. So any code touching bytes 6–9 has
+  begun one, and there is no way to stage a load in advance (§94).
 - **Every byte offset is a transcription** from Akai's own documents and is
   unverified except where a panel check confirmed it. A write that changes the
   sound proves *some* parameter moved (§2).

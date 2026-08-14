@@ -1806,18 +1806,18 @@ async def test_the_loading_dialog_sends_nothing_while_it_waits():
 # --- how to load: the two questions that have answers -----------------------
 
 
-async def test_the_load_screen_offers_no_way_to_choose_a_load_type():
-    """It can show the panel's type. It must not pretend to set it.
+async def test_the_load_screen_cycles_the_type_but_never_offers_the_OS():
+    """All eight types are performable; one of them is not a keypress away.
 
-    Triggering a load IS writing the type register, and the value that loads
-    is 1 -- so no key here could select a type and then load it (§93).
-    Whether writing 0 or 2-4 even moves the panel is untested, which is the
-    byte[49] trap: the panel writes it and the machine may never read it
-    back. So the screen reports and does not offer.
+    Writing value n performs load type n (§94), so the choice is real. Type
+    6 loads an operating system off the disc over the running one -- the
+    bridge guards it behind an explicit flag, and this screen must not be a
+    way around that guard.
     """
     from textual.widgets import Label
     from s3ked.app import LoadOptionsScreen, S3kedApp
     from s3ked.demo import DemoBridge
+    from s3k import messages as m
 
     app = S3kedApp(DemoBridge(), allow_write=True)
     async with app.run_test(size=(130, 44)) as pilot:
@@ -1831,12 +1831,18 @@ async def test_the_load_screen_offers_no_way_to_choose_a_load_type():
         screen = app.screen_stack[-1]
         assert isinstance(screen, LoadOptionsScreen)
         what = str(screen.query_one("#loadopts-what", Label).render())
-        actions = {b.action for b in screen.BINDINGS}
 
-    assert "ALL PROGS+SAMPLES" in what, (
-        "the panel's type is named, not left as a bare number")
-    assert not any("type" in a for a in actions), (
-        f"no binding may claim to change the load type: {actions}")
+        # walk the whole cycle and record every type it can reach
+        reached = {screen.load_type}
+        for _ in range(len(m.LOAD_TYPES) * 2):
+            await pilot.press("t")
+            await pilot.pause()
+            reached.add(screen.load_type)
+
+    assert "ALL PROGS+SAMPLES" in what, "opens on the panel's setting, named"
+    assert 6 not in reached, (
+        "Operating System must not be reachable by holding a key down")
+    assert reached == {0, 1, 2, 3, 4, 5, 7}, reached
 
 
 async def test_clearing_first_deletes_then_loads_and_says_so():
@@ -2023,7 +2029,10 @@ async def test_renumber_is_meaningless_when_memory_is_cleared_first():
         for _ in range(10):
             await pilot.pause()
 
-    assert chosen == [(True, False)], "clear wins; the renumber is dropped"
+    assert len(chosen) == 1
+    clear_first, renumber, _load_type = chosen[0]
+    assert clear_first is True
+    assert renumber is False, "clear wins; the renumber is dropped"
 
 
 def test_renumbering_gives_every_program_a_distinct_number():
@@ -2101,11 +2110,11 @@ async def test_the_load_screen_shows_the_panels_load_type():
                 screen.query_one("#loadopts-what", Label).render())
 
     assert "ALL PROGS+SAMPLES" in seen[1]
-    assert "fires" in seen[1] and "moves the panel" not in seen[1], (
-        "no warning is needed when the panel is already on the type we fire")
+    assert "what the panel is on" in seen[1], (
+        "opening on the panel's own type needs no warning")
     assert "all samples" in seen[3], "type 3 must be named, not numbered"
-    assert "moves the panel to it" in seen[3], (
-        "firing changes the panel's selection, and must say so")
+    assert "what the panel is on" in seen[3], (
+        "it opens on the panel's setting whatever that is")
 
 
 async def test_an_unreadable_load_type_does_not_block_the_load():
@@ -2132,3 +2141,91 @@ async def test_an_unreadable_load_type_does_not_block_the_load():
         what = str(screen.query_one("#loadopts-what", Label).render())
 
     assert "could not be read" in what
+
+
+async def test_the_chosen_load_type_reaches_the_bridge():
+    """The screen's choice must be what gets written, not a default.
+
+    Writing value n performs load type n (§94), so a choice that quietly
+    fired type 1 would load the wrong thing -- and the machine gives no
+    indication which type it just ran.
+    """
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    fired = []
+
+    class Watch(DemoBridge):
+        _load_type = 0                      # panel sits on ENTIRE VOLUME
+
+        def trigger_load(self, load_type=1, *, force=False, timeout=None):
+            fired.append(load_type)
+
+    app = S3kedApp(Watch(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("d")
+        for _ in range(20):
+            await pilot.pause()
+        await pilot.press("l")
+        for _ in range(20):
+            await pilot.pause()
+        assert app.screen_stack[-1].load_type == 0, "opens on the panel's type"
+        await pilot.press("t")              # 0 -> 1
+        await pilot.press("t")              # 1 -> 2, "programs only"
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        prompt = app.last_status
+        await pilot.press("y")
+        for _ in range(30):
+            await pilot.pause()
+
+    assert fired == [2], f"the chosen type must be the one fired, got {fired}"
+
+
+def test_the_bridge_refuses_an_unknown_load_type():
+    """The register performs what it is given, so an unknown value is an
+    unknown operation -- not a no-op, which is what §74 believed."""
+    import pytest
+    from s3k import bridge as b
+
+    class Bare(b.S3kBridge):
+        def __init__(self):
+            pass
+
+    with pytest.raises(ValueError, match="not one of"):
+        Bare().trigger_load(99)
+
+
+def test_the_bridge_guards_the_operating_system_load():
+    """Type 6 loads an OS off the disc over the running one."""
+    import pytest
+    from s3k import bridge as b
+    from s3k import messages as m
+
+    assert m.LOAD_TYPES[6] == "Operating System"
+
+    sent = []
+
+    class Bare(b.S3kBridge):
+        def __init__(self):
+            pass
+
+        def invalidate_structure(self):
+            pass
+
+        def _drain(self):
+            pass
+
+        def _send(self, frame, write=False):
+            sent.append(frame)
+
+        exclusive_channel = 0
+
+    with pytest.raises(ValueError, match="guarded"):
+        Bare().trigger_load(6)
+    assert sent == [], "a guarded type must not reach the wire"
+
+    Bare().trigger_load(6, force=True)
+    assert len(sent) == 1, "force=True means it"

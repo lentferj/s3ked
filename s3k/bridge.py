@@ -1167,36 +1167,31 @@ class S3kBridge:
     _MISC_MODE = 91
     _MISC_SELECTION_HELD = 4     # 1 suppresses the re-read. See below.
 
-    #: Bytes 6-9 mirror one another -- writing any one moves all four, and
-    #: writing **1** starts a load of the selected volume. That value is the
-    #: whole of it as far as *acting* goes: 0 and 2-7 were each written and
-    #: waited out, and every one stored cleanly and loaded nothing (§74).
+    #: Bytes 6-9 mirror one another -- writing any one moves all four -- and
+    #: they are the LOAD page's "type of load" field. **Writing value n
+    #: PERFORMS load type n** (§94): all eight work, not just 1.
     #:
-    #: **But it IS the load type, and this note said otherwise for two days.**
-    #: §93 watched the whole byte bank while a person stepped the LOAD page's
-    #: type setting, and these four moved in lockstep through 0, 1, 2, 3, 4,
-    #: timed to each keypress. The panel writes its selection here. §74 swept
-    #: the register looking for a second *action* and correctly found none,
-    #: then concluded from that absence that the register had no meaning
-    #: beyond the trigger -- which does not follow, and reading it while
-    #: somebody drove the panel is what showed it does.
+    #: There is no select-without-firing. The panel gets that from its own
+    #: `GO` key; this register does not have one, so setting the type IS
+    #: triggering the load. Anything writing here must treat the write as the
+    #: load itself.
     #:
-    #: So: readable as the current type, and the only load this project can
-    #: trigger is type 1, because triggering is writing 1 and writing 1 sets
-    #: the type. A load fired from here therefore CHANGES the panel's
-    #: selection as a side effect.
+    #: §74 swept 0 and 2-7, saw no memory move, and recorded them as inert.
+    #: That sweep ran against a volume that was already entirely resident, so
+    #: every type reloaded what was in memory and netted zero words -- exactly
+    #: the useless experiment §73 had thrown out one section earlier. It stood
+    #: for two days and cost an unintended load to disprove.
     #:
     #: The value is not persisted: it read 7 before a power cycle and 0 after,
     #: so 0 is the power-on default (§77).
     #:
     #: The load **appends**. §73 loaded a 15.30 MB volume onto 3.70 MB of
-    #: resident data and finished with 19.00 MB, the sum to within 630 words,
-    #: and §74 repeated it at 3.62 MB onto 19.00 MB for a miss of 120.
+    #: resident data and finished with 19.00 MB, the sum to within 630 words.
     #:
     #: **The panel's CLR softkey is not in this register.** CLR erases
-    #: waveform memory and then loads, and nothing in 0-7 does that -- it is a
-    #: panel chain with its own on-screen confirmation (§75). The effect is
-    #: reachable: see :meth:`clear_memory`, which deletes what is resident.
+    #: waveform memory and then loads, and it is a panel chain with its own
+    #: on-screen confirmation (§75). The effect is reachable: see
+    #: :meth:`clear_memory`, which deletes what is resident.
     _MISC_LOAD_TYPE = (6, 7, 8, 9)
 
     def _misc_byte(self, index: int, value: Optional[int] = None, *,
@@ -1318,30 +1313,36 @@ class S3kBridge:
         name = self.LOAD_TYPES.get(value)
         return f"{value} ({name})" if name else f"{value} (unnamed)"
 
-    def trigger_load(self, load_type: int = 1, *,
+    #: Load types this method refuses without ``force``. 6 loads an operating
+    #: system off the disc over the running one; it is a legitimate operation
+    #: and not one to reach by a keypress or a typo.
+    _GUARDED_LOAD_TYPES = frozenset({6})
+
+    def trigger_load(self, load_type: int = 1, *, force: bool = False,
                      timeout: Optional[float] = None) -> None:
-        """Load the selected volume into the machine. **This writes and acts.**
+        """Load the selected volume. **This writes and it loads.**
 
-        ``load_type`` is the value written to the register, and 1 is the only
-        value that loads anything; the rest store and do nothing (§74).
+        ``load_type`` is one of :data:`s3k.messages.LOAD_TYPES`, and the
+        machine performs it: 0 `ENTIRE VOLUME`, 1 `ALL PROGS+SAMPLES`,
+        2 `programs only`, 3 `all samples`, and so on (§94).
 
-        **This changes the panel's load-type selection as a side effect.** The
-        register is the LOAD page's type setting (§93), so firing a load sets
-        that setting to 1 whatever it was before. There is no way around it
-        from here: triggering *is* writing the type. Use :meth:`load_type` to
-        read what the panel had first if that matters.
+        **The write IS the load.** There is no way to select a type and fire
+        it separately -- that is what the panel's `GO` key does and this
+        register has no equivalent. So this cannot be used to set up a load
+        for later, and any code that writes bytes 6-9 for any reason has
+        started one.
 
-        The load **appends** to what is already in memory. That is not the
-        safe-and-boring option it sounds like: a bank built from several
-        volumes needs the SUM to fit, so three 12 MB volumes each fit a 32 MB
-        machine and the third load is the one that fails. And the failure is
-        quiet -- the machine says "insufficient waveform memory" once and
-        then carries on, leaving programs whose samples never arrived
-        resident, selectable, and silent. Check the directory's
-        ``audio_words`` against ``status().free_words`` first.
+        The load **appends** to what is already in memory, for the types that
+        add. That is not the safe-and-boring option it sounds like: a bank
+        built from several volumes needs the SUM to fit, so three 12 MB
+        volumes each fit a 32 MB machine and the third load is the one that
+        fails. And the failure is quiet -- the machine says "insufficient
+        waveform memory" once and then carries on, leaving programs whose
+        samples never arrived resident, selectable, and silent. Check the
+        directory's ``audio_words`` against ``status().free_words`` first.
 
-        There is no remote way to clear memory first; the panel's CLR softkey
-        is not reachable through this register (§74).
+        The panel's CLR softkey is not reachable through this register (§75);
+        :meth:`clear_memory` is the remote stand-in for its effect.
 
         **Do not poll the machine while it loads.** A 58.7 MB load probed
         with ``RSTAT`` every 8 seconds ran in stop-start bursts and finally
@@ -1351,7 +1352,23 @@ class S3kBridge:
         consequences and neither is worth assuming, so this fires and returns
         and leaves the machine alone. Read it again when the display settles
         (§71, §72).
+
+        The machine stops acknowledging while it works, so a write that takes
+        long enough will raise a timeout from the transport rather than
+        return. That is the load running, not a failure; this sends without
+        waiting for the reply for exactly that reason.
         """
+        if load_type not in m.LOAD_TYPES:
+            raise ValueError(
+                f"load type {load_type} is not one of "
+                f"{sorted(m.LOAD_TYPES)}; the register performs what it is "
+                f"given, so an unknown value is an unknown operation (§94)"
+            )
+        if load_type in self._GUARDED_LOAD_TYPES and not force:
+            raise ValueError(
+                f"load type {load_type} ({m.LOAD_TYPES[load_type]}) is "
+                f"guarded; pass force=True to mean it"
+            )
         self.invalidate_structure()      # a load replaces the whole bank
         for index in self._MISC_LOAD_TYPE[:1]:
             frame = m.HeaderData(

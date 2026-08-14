@@ -114,16 +114,18 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
 
     Three things could be asked here and only two can be answered.
 
-    **What to load is readable but not choosable.** The LOAD page's eight
-    types — ENTIRE VOLUME, ALL PROGS+SAMPLES, programs only, and five more —
-    are a panel setting, and the panel writes its selection into the trigger
-    register, so this can name what is on screen (§93). It cannot offer the
-    choice: triggering a load *is* writing that register, and the only value
-    that loads is 1, ALL PROGS+SAMPLES. So every load fired from here is that
-    type and moves the panel's selection to match, which the screen says
-    plainly whenever the two differ.
+    **All three questions have answers**, which they did not until §94.
 
-    The other two are real:
+    - **What to load** — the LOAD page's eight types. The register the load
+      trigger uses *is* that field, and writing value n performs type n, so
+      every one of them is a real choice here. The screen opens on whatever
+      the panel is showing.
+
+      `Operating System` is deliberately absent from the cycle. It loads an
+      OS off the disc over the running one; the bridge guards it behind an
+      explicit flag and a keypress is not that.
+
+    The other two:
 
     - **Clearing first** is not the panel's CLR, which is a panel chain with
       its own on-screen prompt and no remote equivalent (§75). It is deleting
@@ -137,10 +139,17 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
     BINDINGS = [
         Binding("escape", "cancel", "Cancel"),
         Binding("enter", "go", "Continue"),
+        Binding("t", "next_type", "Load type"),
         Binding("a", "add", "Add to memory"),
         Binding("c", "clear", "Clear first"),
         Binding("n", "toggle_renumber", "Renumber"),
     ]
+
+    #: Offered in this order, panel order minus the guarded one. `Operating
+    #: System` (6) is not cycled to: the bridge refuses it without force, and
+    #: a load screen is not where somebody should be able to reach an OS
+    #: overwrite by holding a key down.
+    OFFERED_TYPES = (0, 1, 2, 3, 4, 5, 7)
 
     def __init__(self, *, resident_programs: int = 0,
                  load_type: Optional[int] = None) -> None:
@@ -148,7 +157,10 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
         self.clear_first = False
         self.renumber = False
         self.resident_programs = resident_programs
-        self.load_type = load_type
+        #: What the panel was on when this opened, kept so the screen can say
+        #: when the choice has moved away from it.
+        self.panel_type = load_type
+        self.load_type = load_type if load_type in self.OFFERED_TYPES else 1
 
     def compose(self) -> ComposeResult:
         with Vertical(id="loadopts-box"):
@@ -158,8 +170,9 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
             yield Label("", id="loadopts-where")
             yield Label("", id="loadopts-renumber")
             yield Label("")
-            yield Label("[b]a[/b] add   [b]c[/b] clear first   "
-                        "[b]n[/b] renumber   [b]enter[/b] go   [b]esc[/b] cancel")
+            yield Label("[b]t[/b] type   [b]a[/b] add   [b]c[/b] clear first"
+                        "   [b]n[/b] renumber   [b]enter[/b] go   "
+                        "[b]esc[/b] cancel")
 
     def on_mount(self) -> None:
         self._redraw()
@@ -169,20 +182,17 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
         # trigger register, and triggering IS writing that register, so
         # firing a load always sets the type to 1 (§93). Showing the value
         # and what firing will do to it beats a menu that cannot reach it.
-        fires = m.LOAD_TYPES.get(1, "type 1")
-        if self.load_type is None:
-            what = ("  [dim]what:[/dim] whatever the sampler's LOAD page is "
-                    "set to [dim]— could not be read[/dim]")
+        name = m.LOAD_TYPES.get(self.load_type, "unnamed")
+        if self.panel_type is None:
+            note = "[dim]— panel setting could not be read[/dim]"
+        elif self.panel_type == self.load_type:
+            note = "[dim]— what the panel is on[/dim]"
         else:
-            name = m.LOAD_TYPES.get(self.load_type, "unnamed")
-            if self.load_type == 1:
-                what = (f"  [dim]what:[/dim] [b]{name}[/b] "
-                        f"[dim]— the panel's setting, and what this fires"
-                        f"[/dim]")
-            else:
-                what = (f"  [dim]what:[/dim] panel is on [b]{name}[/b] — "
-                        f"[b]this fires {fires}[/b] and moves the panel to it")
-        self.query_one("#loadopts-what", Label).update(what)
+            note = (f"[dim]— panel is on "
+                    f"{m.LOAD_TYPES.get(self.panel_type, self.panel_type)}; "
+                    f"this moves it[/dim]")
+        self.query_one("#loadopts-what", Label).update(
+            rf"  [dim]what:[/dim]  [b]{name}[/b]  \[[b]t[/b]] {note}")
 
         mark = lambda on: "[b]>[/b]" if on else " "
         self.query_one("#loadopts-where", Label).update(
@@ -199,6 +209,13 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
             note = ("  [dim]renumber:[/dim] off — loaded programs keep their "
                     "own numbers and may collide")
         self.query_one("#loadopts-renumber", Label).update(note)
+
+    def action_next_type(self) -> None:
+        """Step the load type. Nothing is sent -- writing it would load."""
+        offered = self.OFFERED_TYPES
+        at = offered.index(self.load_type) if self.load_type in offered else 0
+        self.load_type = offered[(at + 1) % len(offered)]
+        self._redraw()
 
     def action_add(self) -> None:
         self.clear_first = False
@@ -217,7 +234,9 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
         self._redraw()
 
     def action_go(self) -> None:
-        self.dismiss((self.clear_first, self.renumber and not self.clear_first))
+        self.dismiss((self.clear_first,
+                      self.renumber and not self.clear_first,
+                      self.load_type))
 
     def action_cancel(self) -> None:
         self.dismiss(None)
@@ -1415,7 +1434,8 @@ class S3kedApp(App):
             LoadOptionsScreen(resident_programs=len(self._programs),
                               load_type=current_type), chosen)
 
-    def _confirm_load(self, clear_first: bool, renumber: bool) -> None:
+    def _confirm_load(self, clear_first: bool, renumber: bool,
+                      load_type: int = 1) -> None:
         """Show what the load costs, then fire it.
 
         The budget depends on the answer to the first question. Adding is
@@ -1429,10 +1449,12 @@ class S3kedApp(App):
         budget = self._total_words if clear_first else self._words_free
         fits = budget is None or needed <= budget
 
-        headline = (f"Load {len(self._disk_entries)} item(s), {mb(needed)}?"
+        type_name = m.LOAD_TYPES.get(load_type, load_type)
+        headline = (f"{type_name}: {len(self._disk_entries)} item(s), "
+                    f"{mb(needed)}?"
                     if fits else
-                    f"Load {len(self._disk_entries)} item(s), {mb(needed)} — "
-                    f"THIS DOES NOT FIT")
+                    f"{type_name}: {len(self._disk_entries)} item(s), "
+                    f"{mb(needed)} — THIS DOES NOT FIT")
         detail = ""
         if clear_first:
             detail += (
@@ -1446,6 +1468,9 @@ class S3kedApp(App):
         if renumber:
             detail += ("\n\nAfterwards every program is renumbered in list "
                        "order, so nothing shares a MIDI program number.")
+        if load_type not in (0, 1) and fits:
+            detail += ("\n\nThe size above is the whole volume; this type "
+                       "loads part of it, so it will use less.")
         if not fits:
             detail += ("\n\nThe machine will load what it can and stop with "
                        "'insufficient waveform memory'. Programs whose samples "
@@ -1453,7 +1478,8 @@ class S3kedApp(App):
 
         def go(confirmed) -> None:
             if confirmed:
-                self._load_worker(clear_first=clear_first, renumber=renumber)
+                self._load_worker(clear_first=clear_first, renumber=renumber,
+                                  load_type=load_type)
 
         self.push_screen(ConfirmScreen(headline + detail), go)
 

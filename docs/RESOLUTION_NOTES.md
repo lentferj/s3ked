@@ -111,6 +111,7 @@ silently wrong one.
 - [§91](#91--prgnum-collides-after-multi-volume-loads-and-the-panels-remedy-2026-08-14) — `PRGNUM` collides after multi-volume loads, and the panel's remedy (2026-08-14)
 - [§92](#92--btsorts-two-jobs-split-the-flags-rebuild-themselves-the-sort-does-not-2026-08-14) — BTSORT's two jobs split: the flags rebuild themselves, the sort does not (2026-08-14)
 - [§93](#93--the-load-type-is-in-the-trigger-register-and-74-said-it-was-not-2026-08-14) — The load type IS in the trigger register, and §74 said it was not (2026-08-14)
+- [§94](#94--retraction-the-load-register-performs-the-type-you-write-it-2026-08-14) — **RETRACTION**: the load register performs the type you write it (2026-08-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -5641,6 +5642,15 @@ exercised — nobody was at the machine to change it.
 
 ## §74 — The load trigger has one value, and CLR is not remote (2026-08-12)
 
+> **RETRACTED IN PART, 2026-08-14 — see §94.** The claim that only
+> value 1 acts is **wrong**. Writing value *n* performs load type *n*;
+> all eight work. The sweep below could not have seen that, because it
+> ran against a volume that was already entirely resident, so every
+> type reloaded what was in memory and netted zero words. §94 shows
+> this from the numbers in this very section. What still stands: the
+> mirroring of bytes 6-9, the +120-word arithmetic, and that CLR is
+> not in this register.
+
 **Status: settled.** Measured 2026-08-12, RAM only, nothing written to disc.
 
 The panel's LOAD page has two softkeys: **LOAD**, which appends to what is
@@ -7274,3 +7284,93 @@ Write 3, look at the LOAD page. If the displayed type changes, s3ked can
 offer the setting; if it does not, the register is read-only in practice and
 the type stays a front-panel job. Same shape of test as the one that settled
 `byte[49]`, and it costs one write.
+
+---
+
+## §94 — RETRACTION: the load register performs the type you write it (2026-08-14)
+
+**Status: settled, and it overturns §74's central claim.** Measured
+2026-08-14 on a freshly power-cycled machine, RAM only.
+
+§74 concluded that bytes 6-9 are "a trigger that keeps its last value": that
+writing 1 loads and every other value stores cleanly and does nothing. §93
+found the register is also the LOAD page's *type of load* field, and left
+"only type 1 is triggerable" standing on §74's authority.
+
+**Both halves of that are wrong. Writing value *n* performs load type *n*.**
+
+### How it surfaced
+
+A one-write probe was run to answer a much smaller question — does writing
+the register move the panel's display? — on the strength of §74 saying the
+write was inert. It was not inert. It started a load, with the panel still
+showing `ENTIRE VOLUME` while the machine worked, and the field then updated
+to `all samples` when it finished. That is a load fired without intending
+one, from trusting a documented negative that had never been re-tested.
+
+### The measurement
+
+Power-cycled to a near-empty machine: `TEST PROGRAM` and the four ROM
+waveforms, 31.75 MB free. Selected volume holds **one program and five
+samples**, so programs-versus-samples is a binary discriminator no memory
+delta can muddle. Two settings, predictions written before each run:
+
+```
+write 3  "all samples"      predicted  +0 programs, +5 samples
+                            measured   +0 programs, +5 samples   ✓
+
+write 2  "programs only"    predicted  +1 program,  +0 samples
+                            measured   +1 program,  +0 samples   ✓
+```
+
+Two settings where the answer must agree, and they agree. The register
+executes the type written.
+
+### Why §74 measured a null, from §74's own numbers
+
+Not a fluke and not a machine difference — the experiment could not have
+detected the effect. Its table reports 11,861,952 words resident after every
+value it swept, and its value-1 test reports 9,963,440 **before** and
+11,861,952 **after**. So the value-1 load ran *first* and the sweep of 0 and
+2-7 ran afterwards, **against a volume that was by then entirely resident**.
+Every type it wrote reloaded content already in memory and netted zero words.
+
+§73 — the section immediately before it — opens by throwing out exactly this
+mistake: *"The first attempt reloaded the volume that was already resident,
+which is a useless experiment: the volume replaces itself, so free memory
+ends where it started, and +0 words is what 'loaded correctly' and 'did
+nothing at all' both look like."* §74 then did it to seven values and read
+the zeros as evidence of inertness.
+
+The rule §73 wrote for itself is the one that would have saved it: choose a
+starting state that makes the competing predictions far apart. A null result
+against an already-resident volume is not a null result.
+
+### What this buys
+
+**All eight load types are remotely performable**, not one. `ENTIRE VOLUME`,
+`programs only`, `all samples`, the cursor variants and the multi variant are
+each one write away, and s3ked's load screen can offer the choice it had
+been reporting as unreachable.
+
+### What it costs, and this is the part to be careful with
+
+**Every write to bytes 6-9 loads something.** There is no "select without
+firing" — the panel gets that from its own `GO` key, and this register does
+not. So the type cannot be pre-set from software and then triggered; setting
+it *is* triggering it. Anything that writes here must treat the write as the
+load.
+
+`load_type()` reads and is safe. Nothing else about this register is.
+
+### Two smaller observations
+
+**A write during a load times out; a fast one is acknowledged.** Writing 3
+(five samples) returned `TimeoutError` after 2 s; writing 2 (one program)
+was acknowledged in 0.3 s. So the machine stops answering while it works.
+That is the closest thing to a busy signal this family has, and it is not a
+completion signal: it says "still going" by silence, and §71's wedge came
+from polling a loading machine, so it is not to be turned into one.
+
+**Value 6 is `Operating System`** and was deliberately never written. An OS
+load off the disc is not something to fire while characterising a register.

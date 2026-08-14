@@ -157,7 +157,7 @@ MESA sends when it renumbers a program.
 
 ---
 
-## The load type: register and names found; setting it is untested (PARTLY RESOLVED 2026-08-14)
+## The load type: register, names and execution (RESOLVED 2026-08-14)
 
 **Status:** the register is **bytes 6-9**, the same ones this project had
 written off as a bare trigger. They track the panel's LOAD page selection,
@@ -173,13 +173,14 @@ Settled and not re-openable: only type 1 is triggerable, because triggering
 is writing 1 and writing 1 sets the type — so every load s3ked fires is
 `ALL PROGS+SAMPLES` and overwrites the panel's selection as it goes.
 
-**One thing still open:** whether writing the register moves the panel. Write
-3, look at the LOAD page. If the display follows, s3ked can offer the setting
-and the load screen becomes a real choice; if it does not, the register is
-read-only in practice — the `byte[49]` trap, where the panel writes and the
-machine never reads back (§70).
+**Closed 2026-08-14, and it went further than the question asked.** Writing
+the register does not merely move the panel — it **performs the load type
+written**, measured at two settings with predictions recorded first (§94).
+So all eight types are remotely performable and the load screen offers them.
 
-**Blocked on:** a person at the panel.
+§74's "only value 1 acts" is retracted. Its sweep ran against an
+already-resident volume, so every type reloaded what was in memory and netted
+zero words — the useless experiment §73 had thrown out one section earlier.
 
 ---
 
