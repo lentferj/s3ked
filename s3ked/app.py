@@ -151,12 +151,23 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
     #: overwrite by holding a key down.
     OFFERED_TYPES = (0, 1, 2, 3, 4, 5, 7)
 
+    #: Types that act on a single directory entry rather than the whole
+    #: volume. s3ked places the machine's highlight itself, at `word[7]`
+    #: (§97), so these load the row selected in the Disk pane.
+    CURSOR_TYPES = frozenset({4, 5})
+
     def __init__(self, *, resident_programs: int = 0,
-                 load_type: Optional[int] = None) -> None:
+                 load_type: Optional[int] = None,
+                 item: Optional[int] = None,
+                 item_label: str = "") -> None:
         super().__init__()
         self.clear_first = False
         self.renumber = False
         self.resident_programs = resident_programs
+        #: The directory entry the Disk pane is sitting on, if any. Passed to
+        #: the machine's own highlight before a cursor-type load fires.
+        self.item = item
+        self.item_label = item_label
         #: What the panel was on when this opened, kept so the screen can say
         #: when the choice has moved away from it.
         self.panel_type = load_type
@@ -167,6 +178,7 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
             yield Label("[b]Load[/b]")
             yield Label("")
             yield Label("", id="loadopts-what")
+            yield Label("", id="loadopts-cursor")
             yield Label("", id="loadopts-where")
             yield Label("", id="loadopts-renumber")
             yield Label("")
@@ -193,6 +205,13 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
                     f"[/dim]")
         self.query_one("#loadopts-what", Label).update(
             rf"  [dim]what:[/dim]  [b]{name}[/b]  \[[b]t[/b]] {note}")
+        cursor_note = ""
+        if self.load_type in self.CURSOR_TYPES:
+            cursor_note = (
+                f"  [dim]item:[/dim]  [b]{self.item_label}[/b]"
+                if self.item is not None else
+                "  [b]no item selected[/b] — pick a row in the Disk pane")
+        self.query_one("#loadopts-cursor", Label).update(cursor_note)
 
         mark = lambda on: "[b]>[/b]" if on else " "
         self.query_one("#loadopts-where", Label).update(
@@ -234,9 +253,16 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
         self._redraw()
 
     def action_go(self) -> None:
+        if self.load_type in self.CURSOR_TYPES and self.item is None:
+            self.app.notify_status(
+                "that type loads one item — select one in the Disk pane",
+                refused=True)
+            return
         self.dismiss((self.clear_first,
                       self.renumber and not self.clear_first,
-                      self.load_type))
+                      self.load_type,
+                      self.item if self.load_type in self.CURSOR_TYPES
+                      else None))
 
     def action_cancel(self) -> None:
         self.dismiss(None)
@@ -347,6 +373,12 @@ class KeyHints(Static):
     def on_resize(self, event) -> None:
         self._render_hints()
 
+    def set_blocks(self, blocks) -> None:
+        """Replace the legend. The right column shows one of two things and
+        half the keys change with it, so the hints change too."""
+        self._blocks = list(blocks)
+        self._render_hints()
+
     def _render_hints(self) -> None:
         self.update(wrap_blocks(self._blocks, self.size.width))
 
@@ -411,7 +443,9 @@ class SourceScreen(ModalScreen[None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="source-box"):
-            yield Label("[b]Load source[/b]", id="source-title")
+            # "SCSI" is the sampler's own word for this page --
+            # the LOAD page reaches it with F5, labelled SCSI.
+            yield Label("[b]SCSI[/b]", id="source-title")
             yield Label(self._drive_row(), id="source-drive")
             yield Label(self._device_row(), id="source-device")
             yield Label(self._partition_row(), id="source-partition")
@@ -614,7 +648,7 @@ class MenuScreen(ModalScreen[Optional[int]]):
     gaps that rule out guessing: GLOBAL is the second button of the second
     row and reads 8, where its position would make it 5.
 
-    **Stays open across changes**, like the Load source screen. It used to
+    **Stays open across changes**, like the SCSI screen. It used to
     dismiss on the first key that matched, so choosing the wrong page meant
     pressing `g` again to get back -- and this is the sort of tool where Esc
     should be the only way out of a dialog.
@@ -771,8 +805,9 @@ class S3kedApp(App):
         Binding("d", "disk", "Read disk"),
         Binding("[", "partition_prev", "Prev partition", show=False),
         Binding("]", "partition_next", "Next partition", show=False),
-        Binding("l", "load_volume", "Load volume"),
-        Binding("s", "source", "Load source"),
+        Binding("l", "load_volume", "Load"),
+        Binding("escape", "close_disk", "Back", show=False),
+        Binding("s", "source", "SCSI"),
         Binding("g", "menu", "Main menu"),
         Binding("B", "boards", "Boards fitted"),
         Binding("i", "integrity", "Integrity"),
@@ -798,6 +833,8 @@ class S3kedApp(App):
         #: state, not a failure, and `r` only picks the disk up once there is
         #: something to pick up -- see action_refresh.
         self._disk_read = False
+        #: Which of the two things the right column is showing.
+        self._disk_showing = False
         self._words_free: Optional[int] = None
         self._total_words: Optional[int] = None
         self._param_values: Dict[str, object] = {}
@@ -824,11 +861,17 @@ class S3kedApp(App):
                 yield Static("Samples used", classes="pane-title",
                              id="progsamples-title")
                 yield DataTable(id="samples", cursor_type="row")
-                yield Static("Disk", classes="pane-title", id="disk-title")
-                yield DataTable(id="volumes", cursor_type="row")
+            # The right column is one pane showing one of two things. The
+            # disk browser used to be a quarter of the left column, where a
+            # 55-item volume listing had five rows to live in and the four
+            # program-centric panes were squeezed for it. Neither is wanted
+            # at the same time as the other: reading a parameter table and
+            # picking something to load are different jobs.
             with Vertical(id="right"):
                 yield Static("Parameters", classes="pane-title", id="param-title")
                 yield DataTable(id="parameters", cursor_type="row")
+                yield Static("Disk", classes="pane-title", id="disk-title")
+                yield DataTable(id="volumes", cursor_type="row")
         yield Static("", id="status")
         # Not Footer(): it is one line and truncates. See KeyHints.
         yield KeyHints(
@@ -843,6 +886,10 @@ class S3kedApp(App):
         # one-word title reads as broken, and this one is empty on every
         # launch by design.
         self.query_one("#disk-title", Static).update("Disk — press [b]d[/b]")
+        # The right column starts on Parameters. Both sets of widgets exist
+        # from the start so nothing has to be built on the way in.
+        for widget_id in ("disk-title", "volumes"):
+            self.query_one(f"#{widget_id}").display = False
         for table_id, columns in (
             ("programs", ("num", "name")),
             ("keygroups", ("kg", "range")),
@@ -1078,12 +1125,13 @@ class S3kedApp(App):
             self._read_disk_worker()
 
     def action_disk(self) -> None:
-        """Read the volume list off the attached disk.
+        """Show the disk browser, reading the volume list off the disk.
 
         Deliberately not part of the startup catalog. It is 7 round trips and
         about 1.2 s for a full disk, and a machine with no disk attached would
         make that a failure on every launch rather than on request.
         """
+        self._show_disk_pane(True)
         self.notify_status("reading the disk…")
         self._read_disk_worker()
 
@@ -1328,7 +1376,7 @@ class S3kedApp(App):
             screen.update_volumes(volumes)
 
     def apply_source_change(self, what: str, value: int) -> None:
-        """Apply one change from the open Load source dialog.
+        """Apply one change from the open SCSI dialog.
 
         The dialog stays up, so this writes and then refreshes its rows from
         what the machine reports -- not from what was asked for. Three of
@@ -1462,7 +1510,7 @@ class S3kedApp(App):
 
         The dialog stays up. It used to dismiss on the first key that
         matched, so choosing the wrong page meant pressing `g` again to get
-        back -- reported in live use, and the same complaint the Load source
+        back -- reported in live use, and the same complaint the SCSI
         screen drew before it was changed the same way. Esc is now the only
         way out of either.
         """
@@ -1489,6 +1537,38 @@ class S3kedApp(App):
         if isinstance(screen, MenuScreen):
             screen.show_current(current)
 
+    def _show_disk_pane(self, showing: bool) -> None:
+        """Swap the right column between Parameters and the disk browser."""
+        self._disk_showing = showing
+        for widget_id in ("param-title", "parameters"):
+            self.query_one(f"#{widget_id}").display = not showing
+        for widget_id in ("disk-title", "volumes"):
+            self.query_one(f"#{widget_id}").display = showing
+        if showing:
+            self.query_one("#volumes", DataTable).focus()
+        else:
+            self.query_one("#parameters", DataTable).focus()
+        self._refresh_key_hints()
+
+    def action_close_disk(self) -> None:
+        if self._disk_showing:
+            self._show_disk_pane(False)
+            self.notify_status("")
+
+    def _refresh_key_hints(self) -> None:
+        """The legend follows the mode, since half the keys change with it."""
+        if self._disk_showing:
+            blocks = ["esc back", "enter select volume", "l load this",
+                      "d re-read", "[ prev partition", "] next partition",
+                      "w write gate", "q quit"]
+        else:
+            blocks = [f"{b.key} {b.description}"
+                      for b in self.BINDINGS if b.description and b.show]
+        try:
+            self.query_one("#keyhints", KeyHints).set_blocks(blocks)
+        except Exception:
+            pass
+
     def action_load_volume(self) -> None:
         """Load the selected volume into the machine. **This writes.**
 
@@ -1505,12 +1585,19 @@ class S3kedApp(App):
         confirms, and the confirmation shows whether it fits, which is the one
         thing the machine will not tell you until it has already half-loaded.
         """
+        # `l` from the main view opens the browser rather than firing
+        # anything: choosing WHAT to load is the first half of loading, and
+        # it needs the listing in front of you. `l` again, from inside,
+        # is the one that starts a load.
+        if not self._disk_showing:
+            self.action_disk()
+            return
         if not self.allow_write:
             self.notify_status(
                 "write gate is locked — press w to arm it", refused=True)
             return
         if not self._disk_entries:
-            self.notify_status("no volume read yet — press d first")
+            self.notify_status("nothing read yet — press d")
             return
 
         self._open_load_options()
@@ -1533,12 +1620,45 @@ class S3kedApp(App):
                 return
             self._confirm_load(*options)
 
+        item, label = self._selected_disk_item()
+        # A row is selected, so default to loading just that -- which is why
+        # somebody navigated to it. The whole-volume types are one `t` away.
+        if item is not None and current_type not in LoadOptionsScreen.CURSOR_TYPES:
+            current_type = 4 if label.startswith("prog") else 5
         self.push_screen(
             LoadOptionsScreen(resident_programs=len(self._programs),
-                              load_type=current_type), chosen)
+                              load_type=current_type,
+                              item=item, item_label=label), chosen)
+
+    def _selected_disk_item(self):
+        """Which directory entry the Disk pane is sitting on, if any.
+
+        Returns ``(index, label)`` -- the index is `hd_directory`'s and is
+        what `word[7]` takes (§97). A volume row or the divider is not an
+        item and gives ``(None, "")``.
+        """
+        try:
+            table = self.query_one("#volumes", DataTable)
+            row = table.get_row_at(table.cursor_row)
+        except Exception:
+            return None, ""
+        kind, name = str(row[0]), str(row[1])
+        if kind not in ("prog", "samp"):
+            return None, ""
+        # The pane lists volumes first, then a divider, then the entries in
+        # order -- so the entry's position among the entry rows is its
+        # directory index.
+        seen = 0
+        for at in range(table.cursor_row):
+            try:
+                if str(table.get_row_at(at)[0]) in ("prog", "samp"):
+                    seen += 1
+            except Exception:
+                break
+        return seen, f"{kind} {name}"
 
     def _confirm_load(self, clear_first: bool, renumber: bool,
-                      load_type: int = 1) -> None:
+                      load_type: int = 1, item: Optional[int] = None) -> None:
         """Show what the load costs, then fire it.
 
         The budget depends on the answer to the first question. Adding is
@@ -1547,17 +1667,21 @@ class S3kedApp(App):
         machine's whole memory -- measuring a clear-then-load against current
         free would refuse loads that would comfortably fit.
         """
-        needed = sum(getattr(e, "audio_words", 0) for e in self._disk_entries)
+        if item is not None and item < len(self._disk_entries):
+            # One item, so the budget is that item and not the volume.
+            wanted = [self._disk_entries[item]]
+        else:
+            wanted = self._disk_entries
+        needed = sum(getattr(e, "audio_words", 0) for e in wanted)
         mb = lambda w: f"{w * 2 / 1024 / 1024:.2f} MB"
         budget = self._total_words if clear_first else self._words_free
         fits = budget is None or needed <= budget
 
         type_name = m.LOAD_TYPES.get(load_type, load_type)
-        headline = (f"{type_name}: {len(self._disk_entries)} item(s), "
-                    f"{mb(needed)}?"
+        headline = (f"{type_name}: {len(wanted)} item(s), {mb(needed)}?"
                     if fits else
-                    f"{type_name}: {len(self._disk_entries)} item(s), "
-                    f"{mb(needed)} — THIS DOES NOT FIT")
+                    f"{type_name}: {len(wanted)} item(s), {mb(needed)} — "
+                    f"THIS DOES NOT FIT")
         detail = ""
         if clear_first:
             detail += (
@@ -1571,7 +1695,7 @@ class S3kedApp(App):
         if renumber:
             detail += ("\n\nAfterwards every program is renumbered in list "
                        "order, so nothing shares a MIDI program number.")
-        if load_type not in (0, 1) and fits:
+        if load_type not in (0, 1) and item is None and fits:
             detail += ("\n\nThe size above is the whole volume; this type "
                        "loads part of it, so it will use less.")
         if not fits:
@@ -1582,20 +1706,21 @@ class S3kedApp(App):
         def go(confirmed) -> None:
             if confirmed:
                 self._load_worker(clear_first=clear_first, renumber=renumber,
-                                  load_type=load_type)
+                                  load_type=load_type, item=item)
 
         self.push_screen(ConfirmScreen(headline + detail), go)
 
     @work(thread=True)
     def _load_worker(self, *, clear_first: bool = False,
-                     renumber: bool = False, load_type: int = 1) -> None:
+                     renumber: bool = False, load_type: int = 1,
+                     item: Optional[int] = None) -> None:
         try:
             with self._bridge_lock:
                 if clear_first:
                     self.call_from_thread(
                         self.notify_status, "clearing memory…")
                     self.bridge.clear_memory()
-                self.bridge.trigger_load(load_type)
+                self.bridge.trigger_load(load_type, item=item)
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"load: {exc}")
             return

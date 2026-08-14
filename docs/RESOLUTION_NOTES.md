@@ -114,6 +114,8 @@ silently wrong one.
 - [§94](#94--retraction-the-load-register-performs-the-type-you-write-it-2026-08-14) — **RETRACTION**: the load register performs the type you write it (2026-08-14)
 - [§95](#95--the-client-dying-mid-exchange-wedges-the-machine-2026-08-14) — The client dying mid-exchange wedges the machine (2026-08-14)
 - [§96](#96--retraction-the-volume-is-selectable-and-we-had-already-found-the-register-2026-08-14) — **RETRACTION**: the volume IS selectable, and we had already found the register (2026-08-14)
+- [§97](#97--the-disk-listings-cursor-is-word7-and-it-is-writable-2026-08-14) — The disk listing's cursor is `word[7]`, and it is writable (2026-08-14)
+- [§98](#98--free-pks-is-stats-block-count-and-keygroups-are-in-it-2026-08-14) — `free P/K/S` is `STAT`'s block count, and keygroups are in it (2026-08-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -7572,3 +7574,172 @@ feature. Enter on a volume row in the TUI selects that volume; the pane shows
 which one is selected; and a load can be aimed anywhere on the disc without
 touching the machine. Combined with §94's eight load types and §70's
 partition control, the whole LOAD page is now reachable except `CLR` (§75).
+
+---
+
+## §97 — The disk listing's cursor is `word[7]`, and it is writable (2026-08-14)
+
+**Status: settled, panel-confirmed and end-to-end verified.** 2026-08-14.
+
+§93 named all eight load types. Two of them — `Cursor Prog+Samps` (4) and
+`Cursor Item only` (5) — act on whatever the panel's cursor is highlighting
+in the volume's item listing. Read-only they would be of no use to an editor,
+which can *name* the item it wants and could not *select* it.
+
+### Finding it
+
+`byte[49]` is not it and was ruled out from existing logs before anything was
+run: it holds the **value of whichever field** the cursor sits on (§70), so it
+toggled between two field values as the cursor moved between fields, and did
+not move at all while the cursor stayed put.
+
+The three-bank sweep from §96 was re-run with the panel's cursor moved **into
+the item list**. `word[7]` followed it exactly:
+
+```
+   2 -> 3 -> 4 -> 5 -> 16      as the cursor stepped from the 3rd item
+```
+
+0-based. This is the second register found by widening the sweep past the byte
+bank, after the volume itself.
+
+### Writing it moves the LCD
+
+Announced beforehand and watched, because this is precisely the shape
+`byte[49]` warns about — the panel writes it and the machine never reads it
+back, so a clean read-back proves only that something stored the value.
+
+Writing `word[7] = 20` on a machine whose highlight was on item 1 moved the
+highlight to item 21. Confirmed by eye.
+
+An earlier attempt at the same test was worthless and is worth recording as a
+method note: it wrote three values in sequence with twelve seconds between
+them while nobody was watching, then asked what the panel showed. The
+observer has to be told *before* the write and asked *after* it, one write at
+a time. A test whose only instrument is a person needs that person's
+attention scheduled, not assumed.
+
+### End to end, and it needed nobody
+
+Two further things rested on assumption: that `word[7]`'s numbering is
+`hd_directory`'s, and that the cursor load types act on where it points. Both
+were settled without the panel, because the machine names what arrives —
+aim the cursor at a directory entry that is **not** resident, load, and see
+whether exactly that name appears:
+
+```
+Cursor Item only    aimed at entry 30    that exact sample arrived
+Cursor Prog+Samps   aimed at entry  2    that exact program arrived
+```
+
+Neither target was entry 0, deliberately: a bug that ignored the cursor
+entirely would land on the first entry and look like a pass.
+
+A name match is not a plausible-looking number. It is the item or it is not.
+
+### What it buys
+
+`select_item()`, and `trigger_load(load_type, item=n)`, which places the
+highlight before firing and refuses `item=` for a type that ignores the
+cursor rather than dropping it silently. Any single program or sample on the
+disc is now loadable by name from a listing, without touching the machine.
+
+---
+
+## §98 — `free P/K/S` is `STAT`'s block count, and keygroups are in it (2026-08-14)
+
+**Status: settled, exact.** Measured 2026-08-14, prompted by mpc2emu.
+
+The LOAD page shows a row reading `free P/K/S: 1004`. Nothing in this project
+had asked what it counted; the number came from Jan reading the machine's own
+screen.
+
+**It is `STAT`'s `free_blocks`, it is one shared pool, and a keygroup costs
+exactly what a program and a sample cost.** The reply that carries it has been
+decoded here since the first session and was never connected to that row.
+
+```
+STAT max_blocks   1006
+STAT free_blocks   884
+used               122
+
+programs   2
+keygroups 58   (GROUPS summed over the resident programs)
+samples   62
+sum      122   exact
+```
+
+Second setting, since one agreement is a coincidence — loading a single
+sample with `Cursor Item only`:
+
+```
+before  free_blocks 884   P=2 K=58 S=62  sum=122
+after   free_blocks 883   P=2 K=58 S=63  sum=123
+```
+
+`free_blocks` moved by one, objects moved by one, `max_blocks` unchanged.
+
+### The distinction that matters
+
+This is a ceiling on **resident objects in RAM**, not a property of a volume.
+The 510-entry directory limit is a disk-format limit and is unrelated. A
+volume can satisfy the directory cap and still be unloadable, and the pool is
+shared across everything resident — so a volume that loads onto an empty
+machine may not load onto one already holding a bank. Same accumulate-across-
+loads semantics as the RAM budget (§73), and the same silent failure.
+
+### Walked one object at a time (2026-08-14)
+
+The first reading was a single simultaneous equation, satisfied by "all three
+cost one" and by other combinations that happen to sum the same way once. So
+it was walked with single-item loads, which the item cursor made possible
+(§97), checking the identity after each:
+
+```
+one SAMPLE alone                        pool -1
+one PROGRAM, 28 keygroups, no new samples   pool -29  = 1 + 28
+identity used == P + K + S     held at 122, 200 and 229
+```
+
+**A keygroup costs what a program and a sample cost, and K is keygroups.**
+
+**A keygroup cannot be loaded by itself**, and this is a property of the disc
+rather than of the load types: directory entries are `0x70` program and
+`0x73` sample, and a keygroup is not a file. It exists only inside a program,
+which is why every row a cursor load can aim at is one or the other.
+
+### A third directory type, unidentified
+
+Scanning several volumes' directories found entries that are neither:
+
+```
+type 0x00, 162 bytes, at most one per volume
+tail bytes 0x1e 0x04, where every program and sample carries 0x1e 0x09
+```
+
+It satisfies both of `hd_directory`'s stop conditions -- blank extension
+field, not a repeat -- so it is a real record and not list junk. Small and
+one-per-volume; the spec's own selector list has slots for cue lists, take
+lists, effects files and drum files, any of which would fit. **Not guessed
+at.** Whether it consumes a P/K/S block when loaded is also untested.
+
+### A method note, since it produced a wrong number for a minute
+
+The script that walked this reported the new program's keygroup count as
+`groups[-1]`, assuming a loaded program lands at the end of `RPLIST`. It does
+not: three programs reading `[28, 28, 30]` became `[28, 28, 28, 30]`, so the
+arrival was **inserted mid-list**. The pool arithmetic was unaffected -- it
+uses the sum -- but the reported per-program figure was another program's.
+
+Worth keeping for the same reason as the rest: an assumption about ordering
+slipped in as an index, where it could not be seen.
+
+### Open
+
+Whether `max_blocks` moves with memory fitted. This machine is a 32 MB
+S3000XL reporting 1006; a smaller one has never been read. Fit against the
+target's own `max_blocks` rather than against 1006.
+
+Also untested, both plausible off-by-ones in the loosening direction: whether
+a program with no keygroups costs 1 or 0, and whether a stereo sample costs
+one object or two.

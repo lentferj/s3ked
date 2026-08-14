@@ -1302,6 +1302,73 @@ class S3kBridge:
     #: :meth:`clear_memory`, which deletes what is resident.
     _MISC_LOAD_TYPE = (6, 7, 8, 9)
 
+    #: Miscellaneous-data banks, by selector byte: the spec lists 1 byte,
+    #: 2 word, 3 dword, 4 smpte, 5 signed smpte, 6 name, 7 16-byte flag (§5).
+    #: Only the byte bank was ever swept until 2026-08-14, which is how the
+    #: volume register stayed lost in plain sight (§96) and how the disk
+    #: cursor stayed unknown until the sweep was widened (§97).
+    _MISC_BANK_BYTE = 1
+    _MISC_BANK_WORD = 2
+
+    def _misc_word(self, index: int, value: Optional[int] = None, *,
+                   timeout: Optional[float] = None) -> int:
+        """Read or write one entry of the miscellaneous WORD bank."""
+        if value is None:
+            frame = m.HeaderRequest(
+                command=m.Command.RMISCDATA, index=index,
+                selector=self._MISC_BANK_WORD, offset=0, count=2,
+                exclusive_channel=self.exclusive_channel,
+            ).encode()
+            reply = self.send_and_receive(frame, timeout=timeout)
+            _c, command, _p = m.parse_frame(reply)
+            if command == m.Command.REPLY:
+                self._raise_for_reply(reply, f"reading misc word {index}")
+            return int.from_bytes(bytes(m.HeaderData.decode(reply).data)[:2],
+                                  "little")
+        frame = m.HeaderData(
+            command=m.Command.MISCDATA, index=index,
+            selector=self._MISC_BANK_WORD, offset=0,
+            data=int(value).to_bytes(2, "little"),
+            exclusive_channel=self.exclusive_channel,
+        ).encode()
+        self._drain()
+        self._send(frame, write=True)
+        self._raise_for_reply(
+            self._receive(timeout, accept=_ONLY_REPLY),
+            f"writing misc word {index}")
+        return self._misc_word(index, timeout=timeout)
+
+    #: Which entry of the loaded volume's directory the panel is highlighting,
+    #: 0-based, matching :meth:`hd_directory`'s ``index``. Found by watching
+    #: the word bank while a person stepped the panel's cursor down an item
+    #: list -- it read 2, 3, 4, 5 for the 3rd item onwards -- and **writing it
+    #: moves the highlight on the LCD**, confirmed by eye (§97).
+    #:
+    #: That is what makes `Cursor Prog+Samps` and `Cursor Item only` usable
+    #: remotely. Read-only they would be useless to an editor, which can name
+    #: the item it wants and could not select it.
+    _MISC_ITEM_CURSOR = 7
+
+    def item_cursor(self, *, timeout: Optional[float] = None) -> int:
+        """Which directory entry the panel is highlighting, 0-based."""
+        return self._misc_word(self._MISC_ITEM_CURSOR, timeout=timeout)
+
+    def select_item(self, index: int, *,
+                    timeout: Optional[float] = None) -> int:
+        """Move the panel's highlight to a directory entry. **This writes.**
+
+        Nothing is loaded by this. It is the selection the two cursor load
+        types act on -- see :meth:`trigger_load`, which sets it for you.
+
+        Unlike ``byte[49]``, which the panel writes and the machine ignores
+        (§70), this one really moves the machine: the LCD's highlight follows
+        it. Verified by eye rather than by read-back, because a register that
+        reads back what was written proves only that something stored it.
+        """
+        if index < 0:
+            raise ValueError(f"item index {index} is negative")
+        return self._misc_word(self._MISC_ITEM_CURSOR, index, timeout=timeout)
+
     def _misc_byte(self, index: int, value: Optional[int] = None, *,
                    timeout: Optional[float] = None) -> int:
         """Read or write one byte of the miscellaneous byte bank."""
@@ -1427,13 +1494,24 @@ class S3kBridge:
     #: and not one to reach by a keypress or a typo.
     _GUARDED_LOAD_TYPES = frozenset({6})
 
-    def trigger_load(self, load_type: int = 1, *, force: bool = False,
+    #: The load types that act on the panel's highlighted directory entry
+    #: rather than on the whole volume (§93). :meth:`trigger_load` will place
+    #: that highlight for you.
+    CURSOR_LOAD_TYPES = frozenset({4, 5})
+
+    def trigger_load(self, load_type: int = 1, *, item: Optional[int] = None,
+                     force: bool = False,
                      timeout: Optional[float] = None) -> None:
         """Load the selected volume. **This writes and it loads.**
 
         ``load_type`` is one of :data:`s3k.messages.LOAD_TYPES`, and the
         machine performs it: 0 `ENTIRE VOLUME`, 1 `ALL PROGS+SAMPLES`,
         2 `programs only`, 3 `all samples`, and so on (§94).
+
+        ``item`` aims the two cursor types at a specific directory entry,
+        0-based, matching :meth:`hd_directory`. It is written to the machine's
+        own highlight first (§97); passing it with a type that ignores the
+        cursor is refused rather than silently dropped.
 
         **The write IS the load.** There is no way to select a type and fire
         it separately -- that is what the panel's `GO` key does and this
@@ -1473,6 +1551,13 @@ class S3kBridge:
                 f"{sorted(m.LOAD_TYPES)}; the register performs what it is "
                 f"given, so an unknown value is an unknown operation (§94)"
             )
+        if item is not None:
+            if load_type not in self.CURSOR_LOAD_TYPES:
+                raise ValueError(
+                    f"load type {load_type} ({m.LOAD_TYPES[load_type]}) does "
+                    f"not act on the cursor, so item={item} would be ignored"
+                )
+            self.select_item(item, timeout=timeout)
         if load_type in self._GUARDED_LOAD_TYPES and not force:
             raise ValueError(
                 f"load type {load_type} ({m.LOAD_TYPES[load_type]}) is "

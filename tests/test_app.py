@@ -866,6 +866,9 @@ async def test_the_confirmation_says_when_a_volume_does_not_fit():
         for _ in range(20):
             await pilot.pause()
         await pilot.press("l")
+        for _ in range(25):
+            await pilot.pause()
+        await pilot.press("l")
         await pilot.pause()
         await pilot.press("enter")
         await pilot.pause()
@@ -875,17 +878,43 @@ async def test_the_confirmation_says_when_a_volume_does_not_fit():
     assert "play silence" in prompt
 
 
-async def test_loading_without_reading_the_disk_first_is_refused():
-    from s3ked.app import S3kedApp
+async def test_l_opens_the_browser_before_it_loads_anything():
+    """Choosing WHAT to load is the first half of loading.
+
+    `l` used to go straight to a confirmation for the whole selected volume,
+    and refused with "press d first" if the disk had not been read. Now the
+    right column is either the parameter table or the disk browser, and `l`
+    from the main view opens the browser -- `l` again, from inside it, is the
+    one that starts a load. Nothing is fired on the way in.
+    """
+    from s3ked.app import LoadOptionsScreen, S3kedApp
     from s3ked.demo import DemoBridge
 
-    app = S3kedApp(DemoBridge(), allow_write=True)
+    fired = []
+
+    class Watch(DemoBridge):
+        def trigger_load(self, load_type=1, *, item=None, force=False, timeout=None):
+            fired.append(load_type)
+
+    app = S3kedApp(Watch(), allow_write=True)
     async with app.run_test(size=(130, 44)) as pilot:
         await pilot.pause()
         await pilot.press("l")
-        await pilot.pause()
-        assert "press d first" in app.last_status
-        assert len(app.screen_stack) == 1
+        for _ in range(30):
+            await pilot.pause()
+
+        assert app._disk_showing, "the first `l` opens the browser"
+        assert not any(isinstance(s, LoadOptionsScreen)
+                       for s in app.screen_stack), "and confirms nothing"
+        assert fired == []
+
+        await pilot.press("l")
+        for _ in range(25):
+            await pilot.pause()
+        opened = isinstance(app.screen_stack[-1], LoadOptionsScreen)
+
+    assert opened, "the second `l` is the one that offers to load"
+    assert fired == [], "and still nothing has been sent"
 
 
 async def test_the_app_does_not_poll_a_loading_machine():
@@ -930,6 +959,9 @@ async def test_free_memory_comes_from_the_machine_not_a_constant():
         for _ in range(20):
             await pilot.pause()
         assert app._words_free == 1024 * 1024
+        await pilot.press("l")
+        for _ in range(25):
+            await pilot.pause()
         await pilot.press("l")
         await pilot.pause()
         await pilot.press("enter")
@@ -1074,7 +1106,7 @@ async def test_plain_load_stays_at_the_appending_value():
     fired = []
 
     class Watch(DemoBridge):
-        def trigger_load(self, load_type=1, *, timeout=None):
+        def trigger_load(self, load_type=1, *, item=None, force=False, timeout=None):
             fired.append(load_type)
 
     app = S3kedApp(Watch(), allow_write=True)
@@ -1082,6 +1114,9 @@ async def test_plain_load_stays_at_the_appending_value():
         await pilot.pause()
         await pilot.press("d")
         for _ in range(20):
+            await pilot.pause()
+        await pilot.press("l")
+        for _ in range(25):
             await pilot.pause()
         await pilot.press("l")
         await pilot.pause()
@@ -1765,7 +1800,7 @@ async def test_a_load_holds_a_dialog_until_the_person_says_it_finished():
     fired = []
 
     class Watch(DemoBridge):
-        def trigger_load(self, load_type=1, *, timeout=None):
+        def trigger_load(self, load_type=1, *, item=None, force=False, timeout=None):
             fired.append(load_type)
 
     app = S3kedApp(Watch(), allow_write=True)
@@ -1775,6 +1810,9 @@ async def test_a_load_holds_a_dialog_until_the_person_says_it_finished():
             await pilot.pause()
         await pilot.press("d")
         for _ in range(40):
+            await pilot.pause()
+        await pilot.press("l")
+        for _ in range(25):
             await pilot.pause()
         await pilot.press("l")
         await pilot.pause()
@@ -1835,6 +1873,9 @@ async def test_the_load_screen_cycles_the_type_but_never_offers_the_OS():
         for _ in range(20):
             await pilot.pause()
         await pilot.press("l")
+        for _ in range(25):
+            await pilot.pause()
+        await pilot.press("l")
         for _ in range(20):
             await pilot.pause()
         screen = app.screen_stack[-1]
@@ -1867,7 +1908,7 @@ async def test_clearing_first_deletes_then_loads_and_says_so():
             order.append("clear")
             return super().clear_memory(timeout=timeout)
 
-        def trigger_load(self, load_type=1, *, timeout=None):
+        def trigger_load(self, load_type=1, *, item=None, force=False, timeout=None):
             order.append("load")
 
     app = S3kedApp(Watch(), allow_write=True)
@@ -1920,7 +1961,12 @@ async def test_clearing_first_is_measured_against_the_whole_machine():
             await pilot.pause()
         for keys in (("enter",), ("c", "enter")):
             await pilot.press("l")
-            await pilot.pause()
+            for _ in range(25):
+                await pilot.pause()
+            if not any(type(s).__name__ == "LoadOptionsScreen"
+                       for s in app.screen_stack):
+                await pilot.press("l")
+                await pilot.pause()
             for key in keys:
                 await pilot.press(key)
             await pilot.pause()
@@ -1944,7 +1990,7 @@ async def test_renumbering_runs_after_the_load_not_before():
     order = []
 
     class Watch(DemoBridge):
-        def trigger_load(self, load_type=1, *, timeout=None):
+        def trigger_load(self, load_type=1, *, item=None, force=False, timeout=None):
             order.append("load")
 
         def renumber_programs(self, *, timeout=None):
@@ -1989,7 +2035,7 @@ async def test_renumbering_is_off_unless_asked_for():
     called = []
 
     class Watch(DemoBridge):
-        def trigger_load(self, load_type=1, *, timeout=None):
+        def trigger_load(self, load_type=1, *, item=None, force=False, timeout=None):
             pass
 
         def renumber_programs(self, *, timeout=None):
@@ -2001,6 +2047,9 @@ async def test_renumbering_is_off_unless_asked_for():
         await pilot.pause()
         await pilot.press("d")
         for _ in range(20):
+            await pilot.pause()
+        await pilot.press("l")
+        for _ in range(25):
             await pilot.pause()
         await pilot.press("l")
         await pilot.pause()
@@ -2039,7 +2088,7 @@ async def test_renumber_is_meaningless_when_memory_is_cleared_first():
             await pilot.pause()
 
     assert len(chosen) == 1
-    clear_first, renumber, _load_type = chosen[0]
+    clear_first, renumber = chosen[0][0], chosen[0][1]
     assert clear_first is True
     assert renumber is False, "clear wins; the renumber is dropped"
 
@@ -2143,6 +2192,9 @@ async def test_an_unreadable_load_type_does_not_block_the_load():
         for _ in range(20):
             await pilot.pause()
         await pilot.press("l")
+        for _ in range(25):
+            await pilot.pause()
+        await pilot.press("l")
         for _ in range(20):
             await pilot.pause()
         screen = app.screen_stack[-1]
@@ -2167,7 +2219,7 @@ async def test_the_chosen_load_type_reaches_the_bridge():
     class Watch(DemoBridge):
         _load_type = 0                      # panel sits on ENTIRE VOLUME
 
-        def trigger_load(self, load_type=1, *, force=False, timeout=None):
+        def trigger_load(self, load_type=1, *, item=None, force=False, timeout=None):
             fired.append(load_type)
 
     app = S3kedApp(Watch(), allow_write=True)

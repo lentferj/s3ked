@@ -273,8 +273,28 @@ class DemoBridge:
         names += [f"WORK VOL{i:02d}" for i in range(3, 34)]
         return [_Volume(index=i, name=n, kind=3) for i, n in enumerate(names)]
 
-    def trigger_load(self, load_type: int = 1, *, timeout: Optional[float] = None):
+    #: Same surface as the real bridge (§97).
+    CURSOR_LOAD_TYPES = frozenset({4, 5})
+    _MISC_ITEM_CURSOR = 7
+
+    def item_cursor(self, *, timeout: Optional[float] = None) -> int:
+        return getattr(self, "_item_cursor", 0)
+
+    def select_item(self, index: int, *, timeout: Optional[float] = None) -> int:
+        if index < 0:
+            raise ValueError(f"item index {index} is negative")
+        self._item_cursor = index
+        return index
+
+    def trigger_load(self, load_type: int = 1, *, item=None,
+                     force: bool = False, timeout: Optional[float] = None):
         """The demo loads instantly and adds, as the machine does."""
+        if item is not None:
+            if load_type not in self.CURSOR_LOAD_TYPES:
+                raise ValueError(
+                    f"load type {load_type} does not act on the cursor, so "
+                    f"item={item} would be ignored")
+            self.select_item(item)
         self._loaded = True
 
     #: Mirrors of the real bridge's tables. The app reads these off whichever
