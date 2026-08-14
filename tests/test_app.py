@@ -2666,3 +2666,61 @@ def test_renumbering_writes_high_to_low_so_the_panel_lands_on_program_one():
     assert order[-1] == 0, "the LAST write must be program 0"
     assert bridge.program_numbers() == list(range(len(order))), (
         "the assignment is unchanged; only the order of writing differs")
+
+
+async def test_a_toggles_the_samples_pane_between_program_and_everything():
+    """The program-centric redesign dropped the only view of what the machine
+    actually holds. `u` and the audit still read the full list; nothing showed
+    it. Reported in live use as "where has the all-samples window gone".
+    """
+    from textual.widgets import DataTable, Static
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge())
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        table = app.query_one("#samples", DataTable)
+        title = lambda: str(app.query_one("#progsamples-title", Static).render())
+
+        program_rows = table.row_count
+        assert "Samples used" in title()
+        assert program_rows < len(app._samples), (
+            "the demo's first program uses fewer than all nine samples")
+
+        await pilot.press("a")
+        for _ in range(20):
+            await pilot.pause()
+        assert table.row_count == len(app._samples), (
+            "every resident sample, not just this program's")
+        assert "All samples" in title()
+
+        await pilot.press("a")
+        for _ in range(20):
+            await pilot.pause()
+        assert table.row_count == program_rows, "and back again"
+        assert "Samples used" in title()
+
+
+async def test_the_all_samples_view_marks_what_this_program_uses():
+    """Cheap overlay from data already in hand -- NOT a full cross-reference,
+    which is what `i` is for and what takes seconds."""
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge())
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        await pilot.press("a")
+        for _ in range(20):
+            await pilot.pause()
+        table = app.query_one("#samples", DataTable)
+        marked = [
+            str(table.get_row_at(r)[0])
+            for r in range(table.row_count)
+            if str(table.get_row_at(r)[1]) == "used"
+        ]
+
+    assert marked, "the first demo program references something"
+    assert len(marked) < len(app._samples), "and not everything"

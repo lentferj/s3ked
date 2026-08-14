@@ -811,6 +811,7 @@ class S3kedApp(App):
         Binding("g", "menu", "Main menu"),
         Binding("B", "boards", "Boards fitted"),
         Binding("i", "integrity", "Integrity"),
+        Binding("a", "all_samples", "All samples"),
         Binding("u", "usage", "Who uses"),
         Binding("tab", "focus_next", "Next pane", show=False),
     ]
@@ -835,6 +836,11 @@ class S3kedApp(App):
         self._disk_read = False
         #: Which of the two things the right column is showing.
         self._disk_showing = False
+        #: Whether the samples pane lists everything resident or only what
+        #: the selected program references. The program-centric redesign
+        #: dropped the global list entirely, which lost the view the audit
+        #: work is done from.
+        self._samples_show_all = False
         self._words_free: Optional[int] = None
         self._total_words: Optional[int] = None
         self._param_values: Dict[str, object] = {}
@@ -1056,6 +1062,42 @@ class S3kedApp(App):
         )
         self._show_params("program", header, index)
 
+    def action_all_samples(self) -> None:
+        """Swap the samples pane between this program's and every resident one.
+
+        The redesign made that pane program-centric and quietly removed the
+        only view of what the machine actually holds. `u` and the audit both
+        still read the full list; nothing showed it.
+        """
+        self._samples_show_all = not self._samples_show_all
+        self._fill_program_samples()
+        self.notify_status(
+            "samples: everything resident" if self._samples_show_all
+            else "samples: what this program uses")
+
+    def _fill_all_samples(self) -> None:
+        """Every resident sample, marking the ones this program references.
+
+        Deliberately NOT a full cross-reference: knowing which samples no
+        program anywhere uses means walking every keygroup of every program,
+        which is what `i` does and what it takes seconds to do. This is the
+        cheap view -- the machine's own sample list, with the current
+        program's usage overlaid from data already in hand.
+        """
+        table = self.query_one("#samples", DataTable)
+        table.clear()
+        used = {
+            name
+            for row in self._program_keygroups
+            for name in row.get("samples", ())
+        }
+        for name in self._samples:
+            table.add_row(name, "used" if name.strip() in
+                          {u.strip() for u in used} else "")
+        self.query_one("#progsamples-title", Static).update(
+            f"All samples  [dim]({len(self._samples)} resident — "
+            f"[b]a[/b] for this program)[/dim]")
+
     def _fill_program_samples(self) -> None:
         """What this program references, and which of it the machine lacks.
 
@@ -1070,6 +1112,9 @@ class S3kedApp(App):
         and reporting that as a fault is a problem the user cannot act on and
         did not cause.
         """
+        if self._samples_show_all:
+            self._fill_all_samples()
+            return
         table = self.query_one("#samples", DataTable)
         table.clear()
         resident = {s.strip() for s in self._samples}
@@ -1088,10 +1133,12 @@ class S3kedApp(App):
             table.add_row(name, "ok")
 
         title = self.query_one("#progsamples-title", Static)
+        hint = "  [dim]([b]a[/b] for all resident)[/dim]"
         if missing:
-            title.update(f"Samples used — {len(missing)} MISSING of {len(used)}")
+            title.update(
+                f"Samples used — {len(missing)} MISSING of {len(used)}{hint}")
         else:
-            title.update(f"Samples used — {len(used)}")
+            title.update(f"Samples used — {len(used)}{hint}")
 
     def _show_params(self, region: str, values: Dict[str, object],
                      index: int = 0, keygroup: int = 0) -> None:
