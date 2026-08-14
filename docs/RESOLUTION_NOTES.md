@@ -7310,6 +7310,26 @@ The five-rows-from-the-cursor trap appeared again in the same screenshot: one
 visible row and four blank lines, with the cursor on the last of six
 programs. It reads as an emptied list and is nothing of the kind.
 
+### So the renumber writes HIGH TO LOW
+
+The panel was parked on program 6 because that was the **last header
+written** — writing a program header moves the panel's list cursor to that
+program. Combined with the list drawing five rows *downwards* from the
+cursor, a low-to-high renumber always finishes by showing the operator one
+row and four blanks.
+
+Reversing the write order costs nothing and leaves the cursor on program 1
+with a full screen. The assignment is identical either way; only where the
+operator is left standing differs.
+
+Jan's suggestion, from watching the result rather than from the code — the
+sort of thing no test would have produced, because every synthetic run of
+this had passed for months.
+
+The mechanism (a header write moving the panel cursor) rests on **one**
+observation and is not independently confirmed. Nothing depends on it: if it
+is wrong, the write order is merely arbitrary rather than helpful.
+
 ### A panel-reading trap, recorded because it cost a minute
 
 The `SLCT` list draws five rows **from the cursor downwards**. With the cursor

@@ -2454,7 +2454,14 @@ class S3kBridge:
         """
         names = self.program_list(timeout=timeout)
         result = {"renumbered": 0, "beyond_range": 0, "programs": len(names)}
-        for index in range(len(names)):
+        # HIGH TO LOW, deliberately. Writing a program header moves the
+        # panel's list cursor to that program, and the SLCT list draws five
+        # rows from the cursor DOWNWARDS -- so finishing on the last program
+        # leaves the machine showing one row and four blank lines, which
+        # reads as an emptied list (§92). Finishing on the first leaves a
+        # full screen. The assignment is identical either way; only where the
+        # operator is left standing differs.
+        for index in reversed(range(len(names))):
             if index > self._PRGNUM_MAX:
                 result["beyond_range"] += 1
                 continue

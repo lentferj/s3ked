@@ -374,7 +374,8 @@ class DemoBridge:
         """The panel's RNUM -> SEQU, in list order. See S3kBridge."""
         result = {"renumbered": 0, "beyond_range": 0,
                   "programs": len(self._programs)}
-        for index in range(len(self._programs)):
+        # high to low, like the real one -- see S3kBridge.renumber_programs
+        for index in reversed(range(len(self._programs))):
             if index > self._PRGNUM_MAX:
                 result["beyond_range"] += 1
                 continue

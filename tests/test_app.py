@@ -2133,7 +2133,11 @@ def test_renumbering_stops_at_program_128():
 
     assert result["renumbered"] == 128
     assert result["beyond_range"] == 12
-    assert calls == list(range(128)), "the first 128, and no write past them"
+    # high to low: writing a header moves the panel's cursor to it, and
+    # finishing on the FIRST program leaves a full screen rather than one row
+    # and four blanks (§92).
+    assert calls == list(reversed(range(128))), (
+        "the first 128, written high to low, and none past them")
 
 
 async def test_the_load_screen_shows_the_panels_load_type():
@@ -2634,3 +2638,31 @@ async def test_activating_a_program_needs_the_write_gate():
 
     assert app.bridge.program_number() == 0
     assert "write gate is locked" in app.last_status
+
+
+def test_renumbering_writes_high_to_low_so_the_panel_lands_on_program_one():
+    """Writing a program header moves the panel's list cursor to it, and the
+    SLCT list draws five rows from the cursor DOWNWARDS. Finishing on the last
+    program shows one row and four blanks, which reads as an emptied list
+    (§92); finishing on the first shows a full screen.
+
+    Observed on hardware: after a low-to-high renumber the panel was parked on
+    program 6 of 6 with a single visible row.
+    """
+    from s3ked.demo import DemoBridge
+
+    bridge = DemoBridge()
+    order = []
+    original = bridge.set_header_bytes
+
+    def spy(region, index, offset, data, **kwargs):
+        order.append(index)
+        return original(region, index, offset, data, **kwargs)
+
+    bridge.set_header_bytes = spy
+    bridge.renumber_programs()
+
+    assert order == sorted(order, reverse=True), order
+    assert order[-1] == 0, "the LAST write must be program 0"
+    assert bridge.program_numbers() == list(range(len(order))), (
+        "the assignment is unchanged; only the order of writing differs")
