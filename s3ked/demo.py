@@ -306,6 +306,56 @@ class DemoBridge:
         return {"samples": samples, "programs": max(0, programs - 1),
                 "samples_left": 0, "programs_left": len(self._programs)}
 
+    def arrive(self, *names: str, program_number: int = 1) -> None:
+        """Add programs as a load would, headers and all.
+
+        Tests that exercise the load path need programs to appear while a
+        dialog is up. Appending to ``_programs`` alone is not enough -- the
+        header behind the name is what a renumber writes to -- and a test
+        that fakes only the list passes while the real path would raise.
+
+        ``program_number`` defaults to 1 because that is the interesting
+        case: volumes authored independently all start at 1, so loading
+        several without clearing makes programs collide and stack (§91).
+        """
+        for name in names:
+            header = _blank_header("program")
+            self._write_named(header, "program", "PRNAME", name)
+            self._write_named(header, "program", "PRGNUM", program_number)
+            self._write_named(header, "program", "GROUPS", 1)
+            index = len(self._program_headers)
+            self._program_headers.append(header)
+            self._programs.append(name)
+            self._keygroup_counts.append(1)
+            kheader = _blank_header("keygroup")
+            self._write_named(kheader, "keygroup", "LONOTE", 21)
+            self._write_named(kheader, "keygroup", "HINOTE", 127)
+            self._keygroup_headers[index] = [kheader]
+
+    #: Program header offset of PRGNUM, mirroring S3kBridge. 0-based; the
+    #: panel shows it 1-based, measured 2026-08-14 (§91).
+    _PRGNUM_OFFSET = 15
+    _PRGNUM_MAX = 127
+
+    def renumber_programs(self, *, timeout: Optional[float] = None):
+        """The panel's RNUM -> SEQU, in list order. See S3kBridge."""
+        result = {"renumbered": 0, "beyond_range": 0,
+                  "programs": len(self._programs)}
+        for index in range(len(self._programs)):
+            if index > self._PRGNUM_MAX:
+                result["beyond_range"] += 1
+                continue
+            self.set_header_bytes(
+                "program", index, self._PRGNUM_OFFSET, bytes([index]))
+            result["renumbered"] += 1
+        return result
+
+    def program_numbers(self, *, timeout: Optional[float] = None):
+        return [
+            self.get_header_bytes("program", index, self._PRGNUM_OFFSET, 1)[0]
+            for index in range(len(self._programs))
+        ]
+
     def mode(self, *, timeout: Optional[float] = None) -> int:
         return self._mode
 

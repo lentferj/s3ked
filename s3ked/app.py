@@ -109,6 +109,103 @@ class ConfirmScreen(ModalScreen[bool]):
         self.dismiss(False)
 
 
+class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
+    """How to load: onto what is resident, or onto an emptied machine.
+
+    Three things could be asked here and only two can be answered.
+
+    **What to load is not one of them.** ENTIRE VOLUME, ALL PROGS + SAMPLES,
+    a single program — that is a setting on the panel's LOAD page, and this
+    protocol does not reach it. The trigger register acts on the value 1 and
+    stores 0 and 2–7 without doing anything at all (§74), so the load does
+    whatever the panel is showing. Offering a menu of load types here would
+    be a control that silently always does the same thing, so the screen says
+    where the setting lives instead.
+
+    The other two are real:
+
+    - **Clearing first** is not the panel's CLR, which is a panel chain with
+      its own on-screen prompt and no remote equivalent (§75). It is deleting
+      every resident sample and program, and the last program cannot be
+      deleted, so one always survives (`clear_memory`).
+    - **Renumbering** is the panel's `RNUM` → `SEQU`, and it matters because
+      the load appends and `PRGNUM` is reloaded verbatim: load four volumes
+      and four programs claim number 1, stacking on one program change (§91).
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+        Binding("enter", "go", "Continue"),
+        Binding("a", "add", "Add to memory"),
+        Binding("c", "clear", "Clear first"),
+        Binding("n", "toggle_renumber", "Renumber"),
+    ]
+
+    def __init__(self, *, resident_programs: int = 0) -> None:
+        super().__init__()
+        self.clear_first = False
+        self.renumber = False
+        self.resident_programs = resident_programs
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="loadopts-box"):
+            yield Label("[b]Load[/b]")
+            yield Label("")
+            yield Label("", id="loadopts-what")
+            yield Label("", id="loadopts-where")
+            yield Label("", id="loadopts-renumber")
+            yield Label("")
+            yield Label("[b]a[/b] add   [b]c[/b] clear first   "
+                        "[b]n[/b] renumber   [b]enter[/b] go   [b]esc[/b] cancel")
+
+    def on_mount(self) -> None:
+        self._redraw()
+
+    def _redraw(self) -> None:
+        # Not a choice, and saying so beats a menu that does nothing.
+        self.query_one("#loadopts-what", Label).update(
+            "  [dim]what:[/dim] whatever the sampler's LOAD page is set to "
+            "[dim]— not settable over MIDI[/dim]")
+
+        mark = lambda on: "[b]>[/b]" if on else " "
+        self.query_one("#loadopts-where", Label).update(
+            f"  [dim]where:[/dim]  {mark(not self.clear_first)} [b]a[/b]dd to "
+            f"what is resident    {mark(self.clear_first)} [b]c[/b]lear first")
+
+        if self.clear_first:
+            note = ("  [dim]clear deletes every resident sample and program; "
+                    "one program always survives[/dim]")
+        elif self.renumber:
+            note = ("  [dim]renumber:[/dim] [b]on[/b] — every program gets a "
+                    "distinct number, in list order")
+        else:
+            note = ("  [dim]renumber:[/dim] off — loaded programs keep their "
+                    "own numbers and may collide")
+        self.query_one("#loadopts-renumber", Label).update(note)
+
+    def action_add(self) -> None:
+        self.clear_first = False
+        self._redraw()
+
+    def action_clear(self) -> None:
+        self.clear_first = True
+        self._redraw()
+
+    def action_toggle_renumber(self) -> None:
+        # Meaningless when memory is emptied first: nothing is there to
+        # collide with, and the volume's own numbering arrives intact.
+        if self.clear_first:
+            return
+        self.renumber = not self.renumber
+        self._redraw()
+
+    def action_go(self) -> None:
+        self.dismiss((self.clear_first, self.renumber and not self.clear_first))
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
 class MasterScreen(ModalScreen[Optional[str]]):
     """Arm-then-fire menu for the destructive operations.
 
@@ -582,7 +679,7 @@ class S3kedApp(App):
        emphasis elsewhere -- a warning that looks like decoration is not a
        warning. $error is the theme's red and stays red across themes. */
     Header.-write-armed { background: $error; color: $text; text-style: bold; }
-    #confirm-box, #master-box, #edit-box {
+    #confirm-box, #master-box, #edit-box, #loadopts-box {
         width: 70; padding: 1 2; border: thick $panel; background: $surface;
     }
     #edit-desc, #edit-note { color: $text-muted; }
@@ -1256,12 +1353,12 @@ class S3kedApp(App):
     def action_load_volume(self) -> None:
         """Load the selected volume into the machine. **This writes.**
 
-        This is the panel's LOAD softkey and only that one. It APPENDS to
-        what is already resident; the panel's other softkey, CLR, erases
-        memory first and **has no remote equivalent** -- the trigger register
-        acts on the value 1 and stores every other value without doing
-        anything (§74). To start from empty, clear at the panel or delete
-        what is resident.
+        The trigger is the panel's LOAD softkey and only that one, and it
+        APPENDS. The panel's other softkey, CLR, has no remote equivalent --
+        the trigger register acts on the value 1 and stores every other value
+        without doing anything (§74) -- so "clear first" here is not CLR; it
+        is deleting what is resident and then loading, which is why it goes
+        through the same arm-then-fire confirmation the Master screen uses.
 
         Not the Master screen's arm-then-fire: it adds, and what it adds can
         be deleted again. But it moves megabytes, takes seconds to minutes,
@@ -1277,17 +1374,45 @@ class S3kedApp(App):
             self.notify_status("no volume read yet — press d first")
             return
 
+        def chosen(options) -> None:
+            if options is None:
+                return
+            self._confirm_load(*options)
+
+        self.push_screen(
+            LoadOptionsScreen(resident_programs=len(self._programs)), chosen)
+
+    def _confirm_load(self, clear_first: bool, renumber: bool) -> None:
+        """Show what the load costs, then fire it.
+
+        The budget depends on the answer to the first question. Adding is
+        measured against what is free right now, because the load appends
+        (§73). Clearing first frees everything held, so the budget is the
+        machine's whole memory -- measuring a clear-then-load against current
+        free would refuse loads that would comfortably fit.
+        """
         needed = sum(getattr(e, "audio_words", 0) for e in self._disk_entries)
-        free = self._words_free
         mb = lambda w: f"{w * 2 / 1024 / 1024:.2f} MB"
-        # the load appends, so the budget is what is free right now and not
-        # the size of the machine
-        fits = free is None or needed <= free
+        budget = self._total_words if clear_first else self._words_free
+        fits = budget is None or needed <= budget
+
         headline = (f"Load {len(self._disk_entries)} item(s), {mb(needed)}?"
                     if fits else
                     f"Load {len(self._disk_entries)} item(s), {mb(needed)} — "
                     f"THIS DOES NOT FIT")
-        detail = (f"\n\nfree memory: {mb(free)}" if free is not None else "")
+        detail = ""
+        if clear_first:
+            detail += (
+                "\n\nEVERY resident program and sample is deleted first. "
+                "There is no undo, and this is not the panel's CLR — it is "
+                "a delete, so one program will survive it.")
+            if budget is not None:
+                detail += f"\n\ntotal memory: {mb(budget)}"
+        elif budget is not None:
+            detail += f"\n\nfree memory: {mb(budget)}"
+        if renumber:
+            detail += ("\n\nAfterwards every program is renumbered in list "
+                       "order, so nothing shares a MIDI program number.")
         if not fits:
             detail += ("\n\nThe machine will load what it can and stop with "
                        "'insufficient waveform memory'. Programs whose samples "
@@ -1295,33 +1420,61 @@ class S3kedApp(App):
 
         def go(confirmed) -> None:
             if confirmed:
-                self._load_worker()
+                self._load_worker(clear_first=clear_first, renumber=renumber)
 
         self.push_screen(ConfirmScreen(headline + detail), go)
 
     @work(thread=True)
-    def _load_worker(self, load_type: int = 1) -> None:
+    def _load_worker(self, *, clear_first: bool = False,
+                     renumber: bool = False, load_type: int = 1) -> None:
         try:
             with self._bridge_lock:
+                if clear_first:
+                    self.call_from_thread(
+                        self.notify_status, "clearing memory…")
+                    self.bridge.clear_memory()
                 self.bridge.trigger_load(load_type)
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"load: {exc}")
             return
-        self.call_from_thread(self._await_load)
+        self.call_from_thread(self._await_load, renumber)
 
-    def _await_load(self) -> None:
+    def _await_load(self, renumber: bool = False) -> None:
         """Wait for the person to say the load finished, then refresh.
 
         The alternative is polling, and a 58.7 MB load probed every eight
         seconds ran in stop-start bursts and ended sitting at BUSY until the
         machine was power cycled (§71). Whether the probing caused that is
         not established -- which is reason enough not to repeat it.
+
+        The renumber has to happen here rather than in the load worker: it
+        reads the program list, and the program list is not final until the
+        load is. This dialog is the only signal that it is.
         """
         def done(_result) -> None:
+            if renumber:
+                self.notify_status("renumbering…")
+                self._renumber_worker()
+                return
             self.notify_status("re-reading after the load…")
             self._load_catalog()
 
         self.push_screen(LoadingScreen(), done)
+
+    @work(thread=True)
+    def _renumber_worker(self) -> None:
+        try:
+            with self._bridge_lock:
+                result = self.bridge.renumber_programs()
+        except Exception as exc:
+            self.call_from_thread(self.notify_status, f"renumber: {exc}")
+            return
+        message = f"renumbered {result['renumbered']} program(s)"
+        if result.get("beyond_range"):
+            message += (f", {result['beyond_range']} past program 128 and "
+                        f"left alone")
+        self.call_from_thread(self.notify_status, message)
+        self._load_catalog(announce=False)
 
     def _show_volumes(self, volumes, entries, source=None,
                       source_error=None) -> None:

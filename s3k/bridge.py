@@ -2026,6 +2026,91 @@ class S3kBridge:
         result["programs_left"] = len(self.program_list(timeout=timeout))
         return result
 
+    #: Program header offset of ``PRGNUM``, the MIDI program-change number.
+    #: Kept here rather than looked up in :mod:`s3k.params` so the renumber
+    #: does not depend on the parameter table being loaded.
+    _PRGNUM_OFFSET = 15
+
+    #: The highest value the field takes. **The byte is 0-based and the panel
+    #: shows it 1-based** -- measured 2026-08-14 by reading all fifteen
+    #: resident programs straight after the panel's SEQU had numbered them
+    #: 1…15 on screen: the bytes read 0…14 (§91). So there are 128 numbers,
+    #: 0-127, and a machine holding more programs than that cannot give them
+    #: all distinct ones.
+    #:
+    #: This was written as `index + 1` first, from the panel photograph alone.
+    #: mpc2emu's S3000 writer had already inferred 0-based from the bytes in
+    #: authored volumes, and the two could not both be right; the read above
+    #: is what settled it, and it settled it against this project.
+    _PRGNUM_MAX = 127
+
+    def renumber_programs(self, *, timeout: Optional[float] = None) -> Dict[str, int]:
+        """Give every resident program a distinct MIDI program number.
+
+        This is the remote equivalent of the panel's `RNUM` → `SEQU`, and it
+        exists because loading several volumes without clearing leaves
+        programs sharing a number. `PRGNUM` is stored *in* the program and
+        reloaded verbatim, so volumes authored independently all start at 1;
+        four programs numbered 1 was observed after four loads. Programs
+        sharing a number **stack** -- one program change fires all of them
+        (§91).
+
+        Numbers are assigned in `RPLIST` order, so programs that were already
+        resident keep the front of the range and newly loaded ones follow.
+        That is deliberately the whole list rather than "the ones that just
+        arrived": it needs no assumption about where a load puts new programs
+        in the list, which is not established.
+
+        The value written is the list position itself, because the field is
+        0-based; the panel adds one for display, so program 0 here is the one
+        its screen calls 1. See :attr:`_PRGNUM_MAX`.
+
+        **This is not destructive** -- `PRGNUM` is one byte and writing it
+        again undoes it -- but it is not cosmetic either. Anything sending
+        program changes at this machine will address different programs
+        afterwards.
+
+        **The list may not settle until the panel is touched.** The
+        specification says BTSORT "should be triggered" after writing
+        `PRGNUM`, to resort the list and reflag the active programs, and the
+        Data Index that invokes BTSORT is missing from the transcription
+        (§5). Whether the machine does it by itself for a write arriving over
+        SysEx has not been tested (§91). So the numbers are right immediately
+        and the ordering and the panel's `*` flags may lag.
+
+        Returns what it did: how many programs were renumbered, and how many
+        were past :attr:`_PRGNUM_MAX` and had to be left alone.
+        """
+        names = self.program_list(timeout=timeout)
+        result = {"renumbered": 0, "beyond_range": 0, "programs": len(names)}
+        for index in range(len(names)):
+            if index > self._PRGNUM_MAX:
+                result["beyond_range"] += 1
+                continue
+            self.set_header_bytes(
+                "program", index, self._PRGNUM_OFFSET, bytes([index]),
+                timeout=timeout,
+            )
+            result["renumbered"] += 1
+        return result
+
+    def program_numbers(self, *, timeout: Optional[float] = None) -> List[int]:
+        """The MIDI program number each resident program carries.
+
+        One read per program, so this is not something to put on a refresh
+        path -- it is for the audit, which is already walking every program.
+        Index in the returned list is the `RPLIST` position, which is what
+        addresses a program; the *value* is the number that plays it, and the
+        two are unrelated (§91).
+        """
+        count = len(self.program_list(timeout=timeout))
+        return [
+            self.get_header_bytes(
+                "program", index, self._PRGNUM_OFFSET, 1, timeout=timeout,
+            )[0]
+            for index in range(count)
+        ]
+
     def _destructive(self, frame: bytes, what: str, confirm: bool) -> None:
         if not confirm:
             self._send(frame, write=True)

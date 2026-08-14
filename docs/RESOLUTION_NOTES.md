@@ -5588,18 +5588,28 @@ The load did not clear memory first. It **added** to what was resident, and
 landed on the sum to within 630 words — 0.008%, which is the programs' own
 storage, since `audio_words` counts sample data only.
 
-So with load type 1 (ALL PROGS + SAMPLES) the machine accumulates across
-loads. This matters more than it sounds: a bank built by loading three
-volumes in succession needs the *sum* to fit, and the third load is the one
-that fails even though each volume fits on its own.
+So with the panel's LOAD page set to ALL PROGS + SAMPLES, the machine
+accumulates across loads. This matters more than it sounds: a bank built by
+loading three volumes in succession needs the *sum* to fit, and the third
+load is the one that fails even though each volume fits on its own.
+
+> **Retracted in part, 2026-08-12 (§74).** This section originally wrote
+> "load type 1" and "load type 2" for the trigger register's values, on the
+> strength of the LOAD page having a type setting on screen. §74 swept the
+> register and found it is a bare trigger — 1 acts, 0 and 2–7 store cleanly
+> and do nothing — so no register value selects ENTIRE VOLUME or anything
+> else. What the load does is whatever the **panel** has selected. The
+> measurement above stands; only the attribution to a register value was
+> wrong, and the sentence that claimed ENTIRE VOLUME "clears first" was never
+> measured at all and is withdrawn.
 
 **The consequence for s3ked's fit check is that it was already correct.** It
 compares the volume against `free_words` read fresh at the time of the check,
-not against total memory, which is exactly the additive semantics. For load
-type 2 (ENTIRE VOLUME) the machine clears first, so checking against current
-free is conservative — it can warn that a volume will not fit when it would.
-Warning about a load that would have worked is the safe direction to be
-wrong, so the check is left as it is.
+not against total memory, which is exactly the additive semantics of the load
+that was measured. Should a panel-selected mode that clears first ever be
+exercised, checking against current free is conservative — it can warn that a
+volume will not fit when it would. Warning about a load that would have
+worked is the safe direction to be wrong, so the check is left as it is.
 
 ### The bug this run found in passing
 
@@ -5624,8 +5634,8 @@ confirmation's figures are the machine's own; the additive arithmetic above;
 that the machine stays responsive and its directory still reads after the
 load settles.
 
-Not verified: load type 2's clearing behaviour, which was not exercised —
-the panel is set to 1 and nobody was at the machine to change it.
+Not verified: any other LOAD-page selection's behaviour, which was not
+exercised — nobody was at the machine to change it.
 
 ## §74 — The load trigger has one value, and CLR is not remote (2026-08-12)
 
@@ -7016,6 +7026,37 @@ number stack; one program change fires all four.
 `PRGNUM` is stored *in* the program and is saved and reloaded verbatim, so
 nothing renumbers on load. Each volume keeps the numbering it was authored
 with, and volumes authored independently all start at 1.
+
+### The field is 0-based; the panel shows it 1-based (measured 2026-08-14)
+
+This mattered enough to check, because s3ked's `renumber_programs()` was
+written to assign 1, 2, 3… from the photograph alone, and mpc2emu's S3000
+writer had independently inferred the byte was **0-based** from the bytes in
+volumes it authored. Both could not be right, and the difference is a whole
+program number: writing 1…N on a 0-based field leaves the machine's first
+number unused and shifts every program up one.
+
+One read settles it. Straight after `SEQU` had numbered fifteen programs
+1…15 on screen, all fifteen were read over SysEx:
+
+```
+  idx  PRGNUM
+    0       0
+    1       1
+    …       …
+   14      14
+```
+
+**The byte is 0-based and the panel adds one for display.** So s3ked was
+wrong and mpc2emu was right; `renumber_programs()` writes the list position
+itself, and `_PRGNUM_MAX` is 127, not 128.
+
+Worth naming the shape of the error, because it is the same shape as §74's:
+a conclusion drawn from a single display reading, where the display is not
+the storage. The panel is a rendering of the byte and renders it differently;
+reading the byte is what decides. mpc2emu had the better evidence — bytes
+from authored files — and recorded it as an inference rather than a
+measurement, which is what made the conflict visible instead of silent.
 
 ### The `*` is BTSORT's flag, observed
 

@@ -818,7 +818,15 @@ async def test_loading_a_volume_is_gated_and_confirmed():
         app.allow_write = True
         await pilot.press("l")
         await pilot.pause()
-        assert len(app.screen_stack) == 2, "armed, so it must confirm"
+        assert len(app.screen_stack) == 2, "armed, so it must ask how to load"
+        from s3ked.app import LoadOptionsScreen
+        assert isinstance(app.screen_stack[-1], LoadOptionsScreen)
+
+        # the defaults are add-to-memory and no renumber, so Enter is the
+        # shortest path to the load that `l` did before this screen existed
+        await pilot.press("enter")
+        await pilot.pause()
+        assert len(app.screen_stack) == 2, "and then it must confirm"
 
         prompt = str(app.screen_stack[-1].query_one("#confirm-prompt", Static).render())
         assert "MB" in prompt and "free memory" in prompt
@@ -849,6 +857,8 @@ async def test_the_confirmation_says_when_a_volume_does_not_fit():
         for _ in range(20):
             await pilot.pause()
         await pilot.press("l")
+        await pilot.pause()
+        await pilot.press("enter")
         await pilot.pause()
         prompt = str(app.screen_stack[-1].query_one("#confirm-prompt", Static).render())
 
@@ -912,6 +922,8 @@ async def test_free_memory_comes_from_the_machine_not_a_constant():
             await pilot.pause()
         assert app._words_free == 1024 * 1024
         await pilot.press("l")
+        await pilot.pause()
+        await pilot.press("enter")
         await pilot.pause()
         prompt = str(app.screen_stack[-1].query_one("#confirm-prompt", Static).render())
 
@@ -1063,6 +1075,8 @@ async def test_plain_load_stays_at_the_appending_value():
         for _ in range(20):
             await pilot.pause()
         await pilot.press("l")
+        await pilot.pause()
+        await pilot.press("enter")
         await pilot.pause()
         await pilot.press("y")
         for _ in range(20):
@@ -1755,6 +1769,8 @@ async def test_a_load_holds_a_dialog_until_the_person_says_it_finished():
             await pilot.pause()
         await pilot.press("l")
         await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
         await pilot.press("y")
         for _ in range(40):
             await pilot.pause()
@@ -1785,3 +1801,264 @@ async def test_the_loading_dialog_sends_nothing_while_it_waits():
 
     waiter = inspect.getsource(S3kedApp._await_load)
     assert "self.bridge" not in waiter, "the waiter must not talk to the device"
+
+
+# --- how to load: the two questions that have answers -----------------------
+
+
+async def test_the_load_screen_does_not_offer_a_load_type():
+    """What to load is a panel setting, and no menu here can change it.
+
+    The trigger register acts on the value 1 and stores 0 and 2-7 without
+    doing anything (§74), so ENTIRE VOLUME / ALL PROGS + SAMPLES is not
+    reachable. A dropdown offering the choice would silently do one thing
+    whatever was picked, so the screen says where the setting lives instead.
+    """
+    from textual.widgets import Label
+    from s3ked.app import LoadOptionsScreen, S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("d")
+        for _ in range(20):
+            await pilot.pause()
+        await pilot.press("l")
+        await pilot.pause()
+        screen = app.screen_stack[-1]
+        assert isinstance(screen, LoadOptionsScreen)
+        what = str(screen.query_one("#loadopts-what", Label).render())
+
+    assert "LOAD page" in what
+    assert "not settable over MIDI" in what
+
+
+async def test_clearing_first_deletes_then_loads_and_says_so():
+    """Clear is not the panel's CLR -- it is the deletes it is made of."""
+    from textual.widgets import Static
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    order = []
+
+    class Watch(DemoBridge):
+        def clear_memory(self, *, timeout=None):
+            order.append("clear")
+            return super().clear_memory(timeout=timeout)
+
+        def trigger_load(self, load_type=1, *, timeout=None):
+            order.append("load")
+
+    app = S3kedApp(Watch(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("d")
+        for _ in range(20):
+            await pilot.pause()
+        await pilot.press("l")
+        await pilot.pause()
+        await pilot.press("c")          # clear first
+        await pilot.press("enter")
+        await pilot.pause()
+        prompt = str(
+            app.screen_stack[-1].query_one("#confirm-prompt", Static).render())
+        await pilot.press("y")
+        for _ in range(30):
+            await pilot.pause()
+
+    assert "EVERY resident program and sample is deleted" in prompt
+    assert "not the panel's CLR" in prompt
+    assert "one program will survive" in prompt
+    assert order == ["clear", "load"], "the clear must precede the load"
+
+
+async def test_clearing_first_is_measured_against_the_whole_machine():
+    """Adding is budgeted against free memory; clearing frees it all.
+
+    Measuring a clear-then-load against current free would refuse loads that
+    fit comfortably, which is the wrong direction to be wrong for an option
+    whose whole point is making room.
+    """
+    from textual.widgets import Static
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    class Full(DemoBridge):
+        def status(self, *, timeout=None):
+            s = super().status(timeout=timeout)
+            s.max_words = 8 * 1024 * 1024      # 16 MB machine
+            s.free_words = 1024                # almost nothing free
+            return s
+
+    prompts = []
+    app = S3kedApp(Full(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("d")
+        for _ in range(20):
+            await pilot.pause()
+        for keys in (("enter",), ("c", "enter")):
+            await pilot.press("l")
+            await pilot.pause()
+            for key in keys:
+                await pilot.press(key)
+            await pilot.pause()
+            prompts.append(str(app.screen_stack[-1]
+                               .query_one("#confirm-prompt", Static).render()))
+            await pilot.press("n")
+            await pilot.pause()
+
+    adding, clearing = prompts
+    assert "DOES NOT FIT" in adding, "1024 words free cannot take the volume"
+    assert "DOES NOT FIT" not in clearing, "16 MB can"
+
+
+async def test_renumbering_runs_after_the_load_not_before():
+    """The program list is not final until the load is, and the dialog is
+    the only signal that it is. Renumbering before then numbers the old bank.
+    """
+    from s3ked.app import LoadingScreen, S3kedApp
+    from s3ked.demo import DemoBridge
+
+    order = []
+
+    class Watch(DemoBridge):
+        def trigger_load(self, load_type=1, *, timeout=None):
+            order.append("load")
+
+        def renumber_programs(self, *, timeout=None):
+            order.append(f"renumber:{len(self._programs)}")
+            return super().renumber_programs(timeout=timeout)
+
+    app = S3kedApp(Watch(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("d")
+        for _ in range(20):
+            await pilot.pause()
+        await pilot.press("l")
+        await pilot.pause()
+        await pilot.press("n")          # renumber on
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.press("y")
+        for _ in range(30):
+            await pilot.pause()
+
+        assert order == ["load"], "nothing may be renumbered while it loads"
+        assert isinstance(app.screen_stack[-1], LoadingScreen)
+
+        # programs arrive while the dialog is up, as they would during a
+        # load -- carrying number 1, which is what makes them collide
+        app.bridge.arrive("ARRIVED", program_number=1)
+        await pilot.press("escape")
+        for _ in range(40):
+            await pilot.pause()
+
+    assert order == ["load", "renumber:6"], (
+        "the renumber must see the programs the load brought in")
+    # 0-based: the panel calls these 1..6, the byte holds 0..5 (§91)
+    assert app.bridge.program_numbers() == [0, 1, 2, 3, 4, 5]
+
+
+async def test_renumbering_is_off_unless_asked_for():
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    called = []
+
+    class Watch(DemoBridge):
+        def trigger_load(self, load_type=1, *, timeout=None):
+            pass
+
+        def renumber_programs(self, *, timeout=None):
+            called.append(True)
+            return super().renumber_programs(timeout=timeout)
+
+    app = S3kedApp(Watch(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("d")
+        for _ in range(20):
+            await pilot.pause()
+        await pilot.press("l")
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.press("y")
+        for _ in range(20):
+            await pilot.pause()
+        await pilot.press("escape")
+        for _ in range(30):
+            await pilot.pause()
+
+    assert called == [], "renumber is opt-in"
+
+
+async def test_renumber_is_meaningless_when_memory_is_cleared_first():
+    """Nothing survives to collide with, so picking clear drops the option.
+
+    Driven through the screen rather than its attributes, because the thing
+    under test is what the keys do: n then c must not smuggle a renumber
+    through on the strength of having been pressed first.
+    """
+    from s3ked.app import LoadOptionsScreen, S3kedApp
+    from s3ked.demo import DemoBridge
+
+    chosen = []
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        app.push_screen(LoadOptionsScreen(), chosen.append)
+        await pilot.pause()
+        await pilot.press("n")      # renumber on...
+        await pilot.press("c")      # ...then clear first
+        await pilot.press("enter")
+        for _ in range(10):
+            await pilot.pause()
+
+    assert chosen == [(True, False)], "clear wins; the renumber is dropped"
+
+
+def test_renumbering_gives_every_program_a_distinct_number():
+    """The remote SEQU: list order, so nothing stacks.
+
+    The value written is the list position, NOT position+1. The field is
+    0-based and the panel adds one for display -- measured by reading all
+    fifteen resident programs straight after SEQU had shown them as 1..15,
+    and the bytes read 0..14 (§91). Writing position+1 would leave the
+    machine's first program number unused and shift every program up one.
+    """
+    from s3ked.demo import DemoBridge
+
+    bridge = DemoBridge()
+    # make them all collide first, the way four loaded volumes would
+    for index in range(5):
+        bridge.set_header_bytes("program", index, 15, bytes([0]))
+    assert bridge.program_numbers() == [0, 0, 0, 0, 0]
+
+    result = bridge.renumber_programs()
+    assert result["renumbered"] == 5
+    assert result["beyond_range"] == 0
+    assert bridge.program_numbers() == [0, 1, 2, 3, 4]
+    assert len(set(bridge.program_numbers())) == 5
+
+
+def test_renumbering_stops_at_program_128():
+    """There are 128 MIDI program numbers, 0-127, and a machine holds more."""
+    from s3ked.demo import DemoBridge
+
+    bridge = DemoBridge()
+    bridge._programs = [f"P{i:03d}" for i in range(140)]
+
+    calls = []
+    original = bridge.set_header_bytes
+    bridge.set_header_bytes = lambda *a, **k: calls.append(a[1])
+
+    result = bridge.renumber_programs()
+    bridge.set_header_bytes = original
+
+    assert result["renumbered"] == 128
+    assert result["beyond_range"] == 12
+    assert calls == list(range(128)), "the first 128, and no write past them"

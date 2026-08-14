@@ -39,7 +39,14 @@ docs; this tool implements the editor half.
   hardware, and none is provisional (§20–§26, §43–§66).
 - **Disk control.** Volume and directory listing, and remote selection of SCSI
   drive, device and partition. Loading a volume is triggerable, with a fit
-  check against free memory beforehand (§70–§74).
+  check against free memory beforehand (§70–§74). The load asks how: onto what
+  is resident or onto an emptied machine, and whether to renumber afterwards.
+  *What* to load is a panel setting this protocol does not reach, and the
+  screen says so rather than offering a menu that cannot change it.
+- **Renumbering**, the remote equivalent of the panel's `RNUM` → `SEQU`. It
+  matters because loads append and `PRGNUM` is stored in the program and
+  reloaded verbatim: load four volumes and four programs claim number 1, and
+  they stack — one program change fires all four (§91).
 - **An integrity audit** (`s3kcli audit`, `i` in the TUI): which zones name a
   sample the machine does not hold, who uses a given sample, and which samples
   nothing references. It exists because a load that overruns memory reports
@@ -83,6 +90,10 @@ This talks to a sampler that has no undo.
   deletes that program first.
 - **Choosing a volume is a front-panel job.** There is no volume register; the
   drive, device and partition are settable and the volume is not (§72).
+- **The kind of load is a front-panel job too.** ENTIRE VOLUME versus ALL
+  PROGS + SAMPLES is a setting on the LOAD page with no register found, so a
+  load does whatever the panel is showing and this cannot read or change it
+  (§74, §91).
 - **Every byte offset is a transcription** from Akai's own documents and is
   unverified except where a panel check confirmed it. A write that changes the
   sound proves *some* parameter moved (§2).

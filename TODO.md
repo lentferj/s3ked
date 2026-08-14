@@ -152,6 +152,28 @@ MESA sends when it renumbers a program.
 
 ---
 
+## Can the LOAD page's *type* setting be read, or set? (OPEN, needs a person)
+
+**Status:** s3ked can fire a load and cannot say what kind of load it will be.
+The trigger register is not it — value 1 acts and 0 and 2–7 store cleanly and
+do nothing (§74) — so the load does whatever the panel's LOAD page is showing:
+ENTIRE VOLUME, ALL PROGS + SAMPLES, one program. No register for that setting
+has been found, so it is neither readable nor settable, and the TUI says where
+the setting lives rather than offering a menu that cannot reach it.
+
+`byte[49]` will look like the answer and is not: it holds the value of
+whichever field the panel's cursor is on (§70), so it tracks the load type
+only while the cursor sits there.
+
+**To close this:** `probes/loadtype.py`, which is the method that found the
+partition byte — sweep the whole byte bank while a person changes the setting
+at the panel, and see which index tracks it across **two** different values.
+One value proves nothing.
+
+**Blocked on:** a person at the panel.
+
+---
+
 ## Does a `PRGNUM` write over SysEx re-sort and re-flag by itself? (OPEN, needs a person)
 
 **Status:** loading several volumes without `CLR` leaves programs sharing a
