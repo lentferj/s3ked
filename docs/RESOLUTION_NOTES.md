@@ -6433,8 +6433,14 @@ that exact field.
 
 ## §83 — The undescribed sample-header tail has visible structure (2026-08-13)
 
-**Status: characterised, not decoded.** Read-only, six library samples from
-one multisample plus the four built-ins as a control.
+**Status: characterised, not decoded, and two claims below are RETRACTED —
+see §83b.** Read-only, six library samples from one multisample plus the four
+built-ins as a control.
+
+> A 36 645-header corpus later showed that the 0/-1 six-byte run is a
+> dominant S3000 pattern rather than a universal one (S1000 samples are 86 %
+> mixed), and that the "17 412 default" occurs **zero** times outside the one
+> disc measured.
 
 Our table stops at sample-header offset 141. §14 recorded that real library
 samples carry consistent non-zero structure in 171-191 while machine-authored
@@ -6487,6 +6493,67 @@ field from a per-volume stamp, nor a library convention from a format rule.
 **mpc2emu has a corpus derived from real media**; this is the shape to match
 against it, and the question for them is whether their headers show the same
 0/-1 six-byte run and the same 17,412 default. Raised in the handoff.
+
+### §83b — The corpus answered, and answered against two of the three claims (2026-08-14)
+
+mpc2emu found the AKAI corpus after all and ran the questions above over
+**36 645 real sample headers across 21 discs**. Two of §83's three readings
+do not survive it.
+
+**The generation split is the actual finding, and §83 could not have seen
+it.** Every sample it measured was S3000:
+
+```
+S3000 headers (0xF3), n = 11 238     S1000 headers (0x73), n = 25 407
+   182-187 all-zero   91.3 %            182-187 mixed      85.9 %
+   182-187 mixed       8.4 %            182-187 all-zero   13.2 %
+   182-187 all-ones    0.3 %            182-187 all-ones    0.9 %
+```
+
+**RETRACTED: "a six-byte run that is only ever all-zero or all-ones is sign
+extension, not data."** The pattern is real and dominant for S3000 — 91.6 %
+— so the six samples were representative of their generation. But 940 S3000
+headers are neither, and S1000 samples are 86 % *mixed*, so it is not a
+format property and sign extension cannot be concluded from it. With six
+samples there was roughly a three-in-five chance of seeing no counterexample.
+"Dominant" survives; **"only ever" does not**, and the inference rested
+entirely on the "only".
+
+**RETRACTED: 17 412 at 188-191 "looks like a default."** **Zero occurrences
+in 36 645 headers.** Not a default, not a convention — specific to the one
+disc measured. The dominant value there is 0 (10 262 of 11 238 S3000
+headers), and no other non-zero value repeats above 350 instances. §83 saw it
+four times out of six and called it a default; four of six from one
+multisample on one disc is a sample of one library's authoring, which the
+section half-said and then reasoned past.
+
+**Untested: whether the sign tracks multisample position.** It is a question
+about the ~9 % of S3000 headers where those bytes vary at all, and needs
+samples grouped into multisamples — a different walk. §83's own caveat stands
+and is now the only live thread: "outermost of a multisample" and "negative
+value" could not be separated on six samples, and a corpus could separate
+them.
+
+**What survives:** the built-ins are all zero across 141-191, real library
+samples carry structure there, and for S3000 samples that structure is
+overwhelmingly a 0/-1 six-byte run. The field remains undecoded, and nothing
+in this project reads it.
+
+### A third denominator error in one afternoon, in the other project
+
+Their first run reported 11 238 headers from 6 of 21 discs and was nearly
+written up. The filter said `hasattr(P, 'SAMPLE_TYPES')`; the constant is
+`_SAMPLE_TYPES`, so a malformed conditional fell through to matching the
+`.S3` extension alone — silently excluding every S1000 sample and 15 discs.
+
+Not a crash and not a zero: **a plausible number over a population nobody
+chose.** And it would have answered §83's question with the S3000 generation
+only, which is exactly the generation §83 measured — so it would have arrived
+here looking like agreement.
+
+Three distinct instances that day, all in the denominator: a capped loader, a
+filter identical to its own population, and a typo that narrowed a corpus.
+None was caught by a test. All three had a believable shape.
 
 ### §83a — The corpus that would have answered this no longer exists (2026-08-13)
 

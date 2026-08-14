@@ -355,7 +355,7 @@ only how large they are. A fit at r2 0.96 whose errors all lie at one end is a
 shape mismatch wearing a good score, and a fit that is equally mediocre at
 every point is bias rather than noise (§29).
 
-## Sample header bytes 171-191 are undescribed (OPEN, hardware finding)
+## Sample header bytes 171-191 are undescribed (OPEN, narrowed 2026-08-14)
 
 **Status:** our table stops at offset 141 of the sample header. On real
 library samples, bytes 171-191 carry consistent non-zero structure; on
@@ -848,3 +848,24 @@ Two things fell out of it:
   but only widening the search got anyone to look again.
 
 RESOLUTION_NOTES §96.
+
+
+---
+
+## Sample-header tail: two §83 claims retracted by corpus (2026-08-14)
+
+**Status:** mpc2emu ran §83's questions over 36 645 real sample headers from
+21 discs. Two of three readings do not survive.
+
+- **"Only ever all-zero or all-ones, therefore sign extension"** — dominant
+  for S3000 (91.6 %) but 940 counterexamples, and S1000 samples are 86 %
+  *mixed*. Generation-specific, not a format property. The inference rested
+  on the word "only".
+- **"17 412 at 188-191 looks like a default"** — zero occurrences outside the
+  single disc measured.
+- **Untested and now the only live thread:** whether the sign tracks
+  multisample position, over the ~9 % of S3000 headers where those bytes vary
+  at all. Needs samples grouped into multisamples.
+
+Nothing in this project reads these bytes, so this blocks nothing.
+RESOLUTION_NOTES §83b.
