@@ -117,6 +117,7 @@ silently wrong one.
 - [§97](#97--the-disk-listings-cursor-is-word7-and-it-is-writable-2026-08-14) — The disk listing's cursor is `word[7]`, and it is writable (2026-08-14)
 - [§98](#98--free-pks-is-stats-block-count-and-keygroups-are-in-it-2026-08-14) — `free P/K/S` is `STAT`'s block count, and keygroups are in it (2026-08-14)
 - [§99](#99--retraction-the-third-directory-type-was-our-own-phantom-2026-08-14) — **RETRACTION**: the "third directory type" was our own phantom (2026-08-14)
+- [§100](#100--a-load-replaces-a-resident-program-of-the-same-name-and-this-disc-cannot-fill-the-object-pool-2026-08-14) — A load REPLACES a resident program of the same name; and this disc cannot fill the object pool (2026-08-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -7997,3 +7998,83 @@ was empty. This concluded that because our rule fired, the thing must be
 there. Both read a **search procedure** as a **fact about the world**. The
 defence in each case is the same: ask what would have to be true for the
 instrument to be wrong, and find a different instrument.
+
+---
+
+## §100 — A load REPLACES a resident program of the same name; and this disc cannot fill the object pool (2026-08-14)
+
+**Status: the replace behaviour is measured. The ceiling test is blocked, and
+this section records why so nobody re-attempts it the same way.**
+
+### Loads accumulate per distinct item, not per load
+
+§73 established that loading appends. That is true and incomplete. Loading a
+volume whose programs are **already resident** adds nothing at all:
+
+```
+pass 2 over the same partitions, load type 2 (programs only)
+
+  C0   free 731   P 26   K 249   delta +0
+  C1   free 731   P 26   K 249   delta +0
+  C2   free 731   P 26   K 249   delta +0
+  ...
+```
+
+Five consecutive loads, no movement in the object pool, no change in the
+program or keygroup counts. **A load replaces a resident program of the same
+name rather than duplicating it.**
+
+This is the load-path counterpart of the specification's note about `PDATA`,
+which says a whole-header write of a program whose name matches an existing
+one deletes that program first. CLAUDE.md carries that as a hazard for
+`PDATA`/`KDATA`; it evidently governs disc loads too.
+
+So "loads accumulate" should be read as *accumulate across distinct items*.
+A bank built by loading three volumes needs the sum of the **distinct** items
+to fit, and reloading a volume is idempotent rather than additive.
+
+### Why the object-ceiling test cannot be run from this disc
+
+The test needs the **object** pool exhausted while sample RAM stays free, or
+it measures §73's RAM failure again. `programs only` gives exactly that
+separation — programs and keygroups, no audio. But it is bounded by the
+number of *distinct* programs on the medium, because of the replace
+behaviour above.
+
+This disc, measured rather than assumed:
+
+```
+drive 3, partitions A-D:  38 volumes, 38 programs, 542 samples
+every program loaded, keygroups included:   ~418 objects
+plus every sample:                          ~960 objects
+the pool:                                   1006
+```
+
+One program per volume — it is a sample library, not a program library. The
+whole disc cannot reach 1006 by any route, and the sample-laden route would
+exhaust 32 MB of RAM long before it got there.
+
+**To close this:** an authored volume, or a second disc with many
+keygroup-heavy programs. mpc2emu offered to generate disc images for exactly
+this and the offer was declined as unnecessary; it was not.
+
+### A method note: the fifth false negative of the day, and this one was mine
+
+An earlier version of the filling script wrapped its per-volume setup in
+`try/except: continue`, so every failure became "this volume has no
+programs". It ran against a drive holding no matching disc, loaded **nothing
+at all**, and printed a report headed *"the state after the pool ran out"* —
+a heading written before the evidence and printed regardless.
+
+The same swallowing then corrupted a conclusion about something else
+entirely. A script that only loads a volume offering five or more programs
+silently loaded nothing on a disc with one program per volume, and its
+absence of output was read as success. Nine programs found resident
+afterwards were attributed to that load; they were the user's, from a TUI
+session. That reasoning was then used to **argue against the user's own
+correct explanation** of why the SCSI drive had changed.
+
+A search that never ran and a search that found nothing produce identical
+output. That has been the day's recurring lesson in three other projects; it
+is recorded here as having also happened in this one, twice, and having cost
+a wrong contradiction of somebody who was right.

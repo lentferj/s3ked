@@ -900,4 +900,16 @@ none exceeds 1006, and the largest needs 910. Authored volumes crowd up to the
 ceiling and never cross it, so a user reaches this case only with a conversion
 tool — which is exactly why the wording matters.
 
+**BLOCKED as of 2026-08-14: this disc cannot reach the ceiling.** Its 38
+volumes hold one program each -- a sample library -- totalling ~418 objects
+with keygroups, or ~960 with every sample, against a pool of 1006; and the
+sample route exhausts 32 MB of RAM first. Reloading does not help: a load
+**replaces** a resident program of the same name rather than duplicating it
+(§100), so the filling phase is bounded by the number of *distinct* programs
+on the medium.
+
+Needs an authored volume or a keygroup-heavy disc. mpc2emu offered to
+generate images for this and the offer was declined as unnecessary; it was
+not.
+
 Nothing is blocked on it: both projects split before the limit.
