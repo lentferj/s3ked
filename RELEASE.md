@@ -71,7 +71,11 @@ tuning, loudness, pan and the modulation matrix are measured on an S3000XL.
 rather than the author before tagging, because it is the page that decides
 whether someone points s3ked at an irreplaceable sampler.
 
-- [ ] read DISCLAIMER.md end to end, as a stranger
+- [~] DISCLAIMER.md read adversarially — not the same as a stranger reading
+      it, and the item stays open for that. Two factual errors fixed (269
+      parameters, not ~300) and four hazards added that post-dated it:
+      writes that crash the machine outright, out-of-range reads answering
+      with stale data, and loads accumulating into silent programs.
 - [x] version `0.1.0` — right for a first beta on a 0.x line, and the
       maintenance branch `release/0.1.x` takes 0.1.1 onward.
 - [x] `Development Status :: 4 - Beta` — it was Alpha while the CHANGELOG

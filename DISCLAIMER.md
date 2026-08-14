@@ -42,7 +42,7 @@ What that does **not** mean:
 
 - **Verified fields are a minority of the table.** Calibration touched the
   filter, the three envelopes, the LFOs, tuning, loudness, pan and the
-  assignable modulation matrix. Most of the ~300 parameters have still never
+  assignable modulation matrix. Most of the 269 parameters have still never
   been written to a machine, and their offsets rest on the transcription
   alone.
 - **A green test run still proves only self-consistency.** The suite is
@@ -122,6 +122,26 @@ how easy they are to trigger by accident:
   this project is a conservative guess, *not* a reverse-engineered value —
   the sibling k2kremote's RE'd 120 ms figure is a Kurzweil K2000 finding
   and does not transfer here.
+- **Some writes crash the machine outright.** Not hang — crash: no reply,
+  a flooding display, a front panel that stops responding, recoverable only
+  by power cycling. Writing a value past the end of the main-menu page
+  register does it every time (§79, §85), and an S3000XL was taken down a
+  second time with the same signature while the expansion-board fields were
+  being exercised, with no single write identifiable as the cause (§90).
+  s3ked range-checks the page register and refuses the board fields unless
+  you declare the board fitted, because **the device refuses neither**.
+- **An out-of-range read answers with someone else's data.** The extended
+  layer does not bounds-check: ask for a program that does not exist and it
+  returns the previous read's buffer, not an error (§11). So a wrong index
+  comes back as a plausible header belonging to something else, and a
+  read-back can confirm a write that never happened. s3ked refuses these
+  locally (§82); anything else talking to this family should too.
+- **Loading a volume adds to what is already in memory.** It does not
+  replace it, so a bank built from several volumes needs the *sum* to fit.
+  Overrun it and the machine says "insufficient waveform memory" once, then
+  behaves normally — leaving programs that are resident, selectable and
+  silent, with nothing on the sampler to say which (§73). `s3kcli audit`
+  exists to find them.
 
 **Back up anything you care about to disk before pointing this at real
 hardware**, and keep the write gate closed (`--allow-write` is off by
