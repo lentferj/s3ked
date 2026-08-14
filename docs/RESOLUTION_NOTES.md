@@ -108,6 +108,7 @@ silently wrong one.
 - [§88](#88--the-effects-structure-measured-no-document-describes-it-2026-08-13) — The effects structure, measured; no document describes it (2026-08-13)
 - [§89](#89--tuning-is-settable-in-cents-not-in-1256ths-and-56-never-tested-that-2026-08-13) — Tuning is settable in CENTS, not in 1/256ths, and §56 never tested that (2026-08-13)
 - [§90](#90--a-second-crash-with-the-same-signature-and-the-fence-it-argued-for-2026-08-13) — A second crash with the same signature, and the fence it argued for (2026-08-13)
+- [§91](#91--prgnum-collides-after-multi-volume-loads-and-the-panels-remedy-2026-08-14) — `PRGNUM` collides after multi-volume loads, and the panel's remedy (2026-08-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -6988,3 +6989,67 @@ The fence is a safety interlock over a working capability, which is why it is
 a declaration a user can lift rather than a refusal they cannot.
 
 Calibration is the caller that should lift it, deliberately.
+
+---
+
+## §91 — `PRGNUM` collides after multi-volume loads, and the panel's remedy (2026-08-14)
+
+Two panel photographs, taken while the TUI was driving the machine.
+
+### What was seen
+
+The SINGLE-mode `SLCT` page renders **two** numbers per program and s3ked
+renders one of them. Its leading column is `PRGNUM` (program header offset
+15, the MIDI program-change number), not the `RPLIST` position that s3ked's
+`num` column shows and that the specification says is what addresses a
+program (`bridge.program_list`'s docstring quotes it).
+
+With four volumes loaded and no `CLR` between them, fifteen programs were
+resident and **four of them carried `PRGNUM` 1**. The page's right-hand side
+read `15 program(s)` / `4 now active` against `PROGRAM NUMBER: 1`, and those
+four rows — and only those — were marked `*`.
+
+So the two counts answer different questions: how many programs are held,
+and how many respond to the number currently selected. Programs sharing a
+number stack; one program change fires all four.
+
+`PRGNUM` is stored *in* the program and is saved and reloaded verbatim, so
+nothing renumbers on load. Each volume keeps the numbering it was authored
+with, and volumes authored independently all start at 1.
+
+### The `*` is BTSORT's flag, observed
+
+§5 records the specification's line that after writing `PRGNUM`, "Miscellaneous
+function BTSORT should be triggered to resort the list of programs into order
+and **to flag active programs**", and that the Data Index which invokes it is
+missing from the transcription. The `*` column is that flag. This is the first
+sighting of it on hardware, and it does not close §5 — seeing the flag says
+nothing about the index that maintains it.
+
+### The panel's remedy
+
+`RNUM` (F7 on the `SLCT` page) opens `CHANGE PROGRAM NUMBER OF MEMORY PROGS.`,
+whose soft keys are `ALL` (F4), `SLIP` (F5), `SET` (F6), `SEQU` (F7),
+`EXIT` (F8). **`SEQU` renumbers every resident program sequentially**: after it
+ran, the same five rows read 1, 2, 3, 4, 5 where they had read 1, 1, 1, 1, 2.
+`ALL`, `SLIP` and `SET` were not exercised and are not described here.
+
+Avoiding the collision in the first place is `CLR` before each load.
+
+### What s3ked can and cannot do about it
+
+**Can:** a sequential renumber needs no undocumented function. `PRGNUM` is an
+ordinary writable one-byte program field, so `SEQU`'s effect is a loop of
+byte writes over the `RPLIST` positions. Detecting the collision needs only
+one extra read per program, which the audit walk (`s3k/analysis.py`) is
+already paying for.
+
+**Cannot:** trigger BTSORT afterwards, for the reason §5 gives. Whether the
+machine re-sorts and re-flags on its own after a `PRGNUM` write arriving over
+SysEx — as opposed to one made at the panel — has **not** been tested. Until
+it is, a renumber offered by this project has to say that the list order and
+the active flags may not settle until the panel is touched.
+
+**To close:** write `PRGNUM` over SysEx on a machine with a known collision
+and read the panel; that decides whether a `renumber()` can be offered
+without a caveat. Independently, §5's Data Index hunt.

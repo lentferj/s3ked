@@ -152,6 +152,26 @@ MESA sends when it renumbers a program.
 
 ---
 
+## Does a `PRGNUM` write over SysEx re-sort and re-flag by itself? (OPEN, needs a person)
+
+**Status:** loading several volumes without `CLR` leaves programs sharing a
+MIDI program number — four programs numbered 1 was observed — and they stack,
+so one program change fires all of them. The panel's `RNUM` page fixes it with
+`SEQU`. s3ked could do the same as a loop of `PRGNUM` writes, but the spec says
+BTSORT "should be triggered" afterwards and s3ked cannot trigger it (above).
+
+Unknown whether that matters: the machine may re-sort and re-flag on its own
+for a write arriving over SysEx. Nobody has looked.
+
+**To close this:** write `PRGNUM` over SysEx into a known collision and read
+the panel's `SLCT` page — does the order settle, do the `*` flags follow? A
+yes means a `renumber()` can be offered plainly; a no means it ships with a
+caveat, or not at all.
+
+**Blocked on:** a person at the panel. RESOLUTION_NOTES §91.
+
+---
+
 ## Autodetect: no broadcast address exists in this protocol (WORKS ON HARDWARE)
 
 **Status:** confirmed live 2026-08-10 — found a real S3000XL on the first
