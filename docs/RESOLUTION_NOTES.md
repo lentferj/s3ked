@@ -7708,6 +7708,19 @@ rather than of the load types: directory entries are `0x70` program and
 `0x73` sample, and a keygroup is not a file. It exists only inside a program,
 which is why every row a cursor load can aim at is one or the other.
 
+### The panel's own 1004, accounted for
+
+Clearing memory afterwards produced the number that started this:
+
+```
+free_blocks 1004 of 1006     P=1  K=1  S=0     used = 2
+```
+
+`clear_memory` cannot delete the last program (§75), so what it leaves is one
+program carrying one keygroup — two objects, against a total of 1006. The
+`free P/K/S: 1004` read off the LOAD page was a machine in exactly that
+state. The row, the register and the arithmetic are the same thing.
+
 ### A third directory type, unidentified
 
 Scanning several volumes' directories found entries that are neither:
