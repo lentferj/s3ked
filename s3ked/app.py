@@ -757,6 +757,10 @@ class S3kedApp(App):
         self._keygroups: int = 0
         self._program_keygroups: List[dict] = []
         self._disk_entries: List[object] = []
+        #: Whether `d` has ever run. An empty Disk pane is the normal startup
+        #: state, not a failure, and `r` only picks the disk up once there is
+        #: something to pick up -- see action_refresh.
+        self._disk_read = False
         self._words_free: Optional[int] = None
         self._total_words: Optional[int] = None
         self._param_values: Dict[str, object] = {}
@@ -798,6 +802,10 @@ class S3kedApp(App):
     def on_mount(self) -> None:
         self.title = "s3ked"
         self.sub_title = self.bridge.description
+        # Says what to press rather than sitting blank: an empty pane with a
+        # one-word title reads as broken, and this one is empty on every
+        # launch by design.
+        self.query_one("#disk-title", Static).update("Disk — press [b]d[/b]")
         for table_id, columns in (
             ("programs", ("num", "name")),
             ("keygroups", ("kg", "range")),
@@ -1018,8 +1026,19 @@ class S3kedApp(App):
     # -- actions ------------------------------------------------------------
 
     def action_refresh(self) -> None:
+        """Re-read what is on screen.
+
+        The disk joins in only once `d` has read it. It is 7 round trips for
+        a full disk and a machine with none attached fails the read, so
+        paying that on every refresh -- including the one at startup -- would
+        make the common case worse to spare one keypress in the other. Once
+        the pane is showing something, a refresh that leaves it stale is the
+        surprising behaviour instead, which is how this got noticed.
+        """
         self.notify_status("reading catalog...")
         self._load_catalog()
+        if self._disk_read:
+            self._read_disk_worker()
 
     def action_disk(self) -> None:
         """Read the volume list off the attached disk.
@@ -1544,6 +1563,7 @@ class S3kedApp(App):
         for entry in entries:
             table.add_row(f"  {entry.index}", entry.name)
         self._disk_entries = list(entries or [])
+        self._disk_read = True
         try:
             # DeviceStatus calls it free_words. Asking for words_free got None
             # and fell through to a hardcoded 16 Mword machine, which is right

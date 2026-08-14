@@ -2229,3 +2229,59 @@ def test_the_bridge_guards_the_operating_system_load():
 
     Bare().trigger_load(6, force=True)
     assert len(sent) == 1, "force=True means it"
+
+
+async def test_the_disk_pane_says_what_to_press_before_it_is_read():
+    """It is empty on every launch by design, so it must not look broken.
+
+    The disk read is 7 round trips and fails outright on a machine with no
+    disk attached, so it is deliberately not part of the startup catalog. A
+    pane titled "Disk" and holding nothing is indistinguishable from one that
+    tried and failed -- reported as "the disk pane came up empty".
+    """
+    from textual.widgets import Static
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge())
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        title = str(app.query_one("#disk-title", Static).render())
+
+    assert "d" in title and "Disk" in title, title
+
+
+async def test_refresh_re_reads_the_disk_once_it_has_been_read():
+    """`r` leaving a populated pane stale is the surprising behaviour.
+
+    Not before, though: on a machine with no disk the read fails, and
+    startup must not pay for it.
+    """
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    reads = []
+
+    class Watch(DemoBridge):
+        def volume_list(self, *, limit=512, timeout=None):
+            reads.append("disk")
+            return super().volume_list(limit=limit, timeout=timeout)
+
+    app = S3kedApp(Watch())
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        await pilot.press("r")
+        for _ in range(25):
+            await pilot.pause()
+        assert reads == [], "refresh must not read a disk nobody asked for"
+
+        await pilot.press("d")
+        for _ in range(30):
+            await pilot.pause()
+        assert len(reads) == 1
+
+        await pilot.press("r")
+        for _ in range(30):
+            await pilot.pause()
+
+    assert len(reads) == 2, "once read, a refresh must keep it current"
