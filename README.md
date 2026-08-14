@@ -245,7 +245,6 @@ pass `--exclusive-channel N`. The port pair that answers is remembered in
 | `g` | main menu — move the machine between its pages |
 | `B` | declare which expansion boards are fitted (see below) |
 | `m` | Master — the destructive operations |
-| `?` | every key — the footer only shows what fits at 80 columns |
 | `q` | quit |
 
 **Destructive operations are never a single keypress.** Deleting a program,

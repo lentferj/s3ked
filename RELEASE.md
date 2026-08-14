@@ -53,10 +53,11 @@ reason a person still has to look.
 
 Left for a human, because no test can see it:
 
-- [x] 80×24 — panes readable, nothing truncated in them. The **footer was**:
-      Textual's Footer cuts rather than reflowing, so six of thirteen keys
-      showed and the rest were undiscoverable. Fixed by shortening the
-      handful that stay and adding `?` for all of them, with tests for both.
+- [x] 80×24 — panes readable, nothing truncated in them. The **legend was**:
+      Textual's `Footer` is one line and cuts, so six of thirteen keys showed
+      and the rest were undiscoverable. Replaced with `KeyHints`, which folds
+      to the width — k2kremote's and eosed's answer, ported rather than
+      reinvented after Jan pointed out the siblings already solved it.
 - [ ] does the status line say useful things at the moment you need them?
 - [ ] is the parameter table navigable when it is 85 rows long?
 - [ ] a terminal without truecolour, and one with a light background

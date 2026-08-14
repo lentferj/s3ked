@@ -304,49 +304,6 @@ class SourceScreen(ModalScreen[Optional[Tuple[str, int]]]):
         self.dismiss(None)
 
 
-class HelpScreen(ModalScreen[None]):
-    """Every key, generated from the app's own BINDINGS.
-
-    Exists because the footer cannot show them. Textual's Footer truncates
-    rather than reflowing, and at 80x24 it displayed six of thirteen -- so the
-    disk, load, menu, boards and audit keys were unreachable unless you had
-    read the README.
-
-    Generated rather than written out, because a hand-kept list of keys is
-    the thing this project has already found stale twice in sibling code.
-    """
-
-    BINDINGS = [
-        Binding("escape", "close", "Close"),
-        Binding("question_mark", "close", "Close"),
-        Binding("q", "close", "Close"),
-    ]
-
-    def __init__(self, bindings) -> None:
-        super().__init__()
-        self.rows = [(b.key, b.description) for b in bindings
-                     if b.description and b.action != "help"]
-
-    def compose(self) -> ComposeResult:
-        pretty = {"question_mark": "?", "tab": "tab", "escape": "esc"}
-        with Vertical(id="help-box"):
-            yield Label("[b]Keys[/b]", id="help-title")
-            # Scrollable because the list is longer than the smallest
-            # supported terminal is tall -- the same 80x24 that made this
-            # screen necessary in the first place.
-            with VerticalScroll(id="help-scroll"):
-                for key, description in self.rows:
-                    shown = pretty.get(key, key)
-                    yield Label(f"  [b]{shown:<5}[/b] {description}")
-            yield Label("")
-            yield Label("[dim]The footer shows only what fits; this is all of "
-                        "them.[/dim]")
-            yield Label("[b]esc[/b] close")
-
-    def action_close(self) -> None:
-        self.dismiss(None)
-
-
 class BoardsScreen(ModalScreen[Optional[set]]):
     """Declare which expansion boards the machine has.
 
@@ -525,33 +482,23 @@ class S3kedApp(App):
 
     BINDINGS = [
         Binding("q", "quit", "Quit"),
-        Binding("r", "refresh", "Reload"),
+        Binding("r", "refresh", "Refresh"),
         # Not Enter: a focused DataTable consumes it for row selection, so an
         # app-level Enter binding never fires. Enter still works, via
         # on_data_table_row_selected below.
-        Binding("e", "edit", "Edit"),
-        Binding("w", "toggle_write", "Gate"),
+        Binding("e", "edit", "Edit value"),
+        Binding("w", "toggle_write", "Write gate"),
         Binding("z", "undo", "Undo"),
         Binding("m", "master", "Master"),
-        # Everything below is hidden from the footer and listed by `?`.
-        #
-        # Textual's Footer does not reflow: at 80x24 -- the smallest size this
-        # project claims to support -- it rendered six of thirteen bindings and
-        # silently truncated the rest, so `d`, `l`, `s`, `g`, `B`, `i` and `u`
-        # were undiscoverable. Neither `height: auto` nor a grid layout fixes
-        # it; the widget simply cuts. Thirteen entries cannot fit in eighty
-        # columns at any sensible wording, so the footer shows the handful a
-        # user reaches for constantly and `?` shows all of them.
-        Binding("question_mark", "help", "Keys"),
-        Binding("d", "disk", "Read disk", show=False),
+        Binding("d", "disk", "Read disk"),
         Binding("[", "partition_prev", "Prev partition", show=False),
         Binding("]", "partition_next", "Next partition", show=False),
-        Binding("l", "load_volume", "Load volume", show=False),
-        Binding("s", "source", "Load source", show=False),
-        Binding("g", "menu", "Main menu", show=False),
-        Binding("B", "boards", "Boards fitted", show=False),
-        Binding("i", "integrity", "Integrity", show=False),
-        Binding("u", "usage", "Who uses", show=False),
+        Binding("l", "load_volume", "Load volume"),
+        Binding("s", "source", "Load source"),
+        Binding("g", "menu", "Main menu"),
+        Binding("B", "boards", "Boards fitted"),
+        Binding("i", "integrity", "Integrity"),
+        Binding("u", "usage", "Who uses"),
         Binding("tab", "focus_next", "Next pane", show=False),
     ]
 
@@ -944,10 +891,6 @@ class S3kedApp(App):
                 f"{what}: asked for {value}, machine reads {got}")
             return
         self.call_from_thread(self.action_disk)
-
-    def action_help(self) -> None:
-        """Show every key, since the footer can only show some of them."""
-        self.push_screen(HelpScreen(self.BINDINGS))
 
     def action_boards(self) -> None:
         """Declare which expansion boards this machine has. Saved to config.

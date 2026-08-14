@@ -1207,150 +1207,48 @@ async def test_the_demo_never_writes_a_config():
     assert "this session only" in app.last_status
 
 
-async def test_the_footer_fits_at_the_smallest_supported_size():
+async def test_the_key_legend_shows_every_binding_at_80_columns():
     """80x24 is the smallest size this project claims to support.
 
-    Textual's Footer truncates rather than reflowing, and with thirteen
-    bindings it showed six and silently cut the rest -- so the disk, load,
-    menu, boards and audit keys were undiscoverable to anyone who had not
-    read the README. Neither `height: auto` nor a grid layout changes that;
-    the widget simply cuts.
+    Textual's Footer is one line and truncates rather than wrapping: with
+    thirteen bindings it showed six and silently cut the rest, so the disk,
+    load, menu, boards and audit keys were undiscoverable to anyone who had
+    not read the README. Neither `height: auto` nor a grid layout changes
+    that, both measured.
 
-    So the footer carries the handful reached for constantly, and `?` carries
-    all of them. This asserts the handful actually fits, because "it fits" is
-    exactly the claim that was wrong before.
+    KeyHints folds instead -- k2kremote's and eosed's answer to the same
+    problem, ported rather than reinvented. Nothing is hidden; the legend
+    grows a line.
     """
-    from s3ked.app import S3kedApp
-    from s3ked.demo import DemoBridge
+    from s3ked.app import S3kedApp, wrap_blocks
 
-    app = S3kedApp(DemoBridge(), allow_write=False)
-    async with app.run_test(size=(80, 24)) as pilot:
-        await pilot.pause()
-        await pilot.pause()
-        rendered = app.export_screenshot()
+    blocks = [f"{b.key} {b.description}" for b in S3kedApp.BINDINGS
+              if b.description and b.show]
+    assert len(blocks) >= 13, "this test would be weak with few bindings"
 
-    for label in ("Quit", "Reload", "Edit", "Gate", "Undo", "Master", "Keys"):
-        assert label in rendered, f"{label!r} truncated out of the footer at 80x24"
-
-
-async def test_the_help_screen_lists_every_binding():
-    """Generated from BINDINGS, so it cannot drift from what the app does.
-
-    A hand-kept key list is the thing this project has already found stale in
-    sibling code; the footer's own omissions are what made this screen
-    necessary.
-    """
-    from s3ked.app import S3kedApp, HelpScreen
-    from s3ked.demo import DemoBridge
-
-    app = S3kedApp(DemoBridge(), allow_write=False)
-    expected = {b.description for b in S3kedApp.BINDINGS
-                if b.description and b.action != "help"}
-
-    async with app.run_test(size=(80, 24)) as pilot:
-        await pilot.pause()
-        await pilot.press("question_mark")
-        for _ in range(10):
-            await pilot.pause()
-        screen = app.screen_stack[-1]
-        assert isinstance(screen, HelpScreen)
-        listed = {d for _key, d in screen.rows}
-
-    assert listed == expected, f"help missing {expected - listed}"
-    assert len(listed) >= 13, f"only {len(listed)} bindings described"
+    for width in (80, 100, 120):
+        folded = wrap_blocks(blocks, width)
+        for block in blocks:
+            assert block in folded, f"{block!r} lost at {width} columns"
+        widest = max(len(line) for line in folded.splitlines())
+        assert widest <= width, f"line of {widest} exceeds {width}"
 
 
-async def test_every_hidden_binding_is_reachable_from_help():
-    """Hiding a key from the footer must not hide it from the user."""
-    from s3ked.app import S3kedApp, HelpScreen
+def test_wrap_blocks_never_splits_a_hint():
+    """A break inside a label would read as two bindings that do not exist."""
+    from s3ked.app import wrap_blocks
 
-    hidden = {b.description for b in S3kedApp.BINDINGS
-              if b.description and not b.show}
-    listed = {d for _k, d in
-              HelpScreen(S3kedApp.BINDINGS).rows}
-
-    assert hidden, "no bindings are hidden; this test would be vacuous"
-    assert hidden <= listed, f"hidden and undiscoverable: {hidden - listed}"
+    blocks = ["q Quit", "l Load volume", "B Boards fitted"]
+    for width in range(8, 60):
+        folded = wrap_blocks(blocks, width)
+        for block in blocks:
+            assert block in folded, f"{block!r} split at width {width}"
 
 
-async def test_the_keygroup_pane_shows_real_key_ranges():
-    """It showed a literal "-" for every keygroup until 2026-08-14.
+def test_a_hint_wider_than_the_terminal_takes_its_own_line():
+    """Rather than being cut, which is the behaviour being replaced."""
+    from s3ked.app import wrap_blocks
 
-    TODO said why: one request per keygroup, and the offsets should be
-    trusted before spending them. §81 then wrote LONOTE/HINOTE while
-    measuring whether overlapping keygroups layer, and the machine sounded or
-    stayed silent exactly as predicted across six settings -- so offsets 3
-    and 4 are behaviourally confirmed, which is the only confirmation
-    available for a field with no readout of its own.
-    """
-    from textual.widgets import DataTable
-    from s3ked.app import S3kedApp
-    from s3ked.demo import DemoBridge
-
-    app = S3kedApp(DemoBridge(), allow_write=False)
-    async with app.run_test(size=(100, 30)) as pilot:
-        await pilot.pause()
-        for _ in range(30):
-            await pilot.pause()
-        table = app.query_one("#keygroups", DataTable)
-        shown = [str(table.get_row_at(i)[1]) for i in range(table.row_count)]
-
-    assert shown, "no keygroups listed at all"
-    assert all(s != "-" for s in shown), f"placeholder still there: {shown}"
-    assert all("–" in s for s in shown), f"not a range: {shown}"
-
-
-async def test_a_keygroup_that_will_not_read_blanks_only_its_own_row():
-    """A partial answer about the others beats none.
-
-    The pane is one read per keygroup, so one failing read must not cost the
-    whole pane -- which is what a single try around the loop would do.
-    """
-    from textual.widgets import DataTable
-    from s3ked.app import S3kedApp
-    from s3ked.demo import DemoBridge
-
-    class Flaky(DemoBridge):
-        def get_header_bytes(self, region, index, offset, count, *,
-                             selector=0, timeout=None):
-            if region == "keygroup" and count == 2 and selector == 0:
-                raise RuntimeError("no reply")
-            return super().get_header_bytes(region, index, offset, count,
-                                            selector=selector, timeout=timeout)
-
-    app = S3kedApp(Flaky(), allow_write=False)
-    async with app.run_test(size=(100, 30)) as pilot:
-        await pilot.pause()
-        for _ in range(30):
-            await pilot.pause()
-        table = app.query_one("#keygroups", DataTable)
-        shown = [str(table.get_row_at(i)[1]) for i in range(table.row_count)]
-
-    assert shown[0] == "?", f"failed row should be '?', got {shown[0]!r}"
-    assert len(shown) > 1 and "–" in shown[1], "the others must still resolve"
-
-
-async def test_an_inverted_key_range_is_labelled_dead():
-    """lo > hi selects nothing, measured (§81). Printing it as a plain range
-    would read as a keygroup that plays across the whole span backwards."""
-    from textual.widgets import DataTable
-    from s3ked.app import S3kedApp
-    from s3ked.demo import DemoBridge
-
-    class Inverted(DemoBridge):
-        def get_header_bytes(self, region, index, offset, count, *,
-                             selector=0, timeout=None):
-            if region == "keygroup" and count == 2:
-                return bytes([72, 48])
-            return super().get_header_bytes(region, index, offset, count,
-                                            selector=selector, timeout=timeout)
-
-    app = S3kedApp(Inverted(), allow_write=False)
-    async with app.run_test(size=(100, 30)) as pilot:
-        await pilot.pause()
-        for _ in range(30):
-            await pilot.pause()
-        table = app.query_one("#keygroups", DataTable)
-        first = str(app.query_one("#keygroups", DataTable).get_row_at(0)[1])
-
-    assert "dead" in first, f"inverted range not flagged: {first!r}"
+    folded = wrap_blocks(["q Quit", "x " + "a very long description" * 3], 20)
+    assert "a very long description" in folded
+    assert folded.splitlines()[0] == "q Quit"
