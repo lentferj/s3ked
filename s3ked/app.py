@@ -837,6 +837,21 @@ class S3kedApp(App):
         self._disk_read = False
         #: Which of the two things the right column is showing.
         self._disk_showing = False
+        #: Set by a refresh so _apply_program can put the parameter pane back
+        #: where it was, rather than dragging it to the program view.
+        self._restore_context = None
+        #: True while a table is being repopulated by us. Filling a DataTable
+        #: fires row-highlighted events, and the programs branch of that
+        #: handler has no has-focus guard -- by design, so arrowing a program
+        #: loads it -- which meant every refresh reloaded program 0 and
+        #: dragged the parameter pane along with it.
+        self._refilling = False
+        #: Which program the parameter pane is currently built from. The
+        #: row-highlighted handler compares against it, because a flag cannot
+        #: cover a Textual message that is DELIVERED LATER: move_cursor posts
+        #: its event, the handler runs after the guard has been cleared, and
+        #: the reload lands anyway. Comparing state works whenever it runs.
+        self._loaded_program = None
         #: Whether the samples pane lists everything resident or only what
         #: the selected program references. The program-centric redesign
         #: dropped the global list entirely, which lost the view the audit
@@ -955,9 +970,13 @@ class S3kedApp(App):
         self._programs = programs
         self._samples = samples
         table = self.query_one("#programs", DataTable)
-        table.clear()
-        for index, name in enumerate(programs):
-            table.add_row(str(index), name)
+        self._refilling = True
+        try:
+            table.clear()
+            for index, name in enumerate(programs):
+                table.add_row(str(index), name)
+        finally:
+            self._refilling = False
         # The #samples pane is the SELECTED PROGRAM's samples now, filled by
         # _fill_program_samples. The global resident list stays in
         # self._samples, which the integrity check and `u` both use.
@@ -968,8 +987,20 @@ class S3kedApp(App):
             self.notify_status(
                 f"{len(programs)} program(s), {len(samples)} sample(s)"
             )
-        if programs:
-            self._load_program(0)
+        if not programs:
+            return
+        # Keep the selection. This re-selected program 0 unconditionally, and
+        # since every parameter write ends with a catalog reload, editing a
+        # keygroup field bounced the pane back to program 0's parameters
+        # immediately afterwards -- so a second edit went somewhere else
+        # entirely. The same class as the disk pane's cursor jumping to v0:
+        # a refresh must not move the user.
+        selected = self._selected_program() or 0
+        if selected >= len(programs):
+            selected = 0
+        table.move_cursor(row=selected)
+        region, index, keygroup = self._param_context
+        self._load_program(selected, restore=(region, index, keygroup))
 
     @work(thread=True)
     def _load_program_worker(self, index: int) -> None:
@@ -1026,7 +1057,14 @@ class S3kedApp(App):
                         "samples": names, "read": True})
         return out
 
-    def _load_program(self, index: int) -> None:
+    def _load_program(self, index: int, restore=None) -> None:
+        """Read one program and fill the panes from it.
+
+        ``restore`` is the ``_param_context`` to put back afterwards, used by
+        a refresh so that re-reading the catalog does not drag the parameter
+        pane back to the program view while somebody is editing a keygroup.
+        """
+        self._restore_context = restore
         self._load_program_worker(index)
 
     def _apply_program(self, index: int, header: Dict[str, object],
@@ -1061,7 +1099,17 @@ class S3kedApp(App):
         self.query_one("#param-title", Static).update(
             f"Parameters — program {index} ({header.get('PRNAME', '')})"
         )
-        self._show_params("program", header, index)
+        # A refresh restores whatever the pane was showing; a deliberate
+        # program selection shows the program, which is what was asked for.
+        self._loaded_program = index
+        restore = getattr(self, "_restore_context", None)
+        self._restore_context = None
+        if restore and restore[0] != "program":
+            region, at, keygroup = restore
+            self._show_params("program", header, index)
+            self._param_context = (region, at, keygroup)
+        else:
+            self._show_params("program", header, index)
 
     def action_all_samples(self) -> None:
         """Swap the samples pane between this program's and every resident one.
@@ -1234,11 +1282,15 @@ class S3kedApp(App):
         self._programs, self._samples = list(programs), list(samples)
         table = self.query_one("#programs", DataTable)
         row = table.cursor_row
-        table.clear()
-        for index, name in enumerate(self._programs):
-            table.add_row(str(index), name)
-        if row is not None and row < table.row_count:
-            table.move_cursor(row=row)
+        self._refilling = True
+        try:
+            table.clear()
+            for index, name in enumerate(self._programs):
+                table.add_row(str(index), name)
+            if row is not None and row < table.row_count:
+                table.move_cursor(row=row)
+        finally:
+            self._refilling = False
         self.notify_status(
             f"catalog changed while you were away: {previous} → "
             f"{len(self._programs)} program(s), {len(self._samples)} sample(s)")
@@ -1935,7 +1987,8 @@ class S3kedApp(App):
 
     @work(thread=True)
     def _write_param_worker(
-        self, param: p.Parameter, index: int, value, old, keygroup: int = 0
+        self, param: p.Parameter, index: int, value, old, keygroup: int = 0,
+        record: bool = True,
     ) -> None:
         try:
             with self._bridge_lock:
@@ -1947,7 +2000,7 @@ class S3kedApp(App):
             self.call_from_thread(self.notify_status, f"error: {exc}")
             return
         self.call_from_thread(self._after_write, param, index, old, value,
-                              header, keygroup)
+                              header, keygroup, record)
 
     def _write_param(self, param: p.Parameter, current, raw: str) -> None:
         # Through the pane's own context, not the selected program. The two
@@ -1999,27 +2052,37 @@ class S3kedApp(App):
         new,
         header: Dict[str, object],
         keygroup: int = 0,
+        record: bool = True,
     ) -> None:
-        # The KEYGROUP the write actually went to, not 0. This recorded a
-        # hardcoded zero until 2026-08-15, so undoing an edit made on
-        # keygroup 3 wrote the old value into keygroup 0 -- a silent wrong
-        # write, in the one path whose whole job is putting things back.
-        # `_write_param` had threaded the real keygroup through correctly the
-        # entire time; only the log dropped it.
-        self._undo.append(
-            _Change(
-                region=param.region,
-                index=index,
-                keygroup=keygroup,
-                name=param.name,
-                old=old,
-                new=new,
+        # `record` is False when the write IS an undo. Without it the undo
+        # appends its own reversal to the log, so the log never drains:
+        # pressing z twice undid and then REDID, and Z replayed a stack of
+        # undo-entries instead of the edits. Found on hardware; every
+        # synthetic test passed, because they never pressed z and then looked
+        # at the log.
+        #
+        # The KEYGROUP is the one the write actually went to, not 0. This
+        # recorded a hardcoded zero until 2026-08-15, so undoing an edit made
+        # on keygroup 3 put the old value into keygroup 0.
+        if record:
+            self._undo.append(
+                _Change(
+                    region=param.region,
+                    index=index,
+                    keygroup=keygroup,
+                    name=param.name,
+                    old=old,
+                    new=new,
+                )
             )
-        )
         # Blunt invalidation: any write could have changed a name, and a name
         # change moves what the catalog says. Cheaper to re-read than to
         # reason about which caches a given write could not have touched.
-        self._show_params(param.region, header)
+        # WITH the index and keygroup. Defaulting them reset _param_context
+        # to (region, 0, 0) after every write, so a second edit on keygroup 3
+        # silently landed on keygroup 0 -- the same silent wrong-target write
+        # the log bug produced, by a different route.
+        self._show_params(param.region, header, index, keygroup)
         self._refresh_write_badge()
         self.notify_status(f"{param.name} = {p.describe_value(param, new)}")
         self._load_catalog(announce=False)
@@ -2035,7 +2098,7 @@ class S3kedApp(App):
         change = self._undo.pop()
         param = p.lookup((change.region, change.name))
         self._write_param_worker(param, change.index, change.old,
-                                 change.new, change.keygroup)
+                                 change.new, change.keygroup, record=False)
         self._refresh_write_badge()
 
     def action_undo_all(self) -> None:
@@ -2302,6 +2365,8 @@ class S3kedApp(App):
         """
         table = event.data_table
         if table.id == "programs":
+            if self._refilling or event.cursor_row == self._loaded_program:
+                return          # our own repopulation, not the user moving
             self._load_program(event.cursor_row)
         elif not table.has_focus:
             return

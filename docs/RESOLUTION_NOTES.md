@@ -119,6 +119,7 @@ silently wrong one.
 - [§99](#99--retraction-the-third-directory-type-was-our-own-phantom-2026-08-14) — **RETRACTION**: the "third directory type" was our own phantom (2026-08-14)
 - [§100](#100--a-load-replaces-a-resident-program-of-the-same-name-and-this-disc-cannot-fill-the-object-pool-2026-08-14) — A load REPLACES a resident program of the same name; and this disc cannot fill the object pool (2026-08-14)
 - [§101](#101--byte55-is-the-selected-program-number-and-it-is-writable-2026-08-14) — `byte[55]` is the selected PROGRAM NUMBER, and it is writable (2026-08-14)
+- [§102](#102--three-undo-bugs-a-fake-bridge-could-not-have-shown-2026-08-15) — Three undo bugs a fake bridge could not have shown (2026-08-15)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -8267,3 +8268,75 @@ a limitation of the code: every resident program sharing that number becomes
 active and sounds with it. So the status line reports how many will sound
 when it is more than one, and points at the audit and the renumber rather
 than leaving a user to discover a five-program stack by ear.
+
+---
+
+## §102 — Three undo bugs a fake bridge could not have shown (2026-08-15)
+
+**Status: found on hardware, fixed, and re-verified on hardware.** The undo
+path had been tested only against `DemoBridge` and passed every time.
+
+`probes/undo_roundtrip.py` drives the **application** headless over a real
+`S3kBridge` — the same `_write_param` and `action_undo` a keypress reaches —
+and verifies every value by reading the machine back rather than by trusting
+what the app believes.
+
+### What it found
+
+**1. The undo logged itself.** `action_undo` popped an entry and then wrote
+through the normal path, which appended the reversal as a *new* change. The
+log never drained: pressing `z` twice undid and then **redid**, and `Z`
+replayed a stack of undo-entries instead of the edits. Nine single undos left
+nine entries behind.
+
+**2. Every write reset the pane context.** `_after_write` re-read the catalog,
+and `_apply_catalog` re-selected program 0 unconditionally, dragging the
+parameter pane to the program region. A second edit on a keygroup field was
+then **refused** by the region guard — correctly, since the pane really was
+showing program fields by that point. The guard was doing its job against our
+own bug, which is why the symptom was a mysteriously ignored write rather
+than a wrong one.
+
+**3. The keygroup was dropped from the log** (found by reading, not by the
+probe): `_after_write` recorded `keygroup=0` unconditionally while the write
+went to the right keygroup, so undoing an edit made on keygroup 3 put the old
+value into keygroup 0.
+
+All three are the same shape: **a silent wrong-target write**, which is
+exactly what the sibling eosed's `HW_CHECKLIST` item C7 names as *"the
+important one"* for this feature. eosed identified the failure class and left
+the box unticked; s3ked shipped three instances of it.
+
+### Why the synthetic tests passed
+
+A fake cannot fail this way. The demo's keygroup 0 accepts a write and
+nothing compares it against the machine, so a misdirected write looks
+identical to a correct one. And no synthetic test pressed `z` and then
+*looked at the log* — they checked the value came back, which it did.
+
+### The fix, and one thing it taught about Textual
+
+`record=False` on an undo's write; `_show_params` given the real index and
+keygroup; and `_apply_catalog` keeping the selection instead of jumping to
+program 0.
+
+That last one needed two attempts. A `_refilling` flag around the table
+repopulation was not enough, because `move_cursor` **posts a message that is
+delivered later** — the handler ran after the flag had been cleared and the
+reload landed anyway. A flag cannot guard an event that arrives after the
+guarded region ends. Comparing state instead (`_loaded_program`) works
+whenever the handler happens to run.
+
+### Re-verified
+
+```
+9 single round trips: read -> write -> read back -> z -> read back, exact
+undo-all: 36 -> 41,42,43 -> read 43 -> Z -> 36, exact
+```
+
+### Damage from the failing run, recorded because it is instructive
+
+The first run's broken `Z` replayed its polluted log and wrote stale values
+into two parameters that were never part of that edit sequence. RAM only, and
+reloading the volume restores them — but that is precisely what a wrong-target
+write does in the field: it lands somewhere nobody was looking.

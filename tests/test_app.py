@@ -2937,3 +2937,79 @@ async def test_h_lists_the_changes_with_where_they_went():
     assert "nothing written" in empty
     assert "LONOTE" in body
     assert "kg 1" in body, f"the keygroup must be shown: {body!r}"
+
+
+async def test_an_undo_is_not_itself_logged_as_a_change():
+    """Otherwise z twice undoes and then REDOES, and the log never drains.
+
+    Found on hardware: nine single undos left nine entries behind, and Z then
+    replayed those instead of the edits. Every synthetic test passed, because
+    none of them pressed z and then looked at the log.
+    """
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+    from s3k import params as p
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        param = p.lookup(("program", "PRIORT"))
+        started = app.bridge.get_parameter("PRIORT", 0)
+        app._param_context = ("program", 0, 0)
+        app._write_param(param, started, "3")
+        for _ in range(40):
+            await pilot.pause()
+        assert len(app._undo) == 1
+
+        await pilot.press("z")
+        for _ in range(40):
+            await pilot.pause()
+        assert not app._undo, f"the undo logged itself: {app._undo}"
+        assert app.bridge.get_parameter("PRIORT", 0) == started
+
+        # and a second z must find nothing rather than redoing
+        await pilot.press("z")
+        for _ in range(30):
+            await pilot.pause()
+
+    assert app.bridge.get_parameter("PRIORT", 0) == started, "z twice redid it"
+    assert "nothing to undo" in app.last_status
+
+
+async def test_a_write_does_not_reset_the_pane_to_keygroup_zero():
+    """Edit keygroup 3, edit again, and the second must not land on 0.
+
+    _after_write called _show_params without the index or keygroup, so
+    _param_context became (region, 0, 0) after every write -- a silent
+    wrong-target write on the NEXT edit. eosed's HW_CHECKLIST calls this class
+    "the important one".
+    """
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+    from s3k import params as p
+
+    writes = []
+
+    class Watch(DemoBridge):
+        def set_parameter(self, param, index, value, *, keygroup=0, **kw):
+            writes.append((param.name, index, keygroup, value))
+            return super().set_parameter(param, index, value,
+                                         keygroup=keygroup, **kw)
+
+    app = S3kedApp(Watch(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        param = p.lookup(("keygroup", "LONOTE"))
+        app._param_context = ("keygroup", 2, 3)
+        app._write_param(param, 21, "40")
+        for _ in range(40):
+            await pilot.pause()
+        assert app._param_context == ("keygroup", 2, 3), (
+            f"the pane moved to {app._param_context}")
+
+        app._write_param(param, 40, "44")
+        for _ in range(40):
+            await pilot.pause()
+
+    assert [w[2] for w in writes] == [3, 3], (
+        f"the second edit went to keygroup {writes[1][2]}, not 3")
