@@ -7609,6 +7609,34 @@ the conversation is abandoned.
 It leaves an existing handler alone. A host application with its own shutdown
 is better at this than we are.
 
+### Fix 1 was NOT sufficient, and this section said it was (2026-08-14)
+
+The reasoning above — signals arrive between bytecodes, so the frame on the
+wire is whole and "only the conversation is abandoned" — treats an abandoned
+conversation as harmless. **It is the wedge itself.**
+
+The application's bridge calls run in worker threads. A signal arriving on
+the main thread unwinds it and closes the port underneath a worker that has
+sent a request and is waiting for the answer. The sampler is left composing a
+reply for a listener that no longer exists, which is precisely the state this
+section set out to prevent.
+
+Demonstrated by wedging the same S3000XL a second time **with this fix in
+place**: a running TUI was sent SIGTERM six seconds after launch, while it
+was still doing its startup catalog read, and the machine stopped answering
+RSTAT on every port until it was power cycled. The handler was installed and
+survived inside the Textual app — checked afterwards — so the fix worked
+exactly as designed and the design was incomplete.
+
+`_close_when_idle` now takes the same lock every bridge call takes, so
+shutdown waits for an in-flight exchange to finish before closing. The wait
+is bounded, because a hung worker must not hold the process open forever, but
+a bounded wait that usually succeeds is far better than none.
+
+**The operational rule is unchanged and was the real failure here:** do not
+signal a live SysEx client. Quit it the way a person would. The code fix
+makes the accident survivable; it does not make the habit safe.
+
 ### Fix 2: replies are matched to requests — the structural one
 
 A clean exit cannot be guaranteed. `SIGKILL`, a crash and a pulled plug all

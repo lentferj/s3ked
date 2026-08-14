@@ -2408,8 +2408,49 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         app.run()
     finally:
-        bridge.close()
+        _close_when_idle(app, bridge)
     return 0
+
+
+#: How long shutdown waits for an in-flight SysEx exchange to finish.
+#: Generous: a whole-header read is ~128 ms and a directory walk is one
+#: request per entry, so a worker mid-listing needs seconds, not milliseconds.
+SHUTDOWN_GRACE = 8.0
+
+
+def _close_when_idle(app, bridge, grace: float = SHUTDOWN_GRACE) -> None:
+    """Close the bridge, but not while a worker is mid-exchange.
+
+    **Closing the port tidily is not enough, and §95 said it was.** That
+    section fixed SIGTERM ending the process where it stood, and reasoned
+    that raising from the handler was safe because Python delivers signals
+    between bytecodes, so the frame on the wire is whole -- "only the
+    conversation is abandoned".
+
+    An abandoned conversation IS the wedge. The application's bridge calls
+    run in worker threads; a signal arriving on the main thread unwinds it
+    and closes the port underneath a worker that has sent a request and is
+    waiting for the answer. The sampler is left composing a reply for a
+    listener that has gone, which is exactly the state §95 described and
+    then failed to prevent -- demonstrated by wedging an S3000XL a second
+    time with §95's fix in place, by SIGTERMing a TUI six seconds old that
+    was still doing its startup catalog read.
+
+    So this takes the same lock every bridge call takes. A worker mid-request
+    holds it until its reply arrives; shutdown waits for that and then
+    closes. The wait is bounded, because a hung worker must not hold the
+    process open forever -- but a bounded wait that usually succeeds is a
+    great deal better than no wait at all.
+    """
+    lock = getattr(app, "_bridge_lock", None)
+    acquired = False
+    if lock is not None:
+        acquired = lock.acquire(timeout=grace)
+    try:
+        bridge.close()
+    finally:
+        if acquired:
+            lock.release()
 
 
 if __name__ == "__main__":  # pragma: no cover

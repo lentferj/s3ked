@@ -2724,3 +2724,69 @@ async def test_the_all_samples_view_marks_what_this_program_uses():
 
     assert marked, "the first demo program references something"
     assert len(marked) < len(app._samples), "and not everything"
+
+
+def test_shutdown_waits_for_an_exchange_in_flight():
+    """§95 fixed SIGTERM not closing the port, and reasoned that abandoning
+    the conversation was harmless because the FRAME was whole. It is not
+    harmless: an abandoned exchange leaves the sampler composing a reply for
+    a listener that has gone, which is the wedge itself. Demonstrated by
+    wedging an S3000XL a second time with §95's fix in place.
+
+    So shutdown takes the same lock every bridge call takes.
+    """
+    import threading
+    import time
+    from s3ked.app import _close_when_idle
+
+    closed = []
+
+    class Bridge:
+        def close(self):
+            closed.append(time.monotonic())
+
+    class App:
+        _bridge_lock = threading.Lock()
+
+    app, bridge = App(), Bridge()
+    held_until = [None]
+
+    def worker():
+        with App._bridge_lock:
+            time.sleep(0.4)
+            held_until[0] = time.monotonic()
+
+    thread = threading.Thread(target=worker)
+    thread.start()
+    time.sleep(0.05)
+    _close_when_idle(app, bridge, grace=5.0)
+    thread.join()
+
+    assert closed, "it must still close"
+    assert closed[0] >= held_until[0], (
+        "the close happened while a worker held the bridge")
+
+
+def test_shutdown_does_not_hang_forever_on_a_stuck_worker():
+    """A bounded wait that usually succeeds beats no wait; an unbounded one
+    would keep the process alive on a worker that never returns."""
+    import threading
+    import time
+    from s3ked.app import _close_when_idle
+
+    closed = []
+
+    class Bridge:
+        def close(self):
+            closed.append(True)
+
+    class App:
+        _bridge_lock = threading.Lock()
+
+    App._bridge_lock.acquire()          # never released
+    started = time.monotonic()
+    _close_when_idle(App(), Bridge(), grace=0.3)
+    elapsed = time.monotonic() - started
+
+    assert closed, "it closes anyway rather than hanging"
+    assert elapsed < 3.0, elapsed
