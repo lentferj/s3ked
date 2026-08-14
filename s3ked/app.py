@@ -280,7 +280,10 @@ class SourceScreen(ModalScreen[Optional[Tuple[str, int]]]):
                         "     [b]f[/b] floppy   [b]h[/b] hard   [b]x[/b] flash")
             yield Label("  Partition       "
                         f"[b]{chr(65 + part) if isinstance(part, int) else '?'}[/b]"
-                        "        [b][[/b] and [b]][/b], or here too")
+                        # \[ is Rich's escape for a literal bracket. Writing
+                        # [b][[/b] renders "[/b]" instead: Rich reads [[ as
+                        # the escape and the /b] falls through as plain text.
+                        "        [b]\\[[/b] and [b]][/b] here, or in the panes")
             yield Label("  Volume          [dim]panel only — no register "
                         "exists for it[/dim]")
             yield Label("")
@@ -289,8 +292,13 @@ class SourceScreen(ModalScreen[Optional[Tuple[str, int]]]):
             yield Label("[b]Esc[/b] close")
 
     def on_key(self, event) -> None:
-        key = event.key
-        if key in "01234567":
+        # `event.character`, not `event.key`. Textual names punctuation keys:
+        # "[" arrives as "left_square_bracket", so matching on `key` silently
+        # never fired and the partition could not be stepped from this dialog
+        # at all -- while the same keys worked on the main screen, because a
+        # Binding("[") is resolved by Textual rather than compared here.
+        key = event.character or event.key
+        if key in "01234567" and len(key) == 1:
             self.dismiss(("drive", int(key)))
         elif key in ("f", "h", "x"):
             self.dismiss(("device", {"f": 0, "h": 1, "x": 2}[key]))

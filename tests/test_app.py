@@ -1518,3 +1518,64 @@ async def test_an_edit_writes_through_the_pane_context_not_the_program():
     app._write_param(p.lookup(("keygroup", "FILFRQ")), 50, "60")
 
     assert captured == {"param": "FILFRQ", "index": 1, "keygroup": 3}, captured
+
+
+async def test_every_key_the_source_dialog_offers_actually_works():
+    """`[` and `]` did nothing there, and the label was too broken to notice.
+
+    Textual names punctuation keys, so `[` arrives as "left_square_bracket"
+    and `event.key in ("[", "]")` never matched. The same keys worked on the
+    main screen, because a Binding("[") is resolved by Textual rather than
+    compared by hand -- which is why this survived: the feature worked
+    everywhere except the dialog advertising it.
+    """
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    async def press(key, field, start_partition=2):
+        app = S3kedApp(DemoBridge(), allow_write=True)
+        async with app.run_test(size=(110, 34)) as pilot:
+            await pilot.pause()
+            for _ in range(20):
+                await pilot.pause()
+            app.bridge.select_partition(start_partition)
+            await pilot.press("s")
+            await pilot.pause()
+            before = app.bridge.load_source()[field]
+            await pilot.press(key)
+            for _ in range(30):
+                await pilot.pause()
+            return before, app.bridge.load_source()[field]
+
+    before, after = await press("]", "partition")
+    assert after == before + 1, "] must step the partition up"
+    before, after = await press("[", "partition")
+    assert after == before - 1, "[ must step the partition down"
+
+    _before, after = await press("3", "scsi_drive_id")
+    assert after == 3, "a digit must select that SCSI drive"
+
+    _before, after = await press("f", "device_type")
+    assert after == 0, "f must select floppy"
+    _before, after = await press("x", "device_type")
+    assert after == 2, "x must select flash"
+
+
+async def test_the_source_dialog_renders_its_bracket_hint():
+    """`[b][[/b]` printed "[/b]": Rich reads `[[` as an escaped bracket and
+    the `/b]` falls through as plain text."""
+    from textual.widgets import Label
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(110, 34)) as pilot:
+        await pilot.pause()
+        for _ in range(20):
+            await pilot.pause()
+        await pilot.press("s")
+        await pilot.pause()
+        text = " ".join(str(w.render()) for w in app.screen_stack[-1].query(Label))
+
+    assert "[/b]" not in text, f"markup leaked into the display: {text!r}"
+    assert "[ and ]" in text, f"bracket hint not rendered: {text!r}"
