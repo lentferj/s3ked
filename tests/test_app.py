@@ -1207,48 +1207,67 @@ async def test_the_demo_never_writes_a_config():
     assert "this session only" in app.last_status
 
 
-async def test_the_key_legend_shows_every_binding_at_80_columns():
+async def test_the_footer_fits_at_the_smallest_supported_size():
     """80x24 is the smallest size this project claims to support.
 
-    Textual's Footer is one line and truncates rather than wrapping: with
-    thirteen bindings it showed six and silently cut the rest, so the disk,
-    load, menu, boards and audit keys were undiscoverable to anyone who had
-    not read the README. Neither `height: auto` nor a grid layout changes
-    that, both measured.
+    Textual's Footer truncates rather than reflowing, and with thirteen
+    bindings it showed six and silently cut the rest -- so the disk, load,
+    menu, boards and audit keys were undiscoverable to anyone who had not
+    read the README. Neither `height: auto` nor a grid layout changes that;
+    the widget simply cuts.
 
-    KeyHints folds instead -- k2kremote's and eosed's answer to the same
-    problem, ported rather than reinvented. Nothing is hidden; the legend
-    grows a line.
+    So the footer carries the handful reached for constantly, and `?` carries
+    all of them. This asserts the handful actually fits, because "it fits" is
+    exactly the claim that was wrong before.
     """
-    from s3ked.app import S3kedApp, wrap_blocks
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
 
-    blocks = [f"{b.key} {b.description}" for b in S3kedApp.BINDINGS
-              if b.description and b.show]
-    assert len(blocks) >= 13, "this test would be weak with few bindings"
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        await pilot.pause()
+        rendered = app.export_screenshot()
 
-    for width in (80, 100, 120):
-        folded = wrap_blocks(blocks, width)
-        for block in blocks:
-            assert block in folded, f"{block!r} lost at {width} columns"
-        widest = max(len(line) for line in folded.splitlines())
-        assert widest <= width, f"line of {widest} exceeds {width}"
-
-
-def test_wrap_blocks_never_splits_a_hint():
-    """A break inside a label would read as two bindings that do not exist."""
-    from s3ked.app import wrap_blocks
-
-    blocks = ["q Quit", "l Load volume", "B Boards fitted"]
-    for width in range(8, 60):
-        folded = wrap_blocks(blocks, width)
-        for block in blocks:
-            assert block in folded, f"{block!r} split at width {width}"
+    for label in ("Quit", "Reload", "Edit", "Gate", "Undo", "Master", "Keys"):
+        assert label in rendered, f"{label!r} truncated out of the footer at 80x24"
 
 
-def test_a_hint_wider_than_the_terminal_takes_its_own_line():
-    """Rather than being cut, which is the behaviour being replaced."""
-    from s3ked.app import wrap_blocks
+async def test_the_help_screen_lists_every_binding():
+    """Generated from BINDINGS, so it cannot drift from what the app does.
 
-    folded = wrap_blocks(["q Quit", "x " + "a very long description" * 3], 20)
-    assert "a very long description" in folded
-    assert folded.splitlines()[0] == "q Quit"
+    A hand-kept key list is the thing this project has already found stale in
+    sibling code; the footer's own omissions are what made this screen
+    necessary.
+    """
+    from s3ked.app import S3kedApp, HelpScreen
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    expected = {b.description for b in S3kedApp.BINDINGS
+                if b.description and b.action != "help"}
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        await pilot.press("question_mark")
+        for _ in range(10):
+            await pilot.pause()
+        screen = app.screen_stack[-1]
+        assert isinstance(screen, HelpScreen)
+        listed = {d for _key, d in screen.rows}
+
+    assert listed == expected, f"help missing {expected - listed}"
+    assert len(listed) >= 13, f"only {len(listed)} bindings described"
+
+
+async def test_every_hidden_binding_is_reachable_from_help():
+    """Hiding a key from the footer must not hide it from the user."""
+    from s3ked.app import S3kedApp, HelpScreen
+
+    hidden = {b.description for b in S3kedApp.BINDINGS
+              if b.description and not b.show}
+    listed = {d for _k, d in
+              HelpScreen(S3kedApp.BINDINGS).rows}
+
+    assert hidden, "no bindings are hidden; this test would be vacuous"
+    assert hidden <= listed, f"hidden and undiscoverable: {hidden - listed}"
