@@ -2386,3 +2386,126 @@ async def test_selecting_a_volume_needs_the_write_gate():
 
     assert chosen == []
     assert "write gate is locked" in app.last_status
+
+
+async def test_the_disk_cursor_survives_the_refresh_a_selection_causes():
+    """Selecting a volume re-reads the disk, and a rebuilt table resets its
+    cursor to row 0 -- which reads as the selection having been undone.
+
+    Reported from live use: "when I hit enter on v2..3..4, the refresh places
+    the selection back onto v0".
+    """
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        await pilot.press("d")
+        for _ in range(30):
+            await pilot.pause()
+        table = app.query_one("#volumes", DataTable)
+        table.focus()
+        table.move_cursor(row=3)
+        await pilot.pause()
+        before = str(table.get_row_at(table.cursor_row)[0])
+        assert before.startswith("v")
+
+        await pilot.press("enter")
+        for _ in range(40):
+            await pilot.pause()
+        after = str(table.get_row_at(table.cursor_row)[0])
+
+    assert after == before, f"cursor jumped from {before} to {after}"
+
+
+async def test_the_selected_volume_is_marked_in_the_list():
+    """Which one the machine is pointing at, where the eye already is."""
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        await pilot.press("d")
+        for _ in range(30):
+            await pilot.pause()
+        table = app.query_one("#volumes", DataTable)
+        table.focus()
+        table.move_cursor(row=2)
+        await pilot.pause()
+        await pilot.press("enter")
+        for _ in range(40):
+            await pilot.pause()
+        marked = [
+            str(table.get_row_at(r)[0])
+            for r in range(table.row_count)
+            if "◂" in str(table.get_row_at(r)[1])
+        ]
+
+    assert marked == ["v2"], f"exactly the selected volume: {marked}"
+
+
+async def test_the_main_menu_stays_open_across_changes():
+    """Esc is the only way out. Choosing a page must not close the dialog.
+
+    Reported from live use: "when I am in g, any key I hit brings me back to
+    the main screen -- if I hit the wrong one I have to do g again". The same
+    complaint the Load source screen drew, fixed the same way.
+    """
+    from s3ked.app import MenuScreen, S3kedApp
+    from s3ked.demo import DemoBridge
+
+    asked = []
+
+    class Watch(DemoBridge):
+        def select_mode(self, mode, *, timeout=None):
+            asked.append(mode)
+            return super().select_mode(mode, timeout=timeout)
+
+    app = S3kedApp(Watch(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        await pilot.press("g")
+        for _ in range(25):
+            await pilot.pause()
+        assert isinstance(app.screen_stack[-1], MenuScreen)
+
+        for key in ("2", "8", "0"):
+            await pilot.press(key)
+            for _ in range(20):
+                await pilot.pause()
+            assert isinstance(app.screen_stack[-1], MenuScreen), (
+                f"pressing {key!r} closed the dialog")
+
+        await pilot.press("escape")
+        for _ in range(15):
+            await pilot.pause()
+        closed = not isinstance(app.screen_stack[-1], MenuScreen)
+
+    assert asked == [2, 8, 0], f"every press must reach the machine: {asked}"
+    assert closed, "Esc must close it"
+
+
+async def test_the_main_menu_repaints_from_the_read_back():
+    """The acknowledgement is wrong in both directions; only the read counts."""
+    from textual.widgets import Label
+    from s3ked.app import MenuScreen, S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        await pilot.press("g")
+        for _ in range(25):
+            await pilot.pause()
+        screen = app.screen_stack[-1]
+        assert isinstance(screen, MenuScreen)
+        await pilot.press("9")          # SAVE
+        for _ in range(25):
+            await pilot.pause()
+        here = str(screen.query_one("#menu-here", Label).render())
+
+    assert "SAVE" in here, f"the dialog must follow the machine: {here!r}"

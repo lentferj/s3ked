@@ -372,7 +372,8 @@ class ReportScreen(ModalScreen[None]):
             with VerticalScroll(id="report-scroll"):
                 yield Static(self.body, id="report-body")
             yield Label(self.footer, id="report-footer")
-            yield Label("[b]Esc[/b] close")
+            yield Label("[b]Esc[/b] close  [dim]— the page changes as you "
+                        "press, and this stays open[/dim]")
 
     def action_close(self) -> None:
         self.dismiss(None)
@@ -602,17 +603,21 @@ class BoardsScreen(ModalScreen[Optional[set]]):
 
 
 class MenuScreen(ModalScreen[Optional[int]]):
-    """Jump the machine to one of its eight main-menu pages.
+    """Jump the machine to any of its eleven main-menu pages.
 
     This is not button injection -- there is no keypress message anywhere in
     this protocol. The current page is a variable, `byte[91]`, and writing it
     moves the machine.
 
-    Three of the eight values are named. The rest were never observed, because
-    naming one requires somebody at the machine to read the display while the
-    probe runs, and the enumeration has gaps that rule out guessing: GLOBAL is
-    the second button of the second row and reads 8, where its position would
-    make it 5.
+    All eleven values are named, read off the panel one at a time (§84).
+    Naming them needed somebody at the machine, because the enumeration has
+    gaps that rule out guessing: GLOBAL is the second button of the second
+    row and reads 8, where its position would make it 5.
+
+    **Stays open across changes**, like the Load source screen. It used to
+    dismiss on the first key that matched, so choosing the wrong page meant
+    pressing `g` again to get back -- and this is the sort of tool where Esc
+    should be the only way out of a dialog.
     """
 
     BINDINGS = [Binding("escape", "cancel", "Cancel")]
@@ -626,7 +631,7 @@ class MenuScreen(ModalScreen[Optional[int]]):
         here = self.modes.get(self.current, f"unnamed ({self.current})")
         with Vertical(id="menu-box"):
             yield Label("[b]Main menu[/b]", id="menu-title")
-            yield Label(f"  now showing: [b]{here}[/b]")
+            yield Label(f"  now showing: [b]{here}[/b]", id="menu-here")
             yield Label("")
             for key, (value, name) in self._CHOICES.items():
                 yield Label(f"  [b]{key}[/b]  {name}  [dim]({value})[/dim]")
@@ -634,7 +639,8 @@ class MenuScreen(ModalScreen[Optional[int]]):
             yield Label("[dim]EDIT is a modifier, not a page: eight buttons, "
                         "seven modes, and EDIT\n  combines with four of them "
                         "— which is the eleven the manual counts.[/dim]")
-            yield Label("[b]Esc[/b] close")
+            yield Label("[b]Esc[/b] close  [dim]— the page changes as you "
+                        "press, and this stays open[/dim]")
 
     #: All eleven, keyed 0-9 then a for LOAD. The order is the register's
     #: own, which is also the panel's: base/edit pairs, then the three
@@ -649,9 +655,28 @@ class MenuScreen(ModalScreen[Optional[int]]):
     }
 
     def on_key(self, event) -> None:
-        if event.key in self._CHOICES:
-            self.dismiss(self._CHOICES[event.key][0])
+        # `event.character`, not `event.key`, for the same reason SourceScreen
+        # uses it: Textual names some keys rather than passing the character.
+        key = event.character or event.key
+        if key in self._CHOICES:
             event.stop()
+            self.app.apply_menu_change(self._CHOICES[key][0])
+
+    def show_current(self, current) -> None:
+        """Repaint the "now showing" line from what the machine REPORTS.
+
+        Not from what was asked for. Writing 0 answers REPLY *error* and
+        switches the page anyway, and other values answer OK -- the
+        acknowledgement is wrong in both directions, so only the read-back
+        tells the truth (§79).
+        """
+        self.current = current
+        here = self.modes.get(current, f"unnamed ({current})")
+        try:
+            self.query_one("#menu-here", Label).update(
+                f"  now showing: [b]{here}[/b]")
+        except Exception:
+            pass
 
     def action_cancel(self) -> None:
         self.dismiss(None)
@@ -1429,13 +1454,19 @@ class S3kedApp(App):
         self.call_from_thread(self._show_menu, current)
 
     def _show_menu(self, current: int) -> None:
-        def chosen(value: Optional[int]) -> None:
-            if value is None:
-                return
-            self._select_mode_worker(value)
-
         self.notify_status("")
-        self.push_screen(MenuScreen(current, self.bridge.MODES), chosen)
+        self.push_screen(MenuScreen(current, self.bridge.MODES))
+
+    def apply_menu_change(self, value: int) -> None:
+        """Apply one page change from the open Main menu dialog.
+
+        The dialog stays up. It used to dismiss on the first key that
+        matched, so choosing the wrong page meant pressing `g` again to get
+        back -- reported in live use, and the same complaint the Load source
+        screen drew before it was changed the same way. Esc is now the only
+        way out of either.
+        """
+        self._select_mode_worker(value)
 
     @work(thread=True)
     def _select_mode_worker(self, value: int) -> None:
@@ -1450,6 +1481,13 @@ class S3kedApp(App):
             self.notify_status,
             f"main menu: {name}" if got == value
             else f"main menu: asked for {value}, machine shows {name}")
+        # The dialog is still up, so it repaints from the read-back.
+        self.call_from_thread(self._refresh_menu_screen, got)
+
+    def _refresh_menu_screen(self, current: int) -> None:
+        screen = self.screen_stack[-1] if self.screen_stack else None
+        if isinstance(screen, MenuScreen):
+            screen.show_current(current)
 
     def action_load_volume(self) -> None:
         """Load the selected volume into the machine. **This writes.**
@@ -1603,9 +1641,26 @@ class S3kedApp(App):
     def _show_volumes(self, volumes, entries, source=None,
                       source_error=None) -> None:
         table = self.query_one("#volumes", DataTable)
+        # Selecting a volume re-reads the disk, which rebuilds this table --
+        # and a rebuilt DataTable puts its cursor back on row 0. So pressing
+        # Enter on v4 selected v4 and then jumped the cursor to v0, which
+        # reads as the selection having been undone. Remembered by LABEL
+        # rather than by row number, because the directory below the divider
+        # changes length with the volume.
+        was_on = None
+        if table.row_count:
+            try:
+                was_on = str(table.get_row_at(table.cursor_row)[0])
+            except Exception:
+                was_on = None
+
         table.clear()
+        selected = (source or {}).get("volume")
         for volume in volumes:
-            table.add_row(f"v{volume.index}", volume.name)
+            # Which one the machine is actually pointing at. The title says
+            # so too, but the mark is where the eye already is.
+            here = " ◂" if volume.index == selected else ""
+            table.add_row(f"v{volume.index}", f"{volume.name}{here}")
         # The rows below are a DIFFERENT list: the directory of whichever
         # volume the panel has selected, not more volumes. Concatenated with
         # no divider they read as volumes with odd numbering -- asked in live
@@ -1615,6 +1670,15 @@ class S3kedApp(App):
         for entry in entries:
             kind = "prog" if getattr(entry, "is_program", False) else "samp"
             table.add_row(f"{kind}", entry.name)
+
+        if was_on is not None:
+            for row in range(table.row_count):
+                try:
+                    if str(table.get_row_at(row)[0]) == was_on:
+                        table.move_cursor(row=row)
+                        break
+                except Exception:
+                    break
         self._disk_entries = list(entries or [])
         self._disk_read = True
         try:
