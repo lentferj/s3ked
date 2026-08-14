@@ -7326,9 +7326,30 @@ Jan's suggestion, from watching the result rather than from the code — the
 sort of thing no test would have produced, because every synthetic run of
 this had passed for months.
 
-The mechanism (a header write moving the panel cursor) rests on **one**
-observation and is not independently confirmed. Nothing depends on it: if it
-is wrong, the write order is merely arbitrary rather than helpful.
+**Confirmed on a second, clean run.** The first observation was made while
+the operator had been switching pages to watch the loads, so it could not
+separate the write order from the navigation. Repeated fully unattended --
+clear, six loads, renumber high to low, port closed, nothing else sent -- the
+panel was left showing the complete list from program 1. Two observations,
+the second with the confound removed.
+
+### A load leaves the list stale; a header write repaints it
+
+Falling out of the same run, and useful to anyone driving this remotely.
+
+After the six loads the `SLCT` list showed only the last-loaded program until
+the operator left the page and came back — the data was right and the display
+was stale. After the renumber it showed the complete, correct list **with no
+page switch at all**.
+
+So the two write paths differ: a disc load does not refresh that list, and a
+header write does. That is consistent with the family's documented default of
+repainting its own LCD, with item-index bit 13 as an opt-*out* "postpone
+screen update" flag — a load is not a header write and never sets it.
+
+Practical consequence: after a remote load, do not trust the `SLCT` list
+until something touches a header or the page is re-entered. The *counts* on
+the right of that page were correct throughout; only the listing lagged.
 
 ### A panel-reading trap, recorded because it cost a minute
 

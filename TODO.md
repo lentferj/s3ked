@@ -950,3 +950,21 @@ BTSORT sort is a no-op for this write — numbers assigned in list order leave
 the list already in number order.
 
 RESOLUTION_NOTES §92.
+
+
+---
+
+## The SLCT list goes stale after a remote load (recorded 2026-08-14)
+
+Not a bug in this project and nothing to fix here, but it will be reported as
+one. After a load fired over SysEx, the panel's `PROGRAMS IN MEMORY` list
+shows only the last-loaded program until the page is left and re-entered. The
+counts beside it (`N program(s)`, `N now active`) are correct throughout;
+only the listing lags.
+
+A header write repaints it immediately, which is why a remote renumber leaves
+a correct full list and a load does not. Consistent with the family
+repainting its own LCD by default, item-index bit 13 being an opt-*out*
+"postpone screen update" — a load is not a header write and never sets it.
+
+RESOLUTION_NOTES §92.
