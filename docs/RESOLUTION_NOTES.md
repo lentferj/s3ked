@@ -6551,9 +6551,38 @@ chose.** And it would have answered §83's question with the S3000 generation
 only, which is exactly the generation §83 measured — so it would have arrived
 here looking like agreement.
 
-Three distinct instances that day, all in the denominator: a capped loader, a
-filter identical to its own population, and a typo that narrowed a corpus.
-None was caught by a test. All three had a believable shape.
+A **fourth** followed, in the answer to §83's third question. The first pass
+reported outermost 9.13 % non-zero against inner 6.32 % -- a 1.4x enrichment
+reading as weak support for the hypothesis -- and it was an artefact of
+counting each sample once per **keygroup reference** rather than once per
+multisample. A sample spanning eight keygroups voted eight times, so the
+observations were not independent. Deduplicating gives 1.01x.
+
+Four distinct instances that day, all in the denominator: a capped loader, a
+filter identical to its own population, a typo that narrowed a corpus, and a
+unit of observation that double-counted. None was caught by a test. All four
+had a believable shape.
+
+**Two of the four pointed the same way as the hypothesis of the person who
+asked the question.** That is the property worth carrying: a wrong answer
+that contradicts you gets checked, and a wrong answer that agrees with you
+does not. Both would have arrived here as confirmation.
+
+### Where the phantom did and did not reach (2026-08-14)
+
+Asked directly by mpc2emu, whose splitter now implements §98's arithmetic, and
+worth answering from the call paths rather than from memory.
+
+**§98's identity is unaffected.** Its terms came from `program_list()`
+(`RPLIST`), `sample_list()` (`RSLIST`) and each program header's `GROUPS`
+field -- the machine's own resident lists, none of which walk the directory.
+`hd_directory` was used in that session only to choose *what to load*. Had a
+term come from the walk, the identity could not have closed exactly, which is
+its own small check.
+
+**What the phantom did reach:** the fit check's `audio_words` sum, by roughly
+six words -- negligible and still wrong -- and every "N items in this volume"
+figure this project has displayed or quoted.
 
 ### §83a — The corpus that would have answered this no longer exists (2026-08-13)
 
