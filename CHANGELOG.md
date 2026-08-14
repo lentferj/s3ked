@@ -11,30 +11,12 @@ The reasoning behind almost every entry here lives in
 `docs/RESOLUTION_NOTES.md`, which is numbered by section (§n) and is the
 long-form record; this file is the short one.
 
-## [Unreleased]
-
-Work after the 0.1 line was frozen. `release/0.1.x` takes bug fixes only; see
-`docs/FREEZE.md` for what counts as one.
-
-### Added
-
-- **Effects and reverb read/write** (`fx_bytes`, `set_fx_bytes`, `fx_names`).
-  No document describes the structure — the Akai scan covers only the multi
-  header's pointers to an effects file — so it was measured: a 12-character
-  name at offset 3, entries 128 bytes apart, and two lists of 51 presets. Both
-  lists' extents are recorded as data from one machine rather than as
-  constants, because the device offers no count and answers past the end with
-  buffer contents (§88).
-- **All of it works on a machine with no EB16 fitted**, which is the point: an
-  editor can author effects for a program destined for a machine that has the
-  board. It is fenced behind declaring the board, like the IB304F fields
-  (§86).
-
 ## [0.1.0] — unreleased, first public beta
 
-Version `0.1.0`, `Development Status :: 4 - Beta`. Those two and the line
-above are meant to agree: a first public beta, on a 0.x line whose interfaces
-may still move, cut from `main` and maintained on `release/0.1.x`.
+Version `0.1.0`, `Development Status :: 4 - Beta`, on a 0.x line whose
+interfaces may still move. Development happens on `main`; there is no
+maintenance branch, and there was briefly one — see the note at the end of
+this entry.
 
 First release. A terminal editor for the Akai S1000/S3000 family over MIDI
 SysEx, developed against an S3000XL.
@@ -65,6 +47,11 @@ docs; this tool implements the editor half.
   programs that play silence with nothing on the machine to say so (§73, §80).
 - **All eleven main-menu pages** are reachable over MIDI (§84).
 - **A multi mode implementation.**
+- **Effects and reverb read/write.** No document describes the structure, so
+  it was measured: a 12-character name at offset 3, entries 128 bytes apart,
+  two lists of 51 presets. It works on a machine with **no EB16 fitted**,
+  which is the point — an editor can author effects for a program destined
+  for a machine that has the board (§86, §88).
 
 ### Safety
 
@@ -103,6 +90,24 @@ This talks to a sampler that has no undo.
   figure. k2kremote's 120 ms is a K2000 finding and does not transfer.
 - **Tuning writes snap to a one-cent grid.** The field holds 1/256 of a
   semitone but only multiples of 2.56 are kept, silently (§89).
+
+### A note on the branch that briefly existed
+
+A `release/0.1.x` branch was cut and then abandoned within a day. Everything
+on it is here; nothing was lost.
+
+It was cut on the assumption that 0.1 was close to releasable. It was not.
+The evening that followed found a bug in the bounds cache, a config file that
+could silently empty itself, `s3kcli ports` crashing on any host without a
+MIDI backend, a key legend that hid half its bindings at the smallest
+supported size, a parameter table claiming envelope 3 needed a board it does
+not, and a pane that had never shown anything but a placeholder. A freeze is
+for a line that has stopped moving, and this one had not started.
+
+Two things it did earn, kept here because they outlived it: a policy that a
+false claim in the documentation is a bug rather than a nice-to-have, and the
+discipline of asking whether a change *repairs* something or *adds* something
+before writing it. Both are worth keeping without the branch.
 
 ### Not included
 

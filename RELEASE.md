@@ -3,12 +3,6 @@
 
 # What a first public beta needs
 
-> **Frozen.** The 0.1 line lives on `release/0.1.x`, cut from `main` at
-> `4b67cc5` with 775 tests green. That branch takes **bug fixes only** — see
-> [`docs/FREEZE.md`](docs/FREEZE.md) for what counts as one, including the
-> awkward case where most of this project's content is documented
-> measurements. New work goes to `main`.
-
 
 Ordered by what would embarrass the project most if it were skipped.
 
@@ -81,7 +75,7 @@ whether someone points s3ked at an irreplaceable sampler.
       writes that crash the machine outright, out-of-range reads answering
       with stale data, and loads accumulating into silent programs.
 - [x] version `0.1.0` — right for a first beta on a 0.x line, and the
-      maintenance branch `release/0.1.x` takes 0.1.1 onward.
+      No maintenance branch: development is on `main` alone.
 - [x] `Development Status :: 4 - Beta` — it was Alpha while the CHANGELOG
       called this a first public beta. A test now pins version, classifier
       and CHANGELOG heading together so they cannot drift apart again.
