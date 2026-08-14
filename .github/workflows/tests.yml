@@ -6,12 +6,23 @@
 # no ALSA sequencer. That is the point of running it here: the drift this
 # project keeps finding by hand (stale key tables, stale "unverified" claims)
 # is exactly what a red build catches on the push that introduced it.
+#
+# The matrix is deliberately not Linux-only. This is developed on Linux, and
+# the install path is the part most likely to be broken in a way the author's
+# own machine can never show them. The sibling eosed added macOS and Windows
+# and the first run found a config file that had silently never persisted on
+# Windows for the life of that project — a locale-codec bug invisible from a
+# UTF-8 box, with nine passing tests over it.
+#
+# Linux sweeps every supported Python; macOS and Windows cover the ends of the
+# range, which is also the wheel/no-wheel split: python-rtmidi 1.5.8 ships no
+# cp313 wheel on any platform, so 3.13 exercises a from-source build.
 
 name: tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, "release/**"]
   pull_request:
   workflow_dispatch:
 
@@ -20,11 +31,22 @@ permissions:
 
 jobs:
   pytest:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    name: pytest (${{ matrix.os }}, ${{ matrix.python-version }})
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version: ["3.11", "3.12", "3.13"]
+        include:
+          - os: macos-latest
+            python-version: "3.11"
+          - os: macos-latest
+            python-version: "3.13"
+          - os: windows-latest
+            python-version: "3.11"
+          - os: windows-latest
+            python-version: "3.13"
 
     steps:
       - uses: actions/checkout@v4
@@ -35,16 +57,52 @@ jobs:
           cache: pip
 
       # python-rtmidi is imported at module scope by `s3k.bridge`, so it has to
-      # be installed even though nothing here opens a port. It ships manylinux
-      # wheels; the ALSA headers are only needed if pip falls back to a source
-      # build on a version with no wheel yet.
-      - name: Install ALSA headers (source-build fallback for python-rtmidi)
+      # be installed even though nothing here opens a port. On Linux the ALSA
+      # headers are needed whenever pip falls back to a source build, which is
+      # not the rare case it sounds like: there is no cp313 wheel, so 3.13
+      # builds from source every time. macOS and Windows need no equivalent —
+      # CoreMIDI and WinMM are part of the OS SDK and the runners ship the
+      # toolchain a source build needs.
+      - name: Install ALSA headers (needed for any python-rtmidi source build)
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev
 
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e '.[dev]'
+          python -m pip install -e ".[dev]"
 
       - name: Run the suite
         run: python -m pytest -q
+
+      # Proves the console scripts are on PATH and runnable from the venv the
+      # installer made — what the README's Quick Start promises, and the thing
+      # that differs most between platforms (bin/ vs Scripts\).
+      - name: Smoke-test the entry points
+        run: |
+          s3kcli --help
+          s3kcli params --region program
+          s3kcli groups
+
+      # `ports` is the first command a new user runs, and until 2026-08-13 it
+      # answered with a traceback on any host with no MIDI backend — a
+      # container, a headless box, a runner. Both outcomes are legitimate here:
+      # a runner may enumerate cleanly and return empty lists, or may have no
+      # sequencer at all. What is never acceptable is a traceback, so that is
+      # what this asserts rather than the exit code.
+      - name: '`ports` must fail kindly, or not at all'
+        shell: bash
+        run: |
+          set +e
+          output=$(s3kcli ports 2>&1)
+          status=$?
+          set -e
+          echo "$output"
+          if printf '%s' "$output" | grep -q 'Traceback'; then
+            echo "::error::s3kcli ports raised instead of exiting kindly"
+            exit 1
+          fi
+          if [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; then
+            echo "::error::unexpected exit status $status"
+            exit 1
+          fi
