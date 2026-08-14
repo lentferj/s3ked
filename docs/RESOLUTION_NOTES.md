@@ -5514,6 +5514,12 @@ the machine was not left in a bad state by the write.
 waveforms survived it. §71 recorded that a load clears RAM and would need
 arm-then-fire treatment; that is withdrawn.
 
+> **Qualified by §100.** "Adds" means it does not wipe memory — which is what
+> this measurement shows and it stands. It does **not** mean every load is
+> additive: an item whose NAME matches a resident one replaces it, so
+> reloading the same volume is idempotent rather than cumulative. The two
+> facts are compatible and were measured six days apart.
+
 ### The main menu is a variable, and writing it moves the machine
 
 There is no button injection in this protocol -- no keypress message, no panel
