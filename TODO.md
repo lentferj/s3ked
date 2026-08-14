@@ -823,3 +823,28 @@ this one happened because the client stopped listening.
 **Operational note, not a code change:** do not run a live SysEx client under
 `timeout`. It is right for a probe that talks and stops, wrong for anything a
 person would otherwise quit. RESOLUTION_NOTES §95.
+
+
+---
+
+## The volume IS remotely selectable (RESOLVED 2026-08-14, was recorded as impossible)
+
+**Status: settled.** §72 said the volume could not be selected remotely and
+this project repeated it for six days, in a docstring, in the CHANGELOG, in
+the TUI's status line, and in a test asserting `select_volume` must not exist.
+
+The register is **`byte[4]`** — already found, already written to, and named a
+hold flag (§70). It is the volume, 0-based, displayed 1-based. Writing it
+moves the panel and the directory both.
+
+Two things fell out of it:
+
+- `_force_reread` writes 0 to that byte, and `select_drive`, `select_device`
+  and `select_partition` all call it. **Every source change silently jumped
+  the volume to the first one.** Now documented behaviour of those methods.
+- The sweep that found it covered the **word and dword banks** for the first
+  time. Every previous sweep, including the one that concluded §72, had only
+  ever looked at the byte bank. The answer was in the byte bank after all,
+  but only widening the search got anyone to look again.
+
+RESOLUTION_NOTES §96.

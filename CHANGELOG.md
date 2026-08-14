@@ -38,7 +38,7 @@ docs; this tool implements the editor half.
   rather than `80`, and `set FILFRQ 500Hz` accepted. Every law was measured on
   hardware, and none is provisional (§20–§26, §43–§66).
 - **Disk control.** Volume and directory listing, and remote selection of SCSI
-  drive, device and partition. Loading a volume is triggerable, with a fit
+  drive, device, partition **and volume** — the whole LOAD page except `CLR`. Loading a volume is triggerable, with a fit
   check against free memory beforehand (§70–§74). The load asks how: onto what
   is resident or onto an emptied machine, and whether to renumber afterwards.
   *What* to load is a real choice: all eight of the sampler's own load types
@@ -98,8 +98,7 @@ This talks to a sampler that has no undo.
 - **Whole-header `PDATA`/`KDATA` writes are deliberately not exposed.** The
   specification says writing a program whose name matches an existing one
   deletes that program first.
-- **Choosing a volume is a front-panel job.** There is no volume register; the
-  drive, device and partition are settable and the volume is not (§72).
+
 - **A load cannot be set up and fired separately.** The type register has no
   `GO`: writing it *is* starting the load. So any code touching bytes 6–9 has
   begun one, and there is no way to stage a load in advance (§94).

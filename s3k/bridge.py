@@ -1257,7 +1257,23 @@ class S3kBridge:
     #: the button positions: GLOBAL is the second button of the second row and
     #: reads 8, where its position would be 5.
     _MISC_MODE = 91
-    _MISC_SELECTION_HELD = 4     # 1 suppresses the re-read. See below.
+    #: **The selected VOLUME**, 0-based; the panel shows it 1-based. Watched
+    #: while a person stepped the volume: it read 4, 5, 1, 2 against a panel
+    #: reading 005, 006, 002, 003, and writing it moves both the panel and
+    #: the directory (§96).
+    #:
+    #: This was `_MISC_SELECTION_HELD` until 2026-08-14, on §70's reading that
+    #: it was a hold flag whose clearing forced a re-read. That reading was
+    #: built on real behaviour and named it wrongly: writing 0 selects the
+    #: FIRST volume, which always exists, and the re-read that follows is the
+    #: machine loading that volume's directory. The panel's "INACTIVE" state
+    #: §70 describes is a volume index past the end of the partition -- which
+    #: is also why a partition write appeared to stop working, and why
+    #: writing 0 appeared to fix it.
+    _MISC_VOLUME = 4
+    #: The name it went by while it was misunderstood. Kept so that a reader
+    #: coming from §70 or §72 finds the register rather than a missing symbol.
+    _MISC_SELECTION_HELD = _MISC_VOLUME
 
     #: Bytes 6-9 mirror one another -- writing any one moves all four -- and
     #: they are the LOAD page's "type of load" field. **Writing value n
@@ -1490,6 +1506,9 @@ class S3kBridge:
             "device_type": self._misc_byte(self._MISC_DEVICE_TYPE,
                                            timeout=timeout),
             "partition": self._misc_byte(self._MISC_PARTITION, timeout=timeout),
+            # 0-based, as the register holds it. The panel displays it 1-based
+            # and so does anything user-facing; see select_volume (§96).
+            "volume": self._misc_byte(self._MISC_VOLUME, timeout=timeout),
             "cursor_value": self._misc_byte(self._MISC_CURSOR_VALUE,
                                             timeout=timeout),
             "mode": self._misc_byte(self._MISC_MODE, timeout=timeout),
@@ -1510,21 +1529,19 @@ class S3kBridge:
         operation loads from disk. This moves the selection the front panel
         would act on, and nothing more.
 
-        **The volume cannot be moved remotely at all.** There is no volume
-        register: `byte[49]` looked like one because it read 1, 2, 3 as the
-        panel stepped through volumes, but it is the value of whatever field
-        the cursor is on and reads 0 in a page that has no such field. Writing
-        it does nothing, on single- and multi-volume discs alike (§72).
+        **This lands on the first volume**, because the write that makes the
+        machine act is a write to the volume register (§96). Follow with
+        :meth:`select_volume` to go somewhere else; the returned
+        ``load_source`` says where you ended up.
 
-        So remote enumeration reaches whichever volume the panel last selected
-        in each partition, and no further.
-        **`byte[4]` has to be clear or nothing happens.** The panel sets it
-        when the selection lands on a volume that does not exist -- it shows
-        "INACTIVE" -- and while it is set the machine accepts a partition
-        write and does not re-read, so the directory silently keeps
-        describing the previous partition. That cost a confusing half hour:
-        partition switching worked, then stopped, and the difference was this
-        flag left set by an earlier panel change. It is cleared here.
+        The volume must be written FIRST, and the reason is the one §70
+        described without knowing what it was describing: an index past the
+        end of the old partition leaves the panel showing "INACTIVE", and
+        while it is there the machine accepts a partition write and does not
+        re-read, so the directory silently keeps describing the previous
+        partition. That cost a confusing half hour on hardware -- partition
+        switching worked, then stopped -- and writing volume 0, which always
+        exists, is what fixes it.
         """
         self._force_reread(timeout=timeout)
         self._misc_write_verify(self._MISC_PARTITION, partition,
@@ -1557,8 +1574,45 @@ class S3kBridge:
                 f"{what}: asked for {value}, register reads {got}")
         return got
 
+    def select_volume(self, volume: int, *,
+                      timeout: Optional[float] = None) -> Dict[str, int]:
+        """Choose which volume the LOAD page is pointing at. **This writes.**
+
+        ``volume`` is 0-based, matching :meth:`volume_list`'s ``index``; the
+        panel displays it one higher, so volume 0 shows as `001`.
+
+        Nothing is loaded by this -- it moves the selection, and the machine
+        re-reads that volume's directory, which :meth:`hd_directory` then
+        returns. Loading is :meth:`trigger_load`.
+
+        **§72 said this was impossible** and this project told its users so
+        for six days. It was looking for a register it had already found and
+        misnamed (§96). Selecting a volume past the end of the partition
+        leaves the panel showing "INACTIVE", so the value is checked against
+        the volume list rather than trusted.
+        """
+        available = len(self.volume_list(timeout=timeout))
+        if available and not 0 <= volume < available:
+            raise ValueError(
+                f"volume {volume} is outside 0-{available - 1} on this "
+                f"partition; the machine would show INACTIVE rather than "
+                f"refuse"
+            )
+        self._misc_write_verify(self._MISC_VOLUME, volume,
+                                "selecting volume", timeout=timeout)
+        return self.load_source(timeout=timeout)
+
     def _force_reread(self, *, timeout: Optional[float] = None) -> None:
         """Make the machine act on a selection it has only recorded.
+
+        **This selects the first volume as it goes**, because the way it
+        makes the machine act is by writing the volume register (§96). That
+        is not a side effect to be tidied away: after a drive, device or
+        partition change the previous volume index means nothing anyway, and
+        the panel lands somewhere too. Callers that want a specific volume
+        should follow with :meth:`select_volume`, which is what the returned
+        ``load_source`` reports so they can see where they ended up.
+
 
         Writing the SCSI ID or the device type stores the choice and does
         **not** send the machine to look at it: sweeping the ID and reading
@@ -1568,8 +1622,7 @@ class S3kBridge:
         taken before the machine had gone anywhere.
 
         A write to ``byte[4]`` or to the partition both trigger it, equally
-        and immediately. ``byte[4]`` is used here because it does not move the
-        selection.
+        and immediately.
 
         **It answers with error code 1 and performs the write anyway**, in
         every state tested, on both the SINGLE and LOAD pages. That is the

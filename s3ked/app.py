@@ -389,10 +389,12 @@ class SourceScreen(ModalScreen[None]):
 
     Every row here is a miscellaneous-data byte found by changing it on the
     front panel and seeing which one moved -- the specification documents the
-    addressing and not the meanings. The volume is listed and cannot be set,
-    which is not an omission: there is no volume register. `byte[49]` reads
-    like one because it carries whatever field the cursor sits on, and writing
-    it moves nothing (§72).
+    addressing and not the meanings.
+
+    The volume is settable too, since §96: it is `byte[4]`, which this
+    project had already found and called a hold flag. It is chosen from the
+    Disk pane rather than here, because choosing it needs the list of volumes
+    beside it -- `byte[49]` still reads like a volume and still is not one.
     """
 
     BINDINGS = [Binding("escape", "cancel", "Cancel")]
@@ -412,8 +414,8 @@ class SourceScreen(ModalScreen[None]):
             yield Label(self._drive_row(), id="source-drive")
             yield Label(self._device_row(), id="source-device")
             yield Label(self._partition_row(), id="source-partition")
-            yield Label("  Volume          [dim]panel only — no register "
-                        "exists for it[/dim]")
+            yield Label("  Volume          [dim]settable — Enter on a row in "
+                        "the Disk pane[/dim]", id="source-volume")
             yield Label("")
             yield Label("[b]Volumes on this drive and partition[/b]",
                         id="source-vols-title")
@@ -1122,21 +1124,21 @@ class S3kedApp(App):
 
     @staticmethod
     def _describe_source(source) -> str:
-        """The LOAD page as the panel writes it: HARD-:C  (SCSI 3).
+        """The LOAD page as the panel writes it: HARD-:C vol 003 (SCSI 3).
 
-        **No volume.** There is no volume register (§72), and this used to
-        print `vol {source.get("volume", 0):03d}` from a key `load_source()`
-        has never returned -- so every reading was the default, and the pane
-        showed `vol 000` on a machine sitting on volume 1. Third time a
-        lookup-with-a-default in this project has turned a wrong name into a
-        plausible number; see §73 on `words_free`.
+        The volume is 1-based here and 0-based in the register, matching the
+        panel (§96). It went missing from this line for an hour on the way:
+        the key really was absent from `load_source()`, because the register
+        had been found and misnamed rather than not found.
         """
         if not source:
             return ""
         device = {0: "FLOPPY", 1: "HARD", 2: "FLASH"}.get(
             source.get("device_type"), f"DEV{source.get('device_type')}")
         letter = chr(65 + source.get("partition", 0))
-        return f"{device}-:{letter}  (SCSI {source.get('scsi_drive_id')})"
+        volume = source.get("volume")
+        shown = f" vol {volume + 1:03d}" if volume is not None else ""
+        return f"{device}-:{letter}{shown}  (SCSI {source.get('scsi_drive_id')})"
 
     def action_partition_prev(self) -> None:
         self._step_partition(-1)
@@ -1915,6 +1917,45 @@ class S3kedApp(App):
 
     # -- events -------------------------------------------------------------
 
+    def _select_volume_row(self, event) -> None:
+        """Enter on a volume row selects it. **This writes.**
+
+        It used to say a volume was a front-panel job, because §72 said so.
+        The register was there all along under another name (§96). Rows below
+        the divider are the selected volume's directory, not volumes, and
+        selecting one of those means nothing.
+        """
+        table = event.data_table
+        try:
+            label = str(table.get_row_at(event.cursor_row)[0])
+        except Exception:
+            return
+        if not label.startswith("v"):
+            return          # a directory row, or the divider
+        if not self.allow_write:
+            self.notify_status(
+                "write gate is locked — press w to arm it before changing "
+                "the volume", refused=True)
+            return
+        try:
+            index = int(label[1:])
+        except ValueError:
+            return
+        self.notify_status(f"selecting volume {index + 1:03d}…")
+        self._select_volume_worker(index)
+
+    @work(thread=True)
+    def _select_volume_worker(self, index: int) -> None:
+        try:
+            with self._bridge_lock:
+                self.bridge.select_volume(index)
+        except Exception as exc:
+            self.call_from_thread(
+                self.notify_status, f"volume: {exc}", refused=True)
+            return
+        # The directory now describes a different volume, so re-read it.
+        self.call_from_thread(self._read_disk_worker)
+
     def on_descendant_focus(self, event) -> None:
         """Moving focus to a pane shows that pane's parameters.
 
@@ -2020,13 +2061,7 @@ class S3kedApp(App):
         if event.data_table.id == "parameters":
             self.action_edit()
         elif event.data_table.id == "volumes":
-            # Enter here looks like it should select the volume, and nothing
-            # in this protocol can: the drive, device and partition are
-            # settable and the volume is not (§72). Silence reads as a broken
-            # key, so say it.
-            self.notify_status(
-                "choosing a volume is a front-panel job — there is no volume "
-                "register (§72). [ and ] step the partition.", refused=True)
+            self._select_volume_row(event)
 
 
 def build_parser() -> argparse.ArgumentParser:

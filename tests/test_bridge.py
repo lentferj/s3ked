@@ -903,44 +903,59 @@ def _misc_machine(initial):
 
 
 def test_load_source_reads_the_panel_fields():
-    bridge = _misc_machine({0: 1, 2: 2, 11: 4, 12: 6, 49: 1, 91: 10})
+    bridge = _misc_machine({0: 1, 2: 2, 4: 3, 11: 4, 12: 6, 49: 1, 91: 10})
     assert bridge.load_source() == {
         "scsi_drive_id": 4, "scsi_local_id": 6, "device_type": 1,
-        "partition": 2, "cursor_value": 1, "mode": 10,
+        "partition": 2, "volume": 3, "cursor_value": 1, "mode": 10,
     }
 
 
-def test_selecting_a_partition_clears_the_hold_flag_first():
-    """byte[4] set means the machine accepts the write and does NOT re-read.
+def test_selecting_a_partition_lands_on_the_first_volume():
+    """The write that makes the machine re-read is a write to the VOLUME.
 
-    The panel sets it when the selection lands on a volume that does not
-    exist. While it is set, a partition change silently leaves the directory
-    describing the previous partition -- which looks exactly like the write
-    having failed, and cost a confusing half hour on hardware.
+    This test used to be called "clears the hold flag first" and asserted the
+    same bytes for a different reason. byte[4] is the volume (§96), so
+    writing 0 selects the first volume -- which always exists, which is why
+    it reliably forces the re-read, and which is the whole of the "hold flag"
+    behaviour §70 described.
+
+    The ordering still matters and for the same reason: a volume index past
+    the end of the OLD partition leaves the machine showing INACTIVE and
+    ignoring the partition write.
     """
     bridge = _misc_machine({2: 2, 4: 1})
     bridge.select_partition(5)
 
-    assert bridge.bytes[4] == 0, "the hold flag must be cleared"
+    assert bridge.bytes[4] == 0, "lands on the first volume"
     assert bridge.bytes[2] == 5
-    assert bridge.writes.index(4) < bridge.writes.index(2), "cleared FIRST"
+    assert bridge.writes.index(4) < bridge.writes.index(2), "volume FIRST"
 
 
-def test_there_is_no_volume_register_to_offer():
-    """Pinned so nobody adds a volume= argument that lies.
+def test_the_volume_is_selectable_and_this_test_used_to_say_otherwise():
+    """**Inverted 2026-08-14.** It asserted `select_volume` must not exist.
 
-    byte[49] looked like the volume because it read 1, 2, 3 as the panel
-    stepped through them -- but it is the value of whatever field the cursor
-    is on, and reads 0 on a page that has no such field. Writing it does
-    nothing, on single- and multi-volume discs alike.
+    The original read: byte[49] looks like the volume because it steps with
+    the panel, but it is the cursor value, writing it does nothing, and
+    therefore no volume register exists -- pinned "so nobody adds a volume=
+    argument that lies".
+
+    Both halves about byte[49] are still true. The conclusion drawn from
+    them was not, and this test locked it in: the register was byte[4], which
+    the project had already found and named a hold flag (§96). A test written
+    to stop a lie from being added ends up stopping the truth from being
+    added, when what it really pins is an absence.
+
+    Kept, inverted, with the history attached -- an absence is exactly the
+    thing a test should be slowest to assert.
     """
     from s3k import bridge as b
     import inspect
 
-    assert not hasattr(b.S3kBridge, "select_volume")
-    params = inspect.signature(b.S3kBridge.select_partition).parameters
-    assert "volume" not in params
-    assert "cannot be moved remotely" in b.S3kBridge.select_partition.__doc__
+    assert hasattr(b.S3kBridge, "select_volume")
+    params = inspect.signature(b.S3kBridge.select_volume).parameters
+    assert "volume" in params
+    assert "cannot be moved remotely" not in (
+        b.S3kBridge.select_partition.__doc__ or "")
 
 
 def test_select_mode_reports_what_the_register_reads_not_the_ack():
@@ -1521,3 +1536,27 @@ def test_install_clean_exit_raises_system_exit_so_finally_runs():
         assert caught.value.code == 128 + int(signal.SIGTERM)
     finally:
         signal.signal(signal.SIGTERM, previous)
+
+
+def test_select_volume_refuses_a_volume_that_is_not_there():
+    """Past the end the panel shows INACTIVE rather than refusing (§96)."""
+    import pytest
+    from s3ked.demo import DemoBridge
+
+    bridge = DemoBridge()
+    count = len(bridge.volume_list())
+    assert count >= 2
+
+    bridge.select_volume(count - 1)
+    assert bridge.load_source()["volume"] == count - 1
+
+    with pytest.raises(ValueError, match="outside"):
+        bridge.select_volume(count)
+
+
+def test_the_volume_register_is_the_one_that_was_called_a_hold_flag():
+    """Same byte, new name -- and the old name still resolves (§96)."""
+    from s3k import bridge as b
+
+    assert b.S3kBridge._MISC_VOLUME == 4
+    assert b.S3kBridge._MISC_SELECTION_HELD == b.S3kBridge._MISC_VOLUME

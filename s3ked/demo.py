@@ -384,17 +384,32 @@ class DemoBridge:
     def load_source(self, *, timeout: Optional[float] = None):
         """The same keys S3kBridge.load_source returns. **The same, exactly.**
 
-        This used to include ``"volume": 1``, which the real bridge has never
-        returned -- there is no volume register (§72). The application read
-        it with a default, so against hardware it silently showed `vol 000`
-        and against the demo it showed `vol 001`, and the tests agreed with
-        the demo. A stand-in that is more generous than the machine hides the
-        bug it exists to expose.
+        This carried ``"volume": 1`` while the bridge returned no volume at
+        all, so the pane showed `vol 001` here and `vol 000` on hardware, and
+        the tests agreed with the demo. The key was removed -- and then the
+        volume register turned out to exist after all, at ``byte[4]`` (§96),
+        so it is back, on both sides this time.
+
+        The lesson survives the reversal, and is the reason the two are now
+        compared by a test: a stand-in that answers a question the device
+        refuses hides the bug it exists to expose. Which of the two was wrong
+        is a detail; that they disagreed is the defect.
         """
         return {"scsi_drive_id": self._scsi_drive_id, "scsi_local_id": 6,
                 "device_type": self._device_type,
                 "partition": getattr(self, "_partition", 0),
+                "volume": getattr(self, "_volume", 0),
                 "cursor_value": 0, "mode": self._mode}
+
+    def select_volume(self, volume: int, *, timeout: Optional[float] = None):
+        """0-based, like the real one. See S3kBridge.select_volume (§96)."""
+        available = len(self.volume_list())
+        if available and not 0 <= volume < available:
+            raise ValueError(
+                f"volume {volume} is outside 0-{available - 1} on this "
+                f"partition")
+        self._volume = volume
+        return self.load_source()
 
     def select_partition(self, partition: int, *, timeout: Optional[float] = None):
         self._partition = max(0, min(7, int(partition)))

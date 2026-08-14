@@ -726,13 +726,14 @@ async def test_the_disk_pane_shows_the_load_source():
         title = str(app.query_one("#disk-title", Static).render())
 
     assert "HARD-:A" in title
-    # "34 vol" is a COUNT and is fine. What must not appear is a selected
-    # volume NUMBER: there is no volume register (§72), and the pane printed
-    # `vol 000` on hardware for as long as it tried.
+    # The selected volume is shown 1-based, as the panel shows it (§96).
+    # It vanished from this line for an hour when the register was thought
+    # not to exist; the count ("34 vol") is a different number and both
+    # belong here.
     import re
-    assert not re.search(r"vol \d", title), (
-        f"the pane must not print a selected volume number: {title!r}")
-    assert re.search(r"\d+ vol", title), "the volume count is still wanted"
+    assert re.search(r"vol 0*1\b", title), (
+        f"the selected volume, 1-based: {title!r}")
+    assert re.search(r"\d+ vol\b", title), "the volume count is still wanted"
     assert "SCSI 4" in title
 
 
@@ -954,12 +955,10 @@ async def test_the_disk_status_line_offers_the_keys_that_exist():
 
     assert "the protocol cannot" not in status
     assert "press l" in status.lower()
-    # the one part that IS still manual, because there is no volume register
-    assert "panel" in status.lower()
 
 
 async def test_the_source_screen_shows_what_can_and_cannot_be_set():
-    """The volume is listed precisely because it CANNOT be set."""
+    """The volume is listed, and says where it IS set -- since §96."""
     from s3ked.app import S3kedApp, SourceScreen
     from s3ked.demo import DemoBridge
 
@@ -972,7 +971,9 @@ async def test_the_source_screen_shows_what_can_and_cannot_be_set():
         text = " ".join(str(w.render()) for w in app.screen_stack[-1].query("Label"))
 
     assert "SCSI drive" in text and "HARD" in text
-    assert "Volume" in text and "panel only" in text
+    assert "Volume" in text and "settable" in text, (
+        "the volume stopped being a front-panel job in §96")
+    assert "panel only" not in text
 
 
 async def test_the_source_screen_writes_only_through_the_gate():
@@ -2293,3 +2294,95 @@ async def test_refresh_re_reads_the_disk_once_it_has_been_read():
             await pilot.pause()
 
     assert len(reads) == 2, "once read, a refresh must keep it current"
+
+
+async def test_enter_on_a_volume_row_selects_that_volume():
+    """It used to say a volume was a front-panel job. It is not (§96)."""
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    chosen = []
+
+    class Watch(DemoBridge):
+        def select_volume(self, volume, *, timeout=None):
+            chosen.append(volume)
+            return super().select_volume(volume, timeout=timeout)
+
+    app = S3kedApp(Watch(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        await pilot.press("d")
+        for _ in range(30):
+            await pilot.pause()
+        table = app.query_one("#volumes", DataTable)
+        table.focus()
+        table.move_cursor(row=2)
+        await pilot.pause()
+        await pilot.press("enter")
+        for _ in range(30):
+            await pilot.pause()
+
+    assert chosen == [2], f"the row's own volume index, not the cursor: {chosen}"
+
+
+async def test_a_directory_row_is_not_a_volume():
+    """The rows under the divider are files. Selecting one means nothing."""
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    chosen = []
+
+    class Watch(DemoBridge):
+        def select_volume(self, volume, *, timeout=None):
+            chosen.append(volume)
+            return super().select_volume(volume, timeout=timeout)
+
+    app = S3kedApp(Watch(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        await pilot.press("d")
+        for _ in range(30):
+            await pilot.pause()
+        table = app.query_one("#volumes", DataTable)
+        labels = [str(table.get_row_at(i)[0]) for i in range(table.row_count)]
+        row = next(i for i, x in enumerate(labels) if x in ("prog", "samp"))
+        table.focus()
+        table.move_cursor(row=row)
+        await pilot.pause()
+        await pilot.press("enter")
+        for _ in range(25):
+            await pilot.pause()
+
+    assert chosen == [], "a directory row is not a volume"
+
+
+async def test_selecting_a_volume_needs_the_write_gate():
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    chosen = []
+
+    class Watch(DemoBridge):
+        def select_volume(self, volume, *, timeout=None):
+            chosen.append(volume)
+            return super().select_volume(volume, timeout=timeout)
+
+    app = S3kedApp(Watch(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        await pilot.press("d")
+        for _ in range(30):
+            await pilot.pause()
+        table = app.query_one("#volumes", DataTable)
+        table.focus()
+        table.move_cursor(row=1)
+        await pilot.pause()
+        await pilot.press("enter")
+        for _ in range(20):
+            await pilot.pause()
+
+    assert chosen == []
+    assert "write gate is locked" in app.last_status

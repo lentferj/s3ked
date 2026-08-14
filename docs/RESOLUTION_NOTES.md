@@ -113,6 +113,7 @@ silently wrong one.
 - [§93](#93--the-load-type-is-in-the-trigger-register-and-74-said-it-was-not-2026-08-14) — The load type IS in the trigger register, and §74 said it was not (2026-08-14)
 - [§94](#94--retraction-the-load-register-performs-the-type-you-write-it-2026-08-14) — **RETRACTION**: the load register performs the type you write it (2026-08-14)
 - [§95](#95--the-client-dying-mid-exchange-wedges-the-machine-2026-08-14) — The client dying mid-exchange wedges the machine (2026-08-14)
+- [§96](#96--retraction-the-volume-is-selectable-and-we-had-already-found-the-register-2026-08-14) — **RETRACTION**: the volume IS selectable, and we had already found the register (2026-08-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -5466,6 +5467,12 @@ action, not to the story about the action.
 
 ## §72 — Five of six: the load and the menu are remotely controllable (2026-08-12)
 
+> **RETRACTED IN PART, 2026-08-14 — see §96.** The volume **is**
+> remotely selectable, at `byte[4]`, which this project had already
+> found and called a hold flag. Everything here about `byte[49]`
+> stands — it is the cursor value and writing it does nothing — but
+> "therefore no volume register exists" did not follow from it.
+
 The workflow was: select a SCSI ID, open the LOAD menu, choose floppy/hard/
 flash, choose a partition and volume, load it, and get the programs with their
 samples. Five of those six work over MIDI.
@@ -7464,3 +7471,104 @@ could not have been found that way, because nothing was being sent at all —
 the client had stopped existing. When a device stops answering, "what did we
 send it" is only half the question; the other half is "what did we leave it
 waiting for".
+
+---
+
+## §96 — RETRACTION: the volume IS selectable, and we had already found the register (2026-08-14)
+
+**Status: settled on hardware, panel and directory both confirming.**
+Measured 2026-08-14.
+
+§72 concluded the volume could not be selected remotely, and this project
+told its users so for six days: in `select_partition`'s docstring, in the
+CHANGELOG's *Known limitations*, in the disk pane's status line, and in a
+test named `test_there_is_no_volume_register_to_offer` that asserted
+`select_volume` **must not exist**.
+
+**The volume register is `byte[4]`** — a byte this project had already found,
+already written to, and named a hold flag.
+
+### How it was found
+
+Every sweep this project had ever run covered the byte bank alone. `RMISCDATA`
+selects the bank with its selector byte — 1 byte, 2 word, 3 dword, 4 smpte,
+5 signed smpte, 6 name, 7 16-byte flag (§5) — and the word bank was known to
+be real, holding the selected volume's program and sample counts, without
+ever having been swept.
+
+So the sweep was widened to three banks and re-run while a person stepped the
+volume at the panel. The answer came from the byte bank after all, and it was
+sitting in the middle of the annotated indices, labelled as something else:
+
+```
+   time   index   from -> to     panel said
+    36s       4      4 -> 5      "at 005" → stepped
+    41s       4      5 -> 1      "at 002 now"
+    68s       4      1 -> 2      "at 03 now"
+```
+
+**0-based in the register, 1-based on the panel** — the same convention as
+`PRGNUM` (§91). `word[0]`, `word[1]` and `word[6]` moved with it, which is a
+volume change and nothing else.
+
+### Writing it works, and needs nobody at the panel to believe
+
+Writing `byte[4] = k` makes the machine report volume *k*'s own directory,
+checked against the volume list's names:
+
+```
+  wrote  reads  directory reports                 matched the list entry for
+      0      0  6 programs, 48 samples, 55 items  volume 0
+      1      1  6 programs, 36 samples, 43 items  volume 1
+```
+
+Each volume's directory came back with its own item counts, and the name the
+machine reported for the selected volume matched the volume list's entry for
+the index written. (Names are not reproduced here: the disc is a commercial
+library, and what the finding needs is the shape — two indices, two distinct
+directories — not whose volumes they were.)
+
+The panel follows too — confirmed on the LCD — but the directory alone
+settles it, and choosing a reading the machine can give without a human is
+what let this be verified in one pass.
+
+### Why §70 named it a hold flag, and why that was so nearly right
+
+§70 found that writing 0 to `byte[4]` makes the machine re-read, and that
+while the byte held certain values a partition write was accepted and
+ignored, with the panel showing "INACTIVE". Every one of those observations
+is correct. The name put on them was wrong.
+
+Writing 0 selects the **first volume**, which always exists — so the re-read
+that follows is simply the machine loading that volume's directory. And
+"INACTIVE" is a volume index past the end of the current partition, which is
+exactly the state in which the machine has nothing to re-read. A flag that
+suppresses re-reading and a volume index that points at nothing behave
+identically from the outside.
+
+The consequence nobody noticed: `_force_reread` writes 0 to this byte, and it
+is called by `select_drive`, `select_device` and `select_partition`. **Every
+source change s3ked made silently jumped the volume to the first one.** That
+is now documented behaviour of those methods rather than an accident.
+
+### The test that held the door shut
+
+`test_there_is_no_volume_register_to_offer` was written "so nobody adds a
+volume= argument that lies". Its reasoning about `byte[49]` is still entirely
+correct — it is the cursor value, and writing it does nothing. The conclusion
+drawn from that was not, and the test pinned the conclusion.
+
+A test that asserts an **absence** pins a belief about the whole search
+space, not a property of the code. This one said "no volume register exists"
+on the strength of one candidate having been eliminated. It has been inverted
+and kept, with the history attached, because the lesson is worth more than
+the assertion: *be slowest to assert an absence, and never on the strength of
+the candidates that happened to come to mind.*
+
+### What it buys
+
+`select_volume()`, and with it the disk implementation stops being half a
+feature. Enter on a volume row in the TUI selects that volume; the pane shows
+which one is selected; and a load can be aimed anywhere on the disc without
+touching the machine. Combined with §94's eight load types and §70's
+partition control, the whole LOAD page is now reachable except `CLR` (§75).
