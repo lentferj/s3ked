@@ -43,6 +43,48 @@ the wrong parameter remains a realistic failure mode.
 The write gate is **off by default** for those reasons. Back up anything you
 care about, and read [DISCLAIMER.md](DISCLAIMER.md).
 
+## Where this came from
+
+s3ked is **automation for a reverse-engineering loop**, not a project that set
+out to be a sampler editor.
+
+Its sibling [mpc2emu](https://github.com/lentferj/mpc2emu) converts sample
+libraries for vintage hardware, and getting the *musical* parameters right —
+filters, envelopes, LFOs, tuning — means checking them against a real machine.
+Done by hand that is standing at a front panel, pressing buttons, saving banks
+to disk and diffing them. [eosed](https://github.com/lentferj/eosed) started
+as the escape from that loop for an E-mu E4XT; s3ked is the same idea pointed
+at the Akai S1000/S3000 family. If the sampler can be driven over MIDI, a
+probe can be **scripted, repeated and diffed** instead of hand-performed.
+
+**It worked, and the record of what it found is the most valuable thing
+here.** [`docs/RESOLUTION_NOTES.md`](docs/RESOLUTION_NOTES.md) is 103 numbered
+sections of measurements against a real S3000XL — every parameter law fitted
+from audio, every register identified by watching the machine while somebody
+stepped a value at the panel, and the procedure each time.
+
+Some of what it found is in no document at all: the whole `LOAD` page turns
+out to be a set of miscellaneous-data registers, so drive, partition, volume,
+what to load and the load itself are all writable — and the sampler's own
+directory cursor is writable too, which is what makes loading a single named
+sample possible.
+
+**Ten of those sections are retractions outright, and twenty carry one**, all
+left in place beside what replaced them. That is deliberate: a measurement
+that was wrong and the reason it looked right are worth more than a clean list
+of conclusions, and
+several of this project's worst mistakes were confidently documented before
+they were caught. The one that recurs is a *search procedure being read as a
+fact about the world* — "we looked and found nothing" written down as "there
+is nothing there".
+
+The TUI exists because a probe you can steer interactively finds things a
+fixed script does not — the same bargain eosed describes, and the same
+`ed`-flavoured one: terse keys, dense panes, numbers where a prettier tool
+would draw a knob.
+
+---
+
 ## AI assistance & human authorship
 
 s3ked was built by its human author, **Jan Lentfer**, together with
@@ -62,7 +104,9 @@ the machine rather than merely being stored. Full account in
 
 No — and that is settled rather than unexplored. The sibling
 [k2kremote](https://github.com/lentferj/k2kremote) project mirrors a Kurzweil
-K2000's LCD in a terminal and injects front-panel presses. **The Akai
+K2000's LCD in a terminal and injects front-panel presses, and
+[eosed](https://github.com/lentferj/eosed) does the editor half for an E-mu
+E4XT. **The Akai
 S1000/S3000 family has no protocol for that**: no display read, no button
 injection, no panel echo, verified against the Akai documentation itself.
 See [`docs/RESOLUTION_NOTES.md` §1](docs/RESOLUTION_NOTES.md) for the survey
