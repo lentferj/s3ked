@@ -505,7 +505,22 @@ class MultiIn:
 _ONLY_REPLY = frozenset({int(m.Command.REPLY)})
 
 
-def install_clean_exit(signals=(signal.SIGTERM, signal.SIGHUP)) -> None:
+#: The signals worth turning into a clean exit, filtered to those this
+#: platform HAS. Windows has no `SIGHUP`, and naming it in a default argument
+#: put the lookup at import time -- where the try/except inside the function
+#: could not catch it, so `import s3k.bridge` raised AttributeError and every
+#: test file failed at collection. Found by the CI matrix on the first push
+#: after the signal handling was added; the Linux box it was written on could
+#: never have shown it.
+CLEAN_EXIT_SIGNALS = tuple(
+    number
+    for number in (getattr(signal, name, None)
+                   for name in ("SIGTERM", "SIGHUP"))
+    if number is not None
+)
+
+
+def install_clean_exit(signals=None) -> None:
     """Turn termination signals into :class:`SystemExit`, so ports close.
 
     Ctrl-C already unwinds: it raises ``KeyboardInterrupt`` and any
@@ -530,7 +545,7 @@ def install_clean_exit(signals=(signal.SIGTERM, signal.SIGHUP)) -> None:
     for a signal alone -- a host application that has its own shutdown is
     better at this than we are.
     """
-    for number in signals:
+    for number in (CLEAN_EXIT_SIGNALS if signals is None else signals):
         try:
             existing = signal.getsignal(number)
         except (ValueError, OSError):        # not available on this platform

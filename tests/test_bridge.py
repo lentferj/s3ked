@@ -1604,3 +1604,38 @@ def test_an_unreadable_entry_count_falls_back_rather_than_returning_nothing():
     records = [_dir_record("PROG A"), bytes(12) + b"\xff\xff\x00\x00" + bytes(8)]
     entries = _directory(records).hd_directory(1)
     assert [e.name for e in entries] == ["PROG A"]
+
+
+def test_the_clean_exit_signals_all_exist_on_this_platform():
+    """Windows has no SIGHUP, and it was named in a DEFAULT ARGUMENT.
+
+    Defaults evaluate at import time, so `import s3k.bridge` raised
+    AttributeError on Windows and every test file failed at collection --
+    while the try/except inside the function, written for exactly this case,
+    never got the chance to run. The Linux box it was written on could not
+    have shown it; the CI matrix did, on the first push after the signal
+    handling landed.
+    """
+    import signal
+    from s3k import bridge as b
+
+    assert b.CLEAN_EXIT_SIGNALS, "at least SIGTERM exists everywhere"
+    for number in b.CLEAN_EXIT_SIGNALS:
+        assert number in set(signal.Signals), number
+    assert signal.SIGTERM in b.CLEAN_EXIT_SIGNALS
+
+
+def test_install_clean_exit_survives_a_platform_without_sighup(monkeypatch):
+    """The module must import and install where a signal is missing."""
+    import importlib
+    import signal
+    import s3k.bridge as b
+
+    monkeypatch.delattr(signal, "SIGHUP", raising=False)
+    reloaded = importlib.reload(b)
+    try:
+        assert signal.SIGTERM in reloaded.CLEAN_EXIT_SIGNALS
+        assert len(reloaded.CLEAN_EXIT_SIGNALS) >= 1
+    finally:
+        monkeypatch.undo()
+        importlib.reload(b)
