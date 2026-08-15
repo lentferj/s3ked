@@ -543,7 +543,7 @@ async def test_each_documented_screen_actually_renders(
         out = tmp_path / f"{name}.svg"
         app.save_screenshot(str(out))
 
-    text = out.read_text().replace("&#160;", " ").replace("&quot;", '"')
+    text = out.read_text(encoding="utf-8").replace("&#160;", " ").replace("&quot;", '"')
     assert must_contain in text, f"{name} did not render {must_contain!r}"
 
 
@@ -643,7 +643,7 @@ async def test_the_armed_header_is_red_and_the_locked_one_is_not(tmp_path):
                 await pilot.pause()
             out = tmp_path / f"{name}.svg"
             app.save_screenshot(str(out))
-        return set(re.findall(r'fill="(#[0-9a-fA-F]{6})"', out.read_text()))
+        return set(re.findall(r'fill="(#[0-9a-fA-F]{6})"', out.read_text(encoding="utf-8")))
 
     locked = await render("locked", ())
     armed = await render("armed", ("w",))

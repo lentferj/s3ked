@@ -1098,7 +1098,7 @@ def write_snapshot(path: str, saved: dict, *, note: str = "") -> str:
         ],
     }
     tmp = f"{path}.partial"
-    with open(tmp, "w") as fh:
+    with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=1)
         fh.flush()
         os.fsync(fh.fileno())
@@ -1108,7 +1108,7 @@ def write_snapshot(path: str, saved: dict, *, note: str = "") -> str:
 
 def read_snapshot(path: str) -> dict:
     """Load a snapshot written by `write_snapshot`, keyed as `saved` was."""
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         payload = json.load(fh)
     return {(row["region"], row["name"]): row["value"]
             for row in payload["values"]}
@@ -1565,7 +1565,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     print("\n  " + json.dumps(summary, indent=2).replace("\n", "\n  "))
 
     if args.out:
-        with open(args.out, "w", newline="") as fh:
+        with open(args.out, "w", newline="", encoding="utf-8") as fh:
             writer = csv.DictWriter(fh, fieldnames=["value", sweep.measure])
             writer.writeheader()
             writer.writerows(rows)

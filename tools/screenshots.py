@@ -92,7 +92,7 @@ SHOTS = {
 
 
 def _text(svg: Path) -> str:
-    raw = svg.read_text()
+    raw = svg.read_text(encoding="utf-8")
     return raw.replace("&#160;", " ").replace("&quot;", '"')
 
 

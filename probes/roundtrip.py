@@ -546,7 +546,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     summarise(report, args.allow_write)
 
     if args.out:
-        Path(args.out).write_text(json.dumps({
+        payload = json.dumps({
             "results": [vars(r) for r in report.results],
             "skipped": report.skipped,
             "writes": report.writes,
@@ -554,7 +554,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             "seconds": round(report.seconds, 2),
             "aborted": report.aborted,
             "unrestored": report.unrestored,
-        }, indent=2, default=str))
+        }, indent=2, default=str)
+        Path(args.out).write_text(payload, encoding="utf-8")
         print()
         print(f"full report written to {args.out}")
 

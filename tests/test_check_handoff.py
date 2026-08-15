@@ -45,7 +45,7 @@ body
 
 def test_a_clean_file_passes(tmp_path):
     f = tmp_path / "h.md"
-    f.write_text(CLEAN)
+    f.write_text(CLEAN, encoding="utf-8")
     assert check_handoff.check(f) == []
 
 
@@ -60,7 +60,7 @@ def test_a_heading_swallowed_into_a_table_row_is_caught(tmp_path):
         "| tenth | `## TENTH PASS` | something else |",
         "| tenth | `## THIRTY-EIGHTH PASS, 2026-08-12 — a whole disk.\n\nbody\n")
     f = tmp_path / "h.md"
-    f.write_text(broken)
+    f.write_text(broken, encoding="utf-8")
 
     problems = check_handoff.check(f)
     assert any("swallowed a full heading" in p for p in problems), problems
@@ -72,7 +72,7 @@ def test_a_row_that_became_a_heading_is_caught(tmp_path):
         "## TENTH PASS — something else",
         "## TENTH PASS` | something else |")
     f = tmp_path / "h.md"
-    f.write_text(broken)
+    f.write_text(broken, encoding="utf-8")
 
     problems = check_handoff.check(f)
     assert any("contains a table pipe" in p for p in problems), problems
@@ -80,14 +80,17 @@ def test_a_row_that_became_a_heading_is_caught(tmp_path):
 
 def test_an_indexed_pass_with_no_section_is_caught(tmp_path):
     f = tmp_path / "h.md"
-    f.write_text(CLEAN.replace("## TENTH PASS — something else", "## GONE"))
+    f.write_text(CLEAN.replace("## TENTH PASS — something else", "## GONE"),
+                 encoding="utf-8")
     assert any("but no section has it" in p for p in check_handoff.check(f))
 
 
 def test_a_section_missing_from_the_index_is_caught(tmp_path):
     """A pass nobody can find is the failure the index exists to prevent."""
     f = tmp_path / "h.md"
-    f.write_text(CLEAN.replace("| tenth | `## TENTH PASS` | something else |\n", ""))
+    f.write_text(
+        CLEAN.replace("| tenth | `## TENTH PASS` | something else |\n", ""),
+        encoding="utf-8")
     assert any("not in the index" in p for p in check_handoff.check(f))
 
 

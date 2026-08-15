@@ -676,7 +676,7 @@ def test_a_snapshot_survives_the_process(tmp_path):
 def test_a_snapshot_records_when_and_why(tmp_path):
     path = cal.write_snapshot(str(tmp_path / "s.json"), {("program", "X"): 1},
                               note="before the filter sweep")
-    payload = json.loads(Path(path).read_text())
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
 
     assert payload["note"] == "before the filter sweep"
     assert payload["written"]

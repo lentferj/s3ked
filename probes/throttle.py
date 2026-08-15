@@ -371,10 +371,11 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"  {stage:<12} {gap * 1000:.0f} ms")
 
     if args.out:
-        Path(args.out).write_text(json.dumps({
+        payload = json.dumps({
             "levels": [vars(x) for x in probe.report.levels],
             "floors": probe.report.floors,
-        }, indent=2, default=str))
+        }, indent=2, default=str)
+        Path(args.out).write_text(payload, encoding="utf-8")
         print(f"\nwritten to {args.out}")
     return 0
 

@@ -647,7 +647,7 @@ def test_config_writes_preserve_unrelated_keys(tmp_path):
 
 def test_unreadable_config_is_not_fatal(tmp_path):
     path = tmp_path / "config.toml"
-    path.write_text("this is not valid toml {{{")
+    path.write_text("this is not valid toml {{{", encoding="utf-8")
     assert bridge_mod.load_last_ports(str(path)) is None
 
 

@@ -644,7 +644,47 @@ def test_nothing_that_ships_imports_numpy():
     offenders = []
     for pkg in ("s3k", "s3ked"):
         for src in (root / pkg).glob("*.py"):
-            text = src.read_text()
+            text = src.read_text(encoding="utf-8")
             if "import numpy" in text or "import scipy" in text:
                 offenders.append(src.name)
     assert not offenders, f"shipped modules importing numpy/scipy: {offenders}"
+
+
+def test_no_text_file_is_opened_without_an_explicit_encoding():
+    """Windows defaults to cp1252; a UTF-8 box can never show this.
+
+    The CI matrix caught two of these on its first green-on-Linux run: a
+    screenshot read as cp1252 (`'charmap' codec can't decode byte 0x81`) and
+    a handoff fixture written as cp1252 then read as UTF-8 (`byte 0x97`,
+    which is an em dash in cp1252). Both files are ours and both are full of
+    the em dashes this project writes everywhere.
+
+    Binary modes are exempt: they have no encoding to get wrong.
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    offenders = []
+    for path in sorted(root.glob("*/*.py")):
+        if ".venv" in path.parts or "__pycache__" in path.parts:
+            continue
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for number, line in enumerate(lines, 1):
+            # A call can span lines, so look at the next few for the keyword
+            # -- this test found two genuine cases that a single-line grep
+            # had missed for exactly that reason.
+            window = " ".join(lines[number - 1:number + 3])
+            if "encoding=" in window or "noqa: encoding" in line:
+                continue
+            if re.search(r'\bopen\([^)]*["\'][rwa]b["\']', line):
+                continue            # binary
+            if re.search(r"\bwave\.open\(", line):
+                continue            # binary by definition
+            if re.search(r"\b(read_text|write_text)\(", line):
+                offenders.append(f"{path.relative_to(root)}:{number}: {line.strip()}")
+            elif re.search(r"(?<!\.)\bopen\(", line) and "def " not in line:
+                offenders.append(f"{path.relative_to(root)}:{number}: {line.strip()}")
+
+    assert not offenders, "text I/O without an explicit encoding:\n" + "\n".join(
+        offenders)

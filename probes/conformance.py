@@ -772,7 +772,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             "reads": report.reads,
             "seconds": round(report.seconds, 2),
         }
-        Path(args.out).write_text(json.dumps(payload, indent=2, default=str))
+        Path(args.out).write_text(
+            json.dumps(payload, indent=2, default=str), encoding="utf-8")
         print()
         print(f"full report written to {args.out}")
 
