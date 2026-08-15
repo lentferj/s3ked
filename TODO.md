@@ -994,8 +994,7 @@ nudge run + cursor + collapse           exact
 **Run it after touching the edit or undo path.** The synthetic suite cannot
 replace it.
 
-Still not covered: renaming a program and undoing that (`PRNAME` is a text
-field, so nudge refuses it and the round trip has never been run on one).
+Still not covered: **renaming, and undoing a rename** — see below.
 
 ---
 
@@ -1012,3 +1011,28 @@ A keygroup index is a position in a list, not a slot that empties. Anything
 holding a keygroup number across a delete is holding a stale reference.
 
 RESOLUTION_NOTES §103.
+
+
+---
+
+## Rename round trip, on hardware (OPEN — next)
+
+The one part of the edit/undo path never run against a real machine.
+`probes/undo_roundtrip.py` covers numeric fields only: `PRNAME` is text, so
+nudge refuses it by design and the round trip has never been driven on one.
+
+**Why it is not simply "another parameter".** A rename is the only edit that
+changes what the *catalog* says, so it is the only one whose write is followed
+by a re-read that matters — and this project has already had three bugs in
+exactly that window (§102): a pane context reset, a cursor jump, and a log
+entry pointing at the wrong place. A rename also has to survive the Akai
+character set, which refuses anything it cannot store rather than substituting
+(`encode_name`), and it is 12 bytes rather than one.
+
+**To close this:** extend `probes/undo_roundtrip.py` with a text case —
+read the name, write a new one, read it back off the machine, `z`, read back
+again — and check the **program list** as well as the header, since that is
+what a rename is for and what the re-read exists to refresh. Invented names
+only; the resident programs are from a commercial library (CLAUDE.md).
+
+**Blocked on:** nothing. RAM only, needs nobody at the panel.
