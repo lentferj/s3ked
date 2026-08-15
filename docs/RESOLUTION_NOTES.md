@@ -120,6 +120,7 @@ silently wrong one.
 - [§100](#100--a-load-replaces-a-resident-program-of-the-same-name-and-this-disc-cannot-fill-the-object-pool-2026-08-14) — A load REPLACES a resident program of the same name; and this disc cannot fill the object pool (2026-08-14)
 - [§101](#101--byte55-is-the-selected-program-number-and-it-is-writable-2026-08-14) — `byte[55]` is the selected PROGRAM NUMBER, and it is writable (2026-08-14)
 - [§102](#102--three-undo-bugs-a-fake-bridge-could-not-have-shown-2026-08-15) — Three undo bugs a fake bridge could not have shown (2026-08-15)
+- [§103](#103--delk-fired-and-the-undo-path-verified-where-it-had-never-run-2026-08-15) — `DELK` fired, and the undo path verified where it had never run (2026-08-15)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -8340,3 +8341,72 @@ The first run's broken `Z` replayed its polluted log and wrote stale values
 into two parameters that were never part of that edit sequence. RAM only, and
 reloading the volume restores them — but that is precisely what a wrong-target
 write does in the field: it lands somewhere nobody was looking.
+
+---
+
+## §103 — `DELK` fired, and the undo path verified where it had never run (2026-08-15)
+
+**Status: settled.** Measured 2026-08-15, RAM only.
+
+Two gaps this project had named in its own documentation, closed without
+anybody at the panel.
+
+### `DELK` — the one destructive operation never fired
+
+`clear_memory` uses `delete_sample` and `delete_program`, so deleting a single
+**keygroup** had never been sent to a real machine. The README said so
+explicitly rather than letting "every destructive operation" cover it.
+
+Program 11, 22 keygroups, fingerprinted by each keygroup's `LONOTE` so a shift
+would be visible rather than merely a count:
+
+```
+GROUPS        22 -> 21
+LONOTE before [24,24,42,42,48,48,54,54,60,60,66,...]
+LONOTE after  [24,24,42,42,48,   54,54,60,60,66,...]
+free_blocks   745 -> 746
+```
+
+It removes the named keygroup and the rest **shift down keeping their order**
+— so a keygroup index is a position in a list, not a slot that empties.
+Anything holding a keygroup number across a delete is holding a stale
+reference.
+
+**And it returns exactly one object to the pool**, which is independent
+confirmation of §98 from the opposite direction: that section established a
+keygroup costs one block by *loading* programs, and this establishes the same
+figure by *deleting* a keygroup.
+
+### The undo path, on the keygroups it had never touched
+
+§102 fixed three undo bugs but could only verify them against program 0,
+which had a single keygroup — so the non-zero keygroup cases, the ones the
+bugs were actually about, were **skipped**. A skipped case is not a passing
+one.
+
+Re-run against a 22-keygroup program:
+
+```
+keygroup LONOTE kg3   x3   read -> write -> read back -> z -> read back, exact
+keygroup HINOTE kg10  x3   exact
+undo-all  kg4: 48 -> 41,42,43 -> read 43 -> Z -> 48
+nudge     PLAYLO 24 -> +4 -> 28; log grew by 1; cursor held; z -> 24
+```
+
+The nudge line covers three separate fixes at once: the run collapsing into a
+single undo entry, the parameter cursor surviving the table rebuild, and one
+`z` putting a whole run back.
+
+### Two faults in the probe itself, both worth recording
+
+**A shadowed variable.** The program index was named `target`, and an existing
+line `target = new if original != new else new + 1` overwrote it with the
+value being written — so every later read would have used a *value* as a
+program index. Caught by reading before running, and it is the same
+silent-wrong-index shape as the bugs being hunted.
+
+**A race on the shared port.** The probe read the bridge directly while the
+application's own workers were mid-exchange, interleaving two request/response
+pairs on one wire; the loser timed out. It now takes the same
+`_bridge_lock` every app call takes. A second user of a MIDI port has to
+queue like the first one.

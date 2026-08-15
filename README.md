@@ -19,9 +19,8 @@ data loss or **hardware damage**. You assume all risk. Full terms:
 
 **This has been driven hard against a real S3000XL.** The read paths, the
 write path, the physical-unit laws and the whole disk workflow have been
-exercised on hardware, along with the program and sample deletes. Deleting a
-single **keygroup** (`DELK`) has never been fired at a real machine and is
-listed as unverified rather than quietly included here. `docs/RESOLUTION_NOTES.md` records
+exercised on hardware, along with all three deletes — program, keygroup and
+sample. `docs/RESOLUTION_NOTES.md` records
 each measurement — including the ones that
 turned out to be wrong and were retracted. Live use is what found most of the
 interesting bugs; no amount of reading the specification would have surfaced
@@ -445,7 +444,7 @@ and — on the S2000/S3000XL/S3200XL only — the `multi` file header and its 16
 .venv/bin/python -m pytest
 ```
 
-691 tests, all synthetic — no hardware, no MIDI ports, no ALSA sequencer
+876 tests, all synthetic — no hardware, no MIDI ports, no ALSA sequencer
 needed. They cannot tell you an offset is *correct*; what they do check is
 that no two parameters claim the same byte, that no span runs past the end of
 its structure, that `describe_value` never raises anywhere in any parameter's
@@ -456,6 +455,25 @@ by a later edit: every measured law against the parameter range it was fitted
 inside, the failure shapes each probe had to survive (a frozen reading, a
 collapsed span, the difference of two noise floors), and the README's own
 example output.
+
+### What the synthetic suite cannot do, and the probes that can
+
+A fake sampler accepts whatever it is given, so a write aimed at the wrong
+place looks identical to a correct one. That is not hypothetical: the undo
+path passed every synthetic test while writing to the wrong keygroup, logging
+its own undos so `z` twice *redid*, and having its pane context reset out from
+under it.
+
+`probes/` holds the tools that answer what a fake cannot, by driving the real
+application over a real machine and **reading every value back off the
+sampler**:
+
+```sh
+.venv/bin/python probes/undo_roundtrip.py    # read -> write -> read back -> z -> read back
+```
+
+Run that after touching the edit or undo path. It is the check that found the
+three bugs above, and the one that would catch them coming back.
 
 One test is worth more than the rest: `test_multi_part_offsets_mirror_the_program_header`
 pins the twelve offsets where two *separately transcribed* Akai documents

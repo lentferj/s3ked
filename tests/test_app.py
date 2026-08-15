@@ -26,6 +26,25 @@ async def _settled(pilot, app, tries=60):
     return False
 
 
+async def _screen(pilot, app, kind, tries=200):
+    """Wait until `kind` is on top of the screen stack.
+
+    A fixed pause count cannot wait on a worker. `s` and `g` read the device
+    in a thread before pushing their dialog -- deliberately, so a slow bridge
+    cannot freeze the UI -- so the screen appears after a round trip whose
+    length is not ours to predict. Counting pauses passed in isolation and
+    raced under load, which is a flaky test rather than a failing one and is
+    worse: it fails somebody else's unrelated run.
+    """
+    for _ in range(tries):
+        await pilot.pause()
+        if isinstance(app.screen_stack[-1], kind):
+            return app.screen_stack[-1]
+    raise AssertionError(
+        f"{kind.__name__} never appeared; top is "
+        f"{type(app.screen_stack[-1]).__name__}")
+
+
 async def _app(allow_write=False, bridge=None):
     return S3kedApp(bridge or DemoBridge(), allow_write=allow_write)
 
@@ -1699,11 +1718,9 @@ async def test_the_source_dialog_lists_the_volumes_on_the_selected_drive():
         for _ in range(20):
             await pilot.pause()
         await pilot.press("s")
-        for _ in range(30):
-            await pilot.pause()
-
-        screen = app.screen_stack[-1]
-        assert isinstance(screen, SourceScreen)
+        screen = await _screen(pilot, app, SourceScreen)
+        for _ in range(20):
+            await pilot.pause()          # let the volume list worker land
         listing = str(screen.query_one("#source-vols-body", Label).render())
         assert listing.strip() and "nothing here" not in listing, listing
         assert "v0" in listing, f"no volume rows: {listing!r}"
@@ -2525,9 +2542,7 @@ async def test_the_main_menu_stays_open_across_changes():
     async with app.run_test(size=(130, 44)) as pilot:
         assert await _settled(pilot, app)
         await pilot.press("g")
-        for _ in range(25):
-            await pilot.pause()
-        assert isinstance(app.screen_stack[-1], MenuScreen)
+        await _screen(pilot, app, MenuScreen)
 
         for key in ("2", "8", "0"):
             await pilot.press(key)
@@ -2555,10 +2570,7 @@ async def test_the_main_menu_repaints_from_the_read_back():
     async with app.run_test(size=(130, 44)) as pilot:
         assert await _settled(pilot, app)
         await pilot.press("g")
-        for _ in range(25):
-            await pilot.pause()
-        screen = app.screen_stack[-1]
-        assert isinstance(screen, MenuScreen)
+        screen = await _screen(pilot, app, MenuScreen)
         await pilot.press("9")          # SAVE
         for _ in range(25):
             await pilot.pause()

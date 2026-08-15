@@ -54,14 +54,15 @@ from s3k import bridge as b
 from s3k import params as p
 from s3ked.app import S3kedApp
 
-#: (region, parameter, keygroup, value to write). The keygroup cases are the
-#: point: a non-zero keygroup is what the log used to drop.
+#: (region, parameter, keygroup, value to write). The NON-ZERO keygroup cases
+#: are the point: that is what the undo log used to drop, and what a fake
+#: bridge cannot fail on because its keygroup 0 accepts the write happily.
 CASES = [
     ("program", "PRIORT", 0, 2),
     ("program", "PLAYLO", 0, 30),
     ("keygroup", "LONOTE", 0, 36),
     ("keygroup", "LONOTE", 3, 40),
-    ("keygroup", "HINOTE", 5, 90),
+    ("keygroup", "HINOTE", 10, 90),
 ]
 
 ROUNDS = 3
@@ -72,6 +73,20 @@ async def settle(pilot, times=40):
         await pilot.pause()
 
 
+def read(app, bridge, name, index, keygroup=0):
+    """Read a value while holding the app's OWN bridge lock.
+
+    The probe and the application share one MIDI port. Reading it directly
+    while an app worker is mid-exchange interleaves two request/response
+    pairs on the same wire, and the loser gets a timeout -- which happened
+    here, at a point where a worker started by `_load_program` had not
+    finished. Taking the same lock every app call takes makes the probe a
+    well-behaved second user rather than a race.
+    """
+    with app._bridge_lock:
+        return bridge.get_parameter(name, index, keygroup=keygroup)
+
+
 async def main() -> int:
     bridge = b.S3kBridge.autodetect(channels=(0,))
     programs = bridge.program_list()
@@ -79,9 +94,15 @@ async def main() -> int:
         print("no programs resident -- load a volume first", flush=True)
         return 1
 
-    groups = bridge.get_header_bytes("program", 0, 42, 1)[0]
-    print(f"program 0 has {groups} keygroup(s); {len(programs)} resident\n",
-          flush=True)
+    # The program with the MOST keygroups, so the non-zero keygroup cases can
+    # actually run. Picking program 0 blindly meant they were skipped, and a
+    # skipped case is not a passing one.
+    counts = [bridge.get_header_bytes("program", i, 42, 1)[0]
+              for i in range(len(programs))]
+    program = counts.index(max(counts))
+    groups = counts[program]
+    print(f"{len(programs)} programs resident; using program {program}, "
+          f"which has {groups} keygroup(s)\n", flush=True)
     cases = [c for c in CASES if c[0] == "program" or c[2] < groups]
     if len(cases) != len(CASES):
         print(f"  skipping {len(CASES) - len(cases)} case(s) needing more "
@@ -100,17 +121,17 @@ async def main() -> int:
         for region, name, keygroup, new in cases:
             param = p.lookup((region, name))
             for round_number in range(1, ROUNDS + 1):
-                original = bridge.get_parameter(name, 0, keygroup=keygroup)
+                original = read(app, bridge, name, program, keygroup)
                 target = new if original != new else new + 1
 
-                app._param_context = (region, 0, keygroup)
+                app._param_context = (region, program, keygroup)
                 app._write_param(param, original, str(target))
                 await settle(pilot, 60)
-                wrote = bridge.get_parameter(name, 0, keygroup=keygroup)
+                wrote = read(app, bridge, name, program, keygroup)
 
                 await pilot.press("z")
                 await settle(pilot, 60)
-                restored = bridge.get_parameter(name, 0, keygroup=keygroup)
+                restored = read(app, bridge, name, program, keygroup)
 
                 ok = wrote == target and restored == original
                 label = f"{region} {name} kg{keygroup} #{round_number}"
@@ -124,19 +145,18 @@ async def main() -> int:
 
         # --- Z, over several edits at once --------------------------------
         print("\n  undo-all over three edits:", flush=True)
-        region, name, keygroup = "keygroup", "LONOTE", min(2, groups - 1)
+        region, name, keygroup = "keygroup", "LONOTE", min(4, groups - 1)
         param = p.lookup((region, name))
-        before = bridge.get_parameter(name, 0, keygroup=keygroup)
-        app._param_context = (region, 0, keygroup)
+        before = read(app, bridge, name, program, keygroup)
+        app._param_context = (region, program, keygroup)
         for step, value in enumerate((41, 42, 43), 1):
-            app._write_param(param, bridge.get_parameter(
-                name, 0, keygroup=keygroup), str(value))
+            app._write_param(param, read(app, bridge, name, program, keygroup), str(value))
             await settle(pilot, 60)
-        mid = bridge.get_parameter(name, 0, keygroup=keygroup)
+        mid = read(app, bridge, name, program, keygroup)
 
         await pilot.press("Z")
-        await settle(pilot, 120)
-        after = bridge.get_parameter(name, 0, keygroup=keygroup)
+        await settle(pilot, 150)
+        after = read(app, bridge, name, program, keygroup)
         ok = mid == 43 and after == before
         print(f"    {name} kg{keygroup}: {before} -> 41,42,43 -> "
               f"read {mid} -> Z -> {after}  {'ok' if ok else 'FAIL'}",
@@ -146,6 +166,46 @@ async def main() -> int:
                 f"Z: started {before}, reached {mid}, ended {after}")
         if app._undo:
             failures.append(f"Z left {len(app._undo)} entries in the log")
+
+        # --- nudge: does a run collapse, and does one z put it all back? --
+        print("\n  nudge run (+ x4) on hardware:", flush=True)
+        from textual.widgets import DataTable
+
+        app._param_context = ("program", program, 0)
+        app._load_program(program)
+        await settle(pilot, 80)
+        table = app.query_one("#parameters", DataTable)
+        row = next(i for i, x in enumerate(app._param_rows)
+                   if x.name == "PLAYLO")
+        table.move_cursor(row=row)
+        await settle(pilot, 20)
+
+        start = read(app, bridge, "PLAYLO", program)
+        logged_before = len(app._undo)
+        for _ in range(4):
+            await pilot.press("plus")
+            await settle(pilot, 60)
+        stepped = read(app, bridge, "PLAYLO", program)
+        entries = len(app._undo) - logged_before
+        still_on = app._param_rows[table.cursor_row].name
+
+        await pilot.press("z")
+        await settle(pilot, 80)
+        back = read(app, bridge, "PLAYLO", program)
+
+        ok = (stepped == start + 4 and entries == 1 and back == start
+              and still_on == "PLAYLO")
+        print(f"    PLAYLO: {start} -> +4 -> {stepped}; log grew by "
+              f"{entries}; cursor on {still_on}; after z {back}  "
+              f"{'ok' if ok else 'FAIL'}", flush=True)
+        if stepped != start + 4:
+            failures.append(f"nudge: 4 taps moved {start}->{stepped}")
+        if entries != 1:
+            failures.append(f"nudge run logged {entries} entries, want 1")
+        if still_on != "PLAYLO":
+            failures.append(f"cursor moved to {still_on} during the run")
+        if back != start:
+            failures.append(f"one z after a run gave {back}, want {start}")
 
     bridge.close()
     print(flush=True)

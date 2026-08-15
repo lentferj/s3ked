@@ -968,3 +968,47 @@ repainting its own LCD by default, item-index bit 13 being an opt-*out*
 "postpone screen update" — a load is not a header write and never sets it.
 
 RESOLUTION_NOTES §92.
+
+
+---
+
+## The undo path is hardware-verified (CLOSED 2026-08-15)
+
+Tested only against `DemoBridge` until 2026-08-15, and a fake cannot fail the
+way it failed: three bugs, all silent wrong-target writes (§102).
+
+`probes/undo_roundtrip.py` drives the **application** over a real machine and
+reads every value back off the sampler. Verified against a 22-keygroup
+program, which matters because the first run could only reach program 0 with
+its single keygroup — so the non-zero keygroup cases, the ones the bugs were
+about, were skipped, and a skipped case is not a passing one (§103).
+
+```
+program PRIORT / PLAYLO       x3 each   exact
+keygroup LONOTE kg0, kg3      x3 each   exact
+keygroup HINOTE kg10          x3        exact
+undo-all kg4                            exact
+nudge run + cursor + collapse           exact
+```
+
+**Run it after touching the edit or undo path.** The synthetic suite cannot
+replace it.
+
+Still not covered: renaming a program and undoing that (`PRNAME` is a text
+field, so nudge refuses it and the round trip has never been run on one).
+
+---
+
+## `DELK` fired on hardware (CLOSED 2026-08-15)
+
+The one destructive operation never sent to a real machine, because
+`clear_memory` uses only `delete_sample` and `delete_program`. Fired against a
+22-keygroup program: `GROUPS` 22 → 21, the named keygroup removed, the rest
+**shifting down and keeping their order**, and exactly one object returned to
+the P/K/S pool — which independently confirms §98's figure from the opposite
+direction.
+
+A keygroup index is a position in a list, not a slot that empties. Anything
+holding a keygroup number across a delete is holding a stale reference.
+
+RESOLUTION_NOTES §103.
