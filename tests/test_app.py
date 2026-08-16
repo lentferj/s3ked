@@ -3708,3 +3708,56 @@ async def test_tabbing_to_the_keygroup_pane_shows_keygroup_fields():
             await pilot.pause()
         assert app.focused.id == "keygroups", app.focused.id
         assert app._param_context[0] == "keygroup", app._param_context
+
+
+async def test_the_parameter_table_glosses_the_akai_names():
+    """LOVEL2, VTUNO1, K_DAR3 tell a reader nothing they did not know.
+
+    Every parameter already carries a description; the table simply never
+    showed it. Asked for as "some very short human readable explanation for
+    parameters (e.g. LoVel2 - Vel. Layer2 low)".
+    """
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp, _GLOSS_WIDTH
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge())
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        await pilot.press("tab")            # the keygroup pane
+        for _ in range(40):
+            await pilot.pause()
+        table = app.query_one("#parameters", DataTable)
+        rows = {str(table.get_row_at(r)[1]): str(table.get_row_at(r)[3])
+                for r in range(table.row_count)}
+
+    assert rows.get("LOVEL2"), "the velocity fields must be glossed"
+    assert "velocity" in rows["LOVEL2"].lower(), rows["LOVEL2"]
+    assert rows.get("HINOTE") == "Upper limit of keyrange"
+    assert all(len(v) <= _GLOSS_WIDTH for v in rows.values()), (
+        "nothing may overrun the column")
+
+
+def test_a_long_gloss_is_cut_on_a_word_boundary():
+    """A description chopped mid-word reads as corruption, not abbreviation."""
+    from s3ked.app import _gloss, _GLOSS_WIDTH
+
+    class Fake:
+        desc = ("Velocity zone 1 tuning offset with a great deal more text "
+                "than any column could hope to show")
+
+    out = _gloss(Fake())
+    assert len(out) <= _GLOSS_WIDTH
+    assert out.endswith("…")
+    assert not out[:-1].endswith(" "), out
+    assert " " not in out[-2:], "cut at a word boundary"
+
+    class Short:
+        desc = "Upper limit of keyrange"
+
+    assert _gloss(Short()) == "Upper limit of keyrange", "short ones untouched"
+
+    class Empty:
+        desc = None
+
+    assert _gloss(Empty()) == ""

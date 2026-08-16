@@ -359,6 +359,29 @@ class MasterScreen(ModalScreen[Optional[str]]):
         self.dismiss(None)
 
 
+#: How much of a parameter's description the table shows. The full text is
+#: in the edit dialog, which is where somebody has stopped to read; this
+#: column exists so the NAMES are not the only thing on offer. Akai's are
+#: terse to the point of opacity -- LOVEL2, VTUNO1, K_DAR3 -- and a table of
+#: them tells a reader nothing they did not already know.
+_GLOSS_WIDTH = 42
+
+
+def _gloss(param) -> str:
+    """One short human line for a parameter, cut to fit the column."""
+    text = (param.desc or "").strip()
+    if not text:
+        return ""
+    # Cut on a word boundary where there is one: a description chopped
+    # mid-word reads as corruption rather than as abbreviation.
+    if len(text) <= _GLOSS_WIDTH:
+        return text
+    cut = text[:_GLOSS_WIDTH - 1]
+    if " " in cut:
+        cut = cut[:cut.rindex(" ")]
+    return cut + "…"
+
+
 #: Separator between key hints in the legend, matching k2kremote and eosed.
 _LEGEND_SEP = " · "
 
@@ -998,7 +1021,7 @@ class S3kedApp(App):
             ("keygroups", ("kg", "range")),
             ("samples", ("sample", "status")),
             ("volumes", ("vol", "name")),
-            ("parameters", ("off", "name", "value")),
+            ("parameters", ("off", "name", "value", "what")),
         ):
             table = self.query_one(f"#{table_id}", DataTable)
             table.add_columns(*columns)
@@ -1294,6 +1317,7 @@ class S3kedApp(App):
                 str(param.offset),
                 param.name,
                 p.describe_value(param, values.get(param.name)),
+                _gloss(param),
             )
         if was_on is not None:
             for row, param in enumerate(self._param_rows):
