@@ -1090,3 +1090,37 @@ Write-sweeping arbitrary misc-data indices is a different order of risk.
 **Worth it because:** it would remove the marker dance from clear-then-load.
 Ours leaves a program behind because a delete cannot remove the last one; the
 panel's CLR does not.
+
+## Does `collect()` see a partial load the way it sees a deletion? (OPEN)
+
+`analysis.collect()` exists for one case above all: a load that exceeds free
+memory reports *"insufficient waveform memory"* once and then behaves as
+though all is well, leaving programs resident whose samples never arrived
+(§69 — a volume at 183% of the largest machine of this type, 10 programs
+loaded and 60 of 88 samples). Those programs play silence and nothing on the
+panel distinguishes them from a program that is merely quiet.
+
+**What is actually verified is the deletion case.** §80 loaded a bank,
+audited it clean, deleted two samples the audit said were used, predicted 24
+dangling references and got exactly those 24. That is a real failure-case
+test — but it makes its dangling references with `DELS`, not by running out
+of memory.
+
+Both *should* leave the same RAM state: a zone naming a sample that is not in
+RSLIST. "Should" is what §74 said as well, and that one cost an unintended
+load.
+
+**Status:** open, and cheap. Load the oversized volume, run `collect()`,
+check it names the zones pointing at the samples that did not arrive.
+
+**Blocked on:** Jan, one load. No build and no card swap — it is a disc he
+already has. Read-only after the load.
+
+**Worth it because:** it is the only claim in `analysis.py`'s docstring
+resting on inference rather than measurement, and it is the claim the module
+was written for.
+
+**Not to be confused with** the verbatim-vs-rewritten question in §106 —
+what the loader does with a *malformed* disc reference. That one bears on
+validating a written volume, which is mpc2emu's problem, not s3ked's. §106
+originally claimed otherwise and was corrected 2026-08-16.
