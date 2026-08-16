@@ -504,9 +504,17 @@ class SourceScreen(ModalScreen[None]):
                         "every change.[/dim]")
             yield Label("[b]Esc[/b] close", id="source-close")
 
+    #: Device types for which a SCSI id means anything. The floppy is not on
+    #: the bus, so its id is inert -- changing it moves nothing, which reads
+    #: as a broken key unless the screen says why.
+    _SCSI_DEVICES = (1, 2)          # hard, flash
+
     def _drive_row(self) -> str:
-        return (f"  SCSI drive      [b]{self.source.get('scsi_drive_id', '?')}"
-                f"[/b]        press [b]0[/b]-[b]7[/b]")
+        row = (f"  SCSI drive      [b]{self.source.get('scsi_drive_id', '?')}"
+               f"[/b]        press [b]0[/b]-[b]7[/b]")
+        if self.source.get("device_type") not in self._SCSI_DEVICES:
+            row += "  [dim]— ignored while the device is FLOPPY[/dim]"
+        return row
 
     def _device_row(self) -> str:
         kind = self.source.get("device_type")
@@ -1563,16 +1571,47 @@ class S3kedApp(App):
                     current = self.bridge.load_source()["partition"]
                     source = self.bridge.select_partition(
                         max(0, min(7, current + value)))
-            try:
-                with self._bridge_lock:
-                    volumes = self.bridge.volume_list()
-            except Exception:
-                volumes = None
+            volumes = self._volumes_after_a_source_change()
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"{what}: {exc}",
                                   refused=True)
             return
         self.call_from_thread(self._refresh_source_dialog, source, volumes)
+
+    #: Backoff for a volume list that does not answer at once. Nothing is
+    #: waited BEFORE the first attempt: the common case answers immediately,
+    #: and a delay on every keypress would be a tax paid by everyone to cover
+    #: the slow case.
+    SOURCE_RETRY = 0.8
+    SOURCE_TRIES = 5
+
+    def _volumes_after_a_source_change(self):
+        """Re-read the volume list, retrying only if it does not answer.
+
+        Changing the drive sends the machine off to read different media,
+        which is mechanical -- selecting a drive after a CD was observed
+        timing out for several seconds. One immediate read is therefore not
+        always enough, and the original code did exactly one.
+
+        Returning None means "could not be read", which the dialog says out
+        loud. That is the honest answer; showing the previous drive's list
+        would be worse than either.
+        """
+        import time
+
+        for attempt in range(self.SOURCE_TRIES):
+            try:
+                with self._bridge_lock:
+                    return self.bridge.volume_list()
+            except Exception:
+                if attempt + 1 == self.SOURCE_TRIES:
+                    return None
+                # No explicit drain: send_and_receive already drains before
+                # sending, and reaching into the transport's private methods
+                # from here breaks the demo bridge, which duck-types only the
+                # surface the app is supposed to use.
+                time.sleep(self.SOURCE_RETRY)
+        return None
 
     def _refresh_source_dialog(self, source, volumes=None) -> None:
         screen = self.screen_stack[-1] if self.screen_stack else None

@@ -3323,3 +3323,80 @@ async def test_the_armed_line_is_red_at_rest_and_inverted_on_the_flash():
     assert "#master-armed.-flash" in css
     assert "text-style: blink" not in css, (
         "SGR blink is silently dropped by many terminals")
+
+
+async def test_a_slow_volume_list_is_retried_not_abandoned():
+    """Changing the drive sends the machine to read different media, which is
+    mechanical -- a read straight afterwards was seen timing out for seconds.
+    One immediate attempt is not always enough, and the original code did
+    exactly one.
+
+    Nothing is waited before the FIRST attempt: the common case answers at
+    once, and a delay on every keypress would tax everyone for the slow case.
+    """
+    from s3ked.app import S3kedApp, SourceScreen
+    from s3ked.demo import DemoBridge
+
+    calls = []
+
+    class Slow(DemoBridge):
+        def volume_list(self, *, limit=512, timeout=None):
+            calls.append(len(calls))
+            if len(calls) < 3:
+                raise TimeoutError("still spinning up")
+            return super().volume_list(limit=limit, timeout=timeout)
+
+    app = S3kedApp(Slow(), allow_write=True)
+    app.SOURCE_RETRY = 0.01
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        volumes = app._volumes_after_a_source_change()
+
+    assert len(calls) == 3, f"it must retry, got {len(calls)} attempt(s)"
+    assert volumes, "and return the list once the machine answers"
+
+
+async def test_a_volume_list_that_never_answers_says_so():
+    """None means 'could not be read', which the dialog says out loud.
+    Showing the previous drive's list would be worse than either."""
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    class Dead(DemoBridge):
+        def volume_list(self, *, limit=512, timeout=None):
+            raise TimeoutError("no answer")
+
+    app = S3kedApp(Dead(), allow_write=True)
+    app.SOURCE_RETRY = 0.01
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        assert app._volumes_after_a_source_change() is None
+
+
+async def test_the_scsi_row_says_when_the_id_is_inert():
+    """A floppy is not on the SCSI bus, so its drive id changes nothing.
+
+    Reported as "when I change the SCSI id, the list of volumes below does not
+    update" -- with the device on FLOPPY, where it cannot. The machine is
+    right; the screen offered the row as though it were live.
+    """
+    from textual.widgets import Label
+    from s3ked.app import S3kedApp, SourceScreen
+    from s3ked.demo import DemoBridge
+
+    seen = {}
+    for device, name in ((0, "floppy"), (1, "hard")):
+        class Fixed(DemoBridge):
+            _device_type = device
+
+        app = S3kedApp(Fixed(), allow_write=True)
+        async with app.run_test(size=(130, 44)) as pilot:
+            assert await _settled(pilot, app)
+            await pilot.press("s")
+            screen = await _screen(pilot, app, SourceScreen)
+            for _ in range(20):
+                await pilot.pause()
+            seen[name] = str(screen.query_one("#source-drive", Label).render())
+
+    assert "ignored" in seen["floppy"], seen["floppy"]
+    assert "ignored" not in seen["hard"], seen["hard"]
