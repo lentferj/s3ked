@@ -128,6 +128,7 @@ silently wrong one.
 - [§108](#108--kfreq-accepted-22-and-the-table-says-012-2026-08-16) — `K_FREQ` accepted 22, and the table says 0..12 (2026-08-16)
 - [§109](#109--modvfilt1-measured-live-per-keygroup-and-clamped-2026-08-16) — `MODVFILT1` measured: live, per-keygroup, and clamped (2026-08-16)
 - [§110](#110--the-audit-run-on-hardware-at-scale-and-what-it-found-was-not-ours-2026-08-16) — The audit run on hardware at scale, and what it found was not ours (2026-08-16)
+- [§111](#111--the-loader-resolves-by-directory-name-ram-stores-the-header-name-2026-08-16) — The loader resolves by DIRECTORY name; RAM stores the HEADER name (2026-08-16)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -8658,6 +8659,19 @@ The sampler resolves a keygroup zone's `SNAME1..4` against the **header**
 name. The directory entry is how the volume is *listed*; it is not what a
 reference points at.
 
+> **Refined 2026-08-16 by §111, and measured here rather than inherited.**
+> The sentence above is right for RAM and wrong for the LOADER, and the two
+> stages have to be separated:
+>
+> - **Load-time reference resolution uses the DIRECTORY name.**
+> - **The resident name reported by `RSLIST` is the HEADER name.**
+>
+> `ALL PROGS+SAMPLES` looks a program's references up in the directory, so a
+> sample whose header and directory names disagree is **silently not
+> loaded**. `ENTIRE VOLUME` consults no references and loads everything,
+> after which the same sample is resident under its header name. §111 has
+> the measurement.
+
 ### How it surfaced
 
 mpc2emu writes AKAI volumes from KRZ sources. Its writer encodes `#`
@@ -9140,3 +9154,75 @@ those were never on the disc at all. Unexplained.
 Both matter beyond this project: the sibling mpc2emu is diffing disc images
 against RAM, and a loader that skips by name would be a case its
 correspondence does not handle.
+
+## §111 — The loader resolves by DIRECTORY name; RAM stores the HEADER name (2026-08-16)
+
+**Status: settled.** Measured 2026-08-16 on the S3000XL, prediction written
+before the run, discriminator run at two settings where the answers had to
+differ.
+
+### The experiment
+
+A volume with 30 samples, of which **15 carry two different names** — the
+directory entry says `TESTSMB 1`, the header inside the file says
+`TESTSMB#1` — written that way by the sibling mpc2emu's converter, which
+transliterated `#` in one field and not the other. The programs' zones
+reference the `#` form.
+
+Memory cleared before each load; the volume loaded alone:
+
+```
+ALL PROGS+SAMPLES (type 1)   6 programs, 15 samples
+                             the 15 two-named: 0 present, under EITHER name
+ENTIRE VOLUME     (type 0)   6 programs, 30 samples
+                             the 15 two-named: 15 present, under the '#' HEADER name
+```
+
+`ALL PROGS+SAMPLES` loaded **exactly** the 15 samples whose two names agree.
+
+### What it means
+
+- **Load-time reference resolution uses the DIRECTORY name.** Type 1 loads
+  the samples a program references, and looks them up in the directory. A
+  zone naming `TESTSMB#1` finds no `TESTSMB#1` there, and the sample is
+  **silently not loaded** — no error, nothing on the panel.
+- **The resident name is the HEADER name.** Under type 0 the same samples
+  are in memory as `#` forms, so `RSLIST` reports what is inside the file,
+  not what the directory called it.
+- **`ENTIRE VOLUME` consults no references**, which is why it is immune to
+  this class of fault.
+
+### Why it was hard to see
+
+Two correct observations looked like a contradiction for most of a day.
+mpc2emu found the `#` inconsistency at 17:08, filed it as cosmetic on the
+reasoning that "resolution goes by header", and retracted a real symptom on
+the strength of it. Separately its disc-against-RAM diff returned 70/70 zone
+slots identical — true, and irrelevant: it compared **zone contents**, which
+match because both sides carry `#`, and never asked whether the samples
+those zones **name** are resident. A volume can be byte-identical in every
+zone and still be silent.
+
+The hidden variable was the **load type**. A six-volume session had the
+samples resident under `#`; a clean load here did not. Both readings were
+correct; one used `ENTIRE VOLUME` and the other `ALL PROGS+SAMPLES`.
+
+### Consequences for s3ked
+
+1. **`ALL PROGS+SAMPLES` can silently under-load a volume**, and nothing on
+   the device says so. `analysis.collect()` is the only thing that catches
+   it — which is what it was written for, and this is the first time it has
+   caught a fault in the wild rather than one deliberately planted.
+2. **§69's shortfall arithmetic is not the whole story.** A volume can fit
+   in memory and still arrive incomplete, for reasons having nothing to do
+   with size.
+3. The `#` character is **valid** in the device charset — index 37 of
+   `0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ#+-.` — so this is not the machine
+   rejecting a character. It is a name mismatch between two fields that
+   describe the same file.
+
+### Not tested
+
+Whether a `#` in a **directory entry** loads correctly. It was only ever
+observed in a header here. Anyone standardising a writer on the `#` form
+should measure that rather than assume it from the charset table.

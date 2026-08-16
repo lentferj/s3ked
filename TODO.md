@@ -1091,6 +1091,22 @@ Write-sweeping arbitrary misc-data indices is a different order of risk.
 Ours leaves a program behind because a delete cannot remove the last one; the
 panel's CLR does not.
 
+## `ALL PROGS+SAMPLES` can silently under-load a volume (CLOSED — §111)
+
+Measured 2026-08-16. Load-time reference resolution uses the **directory**
+name; the resident name is the **header** name. A sample whose two names
+disagree is silently not loaded by `ALL PROGS+SAMPLES`, with no error and
+nothing on the panel. `ENTIRE VOLUME` consults no references and is immune.
+
+Found because `analysis.collect()` reported 34 dangling references on a real
+bank — the first fault it has caught in the wild rather than one planted to
+test it.
+
+**Consequence still worth acting on:** s3ked's load dialog could warn when a
+volume's directory and header names disagree, but reading a header means
+loading the file, so the check is not free. Left as a note rather than a
+task until someone wants it.
+
 ## Does `collect()` see a partial load the way it sees a deletion? (OPEN)
 
 `analysis.collect()` exists for one case above all: a load that exceeds free
