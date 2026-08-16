@@ -3571,3 +3571,94 @@ async def test_a_leftover_that_cannot_be_removed_is_reported_not_claimed():
     assert app.CLEARED_MARKER in status, status
     assert "still resident" in status, status
     assert "removed" not in status, "it must not claim success"
+
+
+async def test_the_leftover_cleanup_outlasts_a_slow_load():
+    """Twelve seconds was a demo figure and a real load is nothing like it.
+
+    The first version allowed 8 tries at 1.5 s. Against the machine the load
+    had not arrived in that window, the cleanup gave up, and the leftover it
+    exists to remove was still there -- reported as "still doesn't work".
+    """
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    assert S3kedApp.LEFTOVER_RETRY * S3kedApp.LEFTOVER_TRIES >= 120, (
+        "the cleanup must outlast a real load, not a demo one")
+
+    checks = []
+
+    class Slow(DemoBridge):
+        """The load lands only on the fifth look."""
+
+        def trigger_load(self, load_type=1, *, item=None, force=False,
+                         timeout=None):
+            self._countdown = 5
+
+        def program_list(self, *, timeout=None):
+            left = getattr(self, "_countdown", 0)
+            if left:
+                self._countdown = left - 1
+                checks.append(left)
+                if left == 1:
+                    self.arrive("SLOW ONE", "SLOW TWO", program_number=0)
+            return super().program_list(timeout=timeout)
+
+    app = S3kedApp(Slow(), allow_write=True)
+    app.LEFTOVER_RETRY = 0.01
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        await pilot.press("l")
+        for _ in range(30):
+            await pilot.pause()
+        await pilot.press("l")
+        await pilot.pause()
+        await pilot.press("c")
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.press("y")
+        for _ in range(60):
+            await pilot.pause()
+        await pilot.press("escape")
+        for _ in range(200):
+            await pilot.pause()
+        names = [n.strip() for n in app.bridge.program_list()]
+
+    assert len(checks) >= 3, "it must keep looking, not give up at once"
+    assert app.CLEARED_MARKER not in names, f"leftover survived: {names}"
+
+
+async def test_the_loading_dialog_explains_the_parked_leftover():
+    """While the dialog is up the marker is visible on the sampler and looks
+    like the clear having failed. Asked in live use as "the sampler has
+    finished, 1 ZZ CLEARED is still there?"."""
+    from textual.widgets import Label
+    from s3ked.app import LoadingScreen, S3kedApp
+    from s3ked.demo import DemoBridge
+
+    plain = LoadingScreen()
+    marked = LoadingScreen(leftover=True)
+    assert plain.leftover is False and marked.leftover is True
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        app.push_screen(marked)
+        for _ in range(20):
+            await pilot.pause()
+        text = " ".join(str(w.render())
+                        for w in app.screen_stack[-1].query(Label))
+        await pilot.press("escape")
+        for _ in range(10):
+            await pilot.pause()
+
+        app.push_screen(plain)
+        for _ in range(20):
+            await pilot.pause()
+        quiet = " ".join(str(w.render())
+                         for w in app.screen_stack[-1].query(Label))
+
+    assert S3kedApp.CLEARED_MARKER in text, text
+    assert "removed when you close" in text
+    assert S3kedApp.CLEARED_MARKER not in quiet, (
+        "a plain load parks nothing and must not mention it")

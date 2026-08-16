@@ -610,6 +610,14 @@ class LoadingScreen(ModalScreen[None]):
         Binding("q", "done", "Done"),
     ]
 
+    def __init__(self, leftover: bool = False) -> None:
+        super().__init__()
+        #: Whether closing this will also remove the program the clear could
+        #: not delete. Worth saying: the leftover is visible on the sampler
+        #: while this dialog is up, and looks like the clear having failed.
+        #: Asked as "the sampler has finished, 1 ZZ CLEARED is still there?"
+        self.leftover = leftover
+
     def compose(self) -> ComposeResult:
         with Vertical(id="loading-box"):
             yield Label("[b]Loading[/b]")
@@ -617,6 +625,13 @@ class LoadingScreen(ModalScreen[None]):
             yield Label("Close when the sampler has finished.")
             yield Label("[dim]Nothing is being sent to it meanwhile.[/dim]")
             yield Label("")
+            if self.leftover:
+                yield Label(
+                    f"[dim]The cleared machine keeps one program — the last "
+                    f"cannot be deleted — so it is\n  parked as "
+                    f"[b]{S3kedApp.CLEARED_MARKER}[/b] and removed when you "
+                    f"close this.[/dim]")
+                yield Label("")
             yield Label("[b]Esc[/b] — then the lists refresh")
 
     def action_done(self) -> None:
@@ -1932,8 +1947,15 @@ class S3kedApp(App):
     #: dialog closes. The dialog is a person saying "it looks finished", which
     #: is not the same as finished -- and while the leftover is the only
     #: program the machine ACCEPTS the delete and ignores it.
-    LEFTOVER_RETRY = 1.5
-    LEFTOVER_TRIES = 8
+    #:
+    #: Three minutes, not twelve seconds. The first version allowed 8 tries at
+    #: 1.5 s, a figure taken from a demo where loads are instant; against a
+    #: real machine the load had not arrived and the cleanup gave up, leaving
+    #: exactly the leftover it exists to remove. A load moves megabytes off
+    #: mechanical media and there is no completion signal to wait on (§71), so
+    #: the only honest bound is one longer than a load plausibly takes.
+    LEFTOVER_RETRY = 3.0
+    LEFTOVER_TRIES = 60
 
     @work(thread=True)
     def _load_worker(self, *, clear_first: bool = False,
@@ -2006,7 +2028,7 @@ class S3kedApp(App):
             self.notify_status("re-reading after the load…")
             self._load_catalog()
 
-        self.push_screen(LoadingScreen(), done)
+        self.push_screen(LoadingScreen(leftover=leftover), done)
 
     @work(thread=True)
     def _remove_leftover_worker(self, renumber: bool = False) -> None:
@@ -2033,6 +2055,12 @@ class S3kedApp(App):
                     # empty memory in the first place. The load has not landed
                     # yet; waiting is the whole fix.
                     why = "the load had not arrived"
+                    if attempt and not attempt % 5:
+                        self.call_from_thread(
+                            self.notify_status,
+                            f"waiting for the load before removing "
+                            f"{self.CLEARED_MARKER}… "
+                            f"({int(attempt * self.LEFTOVER_RETRY)}s)")
                     time.sleep(self.LEFTOVER_RETRY)
                     continue
                 with self._bridge_lock:
