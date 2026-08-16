@@ -1922,23 +1922,67 @@ class S3kedApp(App):
 
         self.push_screen(ConfirmScreen(headline + detail), go)
 
+    #: What the leftover program is renamed to between a clear and the load
+    #: that follows, so it can be found and deleted afterwards. Uppercase,
+    #: twelve characters or fewer, and only characters the Akai charset can
+    #: store -- `encode_name` refuses anything else rather than substituting.
+    CLEARED_MARKER = "ZZ CLEARED"
+
+    #: How long to keep trying to remove the marked leftover after the load
+    #: dialog closes. The dialog is a person saying "it looks finished", which
+    #: is not the same as finished -- and while the leftover is the only
+    #: program the machine ACCEPTS the delete and ignores it.
+    LEFTOVER_RETRY = 1.5
+    LEFTOVER_TRIES = 8
+
     @work(thread=True)
     def _load_worker(self, *, clear_first: bool = False,
                      renumber: bool = False, load_type: int = 1,
                      item: Optional[int] = None) -> None:
+        leftover = False
         try:
             with self._bridge_lock:
                 if clear_first:
                     self.call_from_thread(
                         self.notify_status, "clearing memory…")
                     self.bridge.clear_memory()
+                    leftover = self._mark_the_leftover()
                 self.bridge.trigger_load(load_type, item=item)
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"load: {exc}")
             return
-        self.call_from_thread(self._await_load, renumber)
+        self.call_from_thread(self._await_load, renumber, leftover)
 
-    def _await_load(self, renumber: bool = False) -> None:
+    def _mark_the_leftover(self) -> bool:
+        """Rename the program a clear could not delete, so it can be later.
+
+        `clear_memory` empties everything except **the last program**: the
+        machine acknowledges that delete and ignores it. So a clear-then-load
+        always left the survivor behind, carrying `PRGNUM` 0, colliding with
+        the first program loaded -- two programs on number 1, both sounding.
+        Reported as "I always end up with 2x Program 1", and the panel's own
+        CLR does not do it.
+
+        The survivor is only undeletable **while it is the last one**. After
+        the load it is not, so it can go then -- which needs it to be
+        identifiable afterwards, and a name is the only handle this protocol
+        offers. Renaming is safe: it is a byte write to `PRNAME`, and two
+        programs may share a name without either being deleted (§13a). The
+        whole-header writes that DO delete by name are not used here.
+
+        Returns whether there is something to clean up.
+        """
+        names = self.bridge.program_list()
+        if len(names) != 1:
+            # Nothing survived, or something unexpected did. Renaming on a
+            # guess would put a marker on a program somebody wanted.
+            return False
+        param = p.lookup(("program", "PRNAME"))
+        self.bridge.set_parameter(param, 0, self.CLEARED_MARKER)
+        return True
+
+    def _await_load(self, renumber: bool = False,
+                    leftover: bool = False) -> None:
         """Wait for the person to say the load finished, then refresh.
 
         The alternative is polling, and a 58.7 MB load probed every eight
@@ -1951,6 +1995,10 @@ class S3kedApp(App):
         load is. This dialog is the only signal that it is.
         """
         def done(_result) -> None:
+            if leftover:
+                self.notify_status("removing what the clear could not…")
+                self._remove_leftover_worker(renumber)
+                return
             if renumber:
                 self.notify_status("renumbering…")
                 self._renumber_worker()
@@ -1959,6 +2007,71 @@ class S3kedApp(App):
             self._load_catalog()
 
         self.push_screen(LoadingScreen(), done)
+
+    @work(thread=True)
+    def _remove_leftover_worker(self, renumber: bool = False) -> None:
+        """Delete the marked survivor, now that the load has made it deletable.
+
+        Located by the marker rather than by index, because a load does not
+        simply append -- an arriving program was observed being inserted
+        mid-list (§100). An index taken before the load means nothing after.
+        """
+        import time
+
+        removed, left, why = 0, None, None
+        try:
+            for attempt in range(self.LEFTOVER_TRIES):
+                with self._bridge_lock:
+                    names = [n.strip() for n in self.bridge.program_list()]
+                marked = [i for i, n in enumerate(names)
+                          if n == self.CLEARED_MARKER]
+                if not marked:
+                    break               # already gone, or never marked
+                if len(names) == 1:
+                    # It is the ONLY program, so the machine will accept the
+                    # delete and ignore it -- that is why clear_memory cannot
+                    # empty memory in the first place. The load has not landed
+                    # yet; waiting is the whole fix.
+                    why = "the load had not arrived"
+                    time.sleep(self.LEFTOVER_RETRY)
+                    continue
+                with self._bridge_lock:
+                    for index in reversed(marked):
+                        self.bridge.delete_program(index)
+                    # VERIFY. The device acknowledges a refused delete, so the
+                    # ack proves nothing; only the list does.
+                    after = [n.strip() for n in self.bridge.program_list()]
+                if self.CLEARED_MARKER not in after:
+                    removed, left = len(marked), len(after)
+                    break
+                why = "the delete was acknowledged and ignored"
+                time.sleep(self.LEFTOVER_RETRY)
+            else:
+                with self._bridge_lock:
+                    left = len(self.bridge.program_list())
+        except Exception as exc:
+            self.call_from_thread(
+                self.notify_status,
+                f"the cleared program could not be removed: {exc}",
+                refused=True)
+            self._load_catalog(announce=False)
+            return
+        if removed:
+            message = f"cleared and loaded; {removed} leftover removed"
+            self.call_from_thread(
+                self.notify_status, f"{message} ({left} program(s))")
+        else:
+            # Never claim it went when it did not. It is still on the machine,
+            # named, and it will collide on program number 1.
+            self.call_from_thread(
+                self.notify_status,
+                f"{self.CLEARED_MARKER} is still resident"
+                + (f" — {why}" if why else "")
+                + "; delete it from the Master screen", refused=True)
+        if renumber:
+            self._renumber_worker()
+        else:
+            self._load_catalog(announce=False)
 
     @work(thread=True)
     def _renumber_worker(self) -> None:

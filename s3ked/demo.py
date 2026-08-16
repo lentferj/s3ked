@@ -608,9 +608,18 @@ class DemoBridge:
     # -- destructive --------------------------------------------------------
 
     def delete_program(self, program: int, *, confirm: bool = True) -> None:
-        """DESTRUCTIVE on hardware; here it only edits this instance."""
+        """DESTRUCTIVE on hardware; here it only edits this instance.
+
+        **The last program cannot be deleted**, exactly as the machine
+        behaves: it acknowledges the delete and the list stays at one. The
+        demo has to refuse it too, or code written against the demo will
+        assume memory can be emptied -- which is the assumption that left a
+        leftover program colliding with every clear-then-load.
+        """
         if not 0 <= program < len(self._programs):
             raise DemoError(f"no program {program}")
+        if len(self._programs) == 1:
+            return              # acknowledged and ignored, like the machine
         del self._programs[program]
         del self._program_headers[program]
         del self._keygroup_counts[program]

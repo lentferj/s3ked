@@ -3400,3 +3400,174 @@ async def test_the_scsi_row_says_when_the_id_is_inert():
 
     assert "ignored" in seen["floppy"], seen["floppy"]
     assert "ignored" not in seen["hard"], seen["hard"]
+
+
+async def test_clear_then_load_removes_the_program_the_clear_could_not():
+    """`clear_memory` cannot delete the LAST program -- the machine
+    acknowledges it and keeps one. So a clear-then-load left that survivor
+    behind carrying PRGNUM 0, colliding with the first program loaded: two
+    programs on number 1, both sounding. Reported as "I always end up with
+    2x Program 1"; the panel's own CLR does not do it.
+
+    The survivor is only undeletable while it IS the last one, so it goes
+    after the load instead.
+    """
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    class Watch(DemoBridge):
+        def trigger_load(self, load_type=1, *, item=None, force=False,
+                         timeout=None):
+            self.arrive("LOADED ONE", "LOADED TWO", program_number=0)
+
+    app = S3kedApp(Watch(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        await pilot.press("l")
+        for _ in range(30):
+            await pilot.pause()
+        await pilot.press("l")
+        await pilot.pause()
+        await pilot.press("c")            # clear first
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.press("y")
+        for _ in range(60):
+            await pilot.pause()
+        await pilot.press("escape")       # close the loading dialog
+        for _ in range(80):
+            await pilot.pause()
+        names = [n.strip() for n in app.bridge.program_list()]
+
+    assert app.CLEARED_MARKER not in names, f"the marker survived: {names}"
+    assert names == ["LOADED ONE", "LOADED TWO"], names
+    assert "leftover removed" in app.last_status, app.last_status
+
+
+async def test_a_plain_load_marks_and_removes_nothing():
+    """Only a clear leaves something behind, so only a clear cleans up."""
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    renames = []
+
+    class Watch(DemoBridge):
+        def set_parameter(self, param, index, value, *, keygroup=0, **kw):
+            if param.name == "PRNAME":
+                renames.append(value)
+            return super().set_parameter(param, index, value,
+                                         keygroup=keygroup, **kw)
+
+        def trigger_load(self, load_type=1, *, item=None, force=False,
+                         timeout=None):
+            self.arrive("ARRIVED", program_number=0)
+
+    app = S3kedApp(Watch(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        before = len(app.bridge.program_list())
+        await pilot.press("l")
+        for _ in range(30):
+            await pilot.pause()
+        await pilot.press("l")
+        await pilot.pause()
+        await pilot.press("enter")        # add, not clear
+        await pilot.pause()
+        await pilot.press("y")
+        for _ in range(60):
+            await pilot.pause()
+        await pilot.press("escape")
+        for _ in range(60):
+            await pilot.pause()
+
+    assert renames == [], f"a plain load renamed something: {renames}"
+    assert len(app.bridge.program_list()) == before + 1
+
+
+async def test_the_leftover_is_not_deleted_while_it_is_the_only_program():
+    """Closing the loading dialog early must not lose the cleanup.
+
+    The dialog is a person saying "it looks finished", which is not the same
+    as finished. While the marked leftover is the ONLY program, the machine
+    accepts the delete and ignores it -- that is exactly why clear_memory
+    cannot empty memory. The first version counted that as removed and
+    reported success, and the leftover was still on screen afterwards.
+    """
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    class Late(DemoBridge):
+        """The load lands only after the dialog has been closed."""
+
+        def trigger_load(self, load_type=1, *, item=None, force=False,
+                         timeout=None):
+            self._pending = True
+
+        def program_list(self, *, timeout=None):
+            if getattr(self, "_pending", False):
+                self._pending = False
+                self.arrive("LATE ONE", "LATE TWO", program_number=0)
+            return super().program_list(timeout=timeout)
+
+    app = S3kedApp(Late(), allow_write=True)
+    app.LEFTOVER_RETRY = 0.01
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        await pilot.press("l")
+        for _ in range(30):
+            await pilot.pause()
+        await pilot.press("l")
+        await pilot.pause()
+        await pilot.press("c")
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.press("y")
+        for _ in range(60):
+            await pilot.pause()
+        await pilot.press("escape")
+        for _ in range(120):
+            await pilot.pause()
+        names = [n.strip() for n in app.bridge.program_list()]
+
+    assert app.CLEARED_MARKER not in names, f"the leftover survived: {names}"
+    assert "leftover removed" in app.last_status, app.last_status
+
+
+async def test_a_leftover_that_cannot_be_removed_is_reported_not_claimed():
+    """Never say it went when it did not: it is still resident, named, and it
+    will collide on program number 1."""
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    class Stubborn(DemoBridge):
+        def trigger_load(self, load_type=1, *, item=None, force=False,
+                         timeout=None):
+            self.arrive("ARRIVED", program_number=0)
+
+        def delete_program(self, program, *, confirm=True):
+            return          # acknowledged and ignored, like the machine
+
+    app = S3kedApp(Stubborn(), allow_write=True)
+    app.LEFTOVER_RETRY = 0.01
+    app.LEFTOVER_TRIES = 3
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        await pilot.press("l")
+        for _ in range(30):
+            await pilot.pause()
+        await pilot.press("l")
+        await pilot.pause()
+        await pilot.press("c")
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.press("y")
+        for _ in range(60):
+            await pilot.pause()
+        await pilot.press("escape")
+        for _ in range(120):
+            await pilot.pause()
+        status = app.last_status
+
+    assert app.CLEARED_MARKER in status, status
+    assert "still resident" in status, status
+    assert "removed" not in status, "it must not claim success"
