@@ -125,7 +125,7 @@ silently wrong one.
 - [§105](#105--is-clr-really-unreachable-the-question-is-open-again-2026-08-16) — Is CLR really unreachable? The question is open again (2026-08-16)
 - [§106](#106--a-sample-has-two-names-and-only-one-of-them-resolves-2026-08-16) — A sample has two names, and only one of them resolves (2026-08-16)
 - [§107](#107--renumbering-assigns-in-rplist-order-and-a-load-interleaves-2026-08-16) — Renumbering assigns in RPLIST order, and a load interleaves (2026-08-16)
-- [§108](#108--k_freq-accepted-22-and-the-table-says-012-2026-08-16) — `K_FREQ` accepted 22, and the table says 0..12 (2026-08-16)
+- [§108](#108--kfreq-accepted-22-and-the-table-says-012-2026-08-16) — `K_FREQ` accepted 22, and the table says 0..12 (2026-08-16)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
