@@ -3431,6 +3431,41 @@ This is worth having because it predicts: `MWLDEP`, `PRSDEP`, `VFREQ1` and
 `VPANO1` should pivot on 64 too. A rule that forecasts unmeasured fields can be
 refuted by them, which is the difference between a pattern and a decoration.
 
+### The pivot measured directly, 2026-08-17
+
+Everything above extrapolates *to* 63.8 from slopes taken at 66, 72 and 78 —
+all on **one side** of it. mpc2emu crossed the pivot instead. A program with
+**one keygroup spanning keys 24–108**, `FILFRQ` forced to 35, velocity 110:
+
+```
+note 52   K_FREQ 0 -> 22    -6.6 -> -63.9 dBFS    -57.3 dB   closes
+note 64   K_FREQ 0 -> 22   -29.2 -> -29.2 dBFS     +0.0 dB   THE PIVOT
+note 76   K_FREQ 0 -> 22   -41.7 -> -24.7 dBFS    +17.0 dB   opens
+```
+
+**Zero at 64**, to the resolution available, 12 semitones either side.
+
+The choice of program is what makes it evidence. Every multi-keygroup
+candidate puts notes on either side of 64 into *different* keygroups, so a
+"reference note" test would really compare two keygroups with their own
+filter settings — a cousin of the fault that produced §108's null. Here all
+three notes are one keygroup, one filter, one sample, and only the note
+varies. No neighbouring keygroup can contribute output because there is no
+neighbour.
+
+So **64 is a constant, not a per-program value** — three programs now, from
+different banks and samples, and the measured 64 agrees with the fitted 63.8
+within either method's resolution.
+
+**The asymmetry is not a discrepancy.** −57.3 dB below against +17.0 dB
+above for the same twelve semitones is what the physics requires: closing a
+corner *into* the signal is loud, opening one already near the top of the
+material's content is quiet. That is the argument §108 recorded as an
+explanation for its null — where it was **wrong about the instance**, the
+null being a keygroup mismatch. It is the right account of *this*
+asymmetry. Keeping a refuted-in-context mechanism visible rather than
+deleting it paid inside the hour.
+
 ### Three failed attempts, each a different way of misreading the ruler
 
 1. **Base below the fold.** At note 84 the fold sits at FILFRQ 70, against 52

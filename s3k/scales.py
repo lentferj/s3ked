@@ -586,7 +586,18 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "V_LOUD and V_ATT1 both pivot at velocity 64. Three fields, two\n"
              "source types, one rule -- modulation is referenced to the middle\n"
              "of the controller's range. It predicts where MWLDEP, PRSDEP and\n"
-             "the per-zone velocity fields will pivot, so it can be refuted.",
+             "the per-zone velocity fields will pivot, so it can be refuted.\n"
+             "The pivot was later measured DIRECTLY rather than extrapolated\n"
+             "to (§43, 2026-08-17): a single-keygroup program spanning keys\n"
+             "24-108, so three notes either side of the pivot share one\n"
+             "keygroup, one filter and one sample, and only the note varies.\n"
+             "  note 52   K_FREQ 0->22   -57.3 dB   (closes)\n"
+             "  note 64   K_FREQ 0->22    +0.0 dB   (the pivot)\n"
+             "  note 76   K_FREQ 0->22   +17.0 dB   (opens)\n"
+             "Zero at 64 to the resolution available, from a different\n"
+             "program, bank and sample -- so 64 is a CONSTANT, not a\n"
+             "per-program value. The measured 64 and the fitted 63.8 agree\n"
+             "within either method's resolution.",
     ),
     ("keygroup", "FILQ"): Scale(
         "keygroup", "FILQ", "dB", "reso", 15.84, 1.067, (0, 15), 0.999975,
