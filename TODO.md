@@ -1124,3 +1124,35 @@ was written for.
 what the loader does with a *malformed* disc reference. That one bears on
 validating a written volume, which is mpc2emu's problem, not s3ked's. §106
 originally claimed otherwise and was corrected 2026-08-16.
+
+## Renumbering gives a second volume 2,4,6 rather than 4,5,6 (OPEN — confirmed defect)
+
+Reported from live use: loading two three-program volumes and renumbering
+should leave volume 2 holding #4 #5 #6, in volume 2's own order. It does
+not.
+
+`renumber_programs()` assigns position *i* the number *i* in `RPLIST` order.
+A load appears to insert new programs in **program-number** order rather
+than appending, so two volumes both numbering from 1 comb together and
+list position is no longer a proxy for "which volume". Evidence and the
+remaining ambiguity are in §107.
+
+**Status:** the defect is confirmed from the user's report and from a
+30-program mapping taken on the same machine. The **mechanism** is not
+settled: the mapping was read after a renumber, and a sort by the load or
+by the panel produces the same picture as a loader that inserts in number
+order. §92 rules out a re-sort triggered by a SysEx `PRGNUM` write — that
+discriminator was built to be visible and holds — but not the other two
+doors.
+
+**Blocked on:** one hardware run, `probes/renumber_order.py`. Clear, load
+two multi-program volumes, read `RPLIST` before any `PRGNUM` is written.
+The panel must not be touched in between.
+
+**Then:** the fix identifies which programs are NEW rather than inferring
+it from position — snapshot before the load, partition after, number the
+incumbents first and the arrivals after them. §107 has the shape and the
+ambiguity that duplicate names introduce.
+
+**Do not build it against the demo alone.** A demo that appends passes
+every test and hides this exact defect; that has now happened four times.

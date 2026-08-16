@@ -124,6 +124,7 @@ silently wrong one.
 - [§104](#104--the-directory-parser-knew-only-one-of-the-two-generations-2026-08-16) — The directory parser knew only one of the two generations (2026-08-16)
 - [§105](#105--is-clr-really-unreachable-the-question-is-open-again-2026-08-16) — Is CLR really unreachable? The question is open again (2026-08-16)
 - [§106](#106--a-sample-has-two-names-and-only-one-of-them-resolves-2026-08-16) — A sample has two names, and only one of them resolves (2026-08-16)
+- [§107](#107--renumbering-assigns-in-rplist-order-and-a-load-interleaves-2026-08-16) — Renumbering assigns in RPLIST order, and a load interleaves (2026-08-16)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -8736,3 +8737,100 @@ references with `DELS`; §69's volume makes them by not fitting. Both should
 leave a zone naming an absent sample, but "should" is what §74 said too,
 and Jan already has the oversized disc — so it costs one load and no
 build.
+
+## §107 — Renumbering assigns in RPLIST order, and a load interleaves (2026-08-16)
+
+**Status: open. The user's report is confirmed as a real defect; the
+mechanism is strongly indicated and not yet settled.** Probe written
+(`probes/renumber_order.py`), not run — it needs hardware.
+
+### The report
+
+From live use: *"if volume 1 has P#1 #2 #3, and volume 2 has P#1 #2 #3, I
+would expect all of Vol2 to become #4 #5 #6 — in the same order they are in
+vol2 — it seems that doesn't work."*
+
+That expectation is the reasonable one, and `renumber_programs()` does not
+meet it. The function assigns position *i* the number *i*, **in `RPLIST`
+order**, and its own docstring names the assumption it declined to make:
+renumbering the whole list *"needs no assumption about where a load puts new
+programs in the list, which is not established"*. Honest when written, and
+this is the gap it was being honest about. Not making an assumption is not
+the same as being right without one.
+
+### What the load appears to do
+
+mpc2emu, working the same machine, mapped 30 resident programs from six
+volumes to their source volume by position (ordinals only):
+
+```
+0 5 4 3 1 0 1 0 1 0 1 0 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 2
+```
+
+14 runs where grouping would give 6. Two volumes alternate strictly —
+`1 0 1 0 1 0 1` — for exactly as far as the shorter reaches, and the longer
+one's remainder continues as a single run of 17. The four singletons at the
+head are the four one-program volumes.
+
+That is interleaving **by program number**: two volumes both numbering from
+1 comb together until one runs out. It predicts the reported symptom
+exactly — volume 2 receives 2, 4, 6 rather than 4, 5, 6.
+
+### Why it is not settled, and it is not the reason offered
+
+mpc2emu flagged that its reading was taken **after** a renumber and rested
+on §92's "the machine does not re-sort". It then questioned §92 on the
+grounds that §92's population was six volumes of one program each — the
+same limit that makes grouping and interleaving indistinguishable.
+
+**That particular worry is answerable.** §92's no-re-sort finding does not
+rest on the six-volume run. It rests on a separate experiment built to be
+visible: fifteen programs, the **last** given the **first**'s number, so a
+re-sort would have moved it the entire length of the list. `RPLIST` came
+back unchanged. That discriminator could have shown the opposite result,
+which is the test §74 failed and this one passes.
+
+**But there is a real ambiguity, and it is a different one.** §92 rules out
+a re-sort triggered by a **SysEx `PRGNUM` write**. It says nothing about
+what the **load** does, and nothing about what the **panel** does. So two
+histories still produce the observed interleaving:
+
+- **(a)** the loader inserts each program in program-number order; or
+- **(b)** the list was sorted by program number *before* the renumber — by
+  the load itself, or by the panel being touched between the two.
+
+Both give the same post-renumber reading, so that reading cannot separate
+them. The distinction matters for the fix: under (a) the list is reliably in
+number order when a renumber runs; under (b) it depends on what was touched,
+and a fix that assumes a fixed pattern would be assuming its way into the
+same class of error again.
+
+### What settles it
+
+One clean run, which is what the probe does: clear memory, load two
+**multi-program** volumes, and read `RPLIST` **before any `PRGNUM` is
+written**. No transform then sits between the load and the reading. The
+panel must not be touched in between, or door (b) reopens through a gap the
+probe cannot close.
+
+### The shape of the fix, once the premise is confirmed
+
+Assigning numbers by list position cannot give a volume a contiguous range
+when the list interleaves, so the fix has to identify which programs are
+**new** rather than infer it from position. The robust form makes no
+assumption about where the loader inserts:
+
+1. snapshot the resident list **before** the load;
+2. after it, partition the list into pre-existing and new;
+3. number the pre-existing first, in their current relative order, then the
+   new ones in theirs.
+
+Identification is the hard part, because names are not unique (§13a) and a
+duplicate name makes "which of these three is new" genuinely ambiguous. The
+deterministic version marks the incumbents first — write them numbers in a
+range incoming programs cannot hold — at the cost of two writes per
+pre-existing program and a temporarily odd panel display.
+
+**Not to be built against the demo alone.** A demo that appends would pass
+every test and hide exactly this defect; that failure has now happened four
+times in this project.
