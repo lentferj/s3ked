@@ -126,6 +126,7 @@ silently wrong one.
 - [§106](#106--a-sample-has-two-names-and-only-one-of-them-resolves-2026-08-16) — A sample has two names, and only one of them resolves (2026-08-16)
 - [§107](#107--renumbering-assigns-in-rplist-order-and-a-load-interleaves-2026-08-16) — Renumbering assigns in RPLIST order, and a load interleaves (2026-08-16)
 - [§108](#108--kfreq-accepted-22-and-the-table-says-012-2026-08-16) — `K_FREQ` accepted 22, and the table says 0..12 (2026-08-16)
+- [§109](#109--modvfilt1-measured-live-per-keygroup-and-clamped-2026-08-16) — `MODVFILT1` measured: live, per-keygroup, and clamped (2026-08-16)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -8882,3 +8883,52 @@ result can contradict it.
 `params.py` keeps 0..12 until this is measured. The table is transcribed
 data, and one accepted write is not grounds to edit a source document —
 the same standard applied to §74's retraction and §51's.
+
+## §109 — `MODVFILT1` measured: live, per-keygroup, and clamped (2026-08-16)
+
+**Status: measured by the sibling mpc2emu, not by s3ked.** Recorded because
+s3ked carries `MODVFILT1` (keygroup offset 151) as **transcribed spec with
+no hardware confirmation at all**, and this is the first behaviour anyone
+has put against it.
+
+### What was measured
+
+Reproducible to 0.1 dB over four interleaved A/B pairs:
+
+```
+FILFRQ 48   byte151  0  ->  v30 -68.7 dBFS   v120 -45.2
+            byte151 25  ->  v30 -74.1        v120  -1.0
+```
+
+- **Live**, and strongly — 44 dB of range at high velocity.
+- **Per keygroup, independent.** KG1 written to 40 left KG2 unchanged.
+- **Clamped to ±50 by the machine**: a write of 90 read back as 50.
+- **Saturates around 12–25**, and the saturation point moves with the base
+  cutoff — so the useful range depends on `FILFRQ`, and a fixed step size
+  is wrong at some bases.
+- It **darkens the quiet end** rather than only opening the loud one, when
+  the base already sits near open. Worth knowing before treating it as a
+  brightness control.
+
+### The route is not part of the finding
+
+Byte 151 is `MODVFILT1`, *"amount of control of filter frequency by
+assignable source 1"*. Source 1 is chosen by `MODSFILT1` at **program**
+offset 84 — s3ked's table and mpc2emu's writer agree on that offset.
+
+mpc2emu first reported this as establishing the machine's **default** source
+assignments (velocity, LFO2, envelope 2), then retracted it: those values
+were its own writer's output, read off the panel and mistaken for firmware
+defaults. So **nothing here says what the machine defaults to**, and the
+depth field means "velocity" only in programs where `MODSFILT1` says so. A
+program with a different assignment keeps the depth working and silently
+changes what it means.
+
+### The part that bears on §108
+
+The ±50 clamp is direct evidence that this machine **does** validate some
+writes. That is what makes §108's question sharp rather than academic:
+`K_FREQ` accepting 22 against a documented 0..12 cannot be waved away as
+"the machine never checks", because here it demonstrably does. Whether
+`K_FREQ` is unchecked or the transcribed bound is too narrow still needs the
+two-point measurement §108 describes.
