@@ -1171,4 +1171,12 @@ bounds-check, which means the UI must clamp on write.
 
 **Predicted:** flattens. Recorded before the run so it can be wrong.
 
-**Blocked on:** hardware.
+**ANSWERED 2026-08-16 — the prediction was wrong.** 22 is effective
+(centroid 1284 / 2237 / 3995 Hz at K_FREQ 0 / 12 / 22). The field is not
+validated by the machine. `params.py` keeps 0..12 because the measurement
+does not show what the real ceiling IS; the app now handles out-of-range
+values instead of refusing to move them. See §108.
+
+**Still open:** the real ceiling (sweep upward until the corner stops
+moving), and the DIRECTION -- centroid rose where the law predicts it
+should fall. §108 has the cheap next probe.

@@ -3884,3 +3884,64 @@ async def test_priority_bindings_do_not_steal_tab_from_a_dialog():
             assert app.focused is None or app.focused.id not in (
                 "programs", "keygroups", "samples", "parameters"), (
                 f"tab focused {app.focused.id} underneath the dialog")
+
+
+def test_a_value_outside_its_declared_range_can_be_walked_back():
+    """The machine can hold values s3ked's table calls impossible.
+
+    `K_FREQ` acts on 22 against a documented 0..12 (§108), and the panel can
+    put one there -- so an out-of-range current value is a real state, not a
+    hypothetical. Refusing every step traps it: the user cannot walk it back,
+    and the old message called 22 "at its minimum".
+    """
+    from s3ked.app import _distance_to_range
+
+    class Param:
+        minimum, maximum = 0, 12
+
+    param = Param()
+    assert _distance_to_range(param, 5) == 0
+    assert _distance_to_range(param, 12) == 0
+    assert _distance_to_range(param, 22) == 10
+    assert _distance_to_range(param, -3) == 3
+
+    # stepping DOWN from 22 gets closer, so it must be allowed
+    assert _distance_to_range(param, 21) < _distance_to_range(param, 22)
+    # stepping UP from 22 gets further, so it must be refused
+    assert _distance_to_range(param, 23) > _distance_to_range(param, 22)
+
+
+async def test_nudging_an_out_of_range_value_moves_it_towards_the_range():
+    from textual.widgets import DataTable
+    from s3k import params as p
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(150, 46)) as pilot:
+        assert await _settled(pilot, app)
+        app.query_one("#keygroups", DataTable).focus()
+        await _pane_settle(pilot)
+        await pilot.press("right")
+        await _pane_settle(pilot)
+
+        param = p.lookup(("keygroup", "K_FREQ"))
+        table = app.query_one("#parameters", DataTable)
+        row = next(i for i, x in enumerate(app._param_rows)
+                   if x.name == "K_FREQ")
+        table.move_cursor(row=row)
+        await _pane_settle(pilot, 30)
+
+        # the machine reports 22 -- outside the table's 0..12
+        app._param_values["K_FREQ"] = 22
+        await pilot.press("minus")
+        await _pane_settle(pilot)
+        assert "further" not in (app.last_status or ""), app.last_status
+        assert "minimum" not in (app.last_status or ""), (
+            f"stepping down from 22 was refused: {app.last_status}")
+
+        app._param_values["K_FREQ"] = 22
+        await pilot.press("plus")
+        await _pane_settle(pilot)
+        assert "further" in (app.last_status or ""), (
+            f"stepping up from 22 should be refused: {app.last_status}")

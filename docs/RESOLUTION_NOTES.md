@@ -8878,11 +8878,53 @@ designed limit rather than an artefact, and a field that clamps internally
 while accepting the write is the commoner firmware shape. Recorded so the
 result can contradict it.
 
-### Not yet changed
+### ANSWERED 2026-08-16, and the prediction was wrong
 
-`params.py` keeps 0..12 until this is measured. The table is transcribed
-data, and one accepted write is not grounds to edit a source document —
-the same standard applied to §74's retraction and §51's.
+Measured by mpc2emu. P019, one keygroup one zone, `FILFRQ` forced to 72,
+probe note 36, velocity 110:
+
+```
+K_FREQ   0    peak -23.9 dBFS    centroid 1284 Hz
+K_FREQ  12    peak -24.1         centroid 2237 Hz
+K_FREQ  22    peak -26.7         centroid 3995 Hz
+```
+
+**22 is effective.** It does not flatten at 12, so the transcribed 0..12 is
+not what the field does, and `K_FREQ` is one this machine does **not**
+validate — alongside byte 151, which clamps ±50 (§109). Validation here is
+per field, not a property of the firmware.
+
+The probe note was chosen **below** the reference deliberately: at note 84
+§43's law puts both settings past the `FILFRQ` 99 ceiling, where they clamp
+to the same place and a real effect reads as a null. That is the failure
+this project has hit repeatedly, designed out in advance rather than
+discovered afterwards.
+
+**The direction is unexplained and is not claimed.** The expectation was
+that positive key follow below the reference lowers the corner — centroid
+down. It went **up**, monotonically, while peak fell slightly. Untested
+candidates: the sign convention is opposite to the reading, the reference
+note is not 64, or the centroid is being pulled by something other than the
+corner. The cheap next step is the same probe **above** the reference with
+`FILFRQ` low enough to keep the ceiling out of it; if the centroid moves the
+other way, the sign resolves itself.
+
+Absolute levels come from a chain with a +6 dB master and unknown interface
+gain: the differences are real, the absolutes are arbitrary.
+
+### What changed in the code, and what did not
+
+`params.py` **keeps 0..12**. The measurement shows the bound is not the
+machine's, but it does not show what the machine's is — only that 22 is
+inside it. Widening to 22, or to any number, would be inventing a ceiling.
+Finding the real one is a sweep upwards until the corner stops moving.
+
+What did change is `s3ked/app.py`. An out-of-range value is now a **real
+state to handle** rather than an impossibility: the panel can set one and
+the machine will keep it — Jan's machine holds `K_FREQ` 22 as this is
+written. The nudge path refused *every* step from such a value, which
+trapped it, and reported 22 as "at its minimum". A step is now judged by
+whether it moves **towards** the declared range.
 
 ## §109 — `MODVFILT1` measured: live, per-keygroup, and clamped (2026-08-16)
 

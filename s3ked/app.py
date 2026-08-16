@@ -367,6 +367,11 @@ class MasterScreen(ModalScreen[Optional[str]]):
 _GLOSS_WIDTH = 42
 
 
+def _distance_to_range(param, value: int) -> int:
+    """How far outside `param`'s declared range `value` sits; 0 if inside."""
+    return max(param.minimum - value, value - param.maximum, 0)
+
+
 def _gloss(param) -> str:
     """One short human line for a parameter, cut to fit the column."""
     text = (param.desc or "").strip()
@@ -2411,11 +2416,24 @@ class S3kedApp(App):
 
         value = current + delta
         if not param.minimum <= value <= param.maximum:
-            self.notify_status(
-                f"{param.name} is at its "
-                f"{'maximum' if delta > 0 else 'minimum'} "
-                f"({p.describe_value(param, current)})", refused=True)
-            return
+            # A value already OUTSIDE the declared range is not hypothetical.
+            # The machine does not validate every field -- `K_FREQ` acts on
+            # 22 against a documented 0..12 (§108) -- and the panel can put
+            # one there. Refusing every step then traps the value: the user
+            # cannot walk it back, and the message claims it is "at its
+            # minimum" when it is far past the maximum.
+            #
+            # So a step is judged by whether it moves TOWARDS the range.
+            if _distance_to_range(param, value) >= _distance_to_range(
+                    param, current):
+                if _distance_to_range(param, current) > 0:
+                    why = "outside its range, and this moves it further"
+                else:
+                    why = "at its maximum" if delta > 0 else "at its minimum"
+                self.notify_status(
+                    f"{param.name} is {why} "
+                    f"({p.describe_value(param, current)})", refused=True)
+                return
 
         region, index, keygroup = self._param_context
         self._nudging = (region, index, keygroup, param.name)
