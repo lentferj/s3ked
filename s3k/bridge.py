@@ -2511,6 +2511,100 @@ class S3kBridge:
             result["renumbered"] += 1
         return result
 
+    def renumber_after_load(self, before: Sequence[Tuple[str, int]], *,
+                            timeout: Optional[float] = None) -> Dict[str, int]:
+        """Renumber so newly loaded programs get a CONTIGUOUS range at the end.
+
+        `before` is what :meth:`resident_pairs` returned *before* the load.
+
+        :meth:`renumber_programs` assigns position *i* the number *i*, which
+        is self-consistent and is not what a person expects. A load does not
+        append: it produces a list in **program-number order** (§107,
+        measured). Two volumes both numbering their programs from 1 therefore
+        comb together, and numbering by position hands the second volume
+        2, 4, 6, 8, 10 rather than a range of its own. Reported from live use:
+        *"I would expect all of Vol2 to become #4 #5 #6 — in the same order
+        they are in vol2."*
+
+        So the arrivals have to be **identified**, not inferred from where
+        they sit. The incumbents keep the front of the range in their existing
+        order; the arrivals follow in theirs, which is their own volume's
+        order because the list is number-ordered.
+
+        **Identification is by subsequence, not by set.** The incumbents are
+        still present, still in the same relative order, with the same
+        numbers -- so the `before` list is a *subsequence* of the list now.
+        Walking the two together consumes each incumbent once and leaves the
+        arrivals behind. A set difference would collapse duplicates, and this
+        machine enforces no name uniqueness (§13a).
+
+        **The ambiguity that remains, stated rather than hidden:** when a
+        name AND number appear more than once, which occurrence is the
+        incumbent cannot be recovered -- they are indistinguishable to the
+        machine and to the user. Both still receive distinct numbers, so the
+        outcome is correct; only the attribution is arbitrary.
+
+        **The cost, which is real.** This writes numbers OUT of `RPLIST`
+        order, and §92 measured that the machine does not re-sort after a
+        SysEx `PRGNUM` write -- it reflags the active markers on its own, but
+        the sort is the half of `BTSORT` s3ked cannot trigger (§5). So the
+        panel's list stays in its loaded order, now with non-ascending
+        numbers, until something on the front panel sorts it. That is exactly
+        the caveat :meth:`renumber_programs` does NOT need, and it is the
+        price of giving each volume a contiguous range: one of the two
+        properties has to go, because the list order is the machine's and the
+        numbering is ours.
+        """
+        pairs = self.resident_pairs(timeout=timeout)
+        wanted = list(before)
+        incumbents: List[int] = []
+        arrivals: List[int] = []
+        cursor = 0
+        for position, pair in enumerate(pairs):
+            if cursor < len(wanted) and pair == wanted[cursor]:
+                incumbents.append(position)
+                cursor += 1
+            else:
+                arrivals.append(position)
+
+        result = {"programs": len(pairs), "incumbents": len(incumbents),
+                  "arrivals": len(arrivals), "renumbered": 0,
+                  "beyond_range": 0,
+                  "unmatched": len(wanted) - cursor}
+        # An incumbent that could not be matched means the assumption above is
+        # wrong for this load -- a program was removed, or the order changed.
+        # Numbering would then be guesswork, so refuse rather than scramble
+        # the numbers of programs the caller did not ask about.
+        if result["unmatched"]:
+            return result
+
+        order = incumbents + arrivals
+        # HIGH TO LOW for the same reason as renumber_programs: the last
+        # header written is where the panel's cursor is left standing (§92).
+        for number in reversed(range(len(order))):
+            index = order[number]
+            if number > self._PRGNUM_MAX:
+                result["beyond_range"] += 1
+                continue
+            self.set_header_bytes(
+                "program", index, self._PRGNUM_OFFSET, bytes([number]),
+                timeout=timeout,
+            )
+            result["renumbered"] += 1
+        return result
+
+    def resident_pairs(self, *, timeout: Optional[float] = None
+                       ) -> List[Tuple[str, int]]:
+        """(name, PRGNUM) for each resident program, in `RPLIST` order.
+
+        The snapshot :meth:`renumber_after_load` matches against. The number
+        is part of it because a name alone is not unique (§13a), and the pair
+        survives a load that inserts around it.
+        """
+        names = self.program_list(timeout=timeout)
+        numbers = self.program_numbers(timeout=timeout)
+        return list(zip(names, numbers))
+
     def program_numbers(self, *, timeout: Optional[float] = None) -> List[int]:
         """The MIDI program number each resident program carries.
 

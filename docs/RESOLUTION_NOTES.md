@@ -8864,7 +8864,55 @@ drive is now read from the machine. A survey pass before the run is what
 caught it: it listed 5 and 21 programs on volumes 0 and 1 of the *current*
 drive, which is what made the constant look wrong.
 
-### The shape of the fix, once the premise is confirmed
+### FIXED and verified on hardware, 2026-08-16
+
+`renumber_after_load(before)` takes a snapshot of `(name, PRGNUM)` pairs
+taken **before** the load and identifies the arrivals rather than inferring
+them from position. `probes/renumber_after_load.py`, run against the
+S3000XL:
+
+```
+volume A settled: 6 programs, PRGNUM [0, 1, 2, 3, 4, 5]
+after volume B  : 27 programs
+  PRGNUM [0,0, 1,1, 2,2, 3,3, 4,4, 5,5, 6,7,8, ... 20]
+
+renumber_after_load -> incumbents 6, arrivals 21, unmatched 0
+
+incumbents now: [0, 1, 2, 3, 4, 5]
+arrivals now  : [6, 7, 8, ... 26]      contiguous, in volume order
+```
+
+Volume B's 21 programs hold **7–27** on the panel, in their own order. That
+is the reported expectation, met.
+
+**Identification is by subsequence, not by set.** The incumbents are still
+present in the same relative order with the same numbers, so the snapshot
+is a *subsequence* of the list now; walking the two together consumes each
+incumbent once and leaves the arrivals. A set difference would collapse
+duplicates, and this machine enforces no name uniqueness (§13a).
+
+**The price, measured rather than assumed.** This writes numbers out of
+`RPLIST` order, so afterwards:
+
+```
+RPLIST order unchanged:        True
+numbers ascend with position:  False
+```
+
+That was **prediction 4, written down before the run precisely because it
+is the one that could embarrass the fix**. §92 measured that a SysEx
+`PRGNUM` write does not trigger a re-sort — the machine reflags the active
+markers itself, but the sort is `BTSORT`'s missing half (§5). So the list
+keeps its loaded order with non-ascending numbers until the front panel
+sorts it. One of the two properties has to go: the list order is the
+machine's and the numbering is ours. §92's caveat, which
+`renumber_programs` does not need, is exactly what this method does need.
+
+**When the snapshot does not match** — a program removed, the order moved —
+it renumbers nothing and reports `unmatched`. The app then falls back to
+the whole-list renumber, which needs no assumption at all, and says so.
+
+### The shape of the fix, as planned before it was built
 
 Assigning numbers by list position cannot give a volume a contiguous range
 when the list interleaves, so the fix has to identify which programs are

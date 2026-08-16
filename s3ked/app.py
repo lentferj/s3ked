@@ -962,6 +962,9 @@ class S3kedApp(App):
         self._disk_showing = False
         #: The source pane `right` was pressed in, so Esc/`left` can go back.
         self._param_origin: str = "programs"
+        #: (name, PRGNUM) of everything resident before a load, so the
+        #: arrivals can be identified afterwards rather than guessed at.
+        self._before_load = None
         #: Set by a refresh so _apply_program can put the parameter pane back
         #: where it was, rather than dragging it to the program view.
         self._restore_context = None
@@ -2102,6 +2105,12 @@ class S3kedApp(App):
                         self.notify_status, "clearing memory…")
                     self.bridge.clear_memory()
                     leftover = self._mark_the_leftover()
+                # Snapshot the incumbents BEFORE the load. A load inserts in
+                # program-number order rather than appending (§107), so
+                # afterwards there is no way to tell arrivals from residents
+                # by position -- the two volumes comb together.
+                self._before_load = (
+                    self.bridge.resident_pairs() if renumber else None)
                 self.bridge.trigger_load(load_type, item=item)
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"load: {exc}")
@@ -2236,13 +2245,33 @@ class S3kedApp(App):
 
     @work(thread=True)
     def _renumber_worker(self) -> None:
+        before = getattr(self, "_before_load", None)
         try:
             with self._bridge_lock:
-                result = self.bridge.renumber_programs()
+                if before:
+                    result = self.bridge.renumber_after_load(before)
+                    # A snapshot that no longer matches means the assumption
+                    # behind it failed -- a program went missing, or the order
+                    # moved. Numbering from it would be guesswork, so fall
+                    # back to the whole-list renumber, which needs no
+                    # assumption at all.
+                    if result.get("unmatched"):
+                        result = self.bridge.renumber_programs()
+                        result["fell_back"] = True
+                else:
+                    result = self.bridge.renumber_programs()
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"renumber: {exc}")
             return
+        finally:
+            self._before_load = None
         message = f"renumbered {result['renumbered']} program(s)"
+        if result.get("arrivals"):
+            message += (f" — {result['arrivals']} newly loaded now "
+                        f"{result['incumbents'] + 1}"
+                        f"–{result['incumbents'] + result['arrivals']}")
+        if result.get("fell_back"):
+            message += " (list changed under the snapshot; renumbered all)"
         if result.get("beyond_range"):
             message += (f", {result['beyond_range']} past program 128 and "
                         f"left alone")

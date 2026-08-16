@@ -1141,7 +1141,20 @@ what the loader does with a *malformed* disc reference. That one bears on
 validating a written volume, which is mpc2emu's problem, not s3ked's. §106
 originally claimed otherwise and was corrected 2026-08-16.
 
-## Renumbering gives a second volume 2,4,6 rather than 4,5,6 (OPEN — confirmed defect)
+## Renumbering gives a second volume 2,4,6 rather than 4,5,6 (CLOSED 2026-08-16)
+
+**Fixed and verified on hardware.** `renumber_after_load(before)` snapshots
+`(name, PRGNUM)` before the load and identifies the arrivals by subsequence
+rather than by position. Measured: 6 incumbents keep 1–6, 21 arrivals hold
+7–27 in volume order. The demo was changed first to INSERT in
+program-number order rather than append, so the tests could fail on the
+defect before they passed on the fix.
+
+Known cost, recorded in §107: the numbers no longer ascend with list
+position until the panel sorts, because §92 established the machine does
+not re-sort after a SysEx `PRGNUM` write.
+
+<details><summary>original report</summary>
 
 Reported from live use: loading two three-program volumes and renumbering
 should leave volume 2 holding #4 #5 #6, in volume 2's own order. It does
@@ -1172,6 +1185,8 @@ ambiguity that duplicate names introduce.
 
 **Do not build it against the demo alone.** A demo that appends passes
 every test and hides this exact defect; that has now happened four times.
+
+</details>
 
 ## Does `K_FREQ` do anything above 12? (OPEN)
 

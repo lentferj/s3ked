@@ -2016,6 +2016,13 @@ async def test_renumbering_runs_after_the_load_not_before():
             order.append(f"renumber:{len(self._programs)}")
             return super().renumber_programs(timeout=timeout)
 
+        # An ADD load takes the snapshot path (§107) -- the whole-list
+        # renumber is only the fallback now. Both count as "renumbered",
+        # which is what this test is about.
+        def renumber_after_load(self, before, *, timeout=None):
+            order.append(f"renumber:{len(self._programs)}")
+            return super().renumber_after_load(before, timeout=timeout)
+
     app = S3kedApp(Watch(), allow_write=True)
     async with app.run_test(size=(130, 44)) as pilot:
         await pilot.pause()
@@ -2043,8 +2050,21 @@ async def test_renumbering_runs_after_the_load_not_before():
 
     assert order == ["load", "renumber:6"], (
         "the renumber must see the programs the load brought in")
-    # 0-based: the panel calls these 1..6, the byte holds 0..5 (§91)
-    assert app.bridge.program_numbers() == [0, 1, 2, 3, 4, 5]
+    # 0-based: the panel calls these 1..6, the byte holds 0..5 (§91).
+    #
+    # The ARRIVAL takes the LAST number, not the one its list position would
+    # suggest. That is the §107 fix and it is the whole point: a load inserts
+    # in program-number order, so `ARRIVED` (number 1) combs into the middle
+    # of the list, and numbering by position would give it 2 while pushing
+    # three incumbents up one. The cost is that the numbers no longer ascend
+    # with list position until the panel sorts them -- §92 measured that a
+    # SysEx PRGNUM write does not trigger the sort.
+    numbers = dict(zip((n.strip() for n in app.bridge.program_list()),
+                       app.bridge.program_numbers()))
+    assert numbers["ARRIVED"] == 5, numbers
+    incumbents = [v for k, v in numbers.items() if k != "ARRIVED"]
+    assert incumbents == [0, 1, 2, 3, 4], numbers
+    assert len(set(numbers.values())) == 6, f"numbers collided: {numbers}"
 
 
 async def test_renumbering_is_off_unless_asked_for():
@@ -3945,3 +3965,81 @@ async def test_nudging_an_out_of_range_value_moves_it_towards_the_range():
         await _pane_settle(pilot)
         assert "further" in (app.last_status or ""), (
             f"stepping up from 22 should be refused: {app.last_status}")
+
+
+def test_the_demo_interleaves_a_load_the_way_the_machine_does():
+    """The demo must reproduce the DEFECT, or the fix cannot be tested.
+
+    A load does not append: it inserts in program-number order (§107,
+    measured on hardware). A demo that appended would make
+    `renumber_programs` look correct and hide the bug a user reported --
+    the failure this project has made four times.
+    """
+    from s3ked.demo import DemoBridge
+
+    d = DemoBridge()
+    d.clear_memory()
+    for i, name in enumerate(("V1 A", "V1 B", "V1 C")):
+        d.arrive(name, program_number=i)
+    d.renumber_programs()
+    first = list(d.program_list())
+
+    for i, name in enumerate(("V2 A", "V2 B", "V2 C")):
+        d.arrive(name, program_number=i)
+
+    order = [n.strip() for n in d.program_list()]
+    assert order != first + ["V2 A", "V2 B", "V2 C"], "the demo APPENDED"
+    assert d.program_numbers() == sorted(d.program_numbers()), (
+        "a load leaves the list in program-number order")
+    assert order.index("V2 A") < order.index("V1 B"), (
+        f"arrivals must comb into the incumbents: {order}")
+
+
+def test_renumber_after_load_gives_the_new_volume_a_contiguous_range():
+    """Jan's report: "I would expect all of Vol2 to become #4 #5 #6 — in the
+    same order they are in vol2 — it seems that doesn't work."
+    """
+    from s3ked.demo import DemoBridge
+
+    d = DemoBridge()
+    d.clear_memory()
+    for i, name in enumerate(("V1 A", "V1 B", "V1 C")):
+        d.arrive(name, program_number=i)
+    d.renumber_programs()
+    before = d.resident_pairs()
+    incumbents = len(before)
+
+    for i, name in enumerate(("V2 A", "V2 B", "V2 C")):
+        d.arrive(name, program_number=i)
+
+    result = d.renumber_after_load(before)
+    assert result["unmatched"] == 0, result
+    assert result["incumbents"] == incumbents
+    assert result["arrivals"] == 3
+
+    got = {n.strip(): v for n, v in zip(d.program_list(),
+                                        d.program_numbers())}
+    # the arrivals hold a contiguous block at the END, in THEIR order
+    assert [got["V2 A"], got["V2 B"], got["V2 C"]] == [
+        incumbents, incumbents + 1, incumbents + 2], got
+    # and the incumbents keep the front of the range, undisturbed
+    assert [got["V1 A"], got["V1 B"], got["V1 C"]] == [1, 2, 3], got
+    assert len(set(got.values())) == len(got), f"numbers collided: {got}"
+
+
+def test_renumber_after_load_refuses_a_snapshot_that_no_longer_matches():
+    """If the assumption failed, numbering from it would be guesswork."""
+    from s3ked.demo import DemoBridge
+
+    d = DemoBridge()
+    d.clear_memory()
+    for i, name in enumerate(("V1 A", "V1 B")):
+        d.arrive(name, program_number=i)
+    before = d.resident_pairs()
+    stale = before + [("GONE        ", 9)]
+
+    numbers = d.program_numbers()
+    result = d.renumber_after_load(stale)
+    assert result["unmatched"] == 1, result
+    assert result["renumbered"] == 0
+    assert d.program_numbers() == numbers, "it must not touch anything"

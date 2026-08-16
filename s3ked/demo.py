@@ -350,20 +350,43 @@ class DemoBridge:
         ``program_number`` defaults to 1 because that is the interesting
         case: volumes authored independently all start at 1, so loading
         several without clearing makes programs collide and stack (§91).
+
+        **Arrivals are INSERTED in program-number order, not appended.** A
+        real load does not append -- measured in §107, where two volumes both
+        numbering from 1 combed together and the list came back
+        number-ordered with no renumber and no panel touch involved. A demo
+        that appended would make `renumber_programs` look correct and hide
+        the defect a user actually reported, which is the failure this
+        project has now made four times. Equal numbers keep arrival order:
+        the incumbent stays in front of the newcomer, as measured.
         """
         for name in names:
             header = _blank_header("program")
             self._write_named(header, "program", "PRNAME", name)
             self._write_named(header, "program", "PRGNUM", program_number)
             self._write_named(header, "program", "GROUPS", 1)
-            index = len(self._program_headers)
-            self._program_headers.append(header)
-            self._programs.append(name)
-            self._keygroup_counts.append(1)
             kheader = _blank_header("keygroup")
             self._write_named(kheader, "keygroup", "LONOTE", 21)
             self._write_named(kheader, "keygroup", "HINOTE", 127)
-            self._keygroup_headers[index] = [kheader]
+
+            numbers = self.program_numbers()
+            at = len(numbers)
+            for position, existing in enumerate(numbers):
+                if existing > program_number:
+                    at = position
+                    break
+
+            self._program_headers.insert(at, header)
+            self._programs.insert(at, name)
+            self._keygroup_counts.insert(at, 1)
+            # `_keygroup_headers` is keyed BY INDEX, so an insert in the
+            # middle renumbers every key above it. Rebuilding is the whole
+            # cost of modelling this faithfully.
+            self._keygroup_headers = {
+                (key + 1 if key >= at else key): value
+                for key, value in self._keygroup_headers.items()
+            }
+            self._keygroup_headers[at] = [kheader]
 
     #: Program header offset of PRGNUM, mirroring S3kBridge. 0-based; the
     #: panel shows it 1-based, measured 2026-08-14 (§91).
@@ -383,6 +406,35 @@ class DemoBridge:
                 "program", index, self._PRGNUM_OFFSET, bytes([index]))
             result["renumbered"] += 1
         return result
+
+    def renumber_after_load(self, before, *, timeout: Optional[float] = None):
+        """Mirrors S3kBridge.renumber_after_load -- see it for the reasoning."""
+        pairs = self.resident_pairs()
+        wanted = list(before)
+        incumbents, arrivals, cursor = [], [], 0
+        for position, pair in enumerate(pairs):
+            if cursor < len(wanted) and pair == wanted[cursor]:
+                incumbents.append(position)
+                cursor += 1
+            else:
+                arrivals.append(position)
+        result = {"programs": len(pairs), "incumbents": len(incumbents),
+                  "arrivals": len(arrivals), "renumbered": 0,
+                  "beyond_range": 0, "unmatched": len(wanted) - cursor}
+        if result["unmatched"]:
+            return result
+        order = incumbents + arrivals
+        for number in reversed(range(len(order))):
+            if number > self._PRGNUM_MAX:
+                result["beyond_range"] += 1
+                continue
+            self.set_header_bytes("program", order[number],
+                                  self._PRGNUM_OFFSET, bytes([number]))
+            result["renumbered"] += 1
+        return result
+
+    def resident_pairs(self, *, timeout: Optional[float] = None):
+        return list(zip(self.program_list(), self.program_numbers()))
 
     def program_numbers(self, *, timeout: Optional[float] = None):
         return [
