@@ -357,3 +357,48 @@ def test_a_single_key_keygroup_is_reachable():
     audit = a.collect(KeyRanged({"KIT": [["ONE KEY", None, None, None]]}, []))
     assert audit.references[0].reachable is True
     assert [r.sample for r in audit.dangling()] == ["ONE KEY"]
+
+
+class Spans:
+    """A bridge whose only job is to report keygroup key ranges."""
+
+    def __init__(self, spans):
+        self.spans = spans
+
+    def get_parameter(self, field, index, keygroup=0, timeout=None):
+        return len(self.spans)
+
+    def get_header_bytes(self, region, index, offset, count, selector=0,
+                         timeout=None):
+        lo, hi = self.spans[selector]
+        return bytes([lo, hi])
+
+
+def test_keygroups_for_note_names_the_keygroup_that_sounds():
+    """§108: writing keygroup 1 and measuring note 72, which sounds from
+    keygroup 19, gives a flat null that reads exactly like an inert field.
+    """
+    import s3k.analysis as a
+
+    # keygroup 0 covers 28-36; the last one covers 67-96, as in the case
+    # that cost an evening
+    bridge = Spans([(28, 36), (37, 48), (49, 66), (67, 96)])
+
+    assert a.keygroups_for_note(bridge, 0, 72) == [3]
+    assert a.keygroups_for_note(bridge, 0, 36) == [0]
+    assert a.keygroups_for_note(bridge, 0, 84) == [3]
+    assert a.keygroups_for_note(bridge, 0, 120) == [], (
+        "a note outside every span must report nothing, not a guess")
+
+
+def test_keygroups_for_note_reports_overlap_and_ignores_dead_ranges():
+    import s3k.analysis as a
+
+    overlapping = Spans([(60, 72), (67, 79)])
+    assert a.keygroups_for_note(overlapping, 0, 70) == [0, 1], (
+        "overlapping keygroups both sound -- the caller needs to know")
+
+    # inverted selects NOTHING, measured in §81 -- not everything
+    dead = Spans([(90, 30), (60, 72)])
+    assert a.keygroups_for_note(dead, 0, 65) == [1]
+    assert a.keygroups_for_note(dead, 0, 40) == []

@@ -85,7 +85,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from . import messages as m
 from . import params as p
 
-__all__ = ["ZoneRef", "Audit", "collect"]
+__all__ = ["ZoneRef", "Audit", "collect", "keygroups_for_note"]
 
 #: The four velocity zones of a keygroup, in order.
 ZONE_FIELDS = ("SNAME1", "SNAME2", "SNAME3", "SNAME4")
@@ -372,6 +372,41 @@ def _collides_with_empty(name: str) -> bool:
         return not any(m.encode_name(name.strip()))
     except ValueError:
         return False
+
+
+def keygroups_for_note(bridge, program: int, note: int, *,
+                       timeout: Optional[float] = None) -> List[int]:
+    """Which keygroups of `program` sound at `note`.
+
+    **The check that a parameter probe should make before it plays a
+    thing.** Writing a keygroup parameter and then measuring a note that
+    keygroup does not cover produces a flat null which is indistinguishable
+    from an inert field -- and the field is fine. That happened twice in one
+    evening on this project's sibling, once by probing a note past the
+    program's whole span and once by writing keygroup 1 while the note
+    sounded from keygroup 19 (§108).
+
+    Both were **structural** and knowable before a note was played, which is
+    what makes them worth a function rather than a warning: connectivity can
+    be checked statically, sensitivity usually cannot.
+
+    An **inverted** range (`LONOTE` > `HINOTE`) selects nothing, measured in
+    §81, so it matches no note rather than every note -- a keygroup written
+    that way is dead and this reports it as covering nothing at all.
+    """
+    groups_field = p.lookup(("program", "GROUPS"))
+    key_offset = p.lookup(("keygroup", "LONOTE")).offset
+    count = int(bridge.get_parameter(groups_field, program, timeout=timeout))
+    covering = []
+    for keygroup in range(count):
+        keys = bridge.get_header_bytes("keygroup", program, key_offset, 2,
+                                       selector=keygroup, timeout=timeout)
+        lo, hi = int(keys[0]), int(keys[1])
+        if lo > hi:
+            continue            # inverted: selects nothing (§81)
+        if lo <= note <= hi:
+            covering.append(keygroup)
+    return covering
 
 
 def collect(bridge, *, programs: Optional[Sequence[str]] = None,

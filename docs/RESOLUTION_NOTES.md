@@ -9070,6 +9070,55 @@ next question is what it is referenced *to* — the two candidates §43
 explicitly ruled out for its own program being middle C and the sample
 root.
 
+### RESOLVED 2026-08-17: §43 stands, and both explanations were wrong
+
+```
+note 72, FILFRQ 17, KEYGROUP 19
+  K_FREQ  0   peak -26.4 dBFS   centroid 1077 Hz
+  K_FREQ 12   peak -19.1        centroid  726
+  K_FREQ 22   peak -11.8        centroid  537
+```
+
+Level rises **14.6 dB monotonically**. The corner **opens** above the
+reference note, exactly as §43's law predicts. §43 needs no amendment, and
+the reference is **not** 72.
+
+**The null was neither the reference note nor the operating point.** The
+writes were going to **keygroup 1**. `PROG-19K` has nineteen keygroups,
+keygroup 1 covers E0–C1 (notes 28–36), and note 72 is covered by
+**keygroup 19**. Every write in the "above" probe landed on a keygroup that
+does not sound at the note being played.
+
+So the theory recorded above — that opening a corner already above the
+material's content produces a null — **was wrong as an explanation of this
+measurement**, and remains untested as a phenomenon. It is left in place
+rather than deleted, because a plausible mechanism that turned out not to
+be the one operating is exactly the kind of thing that should stay visible.
+
+**The discriminator worked by failing informatively.** Re-run at `FILFRQ`
+17 as suggested, the reading was peak −4.2 dBFS, centroid 2108 —
+**identical to `FILFRQ` 40 to a tenth of a decibel**. A filter parameter
+that does nothing when moved from 40 to 17 is not an operating-point
+subtlety; it is a parameter that is not in the signal path. The test named
+the fault, just not the fault it was designed to find.
+
+### Three distinct reasons in one evening for "the effect could not appear"
+
+| probe | why nothing could have shown |
+|---|---|
+| note 84 | outside the program's keygroup span — silence, so a flat null |
+| `FILFRQ` 40 | possibly above the material's content (proposed here, still untested) |
+| keygroup 1 | not the keygroup that sounds at the probed note |
+
+Two of the three were **structural** and checkable before a note was
+played: the key span had already been dumped hours earlier, and the
+keygroup index was visible in the write itself.
+
+**The question to ask first, sharpened by mpc2emu:** not merely *could the
+effect have shown itself*, but **is the thing I am changing connected to
+the thing I am measuring?** Connectivity is checkable statically;
+sensitivity usually is not.
+
 ### The centroid is not a safe channel near the floor
 
 Worth recording as a rule, because it cost mpc2emu the direction on the
@@ -9082,6 +9131,14 @@ noise and the centroid is reporting the floor.
 **Level is the reliable channel; the centroid is meaningful only while
 there is signal.** A spectral measure needs a signal-presence gate, not
 merely a plausible number.
+
+**And it misleads at the other end too, for the opposite reason.** In the
+note-72 run the centroid *falls* 1077 → 537 Hz while the level *rises*
+14.6 dB: opening a lowpass admits low-frequency signal that swamps the
+residual noise the centroid had been reporting. So the centroid moves the
+"wrong" way when signal **leaves** (noise read as brightness) and again
+when signal **arrives** (real content read as darkening). Neither
+direction is safe to read alone.
 
 ### What changed in the code, and what did not
 
