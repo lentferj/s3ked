@@ -1208,9 +1208,18 @@ validated by the machine. `params.py` keeps 0..12 because the measurement
 does not show what the real ceiling IS; the app now handles out-of-range
 values instead of refusing to move them. See §108.
 
+**DIRECTION ANSWERED 2026-08-17.** Below the reference the corner closes
+hard (29 dB between K_FREQ 0 and 22), which is what §43's law predicts, so
+the sign is key-relative. The earlier "centroid rose" was a noise-floor
+artefact: a closing filter drives the signal into the floor and the
+centroid then reports the floor. Level is the reliable channel.
+
 **Still open:** the real ceiling (sweep upward until the corner stops
-moving), and the DIRECTION -- centroid rose where the law predicts it
-should fall. §108 has the cheap next probe.
+moving), and a null measured ABOVE the reference that §43 contradicts --
+§43 has a non-zero slope at note 72, where the follow-up measured nothing.
+§108 argues the null is an operating-point artefact (an upward shift from a
+corner already above the material's content) and gives the discriminator:
+repeat at note 72 with FILFRQ 15-20.
 
 ## The machine caches the directory across a card swap (CLOSED — §112)
 

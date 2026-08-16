@@ -9010,6 +9010,79 @@ other way, the sign resolves itself.
 Absolute levels come from a chain with a +6 dB master and unknown interface
 gain: the differences are real, the absolutes are arbitrary.
 
+### The direction, answered 2026-08-17 — and it collides with §43
+
+mpc2emu ran the follow-up. `PROG-19K`, `FILFRQ` forced to 40 so the 99
+ceiling stays out of it, velocity 110:
+
+```
+note 36 (BELOW)   K_FREQ  0   peak  -3.4 dBFS   centroid  524 Hz
+                  K_FREQ 12   peak -11.7        centroid  270
+                  K_FREQ 22   peak -32.3        centroid 1732
+
+note 72 (ABOVE)   K_FREQ  0   peak  -4.2 dBFS   centroid 2103 Hz
+                  K_FREQ 12   peak  -4.2        centroid 2105
+                  K_FREQ 22   peak  -4.2        centroid 2109
+```
+
+**Below the reference the corner closes, hard** — 29 dB between `K_FREQ` 0
+and 22, monotonic. That is the direction §43's law predicts, so the sign is
+key-relative and the earlier confusion was a reading error, not a property
+of the field.
+
+**Above, nothing at all** — 0.0 dB across the range, 6 Hz of centroid drift
+in 2103.
+
+mpc2emu offers, without asserting it, that the reference note might be **72
+rather than 64**: the null at 72 would then be exact, and note 36 would
+still close.
+
+**§43 contradicts that, and directly.** §43 measured slopes at notes 66,
+**72** and 78 — `+0.1310`, `+0.5362`, `+0.8973` units per `K_FREQ` step —
+which extrapolate to zero at note 63.8 with r² 0.99890. A **non-zero slope
+at note 72** is precisely what a reference of 72 forbids. Two hardware
+measurements at the same note disagree, so the reference is not universally
+72, and something else distinguishes the two runs.
+
+### A likelier reading, and the discriminator for it
+
+The two cases are not symmetric, and the asymmetry is the whole thing:
+
+- At note **36** the shift is **downward**. Closing a filter into the
+  signal is audible — the level collapses 29 dB.
+- At note **72** the shift is **upward**: `0.06386 × 22 × 8` ≈ 11 units,
+  `FILFRQ` 40 → 51. **Opening a corner that already sits above the
+  material's spectral content changes nothing**, no matter how far it
+  opens.
+
+That is a null produced by the detector's operating point, not by the
+field — the same shape as probing note 84 past the `FILFRQ` ceiling, and
+the same shape as §74 and §45 before it. `K_FREQ` 0 at note 72 already
+reads −4.2 dBFS with a centroid of 2103 Hz: the corner is not obviously
+constraining anything before the sweep begins.
+
+**Discriminator:** repeat at note 72 with `FILFRQ` set **low** — 15–20 —
+so the corner starts well inside the sample's spectrum and opening it has
+somewhere to go. If the level and centroid then move with `K_FREQ`, the
+effect exists above the reference and §43 stands unamended. If they still
+do not, the reference genuinely differs between these two programs, and the
+next question is what it is referenced *to* — the two candidates §43
+explicitly ruled out for its own program being middle C and the sample
+root.
+
+### The centroid is not a safe channel near the floor
+
+Worth recording as a rule, because it cost mpc2emu the direction on the
+first attempt and it is visible in the numbers above: at note 36, `K_FREQ`
+22 reports a centroid of **1732 Hz against 270 Hz** at `K_FREQ` 12 — higher
+— while the level falls a further 20 dB. The filter is closing further and
+the centroid says brighter, because the signal has been driven into the
+noise and the centroid is reporting the floor.
+
+**Level is the reliable channel; the centroid is meaningful only while
+there is signal.** A spectral measure needs a signal-presence gate, not
+merely a plausible number.
+
 ### What changed in the code, and what did not
 
 `params.py` **keeps 0..12**. The measurement shows the bound is not the
