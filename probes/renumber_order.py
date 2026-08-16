@@ -69,8 +69,13 @@ from s3k import bridge as b
 #: Two volumes with SEVERAL programs each -- the population §92's six-volume
 #: run did not have. One program per volume makes grouping and interleaving
 #: identical, which is why that run could not have answered this.
-FIRST = (2, 0)
-SECOND = (2, 1)
+#:
+#: VOLUME INDICES ONLY. An earlier draft carried a hardcoded SCSI id as well
+#: and would have selected a different disk than the one surveyed: the
+#: machine was on drive 0 and the constant said 2. The drive in use is read
+#: from the machine instead, so the probe loads what was actually inspected.
+FIRST_VOLUME = 0        # 5 programs
+SECOND_VOLUME = 1       # 21 programs
 LOAD_ALL = 1
 SETTLE = 12.0
 
@@ -79,8 +84,7 @@ def numbers(bridge):
     return bridge.program_numbers()
 
 
-def load(bridge, drive, volume):
-    bridge.select_drive(drive)
+def load(bridge, volume):
     bridge.select_volume(volume)
     time.sleep(1.0)
     bridge.trigger_load(LOAD_ALL)
@@ -89,17 +93,21 @@ def load(bridge, drive, volume):
 
 def main() -> int:
     bridge = b.S3kBridge.autodetect(channels=(0,))
+    source = bridge.load_source()
+    print(f"load source as found: {source}", flush=True)
+    print("THE PANEL MUST NOT BE TOUCHED until the second read is printed.\n",
+          flush=True)
     print("clearing, then loading two multi-program volumes\n", flush=True)
     bridge.clear_memory()
     time.sleep(2.0)
 
-    load(bridge, *FIRST)
+    load(bridge, FIRST_VOLUME)
     first_names = bridge.program_list()
     first_numbers = numbers(bridge)
     print(f"  volume A: {len(first_names)} programs, "
           f"PRGNUM {first_numbers}", flush=True)
 
-    load(bridge, *SECOND)
+    load(bridge, SECOND_VOLUME)
     both = bridge.program_list()
     both_numbers = numbers(bridge)
     print(f"  after volume B: {len(both)} programs, "

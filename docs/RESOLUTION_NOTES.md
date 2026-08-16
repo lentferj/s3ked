@@ -127,6 +127,7 @@ silently wrong one.
 - [§107](#107--renumbering-assigns-in-rplist-order-and-a-load-interleaves-2026-08-16) — Renumbering assigns in RPLIST order, and a load interleaves (2026-08-16)
 - [§108](#108--kfreq-accepted-22-and-the-table-says-012-2026-08-16) — `K_FREQ` accepted 22, and the table says 0..12 (2026-08-16)
 - [§109](#109--modvfilt1-measured-live-per-keygroup-and-clamped-2026-08-16) — `MODVFILT1` measured: live, per-keygroup, and clamped (2026-08-16)
+- [§110](#110--the-audit-run-on-hardware-at-scale-and-what-it-found-was-not-ours-2026-08-16) — The audit run on hardware at scale, and what it found was not ours (2026-08-16)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -8742,9 +8743,9 @@ build.
 
 ## §107 — Renumbering assigns in RPLIST order, and a load interleaves (2026-08-16)
 
-**Status: open. The user's report is confirmed as a real defect; the
-mechanism is strongly indicated and not yet settled.** Probe written
-(`probes/renumber_order.py`), not run — it needs hardware.
+**Status: SETTLED 2026-08-16.** Measured with `probes/renumber_order.py`
+against the S3000XL. The user's report is a real defect and the mechanism
+is now established rather than indicated.
 
 ### The report
 
@@ -8807,13 +8808,47 @@ number order when a renumber runs; under (b) it depends on what was touched,
 and a fix that assumes a fixed pattern would be assuming its way into the
 same class of error again.
 
-### What settles it
+### What settled it
 
-One clean run, which is what the probe does: clear memory, load two
-**multi-program** volumes, and read `RPLIST` **before any `PRGNUM` is
-written**. No transform then sits between the load and the reading. The
-panel must not be touched in between, or door (b) reopens through a gap the
-probe cannot close.
+Cleared memory, loaded a **5-program** volume then a **21-program** volume,
+and read `RPLIST` with **no `PRGNUM` written** and the panel untouched
+throughout — so no transform sits between the load and the reading.
+
+```
+position: 012345678901234567890123456
+origin  : . A B A B A B A B A B B B B B B B B B B B B B B B B B
+PRGNUM  : 0 0 0 1 1 2 2 3 3 4 4 5 6 7 8 ... 20
+
+11 runs; GROUPED by volume would give 3 (leftover, A, B)
+```
+
+`.` at position 0 is the program `clear_memory` leaves behind — it cannot
+delete the last one, which is its own known limitation.
+
+Strict alternation for **exactly as far as the shorter volume reaches**,
+then the longer volume's remaining 16 programs as a single run. That is the
+quantitative prediction mpc2emu made from a 30-program mapping, reproduced
+under conditions where neither a renumber nor a panel touch could be
+responsible.
+
+**The loader does not append. It produces a number-ordered list.** Whether
+it inserts in sorted position or appends and then sorts is not
+distinguished and does not matter: the observable state after a load is
+number-ordered, with nothing human involved. Hypothesis (b) is closed.
+
+So `renumber_programs()` assigning position *i* the number *i* hands the
+second volume 2, 4, 6, 8, 10 for its first five programs — the reported
+symptom, exactly.
+
+### A trap in the probe itself, worth recording
+
+The first draft carried `FIRST = (2, 0)` — a hardcoded **SCSI id** as well
+as a volume index — and would have called `select_drive(2)` while the
+machine was on drive **0**. It would have loaded from a different disk than
+the one surveyed and produced a confident answer about the wrong media. The
+drive is now read from the machine. A survey pass before the run is what
+caught it: it listed 5 and 21 programs on volumes 0 and 1 of the *current*
+drive, which is what made the constant look wrong.
 
 ### The shape of the fix, once the premise is confirmed
 
@@ -8974,3 +9009,134 @@ writes. That is what makes §108's question sharp rather than academic:
 "the machine never checks", because here it demonstrably does. Whether
 `K_FREQ` is unchecked or the transcribed bound is too narrow still needs the
 two-point measurement §108 describes.
+
+## §110 — The audit run on hardware at scale, and what it found was not ours (2026-08-16)
+
+**Status: partly settled.** `collect()` is confirmed on real hardware at a
+scale it had never seen. §106's specific question — whether it sees a
+**memory-exhausted** load the way §80 saw a deletion — is **still open**,
+and could not be answered with the media available.
+
+### What ran
+
+Six volumes loaded into a 32 MB S3000XL: 31 programs, 177 resident samples,
+**485 zone references** walked. §80's hardware run was 2 programs and 66
+references, so this is roughly seven times the traffic and the first time
+the walk has been exercised near a full machine.
+
+**34 dangling references across 6 programs.**
+
+### They are real, and that was checked rather than assumed
+
+Earlier the same day, mpc2emu reported 14 dangling references that were an
+artefact of `.strip()` on one side and `.rstrip()` on the other — a
+significant *leading* space normalised away on one side only. Same class of
+error, so the same check was run here before believing anything:
+
+```
+exact             34 of 34 remain dangling
+rstrip both       34 of 34
+strip both        34 of 34
+casefold + strip  34 of 34
+```
+
+No normalisation makes them go away. The comparison is not lying.
+
+### What they actually are — a LOAD failure, and the first answer here was wrong
+
+**This section originally said "authoring faults in material this project
+did not create". Both halves of that were wrong**, and the retraction is
+kept visible rather than edited away.
+
+The disc is not third-party material at all: it is the sibling mpc2emu's
+own output, written from E4B and KRZ sources that afternoon. That was
+never checked before the sentence was written — the volumes were *assumed*
+to be library material because every other disc in this project has been.
+
+And the reasoning underneath it was unsound even where the conclusion
+survived. The localisation compared zone names against directory names by
+**exact set membership with no normalisation** — the §106 trap, in this
+project's own code, hours after §106 was written to warn about it. Redone
+with `strip`/`casefold` the answer does not change, so the finding stands;
+but it stood by luck rather than by method until it was checked.
+
+**What is actually happening.** The 16 dangling names and the 17 disc
+samples that never loaded line up as **15 exact pairs differing only by
+`#` versus space**:
+
+```
+zone reference        disc directory
+'TESTSMB#1'           'TESTSMB 1'
+'TESTSMC#2'           'TESTSMC 2'      ... 15 such pairs
+```
+
+The zones kept `#`; the sample files were written with a space; and those
+15 samples are **not in RAM at all**. So the references dangle because the
+samples never arrived — a **load** outcome, not an authoring one. The 16th
+name is `SINE`, referenced by the program `clear_memory` leaves behind, and
+is a different case that should be discounted.
+
+Two facts that constrain the cause without settling it. `#` is **valid** in
+the device charset — index 37 of
+`0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ#+-.` — so the machine does not
+refuse the character. And it is not "names containing spaces": 109 of the
+194 disc names contain an internal space and 92 of those loaded. The
+absences cluster by volume — 15 of 30 in one, 2 of 38 in another, none in
+the remaining four.
+
+**Why it matters beyond this disc.** mpc2emu reported this `#`
+inconsistency in the morning, then retracted it on the strength of a
+disc-against-RAM diff that came back 70/70 zone slots identical. That diff
+was correct and irrelevant: it compared **zone contents**, which match
+because both sides carry `#`, and never asked whether the samples those
+zones **name** are resident. A volume can have every zone byte-identical
+and still be silent. The retraction was wrong and the original report was
+closer to the truth.
+
+Worth stating because it is easy to misread this as a success for §106: it
+is not. Nothing here was caused by memory pressure.
+
+**Not yet excluded:** the affected volume was loaded in run 1 and re-loaded
+in run 2, where it added nothing (see below). So "these files never load"
+and "they lost a race once and the retry declined to retry" are not yet
+separated. One clean load into empty memory followed by `sample_list()`
+does it.
+
+### Why §106 could not be answered
+
+§106 needs a load that **exceeds free memory**. The six volumes on this
+disc total **30.84 MB** of audio against a 32 MB machine, and the largest
+single volume is 12.06 MB — so this medium cannot exhaust it. §69's
+oversized volume (58.69 MB, 183% of the largest machine of this type) is on
+different media and needs a disc swap.
+
+Left open rather than answered with a substitute. A partial load and a
+disc-authoring fault produce the same *symptom* — a zone naming an absent
+sample — which is exactly why one cannot stand in for the other as evidence.
+
+### Two things found in passing, both open
+
+**1. Re-loading an already-resident volume added nothing.** Four volumes
+each added their program and their audio. The two that were already
+resident left free memory and program count **identical**:
+
+```
+volume 3   needs 12.06 MB, free 21.36  ->  free  9.31, 28 programs
+volume 1   needs  7.74 MB, free  9.31  ->  free  9.31, 28 programs
+volume 0   needs  4.53 MB, free  9.31  ->  free  9.31, 28 programs
+volume 2   needs  3.09 MB, free  9.31  ->  free  6.28, 29 programs
+```
+
+Exactly the two already-resident volumes, which is too clean for
+coincidence — but "the loader skips what it already holds" is a hypothesis,
+and no test has been designed that could show the opposite. It also has an
+alternative reading that must be excluded: that those two loads silently
+failed for an unrelated reason.
+
+**2. 17 of 194 disc samples are not resident.** All 194 directory names are
+distinct, so this is not name collision, and it is not the dangling 16 —
+those were never on the disc at all. Unexplained.
+
+Both matter beyond this project: the sibling mpc2emu is diffing disc images
+against RAM, and a loader that skips by name would be a case its
+correspondence does not handle.
