@@ -1156,3 +1156,19 @@ ambiguity that duplicate names introduce.
 
 **Do not build it against the demo alone.** A demo that appends passes
 every test and hides this exact defect; that has now happened four times.
+
+## Does `K_FREQ` do anything above 12? (OPEN)
+
+`params.py` transcribes the range as 0..12; mpc2emu wrote 22 and the
+machine accepted it. Accepted is not effective — this machine clamps some
+fields and not others, and §11 shows it returning plausible wrong data
+rather than erroring.
+
+**Status:** open. §108 has the discriminator: measure the corner shift at
+`K_FREQ` 12 and 22 against §43's fitted law. Extrapolates → the table's
+bound is too narrow. Flattens → the bound is right and the field does not
+bounds-check, which means the UI must clamp on write.
+
+**Predicted:** flattens. Recorded before the run so it can be wrong.
+
+**Blocked on:** hardware.

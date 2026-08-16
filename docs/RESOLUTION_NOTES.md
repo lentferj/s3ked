@@ -125,6 +125,7 @@ silently wrong one.
 - [§105](#105--is-clr-really-unreachable-the-question-is-open-again-2026-08-16) — Is CLR really unreachable? The question is open again (2026-08-16)
 - [§106](#106--a-sample-has-two-names-and-only-one-of-them-resolves-2026-08-16) — A sample has two names, and only one of them resolves (2026-08-16)
 - [§107](#107--renumbering-assigns-in-rplist-order-and-a-load-interleaves-2026-08-16) — Renumbering assigns in RPLIST order, and a load interleaves (2026-08-16)
+- [§108](#108--k_freq-accepted-22-and-the-table-says-012-2026-08-16) — `K_FREQ` accepted 22, and the table says 0..12 (2026-08-16)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -8834,3 +8835,50 @@ pre-existing program and a temporarily odd panel display.
 **Not to be built against the demo alone.** A demo that appends would pass
 every test and hide exactly this defect; that failure has now happened four
 times in this project.
+
+## §108 — `K_FREQ` accepted 22, and the table says 0..12 (2026-08-16)
+
+**Status: open, one measurement away.** Reported by the sibling mpc2emu
+from its own hardware run: writing 22 to keygroup offset 8 was accepted and
+read back, where `s3k/params.py` gives the range as **0..12** — transcribed
+from Akai's document, like every other bound in that table.
+
+### Why this is not simply "the table is wrong"
+
+**Accepted is not effective.** This machine does not validate uniformly:
+mpc2emu's own run found offset 151 clamping a write of 90 down to 50, so
+some fields are checked and some are not. §11 is the sharper warning —
+out-of-range *reads* come back as well-formed, plausible data rather than
+as an error, which is how a fixed keygroup bound manufactures references
+that look real. A field that stores 22 without acting on it would look
+identical to a field whose documented range is too narrow.
+
+### The discriminator
+
+§43 fitted `K_FREQ`'s behaviour to
+
+```
+shift (FILFRQ units) = 0.06386 * K_FREQ * (note - 64)
+```
+
+with r² 0.99890, and 12 is one octave of filter movement per octave of
+keyboard — a round number, which is what a real ceiling usually looks like.
+
+So the question is answerable in one run: measure the corner shift at
+`K_FREQ` 12 and at 22, at the same notes. If the law **extrapolates**, the
+documented bound is too narrow and the table should widen. If it
+**flattens** — 22 behaving exactly as 12 does — the bound is right and the
+field simply does not bounds-check its input, which is worth recording for
+a different reason: it means a UI must clamp on write, because the machine
+will not.
+
+Predicted before the run: **flattens**. 12 = one octave per octave is a
+designed limit rather than an artefact, and a field that clamps internally
+while accepting the write is the commoner firmware shape. Recorded so the
+result can contradict it.
+
+### Not yet changed
+
+`params.py` keeps 0..12 until this is measured. The table is transcribed
+data, and one accepted write is not grounds to edit a source document —
+the same standard applied to §74's retraction and §51's.
