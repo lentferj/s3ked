@@ -8709,8 +8709,29 @@ respectively, leaving 14 zones naming a sample that is genuinely absent)
 and predicts the reference survives **verbatim**, on the grounds that the
 loader has no way to guess what a broken reference meant.
 
-If it comes back verbatim, a dangling reference on disc stays dangling in
-RAM and `collect()` will see it. If the loader **rewrites or blanks** it,
-then RAM cannot testify about what was on the disc, and s3ked's audit is
-answering a question about the machine's state rather than about the
-volume — a distinction this module's docstring would then need to make.
+**Corrected 2026-08-16, before anyone spent hardware time on it.** The
+paragraph above originally said this dump would decide what `collect()`
+means. It would not, and the error is worth keeping visible because it is
+the third instance of the same fault in as many days — this time in
+deciding what to *measure* rather than in how to measure it.
+
+`collect()`'s claim is about **RAM**: a zone naming a sample that is not in
+RSLIST is dangling. §80 verified exactly that against hardware, including
+the failure case — a clean bank, then two used samples deleted, predicted
+24 dangling references, and 24 were named, exactly the right ones. The case
+the module was built for is a **memory-exhausted load** (§69: a volume at
+183% of the largest machine of this type, 10 programs loaded and 60 of 88
+samples). There the disc reference is perfectly well-formed; the sample
+simply never arrived. Nothing about the loader's handling of a *malformed*
+disc reference bears on it.
+
+So verbatim-vs-rewritten is a question about **validating a written
+volume** — whether RAM can testify about what was on the disc. That is
+mpc2emu's use case, not s3ked's, and s3ked's docstring should not have
+claimed the answer was load-bearing for it. What remains genuinely open
+here is narrower and needs no malformed volume: whether `collect()` sees a
+partial load the same way it sees a deletion. §80 made its dangling
+references with `DELS`; §69's volume makes them by not fitting. Both should
+leave a zone naming an absent sample, but "should" is what §74 said too,
+and Jan already has the oversized disc — so it costs one load and no
+build.
