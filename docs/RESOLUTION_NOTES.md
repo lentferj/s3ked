@@ -8632,3 +8632,85 @@ not reachable".
 `clear_memory` becomes unnecessary and the marker dance in the TUI's
 clear-then-load goes away: the panel's CLR does not leave a program behind,
 and ours does, because deleting cannot remove the last one.
+
+## §106 — A sample has two names, and only one of them resolves (2026-08-16)
+
+**Status: recorded from the sibling mpc2emu's hardware run, NOT verified
+here.** s3ked did not take the wire for this and cannot confirm it from its
+own data. It is written down because s3ked has both surfaces — a disk
+browser that lists directory entries, and a cross-reference walker that
+resolves zone references — and wiring them together is a natural thing for
+a contributor to do. It would be wrong.
+
+### The two names
+
+A sample on a volume carries a name in **its own header** and an entry in
+the **volume directory**. Both are twelve characters, both decode through
+the same charset, and in a well-written volume they agree — which is why
+nothing forces you to notice there are two of them.
+
+The sampler resolves a keygroup zone's `SNAME1..4` against the **header**
+name. The directory entry is how the volume is *listed*; it is not what a
+reference points at.
+
+### How it surfaced
+
+mpc2emu writes AKAI volumes from KRZ sources. Its writer encodes `#`
+inconsistently: the sample file was written `TESTSMB 1` (`#` → space) while
+the keygroup zone's `SNAME` kept `TESTSMB#1`. Diffing zone references
+against **directory** names, it reported 44 of 100 programs as having
+unresolvable references and therefore silent keygroups — every sharp in the
+bank.
+
+The dump said otherwise: `VOLUME-A1` came back 70/70 zone slots identical,
+and the programs play. The header name and the zone reference agreed all
+along; only the directory entry differed. The 44-program finding was an
+artefact of checking against the wrong one of the two names.
+
+### Why it is worth a section here rather than a sentence
+
+This is §74/§94's shape again, and worth naming as such: **a measurement
+was read as a fact about the machine when it was a fact about the
+measurement.** §74 declared CLR unreachable from a sweep run against an
+already-resident volume, where the effect it was hunting nets zero words
+and cannot appear. Here a checker compared the wrong field and found a
+fault that does not exist. Both were confident, both were internally
+consistent, and neither could have produced the answer it was credited
+with.
+
+The distinguishing question is the same in both cases and is worth asking
+before the run, not after: **could this procedure have shown the opposite
+result?** A directory-name check cannot distinguish "the reference is
+broken" from "the writer named the directory entry differently", because
+both look identical to it.
+
+### What s3ked does, and why it is not exposed
+
+`analysis.collect()` resolves against `bridge.sample_list()` — RSLIST, the
+names the machine holds in RAM — so its dangling check asks the same
+question the sampler does. The disk browser's `_DirectoryEntry` names are
+used only for **display** and for **positional** selection (`word[7]`, the
+item cursor); no directory name is ever compared or used to address
+anything.
+
+The one opening is `collect(samples=…)`, which is public and takes a name
+list. Handing it directory names would reproduce mpc2emu's result exactly.
+The module docstring now says so at the point where somebody would be
+choosing what to pass.
+
+### Still open
+
+What the loader does with a **genuinely** dangling reference — one where no
+sample of that name is on the volume at all — remains untested. `VOLUME-A1`
+could not answer it: nothing there was dangling, so nothing tested it.
+mpc2emu has a clean subject queued (`VOLUME-B1` P001, where two naming
+paths truncated a 13-character source name to 12 and 11 characters
+respectively, leaving 14 zones naming a sample that is genuinely absent)
+and predicts the reference survives **verbatim**, on the grounds that the
+loader has no way to guess what a broken reference meant.
+
+If it comes back verbatim, a dangling reference on disc stays dangling in
+RAM and `collect()` will see it. If the loader **rewrites or blanks** it,
+then RAM cannot testify about what was on the disc, and s3ked's audit is
+answering a question about the machine's state rather than about the
+volume — a distinction this module's docstring would then need to make.

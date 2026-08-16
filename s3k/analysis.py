@@ -57,6 +57,21 @@ character ``0`` (the §68 trap), so twelve zero bytes decode to
 likewise twelve zeros. A sample named entirely of zeroes and an unwritten
 field are therefore the same bytes, and cannot be separated at all.
 
+**A directory name is not a resident name, and they can disagree.** The
+``samples`` argument is public and it wants the names the MACHINE holds --
+``sample_list()``, i.e. RSLIST. It is tempting to hand it the names from a
+disk directory listing instead, since the disk browser has them and they
+look like the same strings. They are not: a sample carries a name in its
+own header AND an entry in the volume directory, written by whatever tool
+wrote the volume, and the sampler resolves a zone reference against the
+HEADER. A writer that truncates or transliterates the two differently
+produces volumes where a zone resolves perfectly on the machine while a
+directory-based check calls it dangling -- or the reverse. This is not
+hypothetical: the sibling mpc2emu diffed its own written volumes this way
+in 2026-08 and reported 44 partly-silent programs that in fact played
+correctly, because its checker compared against the directory entry
+(§106). Pass RAM names, or pass nothing and let ``collect()`` read them.
+
 So: **blank after decoding, or all-zero, means unassigned.** If a resident
 sample *is* named ``000000000000``, :attr:`Audit.indistinguishable` names it,
 because no zone reference to it can then be told from an empty zone and any
