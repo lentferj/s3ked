@@ -1950,17 +1950,19 @@ class S3kedApp(App):
             if volumes or entries else f"{head} — empty"
         )
         note = f"  (load source unavailable: {source_error})" if source_error else ""
+        # Neither of these may say a volume is a front-panel job: it stopped
+        # being one in §96, and the first of them was still saying so a day
+        # later, in the status line of the very screen that selects volumes.
         if entries:
             self.notify_status(
                 f"{len(volumes)} volume(s); {len(entries)} item(s) in the "
-                f"loaded volume. Press l to load it; [ and ] step the "
-                f"partition. Choosing a volume is still a panel job.{note}"
+                f"selected volume. Enter selects a volume; l loads; "
+                f"[ and ] step the partition.{note}"
             )
         else:
             self.notify_status(
-                f"{len(volumes)} volume(s). Nothing loaded, so the directory "
-                f"is empty; select a volume at the panel, then d to read "
-                f"it and l to load it.{note}"
+                f"{len(volumes)} volume(s), and the selected one reads as "
+                f"empty. Enter on a volume row selects it.{note}"
             )
 
     def action_toggle_write(self) -> None:

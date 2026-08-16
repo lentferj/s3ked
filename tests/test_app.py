@@ -1005,7 +1005,9 @@ async def test_the_disk_status_line_offers_the_keys_that_exist():
         status = app.last_status
 
     assert "the protocol cannot" not in status
-    assert "press l" in status.lower()
+    # The wording changed with §96: the line now names Enter as well, since
+    # selecting a volume stopped being a front-panel job.
+    assert "l loads" in status.lower(), status
 
 
 async def test_the_source_screen_shows_what_can_and_cannot_be_set():
@@ -3216,3 +3218,22 @@ async def test_the_parameter_cursor_survives_a_write():
     assert still_on == "PLAYLO", f"the cursor moved to {still_on}"
     assert landed == started + 3, (
         f"three nudges must all land: {started} -> {landed}")
+
+
+async def test_the_disk_status_line_does_not_call_a_volume_a_panel_job():
+    """It said so for a day after §96 made it false — in the status line of
+    the very screen that selects volumes."""
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        await pilot.press("d")
+        for _ in range(40):
+            await pilot.pause()
+        status = app.last_status
+
+    assert "panel job" not in status, status
+    assert "at the panel" not in status, status
+    assert "Enter" in status, f"it should say what selects a volume: {status!r}"

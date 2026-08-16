@@ -648,7 +648,12 @@ _DIRECTORY_RECORD = 24
 
 #: Bytes 12-15 of a real directory record. The device keeps answering past the
 #: end of the list, so this is what separates an entry from an echo.
+#: What the four-byte extension field holds on a **real** entry. Four spaces
+#: on S1000-format media and four NULs on S3000-format media, so neither can
+#: be required -- see the walk in `hd_directory`, where insisting on spaces
+#: made every S3000 volume read as empty (§104).
 _DIRECTORY_BLANK_EXTENSION = b"\x20\x20\x20\x20"
+_DIRECTORY_EXTENSIONS = (b"\x20\x20\x20\x20", b"\x00\x00\x00\x00")
 
 #: `ss` in RHDDIR: which kind of item the listing starts at.
 DIRECTORY_KINDS = {
@@ -668,8 +673,19 @@ DIRECTORY_KINDS = {
 SAMPLE_FILE_OVERHEAD = 150
 
 #: `raw[16]` of a directory record.
+#: Directory item types, **per generation**. The high bit distinguishes them:
+#: `0x70`/`0x73` are S1000-format program and sample, `0xF0`/`0xF3` the S3000
+#: equivalents. mpc2emu measured the same split across 21 library discs --
+#: 25 407 headers of type `0x73` against 11 238 of type `0xF3`.
+#:
+#: This project knew only the S1000 pair until 2026-08-16, because the one
+#: hard disc it had been developed against holds S1000-format files. Every
+#: S3000-format volume read as **empty**: the types were unrecognised and the
+#: walk stopped at entry 0 (§104).
 ITEM_PROGRAM = 0x70
 ITEM_SAMPLE = 0x73
+#: Mask that drops the generation bit, so a type can be compared once.
+ITEM_GENERATION_MASK = 0x7F
 
 
 @dataclass(frozen=True)
@@ -699,11 +715,11 @@ class _DirectoryEntry:
 
     @property
     def is_sample(self) -> bool:
-        return self.item_type == ITEM_SAMPLE
+        return self.item_type & ITEM_GENERATION_MASK == ITEM_SAMPLE
 
     @property
     def is_program(self) -> bool:
-        return self.item_type == ITEM_PROGRAM
+        return self.item_type & ITEM_GENERATION_MASK == ITEM_PROGRAM
 
     @property
     def size_bytes(self) -> int:
@@ -1936,8 +1952,16 @@ class S3kBridge:
             data = m.HeaderData.decode(reply).data
             if len(data) < _DIRECTORY_RECORD:
                 break
-            if data[12:16] != _DIRECTORY_BLANK_EXTENSION:
-                break
+            # Only heuristics, and only where the machine could not give a
+            # count. The extension field is generation-specific -- spaces on
+            # S1000 media, NULs on S3000 -- so requiring either one alone said
+            # "past the end" on half the world's discs (§104). When `word[6]`
+            # bounded the walk, trust that instead.
+            if counted is None:
+                if not any(data):
+                    break       # an all-zero record: the end, on any format
+                if bytes(data[12:16]) not in _DIRECTORY_EXTENSIONS:
+                    break
             record = bytes(data)
             if record in seen:
                 break

@@ -121,6 +121,7 @@ silently wrong one.
 - [§101](#101--byte55-is-the-selected-program-number-and-it-is-writable-2026-08-14) — `byte[55]` is the selected PROGRAM NUMBER, and it is writable (2026-08-14)
 - [§102](#102--three-undo-bugs-a-fake-bridge-could-not-have-shown-2026-08-15) — Three undo bugs a fake bridge could not have shown (2026-08-15)
 - [§103](#103--delk-fired-and-the-undo-path-verified-where-it-had-never-run-2026-08-15) — `DELK` fired, and the undo path verified where it had never run (2026-08-15)
+- [§104](#104--the-directory-parser-knew-only-one-of-the-two-generations-2026-08-16) — The directory parser knew only one of the two generations (2026-08-16)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -8410,3 +8411,76 @@ application's own workers were mid-exchange, interleaving two request/response
 pairs on one wire; the loser timed out. It now takes the same
 `_bridge_lock` every app call takes. A second user of a MIDI port has to
 queue like the first one.
+
+---
+
+## §104 — The directory parser knew only one of the two generations (2026-08-16)
+
+**Status: found in live use, fixed, verified on three CDs.**
+
+Reported as *"the whole disk -> enter -> load this is broken"*, with three CDs
+on SCSI 0-2. Reproduced by driving the application headlessly against them:
+`d` listed the volumes, `Enter` selected one correctly, and `l` then refused
+with **"nothing read yet — press d"** because the directory came back empty.
+
+### Two assumptions, both taken from one disc
+
+```
+                    what s3ked expected      what the CDs hold
+item type           0x70 program             0xF0
+                    0x73 sample              0xF3
+extension field     four SPACES              four NULs
+```
+
+`0xF0`/`0xF3` are the same values with the high bit set: **the generation
+bit**. `0x70`/`0x73` are S1000-format entries and `0xF0`/`0xF3` are the S3000
+equivalents. mpc2emu measured exactly this split across 21 library discs —
+25 407 headers of type `0x73` against 11 238 of type `0xF3` — in a message to
+this project two days earlier, describing sample *headers*. Nobody connected
+it to the directory parser, including the reader of that message.
+
+Both assumptions came from the single hard disc this project was developed
+against, which holds S1000-format files. **Every S3000-format volume read as
+empty**, and since s3ked's own registers reported the right counts all along
+(`word[6]` said 47 items while `hd_directory` returned none), the failure
+looked like a broken load rather than a broken read.
+
+### What was actually wrong, in order of damage
+
+1. **The walk stopped at entry 0.** The stop condition required the extension
+   field to be four spaces. On S3000 media it is four NULs, so the very first
+   record looked like the end of the list.
+2. **The types were unrecognised**, so even had the walk run, every entry
+   would have been neither program nor sample — invisible to the audit, to
+   the fit check, and to the cursor load types.
+
+### The fix
+
+`is_program` and `is_sample` mask the generation bit. The extension check
+accepts either form, applies **only** where `word[6]` could not bound the walk
+(§99), and is joined by an all-zero-record test so that relaxing it does not
+make the terminator look like data.
+
+Verified on all three CDs, counts matching the machine's own `word[6]`:
+
+```
+drive 0   10 entries   3 programs, 7 samples    types 0xf0/0xf3
+drive 1   10 entries   3 programs, 7 samples
+drive 2   47 entries   3 programs, 44 samples
+```
+
+and the reported flow end to end: `d` -> 52 rows -> `Enter` on v1 moves the
+machine from volume 0 to 1 with the cursor staying put -> `l` opens the load
+screen with 50 entries.
+
+### The lesson is about the corpus, not the code
+
+Every measurement in this project up to §103 was made against **one disc**,
+and this is the first finding that could only appear on different media. The
+registers were right, the app was right, and the parser was reading a format
+it had never been shown. Anything here derived from directory contents should
+be read as "on S1000-format media" until checked against the other generation.
+
+Also fixed in passing: the disk pane's status line still read *"Choosing a
+volume is still a panel job"* — false since §96, and displayed in the status
+line of the very screen that selects volumes.

@@ -1639,3 +1639,54 @@ def test_install_clean_exit_survives_a_platform_without_sighup(monkeypatch):
     finally:
         monkeypatch.undo()
         importlib.reload(b)
+
+
+def test_the_directory_reads_both_generations():
+    """S3000-format media use 0xF0/0xF3 and a NUL extension field.
+
+    s3ked knew only the S1000 pair, because the one hard disc it was developed
+    against holds S1000-format files. Every S3000-format volume therefore read
+    as EMPTY -- the types were unrecognised and the walk stopped at entry 0 --
+    so `l` refused with "nothing read yet" and the whole disk flow looked
+    broken. Reported from live use against three CDs (§104).
+    """
+    from s3k import bridge as b, messages as m
+
+    def record(name, kind, extension):
+        return (bytes(m.encode_name(name, 12)) + extension
+                + bytes([kind]) + (900).to_bytes(3, "little")
+                + b"\x00\x00\x1e\x09")
+
+    s1000 = _directory([
+        record("OLD PROG", 0x70, b"\x20\x20\x20\x20"),
+        record("OLD SAMP", 0x73, b"\x20\x20\x20\x20"),
+        bytes(24),
+    ]).hd_directory(1)
+    s3000 = _directory([
+        record("NEW PROG", 0xF0, b"\x00\x00\x00\x00"),
+        record("NEW SAMP", 0xF3, b"\x00\x00\x00\x00"),
+        bytes(24),
+    ]).hd_directory(1)
+
+    for entries, label in ((s1000, "S1000"), (s3000, "S3000")):
+        assert len(entries) == 2, f"{label}: {entries}"
+        assert entries[0].is_program and not entries[0].is_sample, label
+        assert entries[1].is_sample and not entries[1].is_program, label
+
+
+def test_the_generation_bit_is_all_that_separates_the_two():
+    from s3k import bridge as b
+
+    assert b.ITEM_PROGRAM ^ 0x80 == 0xF0
+    assert b.ITEM_SAMPLE ^ 0x80 == 0xF3
+    assert b.ITEM_GENERATION_MASK == 0x7F
+
+
+def test_an_all_zero_record_still_ends_the_walk():
+    """Accepting a NUL extension must not make the terminator look real."""
+    from s3k import bridge as b, messages as m
+
+    good = (bytes(m.encode_name("ONLY ONE", 12)) + b"\x00\x00\x00\x00"
+            + bytes([0xF3]) + (900).to_bytes(3, "little") + b"\x00\x00\x1e\x09")
+    entries = _directory([good, bytes(24), bytes(24)]).hd_directory(1)
+    assert len(entries) == 1, entries
