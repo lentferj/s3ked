@@ -1402,6 +1402,14 @@ class S3kedApp(App):
                     # older machine may genuinely not answer, and silence
                     # would look like a device with no LOAD page.
                     source_error = str(exc)
+                # Force the machine to look at the medium again before
+                # listing it. It caches the directory across a card swap
+                # (§112), and a stale listing is indistinguishable from a
+                # fresh one -- right shape, right counts, wrong disc.
+                try:
+                    self.bridge.refresh_media()
+                except Exception:
+                    pass        # older machine, or no disk: fall through
                 volumes = self.bridge.volume_list()
                 try:
                     entries = self.bridge.hd_directory(1)

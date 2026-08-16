@@ -487,6 +487,16 @@ class DemoBridge:
                 "volume": getattr(self, "_volume", 0),
                 "cursor_value": 0, "mode": self._mode}
 
+    def refresh_media(self, *, timeout: Optional[float] = None):
+        """Mirrors S3kBridge.refresh_media (§112).
+
+        The demo has no medium to go stale, so this only records that it was
+        asked -- which is what the test asserts. A fake that silently did
+        nothing would let the app drop the call without a single failure.
+        """
+        self.media_refreshes = getattr(self, "media_refreshes", 0) + 1
+        return self.load_source(timeout=timeout)
+
     def select_volume(self, volume: int, *, timeout: Optional[float] = None):
         """0-based, like the real one. See S3kBridge.select_volume (§96)."""
         available = len(self.volume_list())

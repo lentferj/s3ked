@@ -129,6 +129,7 @@ silently wrong one.
 - [§109](#109--modvfilt1-measured-live-per-keygroup-and-clamped-2026-08-16) — `MODVFILT1` measured: live, per-keygroup, and clamped (2026-08-16)
 - [§110](#110--the-audit-run-on-hardware-at-scale-and-what-it-found-was-not-ours-2026-08-16) — The audit run on hardware at scale, and what it found was not ours (2026-08-16)
 - [§111](#111--the-loader-resolves-by-directory-name-ram-stores-the-header-name-2026-08-16) — The loader resolves by DIRECTORY name; RAM stores the HEADER name (2026-08-16)
+- [§112](#112--the-machine-caches-the-directory-across-a-card-swap-2026-08-16) — The machine caches the directory across a card swap (2026-08-16)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -9274,3 +9275,80 @@ correct; one used `ENTIRE VOLUME` and the other `ALL PROGS+SAMPLES`.
 Whether a `#` in a **directory entry** loads correctly. It was only ever
 observed in a header here. Anyone standardising a writer on the `#` form
 should measure that rather than assume it from the charset table.
+
+## §112 — The machine caches the directory across a card swap (2026-08-16)
+
+**Status: settled.** Measured on the S3000XL, two reads of the same volume
+minutes apart, and it very nearly cost another project a correct fix.
+
+### The measurement
+
+A card was rebuilt and swapped while the sampler was powered. Reading
+volume 0's directory:
+
+```
+select_volume(0) only                     30 samples,  0 containing '#'
+                                          'TESTSMA 1'      <- the OLD card
+
+select_drive(0) first, then select_volume(0)
+                                          30 samples, 15 containing '#'
+                                          'TESTSMA#1'      <- the NEW card
+```
+
+`select_drive` performs a re-read (`_force_reread`, §70/§96).
+`select_volume` does **not**. So after a media change the machine keeps
+serving the previous card's directory, and every consumer downstream
+describes a disc that is no longer in the drive.
+
+### Why it is dangerous rather than merely wrong
+
+**The stale reading is not detectable from its content.** It is a
+well-formed directory of a real disc: right entry count, plausible names,
+correct types, no error anywhere. Nothing distinguishes it from a fresh
+one except knowing what the card should contain.
+
+It also propagates into **loads**, not just listings. `ALL PROGS+SAMPLES`
+resolves a program's references against the directory (§111), so a load
+driven from a cached directory looks up names that are not on the medium
+in front of it — and silently loads a subset, which is exactly the §111
+symptom arriving for an entirely different reason.
+
+### What it cost, recorded because the near-miss is the lesson
+
+The sibling mpc2emu fixed a writer bug (a host `safe_filename` turning `#`
+into `_`, which is absent from the Akai charset and encoded as a space —
+giving one sample two names), rebuilt the discs, and asked this project to
+confirm the fix from the machine state. The machine showed the **pre-fix**
+split: 15 sharps missing. The natural reading was that the loader rejects
+`#` outright and the fix was wrong.
+
+It was the cache. With the directory freshly re-read:
+
+```
+directory loaded from  : 15 entries containing '#'
+after ALL PROGS+SAMPLES: 6 programs, 30 samples
+  resident containing '#': 15
+  dangling references    : 1  -> TEST PROGRAM -> 'SINE', the clear leftover
+```
+
+`#` in a directory entry loads. The fix was correct, and a correct writer
+was one message away from being rewritten to work around a bug that did not
+exist.
+
+**Two process notes, both about this project rather than the other one.**
+The probe printed a verdict line reading "the sharps are STILL missing"
+because its pass condition demanded *zero* dangling references and did not
+exclude the leftover `clear_memory` always leaves. The line directly above
+it said 30 samples and 15 sharps. The data was right and the verdict was
+wrong — and a verdict is what gets quoted. And mpc2emu's refusal to
+conclude from a machine state whose provenance it had not established is
+what caused the question to be asked at all; it had been burned twice the
+same day and declined to be a third time.
+
+### Fixed in s3ked
+
+`S3kBridge.refresh_media()` forces the re-read and restores the selected
+volume afterwards, clamped to what the new medium actually has — a card
+with fewer volumes makes the old index meaningless. The disk browser calls
+it before listing. A test asserts the call happens, because a demo has no
+medium to go stale and would otherwise let the call be dropped silently.

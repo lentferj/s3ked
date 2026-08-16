@@ -1768,6 +1768,35 @@ class S3kBridge:
                                 "selecting volume", timeout=timeout)
         return self.load_source(timeout=timeout)
 
+    def refresh_media(self, *, timeout: Optional[float] = None) -> Dict[str, int]:
+        """Make the machine look at the medium again, keeping the volume.
+
+        **The machine caches the directory across a media change.** Measured
+        2026-08-16 (§112): a card was swapped while the sampler was powered,
+        and reading a volume's directory returned the PREVIOUS card's
+        contents -- 30 entries, correct count, entirely plausible, and from
+        the wrong disc. `select_volume` does not invalidate it. The re-read
+        that :meth:`select_drive` performs does.
+
+        That is worth a method of its own because the stale reading is not
+        detectable from its content: it is a well-formed directory of a real
+        disc. Two sessions spent an hour concluding a writer was broken from
+        exactly this, and nearly rewrote a correct one.
+
+        :meth:`_force_reread` lands on volume 0 as a side effect of how it
+        works, so the selected volume is restored afterwards -- clamped to
+        what the new medium actually has, since a card with fewer volumes
+        makes the old index meaningless.
+        """
+        before = self.load_source(timeout=timeout)
+        wanted = before.get("volume", 0)
+        self._force_reread(timeout=timeout)
+        if wanted:
+            available = len(self.volume_list(timeout=timeout))
+            if wanted < available:
+                self.select_volume(wanted, timeout=timeout)
+        return self.load_source(timeout=timeout)
+
     def _force_reread(self, *, timeout: Optional[float] = None) -> None:
         """Make the machine act on a selection it has only recorded.
 

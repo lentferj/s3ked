@@ -4043,3 +4043,25 @@ def test_renumber_after_load_refuses_a_snapshot_that_no_longer_matches():
     assert result["unmatched"] == 1, result
     assert result["renumbered"] == 0
     assert d.program_numbers() == numbers, "it must not touch anything"
+
+
+async def test_opening_the_disk_browser_forces_a_media_re_read():
+    """The machine caches the directory across a card swap (§112).
+
+    A stale listing is indistinguishable from a fresh one -- right shape,
+    right counts, wrong disc. Two sessions spent an hour concluding a writer
+    was broken from exactly that, and nearly rewrote a correct one.
+    """
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge())
+    async with app.run_test(size=(150, 46)) as pilot:
+        assert await _settled(pilot, app)
+        assert getattr(app.bridge, "media_refreshes", 0) == 0, (
+            "nothing should touch the disk before it is asked for")
+        await pilot.press("d")
+        for _ in range(80):
+            await pilot.pause()
+        assert getattr(app.bridge, "media_refreshes", 0) >= 1, (
+            "the browser listed the disk without re-reading it")

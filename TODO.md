@@ -1211,3 +1211,19 @@ values instead of refusing to move them. See §108.
 **Still open:** the real ceiling (sweep upward until the corner stops
 moving), and the DIRECTION -- centroid rose where the law predicts it
 should fall. §108 has the cheap next probe.
+
+## The machine caches the directory across a card swap (CLOSED — §112)
+
+`select_volume` does not invalidate the machine's directory cache;
+`select_drive` does. After a card change the sampler keeps serving the
+previous card's listing, and the stale reading is indistinguishable from a
+fresh one — right counts, plausible names, no error. It propagates into
+loads too, since `ALL PROGS+SAMPLES` resolves references against the
+directory (§111).
+
+**Fixed:** `S3kBridge.refresh_media()`, called by the disk browser before
+listing. Restores the selected volume, clamped to the new medium's count.
+
+**Still worth knowing:** any tool of ours that reads a directory after a
+media change without a re-read is describing the wrong disc. §112 has the
+near-miss this caused.
