@@ -3237,3 +3237,31 @@ async def test_the_disk_status_line_does_not_call_a_volume_a_panel_job():
     assert "panel job" not in status, status
     assert "at the panel" not in status, status
     assert "Enter" in status, f"it should say what selects a volume: {status!r}"
+
+
+async def test_the_disk_browser_legend_still_lists_every_key():
+    """Opening the browser must not hide keys that still work.
+
+    The legend used to be REPLACED by a hardcoded list of eight strings while
+    the browser was open, dropping thirteen bindings that were still live --
+    `m` for the Master screen among them. Reported as "master is missing in
+    the menu list". Two copies of one list, and the copy with no compiler
+    behind it is the one that rots.
+    """
+    from s3ked.app import KeyHints, S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        shown = [b for b in app.BINDINGS if b.description and b.show]
+
+        await pilot.press("d")
+        for _ in range(40):
+            await pilot.pause()
+        assert app._disk_showing
+        legend = str(app.query_one("#keyhints", KeyHints).render())
+
+    missing = [b.key for b in shown if f"{b.key} {b.description}" not in legend]
+    assert not missing, f"hidden while the disk browser is open: {missing}"
+    assert "enter select volume" in legend, "and the browser's own keys too"

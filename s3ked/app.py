@@ -1675,15 +1675,24 @@ class S3kedApp(App):
             self._show_disk_pane(False)
             self.notify_status("")
 
+    #: Extra hints for the disk browser -- keys whose meaning is specific to
+    #: it, or which have no app-level binding to describe them.
+    _DISK_HINTS = ("esc back", "enter select volume")
+
     def _refresh_key_hints(self) -> None:
-        """The legend follows the mode, since half the keys change with it."""
+        """The legend, ADDING to the bindings rather than replacing them.
+
+        This used to swap in a hardcoded list of eight strings while the disk
+        browser was open, which silently dropped thirteen keys that still
+        worked -- `m` for the Master screen among them, reported from live
+        use as "master is missing in the menu list". Two copies of a list is
+        the shape; the copy without a compiler behind it is the one that
+        rots.
+        """
+        blocks = [f"{b.key} {b.description}"
+                  for b in self.BINDINGS if b.description and b.show]
         if self._disk_showing:
-            blocks = ["esc back", "enter select volume", "l load this",
-                      "d re-read", "[ prev partition", "] next partition",
-                      "w write gate", "q quit"]
-        else:
-            blocks = [f"{b.key} {b.description}"
-                      for b in self.BINDINGS if b.description and b.show]
+            blocks = list(self._DISK_HINTS) + blocks
         try:
             self.query_one("#keyhints", KeyHints).set_blocks(blocks)
         except Exception:
