@@ -872,10 +872,11 @@ RESOLUTION_NOTES §83b.
 
 ---
 
-## Does exceeding the object pool refuse, or half-load? (OPEN, one load away)
+## Exceeding the object pool HALF-LOADS (ANSWERED 2026-08-15)
 
-**Status:** both s3ked and mpc2emu warn that a volume exceeding the
-1006-object pool "will not load", and **nobody has checked that it refuses**.
+**Status: settled, on a second machine.** Both projects warned that a volume
+over the 1006-object pool "will not load", and neither had checked that it
+refuses. It does not.
 
 The RAM ceiling is known to degrade differently: §73 measured a volume that
 overran memory loading 10 programs and 60 of 88 samples, reporting
@@ -900,7 +901,21 @@ none exceeds 1006, and the largest needs 910. Authored volumes crowd up to the
 ceiling and never cross it, so a user reaches this case only with a conversion
 tool — which is exactly why the wording matters.
 
-**BLOCKED as of 2026-08-14: this disc cannot reach the ceiling.** Its 38
+**ANSWERED 2026-08-15 by mpc2emu, on Jan's machine: it HALF-LOADS.** A volume
+of 967 objects loaded whole and left `free P/K/S: 39` — 967 + 39 = 1006, to
+the unit, which also confirms `max_blocks` on a second machine. A further
+88-object volume then consumed the remaining 39 and stopped. A refusal would
+have left 39 untouched.
+
+So the object pool degrades exactly like §73's RAM ceiling: programs stay
+resident and selectable with keygroups or samples missing underneath them,
+and nothing says why. **"Will not load" is wrong; "will load incompletely" is
+right.** Free memory stayed at 100 % throughout, so the pool and sample RAM
+are independent budgets rather than two views of one — which matches what
+`programs only` showed from the other side here, 978 keygroups consumed with
+free memory never moving off 31.75 MB.
+
+**Why this project could not answer it:** Its 38
 volumes hold one program each -- a sample library -- totalling ~418 objects
 with keygroups, or ~960 with every sample, against a pool of 1006; and the
 sample route exhausts 32 MB of RAM first. Reloading does not help: a load
@@ -1036,3 +1051,42 @@ what a rename is for and what the re-read exists to refresh. Invented names
 only; the resident programs are from a commercial library (CLAUDE.md).
 
 **Blocked on:** nothing. RAM only, needs nobody at the panel.
+
+---
+
+## Is CLR reachable after all? (REOPENED 2026-08-16)
+
+**Status:** §75 said the panel's CLR cannot be fired remotely. That rests on
+§74's sweep, which §94 proved could detect nothing — it ran against an
+already-resident volume, where a CLR value would clear and reload the same
+volume and net **zero words**, exactly like an inert one.
+
+§74's own words: *"Values above 7 are untested."* The eight load types occupy
+0-7, so a CLR trigger would live exactly where nobody looked.
+
+And the method that found every other register cannot find this one: it works
+by watching a **setting** the panel writes, and CLR is an **action**, which
+leaves nothing behind to watch.
+
+**To close this:** a large volume resident, a much smaller one selected, then
+one candidate value at a time with `free_words` read after each — inert leaves
+memory alone, a load grows it, a CLR-then-load drops it to the small volume.
+
+**Partly answered 2026-08-16:** `byte[6]` values **8-47 and 128-135 are all
+inert**, tested with a 28.83 MB volume resident and a 0.05 MB volume selected
+so a clear would have returned 16 MB and been unmissable. 128-135 tested the
+`0x80 | type` modifier hypothesis specifically. Unlike §74's sweep, this null
+is valid.
+
+Forty-eight unknown writes to that register caused no crash — worth recording
+beside §85, where one unknown value in the *mode* register froze the machine.
+
+**Still open:** `byte[6]` 48-127 and 136-255, and every other register. CLR is
+a separate softkey from GO, so it may not live in the load register at all.
+
+**Blocked on:** somebody at the machine for anything beyond this register.
+Write-sweeping arbitrary misc-data indices is a different order of risk.
+
+**Worth it because:** it would remove the marker dance from clear-then-load.
+Ours leaves a program behind because a delete cannot remove the last one; the
+panel's CLR does not.

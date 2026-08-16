@@ -444,7 +444,7 @@ and — on the S2000/S3000XL/S3200XL only — the `multi` file header and its 16
 .venv/bin/python -m pytest
 ```
 
-876 tests, all synthetic — no hardware, no MIDI ports, no ALSA sequencer
+893 tests, all synthetic — no hardware, no MIDI ports, no ALSA sequencer
 needed. They cannot tell you an offset is *correct*; what they do check is
 that no two parameters claim the same byte, that no span runs past the end of
 its structure, that `describe_value` never raises anywhere in any parameter's

@@ -122,6 +122,7 @@ silently wrong one.
 - [§102](#102--three-undo-bugs-a-fake-bridge-could-not-have-shown-2026-08-15) — Three undo bugs a fake bridge could not have shown (2026-08-15)
 - [§103](#103--delk-fired-and-the-undo-path-verified-where-it-had-never-run-2026-08-15) — `DELK` fired, and the undo path verified where it had never run (2026-08-15)
 - [§104](#104--the-directory-parser-knew-only-one-of-the-two-generations-2026-08-16) — The directory parser knew only one of the two generations (2026-08-16)
+- [§105](#105--is-clr-really-unreachable-the-question-is-open-again-2026-08-16) — Is CLR really unreachable? The question is open again (2026-08-16)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -5748,7 +5749,15 @@ an empty machine would have made CLR and LOAD indistinguishable.
 
 ## §75 — CLR is a panel chain; the effect is reachable, the button is not (2026-08-13)
 
-**Status: settled.** Measured 2026-08-12/13, RAM only.
+> **THE "NOT REACHABLE" HALF IS IN DOUBT, 2026-08-16.** It rests on §74's
+> sweep, which §94 showed could not detect anything — it ran against an
+> already-resident volume, so a CLR value would have cleared and reloaded the
+> same volume and netted **zero words**, exactly like an inert one. The rest
+> of this section — what CLR *is*, and that its effect is reproducible by
+> deleting — stands. Whether a register can fire it does not. See §105.
+
+**Status: the effect is settled; the reachability is reopened.** Measured
+2026-08-12/13, RAM only.
 
 §74 established that the trigger register has exactly one acting value and
 concluded there was no remote CLR. That conclusion was right about the
@@ -7958,6 +7967,24 @@ uses the sum -- but the reported per-program figure was another program's.
 Worth keeping for the same reason as the rest: an assumption about ordering
 slipped in as an index, where it could not be seen.
 
+### Exceeding it half-loads, it does not refuse (2026-08-15)
+
+Measured by mpc2emu on a second S3000XL, with a volume built to be
+object-heavy and audio-light. A 967-object volume loaded whole and left
+`free P/K/S: 39`; a further 88-object volume consumed those 39 and stopped. A
+refusal would have left them untouched.
+
+So this ceiling behaves like §73's RAM ceiling and not like a guard: programs
+stay resident and selectable with their keygroups or samples missing
+underneath. Anything warning a user about it should say **"will load
+incompletely"**.
+
+`max_blocks` reading 1006 is confirmed on that second machine, and free
+*memory* stayed at 100 % while 967 objects were consumed — so the object pool
+and sample RAM are genuinely independent budgets, which is the same
+conclusion `programs only` reaches from the other direction here (978
+keygroups consumed, free memory never moving off 31.75 MB).
+
 ### Open
 
 Whether `max_blocks` moves with memory fitted. This machine is a 32 MB
@@ -8484,3 +8511,124 @@ be read as "on S1000-format media" until checked against the other generation.
 Also fixed in passing: the disk pane's status line still read *"Choosing a
 volume is still a panel job"* — false since §96, and displayed in the status
 line of the very screen that selects volumes.
+
+
+---
+
+## §105 — Is CLR really unreachable? The question is open again (2026-08-16)
+
+**Status: OPEN.** Raised by Jan: *"are we really, really sure there is no
+direct calling of CLR (F7) instead of GO (F8)? seems inconsistent for the
+firmware."* It is inconsistent, and the evidence against it is weaker than it
+looks.
+
+### What the claim actually rests on
+
+**§74's sweep, which is void.** It wrote 0 and 2-7 into the trigger register,
+watched free memory, and saw nothing move. §94 established that this sweep ran
+against a volume that was **already entirely resident**, so every value
+reloaded what was in memory and netted zero words. A CLR value in that state
+would have cleared memory and reloaded the same volume — **also zero words**.
+The experiment could not tell CLR from inert, and it was the only measurement
+behind the claim.
+
+**A documentary argument.** The manual describes `F7-CLR` raising an on-screen
+confirmation answered by `F8-YES`, with `F8-GO` as a separate step, so §75
+reasoned that no single register write could reach a three-keypress chain.
+Reasonable, and not a measurement. Panels commonly confirm what a remote
+command performs outright — the load itself is a case in point: `GO` is a
+keypress here and a bare register write there.
+
+### Why our method could never have found it
+
+Every register this project has identified was found by watching the machine
+while a person changed a **setting**: the volume, the load type, the item
+cursor, the program number. A setting leaves a value behind; that is what
+makes it visible.
+
+**CLR is not a setting. It is an action**, and an action leaves nothing to
+watch. Stepping the panel with the bank under observation would show nothing
+whether or not a CLR register exists. The method has a blind spot shaped
+exactly like the thing that was concluded not to exist.
+
+### And the space is explicitly untested
+
+§74 records it in its own words: *"Values above 7 are untested."* The eight
+load types occupy 0-7 (§93), so if a trigger for CLR lives in this register at
+all, it lives precisely where nobody has looked.
+
+### The test, and the state it needs
+
+The predictions have to be far apart, which is §73's rule and the thing §74
+failed:
+
+- **resident:** a large volume, several MB, already loaded
+- **selected:** a DIFFERENT and much smaller volume
+
+Then write one candidate value and read `free_words`:
+
+```
+inert            memory unchanged
+a load           memory grows by the small volume
+a CLR-then-load  memory DROPS to about the small volume alone
+```
+
+Three outcomes, all distinguishable, none of which can be confused with
+another. Values 8 upward, one at a time, waiting each out.
+
+**The risk is real and is why this is written down rather than run.** Writing
+an unknown value to an unknown register crashed this machine twice (§85, §90),
+and those were a different register. This one is known to *act*, which makes
+an unknown value here more dangerous than a random one elsewhere, not less.
+It needs somebody at the machine who can power-cycle it.
+
+### Run 2026-08-16: not in this register, and this time the null is valid
+
+`probes/clr_hunt.py`, with the state built so the three outcomes could not be
+confused — a 28.83 MB volume resident leaving 14.11 MB free, and a **0.05 MB**
+volume selected:
+
+```
+inert            free stays 14.11 MB
+a load           free falls slightly
+a CLR-then-load  free JUMPS to about 30 MB
+```
+
+```
+byte[6] values 8-47      all inert, program count unchanged at 4
+byte[6] values 128-135   all inert
+```
+
+128-135 tested a specific hypothesis rather than by brute force: the register
+means "perform this load type now", and the panel's CLR is *clear, then load*
+— a **modifier on a load** rather than a ninth type. The obvious encoding for
+that is a high bit, `0x80 | type`. It is not that either.
+
+**This null is worth more than §74's**, which is the point of having re-run
+it. §74 could not have detected a CLR at all: its volume was already resident,
+so clearing and reloading it netted zero words. Here a clear would have
+returned 16 MB and been unmissable.
+
+**Safety datum, since it contrasts sharply with §85.** Forty-eight unknown
+values written to this register produced no crash, no wedge, and no unanswered
+read. Writing 11 to the *mode* register froze the machine and needed a power
+cycle. Out-of-range tolerance is per-register and cannot be generalised in
+either direction.
+
+### Still open, and honestly narrower than it sounds
+
+Not tested: `byte[6]` values 48-127 and 136-255, and **every other register**.
+CLR is a separate softkey from GO on the panel, so if it is addressable at all
+it may well not live in the load register — and a write-sweep of arbitrary
+misc-data indices is a different order of risk, since §85 shows what an
+unknown value in the wrong register does.
+
+So the honest statement is: **CLR is not reachable through the load register
+at any value tried**, which is a real finding, and rather less than "CLR is
+not reachable".
+
+### If it exists
+
+`clear_memory` becomes unnecessary and the marker dance in the TUI's
+clear-then-load goes away: the panel's CLR does not leave a program behind,
+and ours does, because deleting cannot remove the last one.
