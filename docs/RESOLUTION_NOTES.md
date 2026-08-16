@@ -123,6 +123,7 @@ silently wrong one.
 - [§103](#103--delk-fired-and-the-undo-path-verified-where-it-had-never-run-2026-08-15) — `DELK` fired, and the undo path verified where it had never run (2026-08-15)
 - [§104](#104--the-directory-parser-knew-only-one-of-the-two-generations-2026-08-16) — The directory parser knew only one of the two generations (2026-08-16)
 - [§105](#105--is-clr-really-unreachable-the-question-is-open-again-2026-08-16) — Is CLR really unreachable? The question is open again (2026-08-16)
+- [§106](#106--a-sample-has-two-names-and-only-one-of-them-resolves-2026-08-16) — A sample has two names, and only one of them resolves (2026-08-16)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)

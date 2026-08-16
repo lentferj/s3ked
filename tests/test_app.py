@@ -3761,3 +3761,126 @@ def test_a_long_gloss_is_cut_on_a_word_boundary():
         desc = None
 
     assert _gloss(Empty()) == ""
+
+
+async def _pane_settle(pilot, times=45):
+    for _ in range(times):
+        await pilot.pause()
+
+
+async def test_right_reaches_the_keygroup_parameters():
+    """The reported bug, as the user hit it.
+
+    "I can not get to the KG parameters pane with tab, because it goes over
+    'samples', I always get samples param pane." The parameter pane follows
+    the focused source, and it used to sit last in one ring of four -- so
+    tabbing towards it TRANSITED the samples pane, which repointed it before
+    the cursor arrived. Keygroup fields were visible and unreachable.
+    """
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge())
+    async with app.run_test(size=(150, 46)) as pilot:
+        assert await _settled(pilot, app)
+        programs = app.query_one("#programs", DataTable)
+        programs.focus()
+        programs.move_cursor(row=1)
+        await _pane_settle(pilot)
+
+        await pilot.press("tab")
+        await _pane_settle(pilot)
+        assert app.focused.id == "keygroups"
+
+        await pilot.press("right")
+        await _pane_settle(pilot)
+
+        assert app.focused.id == "parameters", "right must land in the table"
+        assert app._param_context[0] == "keygroup", (
+            f"landed showing {app._param_context[0]} fields")
+        names = {str(app.query_one("#parameters", DataTable).get_row_at(i)[1])
+                 for i in range(app.query_one("#parameters",
+                                              DataTable).row_count)}
+        assert "LONOTE" in names and "SPITCH" not in names, sorted(names)[:6]
+
+
+async def test_tab_cycles_the_source_panes_and_never_the_parameter_table():
+    """Tab is a ring of THREE. The wrap is what distinguishes it.
+
+    Plain focus_next agrees with the intended order for the first two steps
+    and differs only when wrapping -- which is how a binding that never fired
+    at all looked correct. Textual's Screen binds `tab` itself and a Screen
+    binding resolves before an App one, so the app binding needs priority.
+    """
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge())
+    async with app.run_test(size=(150, 46)) as pilot:
+        assert await _settled(pilot, app)
+        app.query_one("#programs", DataTable).focus()
+        await _pane_settle(pilot)
+
+        seen = []
+        for _ in range(6):
+            await pilot.press("tab")
+            await _pane_settle(pilot, 30)
+            seen.append(app.focused.id)
+
+        assert "parameters" not in seen, seen
+        assert seen == ["keygroups", "samples", "programs"] * 2, seen
+
+
+async def test_escape_and_left_return_to_the_pane_you_came_from():
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge())
+    async with app.run_test(size=(150, 46)) as pilot:
+        assert await _settled(pilot, app)
+        for origin in ("programs", "keygroups", "samples"):
+            app.query_one(f"#{origin}", DataTable).focus()
+            await _pane_settle(pilot, 30)
+            await pilot.press("right")
+            await _pane_settle(pilot, 30)
+            assert app.focused.id == "parameters", origin
+            await pilot.press("escape")
+            await _pane_settle(pilot, 30)
+            assert app.focused.id == origin, f"esc from {origin}"
+
+            await pilot.press("right")
+            await _pane_settle(pilot, 30)
+            await pilot.press("left")
+            await _pane_settle(pilot, 30)
+            assert app.focused.id == origin, f"left from {origin}"
+
+
+async def test_priority_bindings_do_not_steal_tab_from_a_dialog():
+    """The risk `priority=True` introduces, guarded.
+
+    A priority App binding is resolved BEFORE the focused widget's, which is
+    the point -- a DataTable with a row cursor swallows both arrows, and the
+    Screen swallows tab. But it applies everywhere, so a dialog must keep
+    tabbing between its own widgets rather than being yanked back to the
+    program list underneath it.
+    """
+    from s3ked.app import MasterScreen, S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge())
+    async with app.run_test(size=(150, 46)) as pilot:
+        assert await _settled(pilot, app)
+        await pilot.press("m")
+        assert await _screen(pilot, app, MasterScreen)
+
+        for _ in range(3):
+            await pilot.press("tab")
+            await _pane_settle(pilot, 20)
+            assert isinstance(app.screen, MasterScreen), (
+                "tab escaped the dialog")
+            assert app.focused is None or app.focused.id not in (
+                "programs", "keygroups", "samples", "parameters"), (
+                f"tab focused {app.focused.id} underneath the dialog")

@@ -907,8 +907,33 @@ class S3kedApp(App):
         Binding("i", "integrity", "Integrity"),
         Binding("a", "all_samples", "All samples"),
         Binding("u", "usage", "Who uses"),
-        Binding("tab", "focus_next", "Next pane", show=False),
+        # Tab moves between the three SOURCE panes only, and `right` drops
+        # into the parameter table for whichever is focused.
+        #
+        # The parameter pane used to sit last in one ring of four, which made
+        # keygroup parameters visible but unreachable: the pane follows the
+        # focused source, so tabbing from keygroups towards it TRANSITED the
+        # samples pane and repointed it to sample fields before you arrived.
+        # Reported from live use twice -- "I always get samples param pane".
+        # Nothing is traversed on the way now, so nothing can repoint it.
+        #
+        # `priority` because a focused DataTable consumes both arrows: with
+        # `cursor_type="row"` Textual's `action_cursor_right` falls through to
+        # horizontal scrolling, so an ordinary app binding would never fire --
+        # the same trap already documented for Enter above.
+        # `priority` for the same reason as the arrows, but a different
+        # consumer: Textual's own Screen binds `tab` to focus movement, and a
+        # Screen binding is resolved before an App one -- so without this the
+        # action below never runs. It looked like it did: plain focus_next
+        # agrees with it for the first two steps and only differs on the wrap.
+        Binding("tab", "next_pane", "Next pane", show=False, priority=True),
+        Binding("right", "enter_params", "Parameters", priority=True),
+        Binding("left", "leave_params", "Back to list", priority=True),
     ]
+
+    #: The panes Tab cycles, in order. The parameter table is deliberately
+    #: NOT among them; it is reached with `right` and left with `left`/Esc.
+    _SOURCE_PANES = ("programs", "keygroups", "samples")
 
     def __init__(self, bridge, *, allow_write: bool = False,
                  config_path: Optional[str] = None) -> None:
@@ -930,6 +955,8 @@ class S3kedApp(App):
         self._disk_read = False
         #: Which of the two things the right column is showing.
         self._disk_showing = False
+        #: The source pane `right` was pressed in, so Esc/`left` can go back.
+        self._param_origin: str = "programs"
         #: Set by a refresh so _apply_program can put the parameter pane back
         #: where it was, rather than dragging it to the program view.
         self._restore_context = None
@@ -1804,9 +1831,75 @@ class S3kedApp(App):
         self._refresh_key_hints()
 
     def action_close_disk(self) -> None:
+        # Esc means "back one step", and inside the parameter table that step
+        # is the list you came from -- not closing the disk browser, which is
+        # not even on screen then.
+        if self._in_params() and not self._disk_showing:
+            self.action_leave_params()
+            return
         if self._disk_showing:
             self._show_disk_pane(False)
             self.notify_status("")
+
+    # -- moving between the panes -------------------------------------------
+
+    def _focused_id(self) -> Optional[str]:
+        return self.focused.id if self.focused is not None else None
+
+    def _in_params(self) -> bool:
+        return self._focused_id() == "parameters"
+
+    def action_next_pane(self) -> None:
+        """Tab: the next SOURCE pane, wrapping.
+
+        Falls back to plain focus movement whenever the main screen is not
+        the one in front, so dialogs keep tabbing between their own widgets.
+        """
+        if len(self.screen_stack) > 1 or self._disk_showing:
+            self.screen.focus_next()
+            return
+        here = self._focused_id()
+        order = self._SOURCE_PANES
+        step = (order.index(here) + 1) % len(order) if here in order else 0
+        self.query_one(f"#{order[step]}", DataTable).focus()
+
+    def action_enter_params(self) -> None:
+        """`right`: drop into the parameter table for the focused pane.
+
+        Repoints the pane from the focused source first. Tabbing already does
+        that, but arriving from a pane whose answer never landed -- a refresh
+        that failed, a program with no keygroups -- would otherwise put the
+        cursor in a table showing something else entirely.
+        """
+        here = self._focused_id()
+        if here not in self._SOURCE_PANES or self._disk_showing:
+            # Not a source pane: leave the key doing what the widget does.
+            scroll = getattr(self.focused, "action_scroll_right", None)
+            if scroll is not None:
+                scroll()
+            return
+        table = self.query_one(f"#{here}", DataTable)
+        row = table.cursor_row
+        if here == "keygroups":
+            self._load_keygroup(row)
+        elif here == "samples":
+            self._load_sample_row(row)
+        else:
+            self._load_program(row)
+        self._param_origin = here
+        self.query_one("#parameters", DataTable).focus()
+
+    def action_leave_params(self) -> None:
+        """`left` (and Esc): back to the list the parameters came from."""
+        if not self._in_params() or self._disk_showing:
+            scroll = getattr(self.focused, "action_scroll_left", None)
+            if scroll is not None:
+                scroll()
+            return
+        origin = self._param_origin
+        if origin not in self._SOURCE_PANES:
+            origin = self._SOURCE_PANES[0]
+        self.query_one(f"#{origin}", DataTable).focus()
 
     #: Extra hints for the disk browser -- keys whose meaning is specific to
     #: it, or which have no app-level binding to describe them.
