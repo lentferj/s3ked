@@ -925,6 +925,14 @@ class S3kedApp(App):
         #: Set for the duration of a nudge's write, so _after_write can
         #: collapse a run into one undo entry and skip the catalog re-read.
         self._nudging = None
+        #: Serial number of the most recent parameter-pane request. Each pane
+        #: is filled by a worker doing a MIDI round trip, so tabbing quickly
+        #: puts several in flight at once -- and without this the pane showed
+        #: whichever RETURNED last rather than whichever was ASKED last.
+        #: Invisible in the demo, where a round trip costs nothing; on the
+        #: machine it meant tabbing to the keygroup pane and landing on the
+        #: sample fields.
+        self._param_request = 0
         #: Whether the samples pane lists everything resident or only what
         #: the selected program references. The program-centric redesign
         #: dropped the global list entirely, which lost the view the audit
@@ -1076,7 +1084,7 @@ class S3kedApp(App):
         self._load_program(selected, restore=(region, index, keygroup))
 
     @work(thread=True)
-    def _load_program_worker(self, index: int) -> None:
+    def _load_program_worker(self, index: int, token: int = 0) -> None:
         try:
             with self._bridge_lock:
                 header = self.bridge.get_header("program", index)
@@ -1085,7 +1093,7 @@ class S3kedApp(App):
             self.call_from_thread(self.notify_status, f"error: {exc}")
             return
         self.call_from_thread(self._apply_program, index, header,
-                              keygroups)
+                              keygroups, token)
 
     def _read_keygroups(self, program: int, header) -> List[dict]:
         """Each keygroup's key range and the samples its zones name.
@@ -1138,10 +1146,10 @@ class S3kedApp(App):
         pane back to the program view while somebody is editing a keygroup.
         """
         self._restore_context = restore
-        self._load_program_worker(index)
+        self._load_program_worker(index, self._claim_param_pane())
 
     def _apply_program(self, index: int, header: Dict[str, object],
-                       keygroups=None) -> None:
+                       keygroups=None, token: int = 0) -> None:
         """Fill the keygroup pane and the samples-used pane for one program.
 
         The panes are program-centric on purpose. The samples pane used to be
@@ -1172,11 +1180,14 @@ class S3kedApp(App):
         self.query_one("#param-title", Static).update(
             f"Parameters — program {index} ({header.get('PRNAME', '')})"
         )
-        # A refresh restores whatever the pane was showing; a deliberate
-        # program selection shows the program, which is what was asked for.
+        # The panes above are filled regardless -- they describe this program
+        # and somebody asked for it. Only the PARAMETER pane is gated, because
+        # that is the one a later request may already have claimed.
         self._loaded_program = index
         restore = getattr(self, "_restore_context", None)
         self._restore_context = None
+        if token and token != self._param_request:
+            return
         if restore and restore[0] != "program":
             region, at, keygroup = restore
             self._show_params("program", header, index)
@@ -2701,16 +2712,27 @@ class S3kedApp(App):
         elif table.id == "samples":
             self._load_sample_row(event.cursor_row)
 
+    def _claim_param_pane(self) -> int:
+        """Take the parameter pane for the request about to be made.
+
+        Returns a serial the worker carries and its apply step checks. An
+        older answer arriving afterwards is dropped: it answers a question the
+        user has already moved on from.
+        """
+        self._param_request += 1
+        return self._param_request
+
     def _load_keygroup(self, keygroup: int) -> None:
         program = self._selected_program()
         if program is None or keygroup is None:
             return
         if keygroup >= self._keygroups:
             return
-        self._load_keygroup_worker(program, keygroup)
+        self._load_keygroup_worker(program, keygroup, self._claim_param_pane())
 
     @work(thread=True)
-    def _load_keygroup_worker(self, program: int, keygroup: int) -> None:
+    def _load_keygroup_worker(self, program: int, keygroup: int,
+                              token: int) -> None:
         try:
             with self._bridge_lock:
                 header = self.bridge.get_header("keygroup", program,
@@ -2718,9 +2740,13 @@ class S3kedApp(App):
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"keygroup: {exc}")
             return
-        self.call_from_thread(self._apply_keygroup, program, keygroup, header)
+        self.call_from_thread(self._apply_keygroup, program, keygroup, header,
+                              token)
 
-    def _apply_keygroup(self, program: int, keygroup: int, header) -> None:
+    def _apply_keygroup(self, program: int, keygroup: int, header,
+                        token: Optional[int] = None) -> None:
+        if token is not None and token != self._param_request:
+            return          # a later request has already claimed the pane
         self.query_one("#param-title", Static).update(
             f"Parameters — program {program} keygroup {keygroup}")
         self._show_params("keygroup", header, program, keygroup)
@@ -2746,19 +2772,22 @@ class S3kedApp(App):
             self.notify_status(
                 f"{len(matches)} resident samples are named {name!r}; "
                 f"showing the first")
-        self._load_sample_worker(matches[0], name)
+        self._load_sample_worker(matches[0], name, self._claim_param_pane())
 
     @work(thread=True)
-    def _load_sample_worker(self, index: int, name: str) -> None:
+    def _load_sample_worker(self, index: int, name: str, token: int) -> None:
         try:
             with self._bridge_lock:
                 header = self.bridge.get_header("sample", index)
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"sample: {exc}")
             return
-        self.call_from_thread(self._apply_sample, index, name, header)
+        self.call_from_thread(self._apply_sample, index, name, header, token)
 
-    def _apply_sample(self, index: int, name: str, header) -> None:
+    def _apply_sample(self, index: int, name: str, header,
+                      token: Optional[int] = None) -> None:
+        if token is not None and token != self._param_request:
+            return          # a later request has already claimed the pane
         self.query_one("#param-title", Static).update(
             f"Parameters — sample {index} ({name})")
         self._show_params("sample", header, index)

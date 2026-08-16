@@ -3662,3 +3662,49 @@ async def test_the_loading_dialog_explains_the_parked_leftover():
     assert "removed when you close" in text
     assert S3kedApp.CLEARED_MARKER not in quiet, (
         "a plain load parks nothing and must not mention it")
+
+
+async def test_a_stale_pane_answer_cannot_overwrite_a_newer_one():
+    """Each pane is filled by a worker doing a MIDI round trip, so tabbing
+    quickly puts several in flight. Without a token the pane showed whichever
+    RETURNED last rather than whichever was ASKED last.
+
+    Invisible in the demo, where a round trip costs nothing. On the machine it
+    meant tabbing to the keygroup pane and landing on the sample fields --
+    reported as "I can not get to the KG parameters pane with tab".
+    """
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge())
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+
+        # the keygroup request is made FIRST, so its answer is the stale one
+        stale = app._claim_param_pane()
+        newer = app._claim_param_pane()
+        assert newer > stale
+
+        header = app.bridge.get_header("keygroup", 0, keygroup=0)
+        app._apply_keygroup(0, 0, header, stale)
+        assert app._param_context[0] != "keygroup", (
+            "an answer older than the pane's claim must be dropped")
+
+        app._apply_keygroup(0, 0, header, newer)
+        assert app._param_context == ("keygroup", 0, 0), (
+            "the current claim must still be applied")
+
+
+async def test_tabbing_to_the_keygroup_pane_shows_keygroup_fields():
+    """The whole point of the token: arrive where you tabbed to."""
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge())
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        await pilot.press("tab")
+        for _ in range(40):
+            await pilot.pause()
+        assert app.focused.id == "keygroups", app.focused.id
+        assert app._param_context[0] == "keygroup", app._param_context
