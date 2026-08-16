@@ -3265,3 +3265,61 @@ async def test_the_disk_browser_legend_still_lists_every_key():
     missing = [b.key for b in shown if f"{b.key} {b.description}" not in legend]
     assert not missing, f"hidden while the disk browser is open: {missing}"
     assert "enter select volume" in legend, "and the browser's own keys too"
+
+
+async def test_the_armed_line_flashes_and_stops():
+    """The one line where a wrong keypress destroys something.
+
+    Flashed by TIMER, not by `text-style: blink` -- SGR 5 is dropped silently
+    by many terminals, and a warning that renders as ordinary text elsewhere
+    is worse than none because it looks like it worked.
+    """
+    from textual.widgets import Label
+    from s3ked.app import MasterScreen, S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        await pilot.press("m")
+        for _ in range(20):
+            await pilot.pause()
+        screen = app.screen_stack[-1]
+        assert isinstance(screen, MasterScreen)
+        line = screen.query_one("#master-armed", Label)
+        assert screen._flash is None, "nothing flashes before anything is armed"
+
+        await pilot.press("1")
+        for _ in range(10):
+            await pilot.pause()
+        assert screen._flash is not None, "arming must start the flash"
+        # Literally on screen, not swallowed as markup. Written as [ARMED]
+        # Rich parsed it as a style tag and the word never appeared at all.
+        assert "[ARMED]" in str(line.render()), str(line.render())
+
+        # it really alternates: watch the class over several intervals
+        seen = set()
+        for _ in range(40):
+            seen.add("-flash" in line.classes)
+            await pilot.pause(screen.FLASH_SECONDS / 2)
+            if seen == {True, False}:
+                break
+        assert seen == {True, False}, f"the line never alternated: {seen}"
+
+        await pilot.press("escape")
+        for _ in range(15):
+            await pilot.pause()
+
+    assert screen._flash is None, "cancelling must stop the timer"
+
+
+async def test_the_armed_line_is_red_at_rest_and_inverted_on_the_flash():
+    """Both states differ, so a terminal rendering one oddly still shows a
+    change."""
+    from s3ked.app import S3kedApp
+
+    css = S3kedApp.CSS
+    assert "#master-armed {" in css and "$error" in css
+    assert "#master-armed.-flash" in css
+    assert "text-style: blink" not in css, (
+        "SGR blink is silently dropped by many terminals")

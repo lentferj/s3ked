@@ -289,10 +289,16 @@ class MasterScreen(ModalScreen[Optional[str]]):
         "4": ("clear_memory", "Clear memory — delete EVERY program and sample"),
     }
 
+    #: How fast the armed line alternates. Fast enough to read as urgent,
+    #: slow enough that the words stay legible while it does.
+    FLASH_SECONDS = 0.45
+
     def __init__(self, context: str) -> None:
         super().__init__()
         self.context = context
         self.armed: Optional[str] = None
+        self._flash = None
+        self._flash_on = False
 
     def compose(self) -> ComposeResult:
         with Vertical(id="master-box"):
@@ -308,15 +314,48 @@ class MasterScreen(ModalScreen[Optional[str]]):
     def on_key(self, event) -> None:
         if event.key in self._ACTIONS:
             self.armed = self._ACTIONS[event.key][0]
+            # `\[` escapes the bracket. Written as [ARMED] it was parsed as
+            # MARKUP -- Rich read it as a style tag named "ARMED" and the word
+            # never appeared at all, on the one screen where a keypress
+            # destroys something. Found by a test asserting it was on screen.
             self.query_one("#master-armed", Label).update(
-                f"[b][ARMED][/b] {self._ACTIONS[event.key][1]} — Enter to fire"
+                rf"[b]\[ARMED][/b] {self._ACTIONS[event.key][1]} — Enter to fire"
             )
+            self._start_flashing()
             event.stop()
 
+    def _start_flashing(self) -> None:
+        """Alternate the armed line, by TIMER rather than by the blink attribute.
+
+        `text-style: blink` is ANSI SGR 5, which a good many terminals drop
+        silently -- and a warning that renders as ordinary text on somebody
+        else's terminal is worse than no warning, because it looks like it
+        worked. Toggling a class cannot be ignored by a terminal: it is two
+        different sets of colours, drawn alternately.
+        """
+        if self._flash is not None:
+            return
+        self._flash = self.set_interval(self.FLASH_SECONDS, self._flash_once)
+
+    def _flash_once(self) -> None:
+        self._flash_on = not self._flash_on
+        try:
+            self.query_one("#master-armed", Label).set_class(
+                self._flash_on, "-flash")
+        except Exception:
+            self._stop_flashing()
+
+    def _stop_flashing(self) -> None:
+        if self._flash is not None:
+            self._flash.stop()
+            self._flash = None
+
     def action_fire(self) -> None:
+        self._stop_flashing()
         self.dismiss(self.armed)
 
     def action_cancel(self) -> None:
+        self._stop_flashing()
         self.dismiss(None)
 
 
@@ -779,6 +818,11 @@ class S3kedApp(App):
        window the moment somebody resizes, and the overflow is CLIPPED rather
        than wrapped -- the same failure the Footer had, which is why KeyHints
        exists. Reported from live use as truncated dialog text. */
+    /* The armed line on the Master screen. Red at rest, inverted on the
+       flash, so the two states differ in BOTH directions -- a terminal that
+       renders one of them oddly still shows a change. */
+    #master-armed { color: $error; text-style: bold; }
+    #master-armed.-flash { background: $error; color: $text; text-style: bold; }
     #confirm-box, #master-box, #edit-box, #loadopts-box {
         width: 70; max-width: 100%; padding: 1 2;
         border: thick $panel; background: $surface;
