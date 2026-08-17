@@ -155,6 +155,7 @@ silently wrong one.
 - [§112](#112--the-machine-caches-the-directory-across-a-card-swap-2026-08-16) — The machine caches the directory across a card swap (2026-08-16)
 - [§113](#113--the-whole-block-reads-work-and-every-block-is-193-bytes-2026-08-17) — The whole-block reads work, and every block is 193 bytes (2026-08-17)
 - [§114](#114--the-machine-does-not-pair-stereo-halves-and-it-validates-modulation-sources-2026-08-17) — The machine does not pair stereo halves, and it validates modulation sources (2026-08-17)
+- [§115](#115--the-drum-inputs-page-is-readable-and-it-is-sixteen-inputs-2026-08-17) — The drum-inputs page is readable, and it is sixteen inputs (2026-08-17)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -9810,3 +9811,61 @@ that will be discarded without a word.
 the machine. The *source* fields beside it are validated differently — not
 clamped into range but zeroed outright. Two adjacent field families, two
 different rejection behaviours.
+
+## §115 — The drum-inputs page is readable, and it is sixteen inputs (2026-08-17)
+
+**Status: structure settled, field meanings unknown.** Measured 2026-08-17,
+read-only — `RDDATA` only, never `DDATA`.
+
+### It is reachable, and s3ked never used it
+
+`RDDATA` (`0Eh`) *request drum settings* and `DDATA` (`0Fh`) are in the
+opcode table and have never been called. `RDDATA` answers with **no payload
+at all**:
+
+```
+RDDATA -> DDATA, 324 payload bytes = 162 denibbled
+name at 0x03 = 'DRUM INPUTS'
+```
+
+162 bytes, and the 12-character name at `0x03` follows the same convention
+as the program, keygroup and sample blocks. The sibling mpc2emu's
+machine-saved `.D` file is **also 162 bytes with the same header**, so the
+RAM structure and the disk file are the same shape — the page can be read
+over SysEx without a save-and-diff cycle.
+
+### Sixteen inputs, in two banks of eight
+
+```
+0000  01 00 00 | 0e 1c 1f 17 0a 13 18 1a 1f 1e 1d 0a | 00
+0010  3c 32 19 02 04 0a 0a 00 00   x8   -> ends 0x57
+0058  01 00 00                      <- the same marker, again
+005b  3c 32 19 02 04 0a 0a 00 00   x8   -> the last one ends short
+```
+
+The `01 00 00` at `0x00` recurs at **`0x58`** — exactly `0x10 + 8×9` — so
+the layout is *marker + name + eight records*, then *marker + eight
+records*.
+
+The arithmetic that looked broken now closes: `3 + 12 + 1 + 72 + 3 + 72 =
+163` against 162 actual, so **the missing byte is the last byte of the
+sixteenth record**, not a header miscount. Fifteen records are nine bytes
+and the last is eight. The disk file is 162 too, so the format agrees with
+the wire.
+
+### What is NOT known, and why no guess is recorded
+
+`params.py` has **no drum region** — its regions are `keygroup`, `multi`,
+`multipart`, `program`, `sample`. The drum-input page was never transcribed,
+so there are offsets and no labels. Every record currently reads `3c 32 19
+02 04 0a 0a 00 00` (60, 50, 25, 2, 4, 10, 10, 0, 0) **identically**, because
+nothing on the page has been configured — the same condition that makes a
+zero-filled probe unreadable, and the reason §110 could not interpret a
+directory either.
+
+Two of the nine fields are already zero in every record, so a decoding pass
+that leaves them at their defaults will not learn them. Whoever configures
+the page for a diff should set **all nine** positions on at least one input.
+
+**Not a guess to be filled in later:** the field names must come from the
+panel's own labels or a document, not from inference over uniform data.

@@ -1236,3 +1236,18 @@ listing. Restores the selected volume, clamped to the new medium's count.
 **Still worth knowing:** any tool of ours that reads a directory after a
 media change without a re-read is describing the wrong disc. §112 has the
 near-miss this caused.
+
+## The drum-inputs page: readable, unlabelled (OPEN)
+
+`RDDATA` returns the whole page — 162 bytes, sixteen inputs in two banks of
+eight, structure settled in §115. What is missing is **names**: `params.py`
+has no drum region, and the page was never transcribed from the Akai
+documents.
+
+**Blocked on:** the panel's own labels, or a document. Not inferable — every
+record currently holds identical values because nothing is configured, and
+two of the nine fields are zero throughout.
+
+**Worth it because:** it is a whole page of the machine that s3ked can read
+and cannot present. Adding a `drum` region would make it editable the same
+way everything else is.
