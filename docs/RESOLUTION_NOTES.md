@@ -10174,25 +10174,58 @@ The operator reported that the sample "does not really sound like constant
 white noise — there is a rhythm to it". There is, and it is large:
 
 ```
-                             95/5 envelope spread   slow/fast modulation
-NSWHITE (measured)                  71.2 dB               +5.7 dB
-synthetic white (control)            2.1 dB              -10.8 dB
-0.25 s looped noise (control)        2.0 dB              -14.5 dB
+                                 95/5 envelope spread   slow/fast modulation
+NSWHITE (corrected window)              13.3 dB               +5.6 dB
+synthetic white (control)                2.1 dB              -11.1 dB
+white + 1.5 Hz AM (control)             19.0 dB              +18.2 dB
 ```
 
 White noise has a nearly steady envelope — about 2 dB of spread on a 2 ms
-window. This swings **71 dB**, with its modulation energy concentrated at
-**1–4 Hz** rather than in the grain of the noise. A short-loop control shows
-none of it, so it is not a loop artefact.
+window. This swings **13 dB**, with modulation energy well above clean noise
+and toward the amplitude-modulated control. The cause is mpc2emu's own: a
+5 ms taper applied to **both ends of a looped sample**, which is a de-click
+for a one-shot and an amplitude dip at every seam for a loop. It measured
+the dip independently at **13.3 dB** — the same number from the file side.
 
-**The ear got there first and the first two analyses did not.** An
-autocorrelation peaked at the floor of its own search range and was read as
-a period; an envelope measured across the note-off found "0.5 Hz", which was
-the note's own on-off inside a 2 s window and nothing to do with the sample.
-Both were artefacts of the analysis window. What settled it was **running
-the same analysis on synthetic controls** — which is the same move as the
-reference band, the identity write, and the known-good control value in
-§114, arrived at again from a different direction.
+### RETRACTED: the first figure here was 71.2 dB and it was an artefact
+
+**Three analyses of this in a row were wrong, each in its own analysis
+window, and the third was published to a sibling project before it was
+caught.**
+
+1. An autocorrelation peaked at the **floor of its own search range** and
+   the floor was read as a period.
+2. An envelope measured **across the note-off** found "0.5 Hz" — the note's
+   own on-off inside a 2 s window, nothing to do with the sample.
+3. The 71.2 dB figure used a window of 0.45–1.95 s. **The sound did not
+   start until ~0.65 s.** Two hundred milliseconds of pre-note silence sat
+   inside the window, and the silence *was* the spread. Measured strictly
+   inside the sound it is 13.3 dB.
+
+What caught the third was the sibling refusing it: they could not reproduce
+more than 0.3 dB from the file at any stage, said so instead of accepting a
+number from the machine, and listed the windows to check. Two of their three
+hypotheses were about analysis windows — the failure mode this project had
+already made twice that hour.
+
+**A coarse RMS-per-50 ms picture of the whole recording showed it at once**,
+and would have shown it before any of the three:
+
+```
+ 0.00s |             -+@@@@@|   sound starts ~0.65 s
+ 1.00s |@@@@@#@@@#@@@@@@@@@@|
+ 2.00s |@@@@+==:....        |   note-off, release
+ 3.00s |                    |
+```
+
+Look at the recording before analysing it. Every one of the three failures
+was invisible in a summary statistic and obvious in a plot.
+
+**Unexplained and not chased:** roughly 500 ms between the note-on and
+audible sound, where `play_and_record` assumes 0.15 s. It does not affect
+§116 — the sweeps measure spectra over the held portion — but it means the
+rig's timing model and the machine disagree, and anything measuring an
+*attack* would inherit it.
 
 Recorded because the depth measurement above **used this source and still
 agreed with the sawtooth to 0.1%** — a broadband amplitude modulation moves
