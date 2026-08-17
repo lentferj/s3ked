@@ -699,6 +699,40 @@ SWEEPS: Dict[str, Sweep] = {
             "The answer decides how a converter maps a gain onto this field "
             "-- get it wrong and every converted program is mixed wrong.",
     ),
+    # The per-ZONE loudness offset. §51 measured it spanning 39.81 dB across
+    # its range but never fitted a law, and it is the one field an AKAI
+    # converter writes that `scales.py` has no entry for -- so a converter
+    # balancing velocity layers against each other has a range and no scale,
+    # which is exactly the position MODVFILT1 was in before §116.
+    "zone-loudness": Sweep(
+        name="zone-loudness",
+        fit="linear",
+        param="VLOUD1", region="keygroup",
+        values=tuple(range(-50, 51, 5)),
+        measure="rms_db", unit="dB",
+        hold=3.0,
+        note=60,
+        source="a sustained sample; a steady state is all this needs",
+        reference_value=0,
+        prepare=(
+            ("program", "OUTPUT", 0),
+            ("program", "PANPOS", 0),
+            # 70, NOT 99. §37 measured an output CEILING that moves with the
+            # program volume -- at PRLOUD 99 full level arrives by velocity 66
+            # and everything above it reads the same. A zone offset measured
+            # against a ceiling measures the ceiling.
+            ("program", "PRLOUD", 70),
+            ("program", "V_LOUD", 0),
+        ) + _ENV1_OPEN + _LFO_OFF + (
+            ("keygroup", "FILFRQ", 99),    # filter open: level, not tone
+            ("keygroup", "MODVFILT1", 0),
+            ("keygroup", "K_FREQ", 0),
+            ("keygroup", "VFREQ1", 0),
+        ),
+        why="An AKAI converter writing velocity layers sets this per zone to "
+            "balance them. §51 gives its span and no law, so a converter has "
+            "a range and no scale.",
+    ),
     "pan": Sweep(
         name="pan",
         # HYPOTHESIS, not measured: balance in dB against a position that

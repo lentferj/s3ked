@@ -157,6 +157,7 @@ silently wrong one.
 - [§114](#114--the-machine-does-not-pair-stereo-halves-and-it-validates-modulation-sources-2026-08-17) — The machine does not pair stereo halves, and it validates modulation sources (2026-08-17)
 - [§115](#115--the-drum-inputs-page-is-readable-and-it-is-sixteen-inputs-2026-08-17) — The drum-inputs page is readable, and it is sixteen inputs (2026-08-17)
 - [§116](#116--modvfilt1s-depth-measured-and-the-pivot-falls-out-at-6456-2026-08-17) — `MODVFILT1`'s depth measured, and the pivot falls out at 64.56 (2026-08-17)
+- [§117](#117--one-level-scale-across-three-fields-and-a-source-that-cannot-sustain-2026-08-17) — One level scale across three fields, and a source that cannot sustain (2026-08-17)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -10256,3 +10257,97 @@ separate parameter for the reference recording only.
 Both faults produced *plausible failures pointing at the wrong cause*: a
 message about channel collisions, and a field that looked inert. Neither was
 about the field under test.
+
+## §117 — One level scale across three fields, and a source that cannot sustain (2026-08-17)
+
+**Status: `VLOUD1` measured; three sweeps refused for cause.** Run overnight
+2026-08-17 under the sibling mpc2emu's lead, confirmed directly by the
+operator.
+
+### `VLOUD1`, the last unmeasured field an AKAI converter writes
+
+```
+dB = 0.60576 * VLOUD1 - 20.1778     r2 0.999896, VLOUD1 -50..+20
+span across the linear region: 42.40 dB
+```
+
+§51 gave this field's span (39.81 dB) and no law. This is the law, and it
+closes the last entry in `scales.py` for the fields a converter actually
+emits.
+
+**Above +20 it saturates.** `+30` through `+50` sit within **1.09 dB** of
+each other at −5.65 dB — §37's output ceiling, reached from the *zone*
+offset rather than from the program volume. The ceiling moves with `PRLOUD`,
+so the usable range of `VLOUD1` moves with it too. It is not a property of
+`VLOUD1` alone, which is the same base-and-depth interaction §116 found for
+`MODVFILT1` and `FILFRQ`, in a second field family.
+
+### One level scale, three fields
+
+```
+PRLOUD   0.61872 dB/unit  (existing)    0.60857  (re-measured tonight)
+V_LOUD   0.596862
+VLOUD1   0.60576
+```
+
+Program loudness, velocity-to-loudness and zone loudness all move about
+**0.6 dB per unit**. That is the same kind of shared constant as §43's pivot
+on 64 — and like it, it predicts: any further level field on this machine
+should use the same scale, which is how the claim can be refuted.
+
+The re-measurement of `PRLOUD` agreeing with the existing entry to **1.6%**
+is worth noting on its own: a different source, a different session and a
+rig with three faults found and fixed in between.
+
+### Three sweeps refused, and why that is the result
+
+The source available was a noise program whose playback **cannot sustain**.
+Measured over a ten-second held note at note 60:
+
+```
+  0.0s |             :=@@@@@@@@@@#@@@#@@@@@@@@@@|
+  2.0s |#@@@==-:     :=@@@@@@@@@@#@@@#@@@@@@@@@@|
+  4.0s |#@@@==-:     :=@@@@@@@@@@#@@@#@@@@@@@@@@|
+  6.0s |#@@@==-:  .  :=@@@@@@@@@@#@@@#@@@@@@@@@@|
+  8.0s |#@@@==-:     :=@@@@@@@@@@#@@@#@@@@@@@@@@|
+ 10.0s |#@@@==-:                                |
+```
+
+A **2.0 s cycle** — sound, decay, silent gap — with **67 of 243 cells below
+−70 dBFS**, 27.6% of the held note silent. Plus a **610 ms silent lead-in**
+that halves per octave, so a fixed frame count rather than rig latency.
+
+Therefore **not run**:
+
+| sweep | why |
+|---|---|
+| `amp-attack` | times the rise from note-on; 610 ms of dead air in front of it makes fourteen points of inflated rise time that form a smooth curve and look like a calibration |
+| `amp-decay` | needs a 10 s hold; gets five silent gaps |
+| `amp-release` | needs an established tone at note-off; the sample may already have stopped |
+
+**The refusal is the finding.** Each of those would have produced a
+plausible, smooth, entirely wrong law — the failure mode that is hardest to
+catch afterwards, because nothing about the output looks wrong. What made
+the refusal possible was measuring the *source* before measuring *with* it,
+which is the rule §116 arrived at from the other direction.
+
+`loudness` and `pan` were run and both reproduced existing entries, so the
+night's new information is `VLOUD1`, the shared 0.6 dB scale, and the
+bounded statement of what this source cannot measure.
+
+### The source fault is the sibling's, and is not yet explained
+
+mpc2emu measured its own file byte for byte: 88200 frames, audible from
+frame 0 to 88199, three independent length fields agreeing. **There is no
+silence in the file.** So the gap and the lead-in are introduced between
+that file and the sound.
+
+Its leading hypothesis is the playback mode: the writer emits `0` (*loop in
+release*) for every looped sample where a sustained source wants `1` (*loop
+until release*). That accounts for a gap after one pass and **not** for
+silence before the first. Two symptoms, one confirmed cause at most.
+
+A ruler sample — ten 5 ms bursts at 100 ms spacing — settles both in one
+recording: where the first click lands measures the offset directly, and
+counting clicks before the gap distinguishes "played once and stopped" from
+"looping with a gap". It needs the card moved, so it is a morning job.

@@ -599,6 +599,30 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "per-program value. The measured 64 and the fitted 63.8 agree\n"
              "within either method's resolution.",
     ),
+    ("keygroup", "VLOUD1"): Scale(
+        "keygroup", "VLOUD1", "dB", "linear", 0.60576, -20.1778, (-50, 20),
+        0.999896,
+        bounds="-50..+20, every 5 units, at PRLOUD 70 with V_LOUD and the\n"
+               "filter neutralised. ABOVE +20 IT SATURATES: +30..+50 sit\n"
+               "within 1.09 dB of each other at -5.65 dB, which is §37's\n"
+               "output ceiling reached from the zone offset rather than from\n"
+               "the program volume. The ceiling moves with PRLOUD, so the\n"
+               "usable range of this field does too -- it is not a property\n"
+               "of VLOUD1 alone.",
+        note="The per-ZONE loudness offset, and the field an AKAI converter\n"
+             "uses to balance velocity layers against one another. §51 gave\n"
+             "its span (39.81 dB) and no law; this is the law.\n"
+             "  dB = 0.60576 * VLOUD1 - 20.1778\n"
+             "ONE LEVEL SCALE, THREE FIELDS. Measured slopes in dB per unit:\n"
+             "  PRLOUD   0.61872 (§- existing)   0.60857 (re-measured 2026-08-17)\n"
+             "  V_LOUD   0.596862\n"
+             "  VLOUD1   0.60576\n"
+             "Program loudness, velocity-to-loudness and zone loudness all\n"
+             "move about 0.6 dB per unit. That is the same kind of shared\n"
+             "constant as §43's pivot on 64, and it predicts that any further\n"
+             "level field on this machine will use it -- which is how it can\n"
+             "be refuted.",
+    ),
     ("keygroup", "FILQ"): Scale(
         "keygroup", "FILQ", "dB", "reso", 15.84, 1.067, (0, 15), 0.999975,
         bounds="the full 0..15, every value measured. The law is fitted to the\n"
