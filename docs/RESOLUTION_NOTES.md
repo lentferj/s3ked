@@ -161,6 +161,7 @@ silently wrong one.
 - [§118](#118--a-loop-as-long-as-its-sample-overruns-and-the-envelope-sweeps-that-followed-2026-08-17) — A loop as long as its sample overruns, and the envelope sweeps that followed (2026-08-17)
 - [§119](#119--paramspy-against-a-corpus-and-three-false-positives-from-the-checker-2026-08-17) — `params.py` against a corpus, and three false positives from the checker (2026-08-17)
 - [§120](#120--an-unnamed-16-bit-field-in-every-loop-record-2026-08-17) — An unnamed 16-bit field in every loop record (2026-08-17)
+- [§121](#121--every-offset-cross-checked-against-both-documents-2026-08-17) — Every offset cross-checked against both documents (2026-08-17)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -10821,3 +10822,75 @@ per-zone `VTUNO`/`VZOUT`/`ZPLAY` sets, `K_FREQ`, `LOVEL1`. **This is
 "unused by this material", not "invented".** A library of single-zone
 sampled instruments has no reason to touch a fourth velocity zone's tuning
 offset. Recorded so the list is not mistaken for a defect list later.
+
+## §121 — Every offset cross-checked against both documents (2026-08-17)
+
+**Status: settled, and it is the strongest check the table has ever had.**
+No hardware. `probes/doc_offsets.py`.
+
+### What §8 did, and what was left undone
+
+§8 compared twelve multi-part fields against the program header by hand and
+found every one on the same offset. That has been the parameter table's only
+external validation — twelve fields of roughly 250.
+
+The two source documents state offsets in **completely different ways**, and
+that is what makes a mechanical check worth having:
+
+* the **S1000** source is a run of assembler declarations — `DB` one byte,
+  `DW` two, `DW ?,?` four — so offsets are **implicit**, accumulated by
+  walking the block. One missing declaration shifts everything after it.
+* the **S2800/S3000XL** source states `Offset: N bytes` **explicitly** per
+  parameter, so its errors are local rather than cascading.
+
+Two sources with opposite failure modes agreeing is much stronger than
+either alone.
+
+### The result
+
+```
+CONTROL: six offsets already confirmed on hardware, all reproduced by the walk
+  program PRNAME 0x03   GROUPS 0x2a
+  keygroup FILFRQ 0x07  SNAME1 0x22
+  sample  SPTYPE 0x13   SLNGTH 0x1a
+
+params.py against the S1000 walk      124 agree,  0 disagree
+params.py against the S2800 offsets   247 compared, 0 disagree
+```
+
+**Not one offset in the table disagrees with either primary document.**
+
+### Two parser bugs, both caught by the control rather than by review
+
+Neither would have been visible in the output, and both produced
+confident-looking findings.
+
+**1. Names containing `@`.** `KGRP1@` and `NXTKG@` are declarations whose
+names `\w` does not match, so the walk skipped them — dropping a two-byte
+`DW` from the program and keygroup blocks and shifting **every later offset
+by 2**. The sample block has no such name and passed, which is exactly why
+a control across all three blocks was necessary: one region agreeing proves
+nothing about the others.
+
+**2. An alias map that broke symbol resolution.** `ZBYTES EQU $-SNAME` and
+`LBYTES EQU $-LOOPAT` resolve against the *document's* spelling, and
+normalising `SNAME` to `SNAME1` on the way in made those symbols
+unresolvable. The walk then silently dropped 72 bytes of zones 2–4 and 84 of
+loops 2–8, and reported **19 fields disagreeing** — every one by a constant
+delta of −72 or −84.
+
+**A constant delta across unrelated fields is a block-size bug, not a
+transcription error.** That is the same shape as §119's identical violation
+count: when many independent things are wrong by exactly the same amount,
+the thing they have in common is the instrument.
+
+### What this does and does not establish
+
+It establishes that `params.py`'s **offsets** are faithful to both sources.
+It says nothing about the **ranges**, which §119 checked separately against
+a corpus, and nothing about whether the documents themselves are right —
+§108's `K_FREQ` acts well outside its documented range, and §120 found the
+two documents contradicting each other over one region.
+
+The transcription is sound. What it transcribes is a separate question, and
+the machine remains the only authority on that.
