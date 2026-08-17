@@ -1250,10 +1250,15 @@ per record, and `input` is a scope selector that is not stored at all. Seven
 of nine record bytes named; bytes 7 and 8 remain open and are zero
 everywhere.
 
-**The remaining two are NOT padding.** Writing 42 and 77 into record 1's
-bytes 7 and 8 crashed the firmware with *"Internal Error - divide
-overflow"*, F8 would not recover it, and a power cycle was needed (§115).
-One of them is a divisor or feeds one. They were about to be filed as spare
+**Byte 7 is a divisor, isolated on a single variable.** Writing 42 into
+byte 7 alone — byte 8 left at zero, one byte differing from a verified
+snapshot, on a route an identity write had just proven clean — crashed the
+firmware with *"Internal Error - divide overflow"*. F8 would not recover
+it; a power cycle was needed (§115).
+
+**Byte 8 is UNKNOWN AND UNTESTED, not padding.** Nobody has written to it
+alone. Recording it as spare would be the same inference that has now cost
+two power cycles. They were about to be filed as spare
 on two independent readings — seven visible parameters against nine bytes,
 and a write that changed nothing on that page — and both readings were
 wrong in the same direction.

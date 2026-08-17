@@ -9942,6 +9942,56 @@ count of STORED fields, and a value the page in front of you does not render
 is not a value the machine ignores.** Another drum page evidently reads one
 of these bytes and divides by it.
 
+### ISOLATED: it is byte 7, on a single variable
+
+The first crash wrote 42 **and** 77 together, so it named neither byte. The
+second run wrote **42 into byte 7 alone, byte 8 left at `00`**, with exactly
+one byte differing from a verified snapshot. **It crashed.** Byte 7 is the
+divisor, and byte 8 never needed testing.
+
+Two pieces of method did the work, and neither was the measurement:
+
+**The identity write is what makes it a result rather than a repeat.** Stage
+B sent the block back unchanged *after* the assertion and the power cycle,
+and it round-tripped byte-for-byte:
+
+```
+B  identity write        -> REPLY 0x16 [0]     round trip identical: True
+C  0x17 = 42             -> REPLY 0x16 [0]
+   differing from snapshot: ['0x17']           exactly one byte
+```
+
+Without it the obvious objection — *the machine was still unwell from the
+first crash* — would have been unanswerable, and two crashes would have left
+the same ambiguity as one.
+
+**The same value in both positions separates position from value.** A divide
+overflow depends on the magnitude as much as the offset, so the natural
+"42 here, 77 there" design would have left *maybe 77 is simply not a small
+enough divisor* open even after two runs and two power cycles. Using 42 in
+each slot in turn means one crash settles it. mpc2emu's refinement, and it
+is the difference between an answer and another round.
+
+### Byte 8 is UNKNOWN AND UNTESTED — not padding
+
+Recorded that way deliberately. Bytes 7 and 8 both looked spare on the same
+two independent readings, and one of them halts the machine. What is known
+about byte 8 is that **nobody has ever written to it alone**. Filing it as
+"the other one is spare" would be the identical inference that has now cost
+two power cycles.
+
+### Confirmed twice: the page is rebuilt at boot
+
+Read after the second power cycle, the page was again at factory defaults —
+`3c 32 19 02 04 0a 0a 00 00`, byte 7 back to `0` — with the operator's own
+configuration gone along with the 42. That is a second independent
+observation of the same behaviour, from a different crash and a different
+reboot.
+
+The configuration was then restored from the pre-experiment snapshot and
+verified exact. **Restoring here puts a setting back; it repairs nothing**,
+because the reboot had already cleared the damage.
+
 ### There is no byte-addressable route, so this had to be a whole-structure write
 
 The extended layer has headers for program, keygroup, sample, FX, cue, take,
