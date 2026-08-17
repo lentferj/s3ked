@@ -1244,9 +1244,15 @@ eight, structure settled in §115. What is missing is **names**: `params.py`
 has no drum region, and the page was never transcribed from the Akai
 documents.
 
-**Blocked on:** the panel's own labels, or a document. Not inferable — every
-record currently holds identical values because nothing is configured, and
-two of the nine fields are zero throughout.
+**Partly answered 2026-08-17** (§115): record byte 0 is the note, byte 3 the
+V-curve (0-based), `chan` is a **global** field at header `0x0f` rather than
+per record, and `input` is a scope selector that is not stored at all. Seven
+of nine record bytes named; bytes 7 and 8 remain open and are zero
+everywhere.
+
+**Blocked on:** the panel's own labels for the remaining two, if they are
+fields at all. Not inferable from uniform data. Also unverified: that record
+*n* sits at `0x10 + 9(n-1)` — only record 1 has been demonstrated.
 
 **Worth it because:** it is a whole page of the machine that s3ked can read
 and cannot present. Adding a `drum` region would make it editable the same

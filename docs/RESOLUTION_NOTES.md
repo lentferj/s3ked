@@ -9837,11 +9837,15 @@ over SysEx without a save-and-diff cycle.
 ### Sixteen inputs, in two banks of eight
 
 ```
-0000  01 00 00 | 0e 1c 1f 17 0a 13 18 1a 1f 1e 1d 0a | 00
+0000  01 00 00 | 0e 1c 1f 17 0a 13 18 1a 1f 1e 1d 0a | cc
 0010  3c 32 19 02 04 0a 0a 00 00   x8   -> ends 0x57
 0058  01 00 00                      <- the same marker, again
 005b  3c 32 19 02 04 0a 0a 00 00   x8   -> the last one ends short
 ```
+
+(`cc` at `0x0f` is the transmit channel — see below. This section first
+described it as an unremarkable trailing zero in a sixteen-byte header,
+which it is not.)
 
 The `01 00 00` at `0x00` recurs at **`0x58`** — exactly `0x10 + 8×9` — so
 the layout is *marker + name + eight records*, then *marker + eight
@@ -9869,3 +9873,43 @@ the page for a diff should set **all nine** positions on at least one input.
 
 **Not a guess to be filled in later:** the field names must come from the
 panel's own labels or a document, not from inference over uniform data.
+
+### Fields identified 2026-08-17, by setting them on the panel and reading back
+
+Jan set four values on the page; each read was `RDDATA` only, never `DDATA`.
+
+```
+note    C_3 -> C_1  (60 -> 36)     record 1 byte 0:  60 -> 36
+V-curve   3 -> 1                   record 1 byte 3:   2 -> 0
+chan      1 -> 9                   HEADER   0x0f:     0 -> 8
+input   ALL -> 1                   nothing anywhere
+```
+
+- **Record byte 0 is the note**, stored as the raw MIDI number.
+- **Record byte 3 is the V-curve, 0-based.**
+- **`chan` is a single GLOBAL field at header offset `0x0f`, 0-based** — not
+  per record. That is the surprise, and it is why an elimination argument
+  aimed at record bytes 7 and 8 could not resolve: `chan` was never in the
+  record. Both of those bytes remain unaccounted for, and both are zero in
+  all sixteen records.
+- **`input` is a scope selector, not a stored field.** Setting it `ALL → 1`
+  changed no byte anywhere, and exactly **one** record moved when the two
+  other edits landed — record 1, at `0x10`, immediately after the first
+  marker. So the two-banks-of-eight reading holds, and `input` chooses which
+  record subsequent edits write to rather than being persisted itself.
+
+`chan` moving 1 → 9 as 0 → 8 confirms the 0-based convention **a second
+time and independently of the V-curve**, over eight steps rather than two.
+
+So: seven of nine record bytes named — 0 and 3 here, and by the panel's own
+labels `sens`, `trig`, `capture`, `recover` and `on-time` occupy 1, 2, 4, 5
+and 6 in some order — with bytes 7 and 8 open and plausibly reserved.
+
+**The scope mixing is the part worth carrying.** A file that holds a global
+field in its header and per-pad fields in its records means an editor
+changing `chan` rewrites the header, not sixteen records. Something that
+round-trips the file unchanged never notices; something that edits it must.
+
+**Only record 1 has been demonstrated.** That record *n* sits at
+`0x10 + 9(n-1)` is assumed for the other fifteen, and setting a value on a
+different input would check it while naming whatever is left.
