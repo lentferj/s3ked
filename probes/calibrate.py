@@ -1718,6 +1718,13 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="required: a sweep writes parameters continuously")
     ap.add_argument("--dry-run", action="store_true",
                     help="run against a synthetic machine, no hardware touched")
+    ap.add_argument("--filfrq", type=int,
+                    help="override the base FILFRQ in the sweep's prepare. "
+                         "§116's depth law was fitted at ONE base; two fields "
+                         "on this machine already have behaviour that moves "
+                         "with the level they sit on (§116 saturation, §117 "
+                         "VLOUD1 headroom), so base-independence is a claim "
+                         "and not a given.")
     ap.add_argument("--velocity", type=int,
                     help="override the sweep's note velocity. The `mod-filter` "
                          "sweep is run TWICE with different values and the two "
@@ -1734,6 +1741,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
 
     sweep = SWEEPS[args.sweep]
+    if args.filfrq is not None:
+        if not 0 <= args.filfrq <= 99:
+            print(f"filfrq {args.filfrq} outside 0..99")
+            return 2
+        prep = tuple((r, n, args.filfrq if (r, n) == ("keygroup", "FILFRQ")
+                      else v) for r, n, v in sweep.prepare)
+        if not any((r, n) == ("keygroup", "FILFRQ") for r, n, _ in prep):
+            print("this sweep does not set FILFRQ; --filfrq would do nothing")
+            return 2
+        sweep = dataclasses.replace(sweep, prepare=prep)
     if args.velocity is not None:
         if not 1 <= args.velocity <= 127:
             print(f"velocity {args.velocity} outside 1..127")

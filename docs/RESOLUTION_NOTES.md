@@ -10128,6 +10128,41 @@ measured, it gives 11.36. Recorded because the guess was directionally right
 and quantitatively useless, which is the failure mode a stated assumption is
 supposed to make visible — and did.
 
+### The depth is BASE-INDEPENDENT — tested, because two other fields are not
+
+The law was fitted at one `FILFRQ` base, and a converter applying it at
+whatever base a source's cutoff lands on is assuming that constant holds
+everywhere. Two fields on this machine already behave otherwise — this
+field's own saturation moves with the base (~12 at `FILFRQ` 48, ~25 at 72),
+and §117's `VLOUD1` headroom moves with `PRLOUD`. So it was worth asking.
+
+Re-run at `FILFRQ` 75, fifteen units above the original 60:
+
+```
+source     FILFRQ base   b at velocity 70
+sawtooth       60         0.0137242
+noise          60         0.0137925
+noise          75         0.0137091      <- 0.60% from base 60
+
+k at base 60   4.373 cents per depth x velocity unit
+k at base 75   4.347 cents
+```
+
+**The rate is the same; what moves with the base is the RANGE.**
+
+```
+FILFRQ 60   39 units of headroom = 3.99 octaves before the corner ceilings
+FILFRQ 75   24 units             = 2.46 octaves
+```
+
+That is the useful form of the distinction, and it resolves the apparent
+conflict with the saturation observation: the depth per unit is constant,
+and how far you can push it before the corner hits the top of the filter's
+range is not. A converter can use one constant everywhere **and** must
+compute the reachable range from the base it chose. At base 75 the sweep
+saturated by depth 15 at velocity 120 — two usable points — where base 60
+gave four, which is the same fact seen as a measurement limit.
+
 ### The saturation is real and it bounds the fit
 
 At velocity 120 every point from depth 25 upward returned **NaN**: the corner

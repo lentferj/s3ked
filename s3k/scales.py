@@ -608,7 +608,8 @@ SCALES: Dict[Tuple[str, str], Scale] = {
                "output ceiling reached from the zone offset rather than from\n"
                "the program volume. The ceiling moves with PRLOUD, so the\n"
                "usable range of this field does too -- it is not a property\n"
-               "of VLOUD1 alone.",
+               "of VLOUD1 alone. The same distinction as §116's depth: the\n"
+               "RATE is constant, the reachable RANGE moves with the base.",
         note="The per-ZONE loudness offset, and the field an AKAI converter\n"
              "uses to balance velocity layers against one another. §51 gave\n"
              "its span (39.81 dB) and no law; this is the law.\n"
