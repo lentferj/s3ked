@@ -9,6 +9,29 @@ SPDX-FileCopyrightText: Copyright (C) 2026  s3ked contributors
 procedures, and ready-to-apply code. Numbered sections, referenced from code
 comments as "see RESOLUTION_NOTES §N".
 
+## A note on the names in these findings
+
+**Program, sample and volume names appearing here are invented.** Where a
+finding came from material derived from a commercial library, the names are
+replaced by placeholders — `TESTSMA`/`TESTSMB`/`TESTSMC` for samples,
+`PROG-19K` for a program, `VOLUME-A1`/`VOLUME-B1` for volumes — chosen to
+preserve exactly the property the finding turns on, and nothing else.
+
+That matters in one place especially: §111 and §112 rest on a sample
+carrying **two spellings of one name**, differing only by `#` against a
+space. The placeholders keep that difference (`TESTSMB#1` against
+`TESTSMB 1`) because it *is* the finding; the original characters around it
+carried no information the finding needed.
+
+Names that are **not** placeholders are ones this project or its siblings
+invented outright — `RSCTRL`, `RSPROBE`, `STPAIR-L`, `PKSP0`, `BNDTONE`,
+`RSTONE` — synthetic probe files built to answer a question, with no library
+material behind them. `TEST PROGRAM`, `SINE`, `SQUARE`, `SAWTOOTH` and
+`PULSE` are the machine's own.
+
+See `CLAUDE.md`: what a finding needs is the *shape* of the data, never
+whose program it was.
+
 ---
 
 ## Index
