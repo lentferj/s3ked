@@ -10463,10 +10463,16 @@ DECAY1  10:0.01  20:0.01 ... 50:0.075  60:0.03  70:0.085  90:0.6  99:0.375
 RELSE1  0:0.225  5:0.16  10:0.175 ... 60:0.665  70:1.73
 ```
 
-`DECAY1` runs the **wrong way**: tonight's data has the time rising with the
-parameter, where the recorded law has it falling — `b = -0.09776`, a rate,
-99 being fastest. A re-measurement that contradicts a well-fitted law in
-*direction* is not a correction; it is a measurement of something else.
+> **CORRECTED.** This section originally read: *"`DECAY1` runs the wrong
+> way: tonight's data has the time rising with the parameter, where the
+> recorded law has it falling."* **That was my error, not the machine's.**
+> `DECAY1` and `RELSE1` are recorded as **RATES** — decibels per second —
+> so a larger value is a *slower* rate and therefore a *longer* time. The
+> sweep measures a time. A rate law with exponent −b implies a time
+> exponent +b, and the two never disagreed. Comparing a time against a rate
+> without inverting one of them is the same class of mistake as comparing a
+> directory name against a header name: two quantities that look alike and
+> are not. The sine re-measurement below confirms all three laws.
 
 **Nothing was written to `scales.py`.** The existing entries stand. The
 likely cause is that a noise source is wrong for envelope *timing* — its own
@@ -10477,3 +10483,65 @@ right instrument; noise is right for spectra and wrong for envelopes.
 **That the loop workaround made the sweeps *runnable* did not make them
 *valid*.** Unblocking a measurement and being able to trust it are different
 questions, and the second one still has to be asked afterwards.
+
+### Repeated with a SINE, and all three laws reproduce
+
+A sine is the right instrument for envelope timing on both counts a noise
+sample fails: its amplitude is constant, so the envelope measured is the
+machine's rather than the source's, and it is a single frequency, so nothing
+the filter does changes its level while it sits in the passband. Loaded from
+a `VOLUME 001` on SCSI 5 holding the ROM test set — `SINE`, `SQUARE`,
+`SAWTOOTH`, `PULSE`.
+
+Measured sustain, before measuring anything with it:
+
+```
+10 s held note, 1..9 s window:  -1.8 .. -1.7 dBFS  ->  0.0 dB of wobble
+                       (the noise source gave 13.3 dB)
+```
+
+```
+field    existing |b|   sine re-measure   region    r2        agreement
+ATTAK1     0.10844         0.10862        40..99   0.99901      0.17%
+DECAY1     0.09776         0.08781        40..99   0.99681      10%
+RELSE1     0.09683         0.09226        20..70   0.99941      4.7%
+```
+
+All three reproduce, on a different source in a different session. Nothing
+in `scales.py` needed changing — which is the outcome a re-measurement
+should usually have, and it is worth having done because the alternative was
+an untested assumption that the existing entries were sound.
+
+**The instrument was the whole difference.** The same three sweeps on noise
+produced non-monotonic data with no region reaching r² 0.99; on a sine they
+reach 0.997 to 0.999. Noise is right for spectra — it is what made §116
+work — and wrong for envelopes. A source is not good or bad in general, only
+for a measurement.
+
+### Three faults in the setup, each of which looked like the previous one
+
+Getting there took three failures of the isolation check, and only the third
+was what the check's message said it was.
+
+1. **Wrong capture ports** — both readings at −73 dB, the noise floor twice,
+   which is nothing *arriving* rather than something else sounding.
+2. **`verify_isolation` ran before `apply_prepare`**, so a program routed to
+   an individual output was silent for a reason the check could not see.
+3. **The program had TWO keygroups**, both spanning the whole keyboard and
+   both playing `SINE`. Silencing one left the other, and because two
+   identical sines partially cancel, **silencing one made the recording
+   LOUDER** — −22.12 dB with both, −12.85 dB with one.
+
+The third was diagnosed in one call by `analysis.keygroups_for_note()`,
+added earlier the same day after the sibling project measured a field
+through a keygroup that did not sound at the probed note:
+
+```
+keygroups covering note 60: [0, 1]
+```
+
+**A tool written for one project's mistake caught the same shape in the
+other's rig within hours.** The check's advice — *"give this program a
+channel no other resident program uses"* — was wrong for all three, which is
+worth fixing: `PMCHAN` did not isolate here at all, since in single mode the
+machine plays the selected program regardless of it.

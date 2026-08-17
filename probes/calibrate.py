@@ -1725,6 +1725,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                          "with the level they sit on (§116 saturation, §117 "
                          "VLOUD1 headroom), so base-independence is a claim "
                          "and not a given.")
+    ap.add_argument("--prloud", type=int,
+                    help="override the sweep's PRLOUD. `_MAIN_OUT` sets 99, "
+                         "which clips a sine at the interface -- and a clipped "
+                         "peak makes an attack appear to complete early, so it "
+                         "biases exactly the measurement it is used for.")
     ap.add_argument("--velocity", type=int,
                     help="override the sweep's note velocity. The `mod-filter` "
                          "sweep is run TWICE with different values and the two "
@@ -1741,6 +1746,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
 
     sweep = SWEEPS[args.sweep]
+    if args.prloud is not None:
+        if not 0 <= args.prloud <= 99:
+            print(f"prloud {args.prloud} outside 0..99")
+            return 2
+        prep = tuple((r, n, args.prloud if (r, n) == ("program", "PRLOUD")
+                      else v) for r, n, v in sweep.prepare)
+        sweep = dataclasses.replace(sweep, prepare=prep)
     if args.filfrq is not None:
         if not 0 <= args.filfrq <= 99:
             print(f"filfrq {args.filfrq} outside 0..99")
