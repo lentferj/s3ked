@@ -160,6 +160,7 @@ silently wrong one.
 - [§117](#117--one-level-scale-across-three-fields-and-a-source-that-cannot-sustain-2026-08-17) — One level scale across three fields, and a source that cannot sustain (2026-08-17)
 - [§118](#118--a-loop-as-long-as-its-sample-overruns-and-the-envelope-sweeps-that-followed-2026-08-17) — A loop as long as its sample overruns, and the envelope sweeps that followed (2026-08-17)
 - [§119](#119--paramspy-against-a-corpus-and-three-false-positives-from-the-checker-2026-08-17) — `params.py` against a corpus, and three false positives from the checker (2026-08-17)
+- [§120](#120--an-unnamed-16-bit-field-in-every-loop-record-2026-08-17) — An unnamed 16-bit field in every loop record (2026-08-17)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -10690,3 +10691,82 @@ are the envelope-3 and filter-2 families, which need the optional IB304F
 board this machine does not have, and fields our own writers zero-fill by
 design. That is consistent with the board being rare rather than evidence
 of an invented parameter, and it is left as an observation.
+
+## §120 — An unnamed 16-bit field in every loop record (2026-08-17)
+
+**Status: located, meaning unknown.** No hardware.
+`probes/unmodelled_bytes.py`, third-party blocks only.
+
+### The question
+
+§113 measured the machine's blocks at 192 bytes and found `params.py`
+naming 115 of the program block's and 109 of the sample block's. The rest
+are not absent from the machine, only from the transcription. Which of them
+carry information?
+
+An unmodelled byte that is **constant** across a corpus is padding or a
+marker. One that **varies** is an unnamed parameter, and it says where the
+next hardware session should point — which is the cheapest thing an offline
+night can produce, because a card swap is the expensive step.
+
+### The finding
+
+```
+sample header, third-party blocks (n=182)
+
+0x5c  0x68  0x74  0x80    stride 12, 18 distinct values, identical
+                          distributions:  0:116  131:4  186:4  168:4
+0x5d  0x69  0x75  0x81    stride 12,  8 distinct values, identical
+                          distributions:  0:136   1:14    2:12    9:4
+```
+
+Two four-member families on a **stride of 12**, which is the loop record's
+own stride: `LOOPAT` at `0x26`/`0x32`/`0x3e`/`0x4a`, `LLNGTH` and `LDWELL`
+following, and `SLXY` at `0x56`/`0x62`/`0x6e`/`0x7a`. `SLXY1` occupies
+`0x56`–`0x59`; these sit at **+6 and +7** into the same 12-byte record and
+nothing names them.
+
+The low byte spans a wide range and the high byte holds small values
+(0, 1, 2, 9), which is the signature of **one 16-bit little-endian field at
+`0x5c`**, repeated per loop record, reaching about 2300.
+
+All four members carry identical distributions, so within a file every loop
+record holds the same value.
+
+**That is a precise target: sample header `0x5c`, two bytes, four records.**
+A hardware session can change it on the panel and read it back, or write it
+and listen — the work `NSRULER` was built for, on a field that turns out to
+exist.
+
+### The negative that is worth as much
+
+- **Program block: all 56 unmodelled bytes are CONSTANT** across the
+  corpus. No unnamed program parameters hide there.
+- **Keygroup block: 192 of 192 bytes modelled.** Nothing to find.
+
+So the search space for undocumented sample-and-program structure is now
+one 16-bit field rather than 133 unknown bytes.
+
+### The control, and the signal it killed
+
+Fields that must vary — `SHNAME`, `SPITCH`, `SLNGTH`, `PRNAME`, `GROUPS`,
+`LONOTE` — were checked first, and the analysis refuses to report anything
+if they come back flat. §119 produced three large confident findings that
+were all the checker; this one states its control before its result.
+
+It also killed a second apparent finding. Bytes `0x8d`–`0x95` showed "3
+distinct values" and looked like more unnamed fields. They are not: **72 of
+182 blocks carry a single fixed nonzero byte at each offset** (233, 253,
+165, 142) and the other 108 carry zero. That is two populations of files,
+one of which stamps a constant pattern into the region — a property of who
+wrote the file, not a parameter. A field that varies takes many values; this
+takes exactly two, and one of them is shared by 72 files.
+
+### On the 46 program and 77 keygroup fields that never vary
+
+`params.py` names many fields that are constant throughout the corpus —
+the envelope-3 and filter-2 families (which need the IB304F board), the
+per-zone `VTUNO`/`VZOUT`/`ZPLAY` sets, `K_FREQ`, `LOVEL1`. **This is
+"unused by this material", not "invented".** A library of single-zone
+sampled instruments has no reason to touch a fourth velocity zone's tuning
+offset. Recorded so the list is not mistaken for a defect list later.

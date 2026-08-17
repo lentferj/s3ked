@@ -1374,3 +1374,24 @@ format inclusive at one end and exclusive at the other is not unusual.
 **Consequence:** adjacent zones written `hi = 63` and `lo = 64` tile exactly,
 with no gap and no overlap, and a writer passing the source's bounds through
 unchanged is correct. No off-by-one anywhere in that path.
+
+## An unnamed 16-bit field in every loop record (OPEN — §120)
+
+`probes/unmodelled_bytes.py` found two four-member families on the loop
+record's own stride of 12, at **+6 and +7** into each record — sample header
+`0x5c`, `0x68`, `0x74`, `0x80` and the byte after each. The low byte spans a
+wide range and the high byte holds 0/1/2/9, which reads as **one 16-bit
+little-endian field at `0x5c`**, repeated per loop record, reaching ~2300.
+
+Nothing in `params.py` names it, and it varies across third-party files.
+
+**Worth it because** the same pass proved the program block's 56 unmodelled
+bytes are all constant and the keygroup block is fully modelled — so this is
+the *only* place undocumented per-sample structure is known to live.
+
+**Blocked on:** hardware, and cheaply. Change it from the panel and read it
+back, or write it and listen. A precise two-byte target rather than a survey.
+
+**Not** the 0x8d–0x95 bytes: 72 of 182 blocks carry a single fixed value
+there and 108 carry zero, which is two populations of files rather than a
+parameter.
