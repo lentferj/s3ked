@@ -9913,3 +9913,93 @@ round-trips the file unchanged never notices; something that edits it must.
 **Only record 1 has been demonstrated.** That record *n* sits at
 `0x10 + 9(n-1)` is assumed for the other fifteen, and setting a value on a
 different input would check it while naming whatever is left.
+
+### Bytes 7 and 8 are NOT padding — one of them is a divisor, and it crashed the firmware
+
+**Status: settled the expensive way, 2026-08-17.** Writing `0x17 = 42` and
+`0x18 = 77` — record 1's two always-zero bytes — put the machine into
+
+```
+Internal Error - divide overflow
+Please tell Richard the operations that you performed to reach this state
+Press F8 to continue
+```
+
+as the operator moved between drum pages. **F8 did not recover it**: every
+keypress re-raised the assertion, which fits the structure being re-read on
+each UI action. A power cycle was required.
+
+**They were about to be filed as padding, on two independent lines of
+evidence, and both were wrong in the same direction:**
+
+- the settings page exposes exactly **seven** per-input parameters against a
+  **nine**-byte record, so "two spare" looked like arithmetic rather than
+  inference; and
+- writing 42 and 77 changed **nothing visible** on that page.
+
+The lesson is the pair, not either one: **a count of VISIBLE fields is not a
+count of STORED fields, and a value the page in front of you does not render
+is not a value the machine ignores.** Another drum page evidently reads one
+of these bytes and divides by it.
+
+### There is no byte-addressable route, so this had to be a whole-structure write
+
+The extended layer has headers for program, keygroup, sample, FX, cue, take,
+misc, multi and the disk lists — and **nothing for drum**. `RDDATA`/`DDATA`
+are S1000 base-layer whole-structure operations, so changing one byte means
+sending all 162.
+
+That is the class `CLAUDE.md` says to treat as destructive until proven
+otherwise, and `DDATA` had never been sent to this machine. So the first
+`DDATA` ever sent **changed nothing** — the block was read and written
+straight back:
+
+```
+read 162 -> write 162 unchanged -> read back identical: True, REPLY 0x16
+```
+
+Two facts fall out of that no-op alone, independent of drum inputs: **`DDATA`
+is acknowledged** (`REPLY 16h`, payload `[0]`), and **a byte-identical round
+trip is possible**, so this structure can be read, edited and put back without
+the machine reinterpreting it. Staging it that way separated *does the route
+work* from *what does the byte do*; without it, the crash would have had two
+candidate explanations instead of one.
+
+### The structure is rebuilt at boot, so a bad write is self-clearing
+
+Read immediately after the power cycle, the page was at **factory defaults** —
+the operator's own configuration gone along with the 42/77. Confirmed from
+the operator directly rather than inferred from the byte pattern.
+
+That is the reassuring half: **this page cannot be permanently damaged by a
+bad write.** It is also the only reason the experiment was cheap.
+
+### `REPLY [0]` acknowledges the TRANSFER, not the contents
+
+The crashing write was **accepted**, with `REPLY 0x16` payload `[0]` and no
+error, exactly as the harmless ones were.
+
+This is the fourth and sharpest instance of the accepted / preserved /
+effective distinction (§108, §109, §114), and it needs a fourth term:
+**survivable**. Every write route tested here acknowledges that a transfer
+was *well-formed*; none of them says the machine can live with the contents.
+`PHEADER` swallowed 15, 23 and 40 against a documented 0–255 that the load
+path rejects; `DDATA` swallowed 42 and 77 and the firmware then divided by
+one of them.
+
+### A near-miss in the write-up, worth more than the finding
+
+The sibling mpc2emu committed a causal account naming `0x01`, `0x02`, `0x59`
+and `0x5a` as the culprits, with a plausible mechanism and specific offsets.
+**Those four bytes were never written.** The script carrying them died at
+`autodetect` — the machine had already stopped answering — so nothing was
+sent, and the account reasoned soundly from an event that did not occur.
+
+It would have survived review by anyone without the transcript: real
+offsets, correct-looking reasoning, and a real crash to explain. What
+falsified it was not judgement but a **timestamp** — the connection failure
+at 17:23:03, before any write, sitting in a log.
+
+**s3ked is not exposed by any of this.** `params.py` has no drum region and
+the bridge has no `DDATA` path; nothing in this project can reach that
+structure by accident. Anyone adding drum editing needs this section first.

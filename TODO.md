@@ -1250,9 +1250,26 @@ per record, and `input` is a scope selector that is not stored at all. Seven
 of nine record bytes named; bytes 7 and 8 remain open and are zero
 everywhere.
 
-**Blocked on:** the panel's own labels for the remaining two, if they are
-fields at all. Not inferable from uniform data. Also unverified: that record
-*n* sits at `0x10 + 9(n-1)` — only record 1 has been demonstrated.
+**The remaining two are NOT padding.** Writing 42 and 77 into record 1's
+bytes 7 and 8 crashed the firmware with *"Internal Error - divide
+overflow"*, F8 would not recover it, and a power cycle was needed (§115).
+One of them is a divisor or feeds one. They were about to be filed as spare
+on two independent readings — seven visible parameters against nine bytes,
+and a write that changed nothing on that page — and both readings were
+wrong in the same direction.
+
+**Do not write to this structure again without the machine's owner
+agreeing.** It threw an internal error at him. There is no byte-addressable
+route — the extended layer has no drum header — so any write is a
+whole-structure `DDATA` of all 162 bytes.
+
+**Mitigating:** the page is rebuilt from defaults at boot, so a bad write is
+self-clearing and cannot permanently damage anything.
+
+**Blocked on:** the panel's own labels for the remaining two. Not inferable
+from uniform data, and no longer safely probable by writing. Also
+unverified: that record *n* sits at `0x10 + 9(n-1)` — only record 1 has ever
+been demonstrated.
 
 **Worth it because:** it is a whole page of the machine that s3ked can read
 and cannot present. Adding a `drum` region would make it editable the same
