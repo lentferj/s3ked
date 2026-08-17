@@ -158,6 +158,7 @@ silently wrong one.
 - [§115](#115--the-drum-inputs-page-is-readable-and-it-is-sixteen-inputs-2026-08-17) — The drum-inputs page is readable, and it is sixteen inputs (2026-08-17)
 - [§116](#116--modvfilt1s-depth-measured-and-the-pivot-falls-out-at-6456-2026-08-17) — `MODVFILT1`'s depth measured, and the pivot falls out at 64.56 (2026-08-17)
 - [§117](#117--one-level-scale-across-three-fields-and-a-source-that-cannot-sustain-2026-08-17) — One level scale across three fields, and a source that cannot sustain (2026-08-17)
+- [§118](#118--a-loop-as-long-as-its-sample-overruns-and-the-envelope-sweeps-that-followed-2026-08-17) — A loop as long as its sample overruns, and the envelope sweeps that followed (2026-08-17)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -10351,3 +10352,93 @@ A ruler sample — ten 5 ms bursts at 100 ms spacing — settles both in one
 recording: where the first click lands measures the offset directly, and
 counting clicks before the gap distinguishes "played once and stopped" from
 "looping with a gap". It needs the card moved, so it is a morning job.
+
+## §118 — A loop as long as its sample overruns, and the envelope sweeps that followed (2026-08-17)
+
+**Status: the loop finding is settled; the envelope re-measurements are
+withheld.** Measured 2026-08-17.
+
+### `LLNGTH1` equal to the sample length overruns into silence
+
+A sample of 88200 frames, `SMPEND` 88199, `LOOPAT1` 0, looping enabled.
+Sweeping the loop length alone:
+
+```
+LLNGTH1 = 88200  (= the whole sample)   610 ms silent lead-in, periodic
+                                        gaps, 15% of a held note silent
+LLNGTH1 = 44100  (half)                 CONTINUOUS, 2% silent, no lead-in
+LLNGTH1 = 22050  (quarter)              CONTINUOUS, 2% silent, no lead-in
+```
+
+**A loop whose length equals the sample's length reads past the last valid
+frame** — `LOOPAT1 + LLNGTH1` = 88200 against an `SMPEND` of 88199 — and the
+overrun plays as silence. Any shorter length loops perfectly. So the loop
+end is **exclusive** where the writer that produced this sample assumed
+inclusive.
+
+The lead-in and the periodic gap turned out to be **one fault seen twice in
+the cycle**, after being carefully kept apart as two — which was the right
+way to hold them until something explained both.
+
+### The diagnosis it replaced was well-reasoned and wrong
+
+The sibling mpc2emu had a documented value table, a playback mode plainly
+wrong for a sustained loop (`SPTYPE` 0, *loop in release*, where `1` is
+*loop until release*), and a symptom that mode explained exactly. It was
+about to change a writer that emits that value on every looped sample it has
+ever produced.
+
+One byte refuted it:
+
+```
+SPTYPE 0   lead-in +500 ms   22.3% of the held note silent
+SPTYPE 1   lead-in +500 ms   21.4%          <- no change
+```
+
+**And the values that did nothing are what located the fault.** Checking
+that the field was effective at all — the accepted-versus-effective rule
+applied to the *write* rather than the value — produced the clue:
+
+```
+SPTYPE 2 (no looping)     one clean 2.0 s pass, no gap.  LEAD-IN +0 ms
+SPTYPE 3 (play to end)    the same.                      LEAD-IN +0 ms
+```
+
+The lead-in exists **only when looping is on**, and an un-looped pass plays
+the sample cleanly end to end. That is what moved the search from the mode
+to the loop bounds. A control chosen to prove the instrument works ended up
+naming the fault.
+
+`SLOCAT` was cleared as a suspect in the same pass: it reads **131072** for
+one sample and **219280** for the next, exactly 88208 apart, so the machine
+resolves it on load and a writer storing 0 is harmless. Note that s3ked puts
+`SLOCAT` at sample header **`0x16`** and mpc2emu's notes say `0x18`; ours
+reads sane values and theirs reads zero.
+
+### The envelope sweeps: run, and withheld
+
+With the loop length worked around, the source sustains and `amp-attack`,
+`amp-decay` and `amp-release` all ran to completion. **All three produced
+non-monotonic data with no region reaching r² 0.99**, against existing
+entries fitted at r² 0.99988, 0.99998 and 0.99956.
+
+```
+ATTAK1  0:0.005  5:0.01  10:0.01  15:0.005 ... 90:2.28  99:5.31
+DECAY1  10:0.01  20:0.01 ... 50:0.075  60:0.03  70:0.085  90:0.6  99:0.375
+RELSE1  0:0.225  5:0.16  10:0.175 ... 60:0.665  70:1.73
+```
+
+`DECAY1` runs the **wrong way**: tonight's data has the time rising with the
+parameter, where the recorded law has it falling — `b = -0.09776`, a rate,
+99 being fastest. A re-measurement that contradicts a well-fitted law in
+*direction* is not a correction; it is a measurement of something else.
+
+**Nothing was written to `scales.py`.** The existing entries stand. The
+likely cause is that a noise source is wrong for envelope *timing* — its own
+amplitude fluctuates by design, and every one of these measurements times a
+threshold crossing on that fluctuating envelope. A sustained tone is the
+right instrument; noise is right for spectra and wrong for envelopes.
+
+**That the loop workaround made the sweeps *runnable* did not make them
+*valid*.** Unblocking a measurement and being able to trust it are different
+questions, and the second one still has to be asked afterwards.
