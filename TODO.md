@@ -1188,7 +1188,7 @@ every test and hides this exact defect; that has now happened four times.
 
 </details>
 
-## Does `K_FREQ` do anything above 12? (OPEN)
+## Does `K_FREQ` do anything above 12? (CLOSED 2026-08-17)
 
 `params.py` transcribes the range as 0..12; mpc2emu wrote 22 and the
 machine accepted it. Accepted is not effective — this machine clamps some
@@ -1214,12 +1214,23 @@ the sign is key-relative. The earlier "centroid rose" was a noise-floor
 artefact: a closing filter drives the signal into the floor and the
 centroid then reports the floor. Level is the reliable channel.
 
-**Still open:** the real ceiling (sweep upward until the corner stops
-moving), and a null measured ABOVE the reference that §43 contradicts --
-§43 has a non-zero slope at note 72, where the follow-up measured nothing.
-§108 argues the null is an operating-point artefact (an upward shift from a
-corner already above the material's content) and gives the discriminator:
-repeat at note 72 with FILFRQ 15-20.
+**THE CEILING: THERE ISN'T ONE, measured 2026-08-17.** Swept to the top of
+the byte at a note eight semitones above the pivot, the corner rises
+linearly all the way to `K_FREQ` **99** — 0.508 to 0.602 `FILFRQ` units per
+step against §43's predicted 0.511 — with a control at `K_FREQ` 0 reading
+−0.006 octaves per octave. The field does not saturate anywhere in its byte
+range. So 12 is where tracking reaches 1:1, a musically meaningful point
+rather than a limit.
+
+The earlier null above the reference was the operating-point artefact §108
+predicted: it needed a source with energy in the reference band at both
+notes, which a sawtooth cannot provide because its fundamental moves with
+the note. With noise the control passes and the effect is plainly there.
+
+**Decision left for a human:** `params.py` still declares 0..12, so s3ked
+refuses to write a value the machine demonstrably acts on. Widening it is a
+judgement about transcribed source data rather than about the measurement,
+so it has not been changed unilaterally.
 
 ## The machine caches the directory across a card swap (CLOSED — §112)
 
@@ -1344,3 +1355,22 @@ ceiling gets measured instead of the field.
 calibration, not on its own.
 
 </details>
+
+## Velocity zone bounds are INCLUSIVE at both ends (CLOSED 2026-08-17)
+
+`LOVEL1`/`HIVEL1` (keygroup `0x2e`/`0x2f`) were never confirmed, and every
+converted velocity split in the sibling projects passes them straight
+through. Measured on a sine with `V_LOUD` zeroed, so level could not be
+confused with silence:
+
+```
+LOVEL1 = 64:   velocity 63 silent (-87 dB)   64 SOUNDS (-27.78 dB)
+HIVEL1 = 64:   velocity 64 SOUNDS            65 silent (-87 dB)
+```
+
+Both ends inclusive, tested separately rather than assuming symmetry — a
+format inclusive at one end and exclusive at the other is not unusual.
+
+**Consequence:** adjacent zones written `hi = 63` and `lo = 64` tile exactly,
+with no gap and no overlap, and a writer passing the source's bounds through
+unchanged is correct. No off-by-one anywhere in that path.
