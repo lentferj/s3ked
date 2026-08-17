@@ -10762,6 +10762,57 @@ one of which stamps a constant pattern into the region — a property of who
 wrote the file, not a parameter. A field that varies takes many values; this
 takes exactly two, and one of them is shared by 72 files.
 
+### The two primary documents disagree about these very bytes
+
+Chasing the field led to a conflict between the sources `params.py` is
+transcribed from, which is worth more than the field.
+
+**The S1000 document says EIGHT loops.** It declares one loop record and
+then:
+
+```
+LBYTES   EQU $-LOOPAT         ;Bytes per loop          -> 12
+LOOP2    DW LBYTES*7 DUP(0)   ;same as Loop1           -> loops 2..8
+```
+
+Twelve bytes per record from `0x26` puts loops 5–8 at `0x56`, `0x62`,
+`0x6e`, `0x7a`.
+
+**The S2800/S3000XL document says FOUR loops and something else.** At those
+same offsets it names `SLXY1`–`SLXY4`, *"relative loop factors"*, 4 bytes
+each — leaving **8 of every 12 bytes unnamed**. `params.py` follows this
+one.
+
+Two primary sources, the same byte range, different structures. That is the
+§8 situation — except §8 found twelve offsets *agreeing*, and this is the
+first place they are known to conflict.
+
+### The corpus rejects the eight-loop reading
+
+The obvious move is to prefer the S1000 document, since it accounts for
+every byte and the S2800 leaves eight unexplained. **The data says no.**
+
+```
+SLOOPS (number of loops) = 1 in ALL 177 third-party headers
+reading 0x56 as LOOPAT5:  134247924, 67140152, 100695568 ...
+    against samples whose whole length is 15000-80000 frames
+LDWELL for loops 5-8:     0 in 175 of 177
+```
+
+No file uses more than one loop, and the values at `0x56` are three orders
+of magnitude too large to be loop points in these samples. **Whatever lives
+there, it is not loops 5–8 in this material.**
+
+So the hypothesis was formed from a primary document, tested against the
+corpus, and refused. The S2800's `SLXY` naming survives — as a name for the
+first four bytes of each record, with eight still unaccounted and two of
+them carrying data.
+
+**Nothing in `params.py` is being changed on this.** Two documents disagree,
+the corpus contradicts the one that looked more complete, and a table entry
+is not the place to record an unresolved conflict. What the region needs is
+the machine: set a loop on the panel, save, and read which bytes move.
+
 ### On the 46 program and 77 keygroup fields that never vary
 
 `params.py` names many fields that are constant throughout the corpus —

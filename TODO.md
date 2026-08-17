@@ -1389,8 +1389,23 @@ Nothing in `params.py` names it, and it varies across third-party files.
 bytes are all constant and the keygroup block is fully modelled — so this is
 the *only* place undocumented per-sample structure is known to live.
 
-**Blocked on:** hardware, and cheaply. Change it from the panel and read it
-back, or write it and listen. A precise two-byte target rather than a survey.
+**AND THE TWO PRIMARY DOCUMENTS DISAGREE ABOUT IT.** The S1000 source
+declares `LBYTES EQU $-LOOPAT` (12) and `LOOP2 DW LBYTES*7 DUP(0)` — eight
+loops, putting loops 5–8 at exactly `0x56`/`0x62`/`0x6e`/`0x7a`. The
+S2800/S3000XL source names those same offsets `SLXY1`–`SLXY4`, four bytes
+each, leaving eight of every twelve unnamed. `params.py` follows the S2800.
+
+§8 found twelve offsets where the two documents *agree*; this is the first
+place they are known to conflict.
+
+**The corpus rejects the eight-loop reading:** `SLOOPS` is 1 in all 177
+third-party headers, and reading `0x56` as a loop point gives values around
+134 million against samples 15–80k frames long. So the more complete-looking
+document is the wrong one here.
+
+**Blocked on:** hardware, and cheaply. Set a loop from the panel, save, and
+read which bytes move. A precise target rather than a survey — and it
+settles a documented conflict rather than only naming a field.
 
 **Not** the 0x8d–0x95 bytes: 72 of 182 blocks carry a single fixed value
 there and 108 carry zero, which is two populations of files rather than a
