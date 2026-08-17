@@ -130,6 +130,7 @@ silently wrong one.
 - [§110](#110--the-audit-run-on-hardware-at-scale-and-what-it-found-was-not-ours-2026-08-16) — The audit run on hardware at scale, and what it found was not ours (2026-08-16)
 - [§111](#111--the-loader-resolves-by-directory-name-ram-stores-the-header-name-2026-08-16) — The loader resolves by DIRECTORY name; RAM stores the HEADER name (2026-08-16)
 - [§112](#112--the-machine-caches-the-directory-across-a-card-swap-2026-08-16) — The machine caches the directory across a card swap (2026-08-16)
+- [§113](#113--the-whole-block-reads-work-and-every-block-is-193-bytes-2026-08-17) — The whole-block reads work, and every block is 193 bytes (2026-08-17)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -9517,3 +9518,58 @@ volume afterwards, clamped to what the new medium actually has — a card
 with fewer volumes makes the old index meaningless. The disk browser calls
 it before listing. A test asserts the call happens, because a demo has no
 medium to go stale and would otherwise let the call be dropped silently.
+
+## §113 — The whole-block reads work, and every block is 193 bytes (2026-08-17)
+
+**Status: settled.** Measured 2026-08-17, read-only, one request each.
+
+`RPDATA` (`06h`), `RKDATA` (`08h`) and `RSDATA` (`0Ah`) are defined in
+`messages.py` and **never used** — s3ked reads exclusively through the
+byte-addressable extended layer (`RPHEADER`/`RKHEADER`/`RSHEADER`). So the
+question "does the SysEx program block reach offset `0xbf`?" had only ever
+been answered by what `params.py` *models*, which is not the same question.
+
+Asked of the machine:
+
+```
+region     block bytes        params.py models to   unmodelled
+program    193 (0x00-0xc0)    0x72                   78
+keygroup   193 (0x00-0xc0)    0xbf                    1
+sample     193 (0x00-0xc0)    0x8c                   52
+```
+
+**All three blocks are the same length: 193 bytes, `0x00`–`0xC0`.**
+
+### The request takes a 14-bit item number, and that is why it looked dead
+
+The first attempts sent no payload and then a single byte, and both timed
+out — which reads exactly like "the machine does not answer `RPDATA`". It
+answers fine; the item number is a **two-byte 14-bit pair**, the same
+encoding the extended header uses for its item index:
+
+```
+f0 47 00 06 48 00 f7        -> no reply
+f0 47 00 06 48 00 00 f7     -> PDATA, 386 payload bytes = 193 nibbled
+```
+
+Worth recording as its own trap: a wrong request shape and an unsupported
+operation are indistinguishable over the wire, both being silence. Two
+plausible shapes were tried before concluding anything, which is the only
+reason this is a finding rather than a negative.
+
+### What it means for s3ked
+
+**We model 115 of the program block's 193 bytes and 141 of the sample
+block's.** The 78 and 52 unmodelled bytes are not absent from the machine —
+they are simply outside the transcription. They are also exactly where the
+sibling mpc2emu's resave-diff probes are stamping, since the undocumented
+regions are what a format-preservation test is *for*.
+
+This does not make `params.py` wrong; it makes its coverage visible.
+Nothing should be added to it from this measurement alone — knowing a byte
+exists is not knowing what it means, which is the standard §108 was held to.
+
+**Unimplemented capability:** the bridge has no whole-block read. Adding one
+would give a caller the full 193 bytes in a single round trip instead of
+193 byte-addressed reads, which matters for anything diffing structures
+rather than editing fields.
