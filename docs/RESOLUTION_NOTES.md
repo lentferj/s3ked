@@ -10140,6 +10140,65 @@ filter's range was mistaken for depth-dependence. **The saturation is not a
 property of the field. It is the base and the depth interacting**, and the
 base is the half that is ours to choose.
 
+### Confirmed against a second source, and the pivot with it
+
+Repeated with a **white-noise** program loaded from disc — a different
+source, a different note (60, not 24), a different reference band
+(80–200 Hz, not 50–100) and a different program:
+
+```
+                  velocity 70                     velocity 120
+sawtooth   exp(0.0137242 * MODVFILT1)    exp(0.13988892 * MODVFILT1)
+noise      exp(0.0137925 * MODVFILT1)    exp(0.140029   * MODVFILT1)
+agreement            0.50%                          0.10%
+
+           pivot        k (cents per depth x velocity unit)
+sawtooth   64.56        4.368
+noise      64.54        4.371
+```
+
+**Two instruments, one answer.** The pivot agrees to 0.03 and the depth to
+0.07%. That is the measurement surviving a change of instrument, which is
+worth more than either run — and it matters here because the noise sample
+turned out to be defective (below), so the two sources fail in completely
+different ways and still agree.
+
+The saturation did **not** improve: velocity 120 still returns NaN above
+depth 20. So it is a property of the filter reaching the end of its range,
+not of the source, which is what §108's `ATTAK2` note already said and this
+now confirms from a second direction.
+
+### The noise source is not white, measured against two controls
+
+The operator reported that the sample "does not really sound like constant
+white noise — there is a rhythm to it". There is, and it is large:
+
+```
+                             95/5 envelope spread   slow/fast modulation
+NSWHITE (measured)                  71.2 dB               +5.7 dB
+synthetic white (control)            2.1 dB              -10.8 dB
+0.25 s looped noise (control)        2.0 dB              -14.5 dB
+```
+
+White noise has a nearly steady envelope — about 2 dB of spread on a 2 ms
+window. This swings **71 dB**, with its modulation energy concentrated at
+**1–4 Hz** rather than in the grain of the noise. A short-loop control shows
+none of it, so it is not a loop artefact.
+
+**The ear got there first and the first two analyses did not.** An
+autocorrelation peaked at the floor of its own search range and was read as
+a period; an envelope measured across the note-off found "0.5 Hz", which was
+the note's own on-off inside a 2 s window and nothing to do with the sample.
+Both were artefacts of the analysis window. What settled it was **running
+the same analysis on synthetic controls** — which is the same move as the
+reference band, the identity write, and the known-good control value in
+§114, arrived at again from a different direction.
+
+Recorded because the depth measurement above **used this source and still
+agreed with the sawtooth to 0.1%** — a broadband amplitude modulation moves
+the level, not the corner, and the reference divides the shape out. The
+defect matters for whoever relies on that sample next, not for §116.
+
 ### Two rig faults this exposed, both silent
 
 **The capture ports were wrong and the error message said otherwise.** The

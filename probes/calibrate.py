@@ -576,6 +576,54 @@ SWEEPS: Dict[str, Sweep] = {
             "a source's velocity-to-filter amount onto this field has no "
             "basis for its multiplier. See TODO.md.",
     ),
+    # The same measurement with a NOISE source instead of the resident
+    # sawtooth. Flat per Hz means the output spectrum IS the transfer
+    # function, so the reference band cannot land in a harmonic gap -- which
+    # is what made the sawtooth version return NaN at every point until a
+    # reference was added, and what still limits how low the band can go.
+    #
+    # Three differences from `mod-filter`, every one of them measured:
+    #   note 60, not 24  -- the noise program sounds at -0.0 dBFS at note 60
+    #                       and -72.2 at note 24. It is rooted near 60.
+    #   PRLOUD 85, not 99 -- at 99 with this source note 60 clips at 0.0 dBFS,
+    #                       and a clipped peak is not a corner.
+    #   band 80-200 Hz   -- well below the ~457 Hz corner at FILFRQ 60, so the
+    #                       band stays in the passband as the corner rises.
+    "mod-filter-noise": Sweep(
+        name="mod-filter-noise",
+        fit="exp",
+        param="MODVFILT1", region="keygroup",
+        values=(0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50),
+        measure="corner_hz", unit="Hz",
+        hold=3.0,
+        note=60,
+        ref_band=(80.0, 200.0),
+        source="a WHITE noise sample, flat per Hz",
+        reference_value=0,
+        reference_setup=(("keygroup", "FILFRQ", 99),),
+        prepare=(
+            ("program", "OUTPUT", 0),      # off the individual outputs
+            ("program", "PANPOS", 0),
+            # 70, not 85 and certainly not 99. A -9 dBFS noise sample at
+            # velocity 120 clipped the interface at 85, and a clipped peak is
+            # not a corner -- it is manufactured spectrum that looks like one.
+            ("program", "PRLOUD", 70),
+            ("program", "V_LOUD", 0),
+        ) + _ENV1_OPEN + _LFO_OFF + (
+            ("keygroup", "K_FREQ", 0),
+            ("keygroup", "VFREQ1", 0),
+            ("keygroup", "MODVFILT2", 0),
+            ("keygroup", "MODVFILT3", 0),
+            ("program", "SPFILT", 0),
+            ("program", "MODSFILT1", 5),   # source 1 = velocity
+            ("keygroup", "FILFRQ", 60),
+            ("keygroup", "VLOUD1", 0),
+        ),
+        why="§116 measured MODVFILT1's depth against a sawtooth, whose comb "
+            "forced a reference and still saturated above depth 20 at "
+            "velocity 120. A flat source should extend the usable range and "
+            "remove the compensation.",
+    ),
     "amp-attack": Sweep(
         name="amp-attack",
         param="ATTAK1", region="keygroup",
@@ -1330,6 +1378,24 @@ def run_sweep(bridge, rig, sweep: Sweep, program: int = 0, keygroup: int = 0,
             pass  # not the main thread, or the platform lacks it
 
     try:
+        # PREPARE FIRST, THEN VERIFY. `verify_isolation` has said in its own
+        # docstring since it was written that it must run AFTER neutralising,
+        # and this called it before -- for every sweep, since the beginning.
+        #
+        # It survived because every program tested until now happened to be
+        # audible untouched. The first one that was not -- a noise program with
+        # OUTPUT 255, routed to an individual output rather than the main pair,
+        # which is the exact trap `_MAIN_OUT` exists to undo -- failed the check
+        # at -88 dB against -88 dB. Both readings were the noise floor, i.e.
+        # nothing arriving, and the message blamed a MIDI channel collision.
+        #
+        # A guard that fails for the wrong reason is worse than no guard: it
+        # sends you to look at the wrong thing with the authority of a check.
+        saved = snapshot_prepare(bridge, sweep, program, keygroup)
+        if verbose:
+            print(f"  preparing ({len(sweep.prepare)} parameters neutralised)")
+        apply_prepare(bridge, sweep, program, keygroup, verbose=False)
+
         # Inside the guard: this writes LONOTE/HINOTE and restores them, so a
         # signal here must unwind like any other part of the sweep.
         if verbose:
@@ -1338,11 +1404,6 @@ def run_sweep(bridge, rig, sweep: Sweep, program: int = 0, keygroup: int = 0,
         if verbose:
             print(f"  isolation ok -- silencing it drops the recording "
                   f"{drop:.1f} dB")
-
-        saved = snapshot_prepare(bridge, sweep, program, keygroup)
-        if verbose:
-            print(f"  preparing ({len(sweep.prepare)} parameters neutralised)")
-        apply_prepare(bridge, sweep, program, keygroup, verbose=False)
 
         return _sweep_points(bridge, rig, sweep, param, program, keygroup,
                              keep_dir, verbose)
