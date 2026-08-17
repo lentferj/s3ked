@@ -56,8 +56,13 @@ BLOCK = 192
 #: Path fragments marking a file as OUR OWN output rather than third-party.
 #: Conservative on purpose: anything unrecognised counts as "unknown
 #: provenance" and is reported separately rather than silently trusted.
+# CORRECTED 2026-08-17: this list said "vinsamlib_akai_smoke" and so
+# let vinsamlib_akai_write_* and its temp directories through as
+# third-party. They are a LOCAL tool's output. 74 of the 74 blocks
+# that carried anything interesting were that tool, and the pattern
+# read as a format fact was one writer's habit -- §120.
 OURS = ("s3ked_pooltest", "cd0build", "akai_resave_selftest", "akai_out_krz",
-        "akai_out_e4b", "vinsamlib_akai_smoke", "akai_cal", "s3ked-logs",
+        "akai_out_e4b", "vinsamlib", "akai_cal", "s3ked-logs",
         "akai_e2e", "smokevol")
 
 

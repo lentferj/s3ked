@@ -10631,7 +10631,30 @@ against those and calling it validation is the round-trip mistake. 315
 generated blocks against 217 of unknown or third-party origin, counted
 apart.
 
-### The result
+### RETRACTED IN PART: the provenance split was broken
+
+**The headline lesson of this section was "provenance is separated and it is
+the point", and the separation did not work.** The filter listing our own
+output named `vinsamlib_akai_smoke` and therefore let
+`vinsamlib_akai_write_*` and its temporary directories through as
+third-party. They are a local tool's output.
+
+Corrected, the split is **510 generated against 22 unknown** — not 315
+against 217. So the check below had almost no third-party power, and its
+result is very largely *our own writers agreeing with our own table*: the
+round-trip mistake this section was written to avoid, made in the section
+that warns about it.
+
+The findings about the **checker** stand — they were faults in the
+instrument and do not depend on whose files went in. The finding about the
+**table** does not: `params.py` has not meaningfully been tested against
+third-party material, because there is barely any to test against. Twenty-two
+sample blocks is not a corpus.
+
+Caught by mpc2emu asking a question I had not: *what is the provenance of
+the files that carry anything interesting?*
+
+### The result, as originally written
 
 **`params.py` survives.** Across every field with a declared range, in
 well-formed real files, exactly one exceedance remains:
@@ -10814,7 +10837,35 @@ the corpus contradicts the one that looked more complete, and a table entry
 is not the place to record an unresolved conflict. What the region needs is
 the machine: set a loop on the panel, save, and read which bytes move.
 
-### CORRECTION: the argument above is invalid, and so is its rebuttal
+### RETRACTED: every block carrying the pattern was one local tool's output
+
+**This entire section is withdrawn as a statement about the machine's
+format.** All 74 headers carrying anything in `0x56`–`0x85` come from
+`vinsamlib-tests/` directories — a local project's writer — which the
+provenance filter failed to exclude (§119's correction).
+
+With the filter fixed, **14 genuinely third-party sample headers remain, and
+exactly one carries a nonzero byte in that region** — a volume the S3000XL
+itself re-saved.
+
+So the "structure" — `+6` identical across four records in 74 of 74, records
+2–4 sharing a `+0` value in 72 of 74 — is **one writer's habit**, not a
+format fact. It was real, regular, and about the wrong thing.
+
+mpc2emu predicted exactly this before the check was run: *"A pattern holding
+74 of 74 across many vendors is a format fact; the same pattern from one
+vendor is one program's habit."* It also named the reason I should have
+suspected it — the pattern's very regularity.
+
+**What survives:** the S1000 and S2800 documents do genuinely disagree about
+`0x56`–`0x85`, which is a fact about the documents and needs no corpus. The
+hardware test still settles it, and mpc2emu's framing of it is unchanged:
+set a second loop, save, and see whether `0x32`–`0x3d` moves.
+
+**What does not:** any claim that bytes there carry information on a real
+machine. There is no corpus evidence either way.
+
+### Superseded: the argument above is invalid, and so is its rebuttal
 
 **My inference was wrong.** "The values at `0x56` are absurd for loop
 points, therefore these are not loop points" does not follow. With

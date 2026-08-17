@@ -1375,7 +1375,13 @@ format inclusive at one end and exclusive at the other is not unusual.
 with no gap and no overlap, and a writer passing the source's bounds through
 unchanged is correct. No off-by-one anywhere in that path.
 
-## An unnamed 16-bit field in every loop record (OPEN — §120)
+## An unnamed 16-bit field in every loop record (RETRACTED — §120)
+
+**The corpus evidence was one local tool's output.** All 74 blocks carrying
+the pattern came from `vinsamlib-tests/`; the provenance filter missed them.
+Only 14 genuinely third-party headers exist here and one carries anything in
+that region. The document conflict below is still real — it needs no corpus
+— but there is no evidence that those bytes carry information on a machine.
 
 `probes/unmodelled_bytes.py` found two four-member families on the loop
 record's own stride of 12, at **+6 and +7** into each record — sample header
