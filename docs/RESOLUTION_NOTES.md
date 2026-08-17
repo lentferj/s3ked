@@ -159,6 +159,7 @@ silently wrong one.
 - [§116](#116--modvfilt1s-depth-measured-and-the-pivot-falls-out-at-6456-2026-08-17) — `MODVFILT1`'s depth measured, and the pivot falls out at 64.56 (2026-08-17)
 - [§117](#117--one-level-scale-across-three-fields-and-a-source-that-cannot-sustain-2026-08-17) — One level scale across three fields, and a source that cannot sustain (2026-08-17)
 - [§118](#118--a-loop-as-long-as-its-sample-overruns-and-the-envelope-sweeps-that-followed-2026-08-17) — A loop as long as its sample overruns, and the envelope sweeps that followed (2026-08-17)
+- [§119](#119--params-py-against-a-corpus-and-three-false-positives-from-the-checker-2026-08-17) — `params.py` against a corpus, and three false positives from the checker (2026-08-17)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -10604,3 +10605,88 @@ other's rig within hours.** The check's advice — *"give this program a
 channel no other resident program uses"* — was wrong for all three, which is
 worth fixing: `PMCHAN` did not isolate here at all, since in single mode the
 machine plays the selected program regardless of it.
+
+## §119 — `params.py` against a corpus, and three false positives from the checker (2026-08-17)
+
+**Status: settled, and the answer is a negative.** No hardware. Suggested by
+the sibling mpc2emu after a comparable exercise on its own side caught a
+rule that invented filters.
+
+### The idea
+
+Every range in `params.py` is **transcribed from Akai's documents**. The
+only checks on it are two documents agreeing (§8) and whatever hardware has
+touched. A third, free check: measure what values real `.P3` and `.S3`
+files actually carry. `probes/corpus_ranges.py`.
+
+Two classes of finding were expected — a declared range the corpus
+*exceeds* (the table too narrow, as `K_FREQ`'s 0..12 turned out to be), and
+a declared range nothing *approaches* (where an invented parameter hides).
+
+**Provenance is separated and never pooled.** Files this project or its
+siblings generated say only what our own writers emit; measuring the table
+against those and calling it validation is the round-trip mistake. 315
+generated blocks against 217 of unknown or third-party origin, counted
+apart.
+
+### The result
+
+**`params.py` survives.** Across every field with a declared range, in
+well-formed real files, exactly one exceedance remains:
+
+```
+region   field    provenance   declared     seen        out/n
+sample   SPITCH   unknown      21..127      1..101       2/182
+```
+
+Two blocks out of 182 carry `SPITCH` 1 against a declared minimum of 21.
+Two outliers are not grounds to widen a transcribed bound; they are worth
+knowing about and nothing more.
+
+### Three false positives, all from the checker rather than the table
+
+Each of these produced a large, confident, wrong result, and each was
+caught by a different tell.
+
+**1. Deliberately stamped files — caught by an identical count.** The first
+run reported 105 fields out of range, and every single one showed *exactly*
+20 generated and 16 unknown violations. An identical count across unrelated
+parameters is not a range finding; it is a handful of odd blocks voting on
+everything. They were mpc2emu's resave probes, which stamp every
+undocumented byte with its own offset (values 170 and 255 throughout) —
+files built to be out of range.
+
+**2. Signed two-byte fields — caught by the values being absurd.** The
+decoder sign-converted single-byte fields only, so a two-byte `-12` read as
+65524. `KGTUNO` appeared to violate its range in 184 of 293 blocks. Three of
+the four remaining findings were this.
+
+**3. Blocks that were not headers — caught by validating the block.** The
+last survivor was `SPITCH` running below its minimum in **357 of 537**
+sample files. Only 182 of those 537 parse as sample headers at all: the
+name at 0x03 decoding to printable characters through the device charset,
+and a plausible block identifier at byte 0. Among the sane ones the count
+is **2**. The other 355 were files whose first 192 bytes are not a header,
+quietly voting on every field.
+
+### The lesson is the one the hardware work kept teaching
+
+**A corpus check needs its own validation before its output means
+anything.** Three times a large finding turned out to be the instrument.
+The same rule as the reference band, the identity write, the known-good
+control value and the passing control on `K_FREQ` 0 — and it applies to
+static analysis exactly as it does to a measurement.
+
+Worth noting what the *shape* of each error was, since none was subtle once
+seen: an implausibly uniform count, an implausibly large value, and an
+implausibly large proportion. All three were visible in the output before
+any interpretation, and all three would have read as findings to anyone
+skimming.
+
+### What the "barely used" column is not
+
+237 fields have a declared maximum nothing in the corpus approaches. Most
+are the envelope-3 and filter-2 families, which need the optional IB304F
+board this machine does not have, and fields our own writers zero-fill by
+design. That is consistent with the board being rare rather than evidence
+of an invented parameter, and it is left as an observation.
