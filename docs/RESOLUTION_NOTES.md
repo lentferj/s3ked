@@ -131,6 +131,7 @@ silently wrong one.
 - [§111](#111--the-loader-resolves-by-directory-name-ram-stores-the-header-name-2026-08-16) — The loader resolves by DIRECTORY name; RAM stores the HEADER name (2026-08-16)
 - [§112](#112--the-machine-caches-the-directory-across-a-card-swap-2026-08-16) — The machine caches the directory across a card swap (2026-08-16)
 - [§113](#113--the-whole-block-reads-work-and-every-block-is-193-bytes-2026-08-17) — The whole-block reads work, and every block is 193 bytes (2026-08-17)
+- [§114](#114--the-machine-does-not-pair-stereo-halves-and-it-validates-modulation-sources-2026-08-17) — The machine does not pair stereo halves, and it validates modulation sources (2026-08-17)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -9650,3 +9651,82 @@ six 32-byte reads, which matters for anything diffing structures rather
 than editing fields. **It must strip the reply header** — two nibble bytes
 for `PDATA`, and two plus a raw keygroup byte for `KDATA` — and must not
 assume the payload length is even.
+
+## §114 — The machine does not pair stereo halves, and it validates modulation sources (2026-08-17)
+
+**Status: settled, two independent runs.** Measured 2026-08-17 on volumes
+built by the sibling mpc2emu for the purpose. Read-only after each load.
+
+### Stereo halves are NOT paired by name
+
+A program referencing **only** `STPAIR-L`, with `STPAIR-R` sitting on the
+same volume referenced by nothing. Memory cleared before each load so that
+"resident" is unambiguous — the whole question is which samples are in
+memory, and a leftover makes a present sample indistinguishable from one
+the machine fetched itself.
+
+```
+after CLR      programs ['TEST PROGRAM'], samples []
+load STPRSHORT samples ['STPAIR-L']              -R did NOT arrive
+after CLR      programs ['TEST PROGRAM'], samples []
+load STPRLONG  samples ['STEREOLONG-L']          -R did NOT arrive
+```
+
+**`Cursor Prog+Samps` loads exactly what the program references and nothing
+else.** There is no name-based pairing of `-L`/`-R`, no convention the
+firmware applies. A stereo pair is two samples and both must be referenced
+or loaded explicitly.
+
+This is worth knowing before building a bank: a program whose zones name
+only the left half loads cleanly, reports no error, is **not** dangling by
+`collect()`'s definition — nothing is missing that anything asked for — and
+plays mono. Nothing anywhere says so.
+
+`STEREOLONG-L` is **twelve characters exactly**, the full name budget, and
+loaded and resolved correctly. So the edge of the name field is not a
+problem in itself.
+
+### Modulation source codes are validated on load, per value
+
+The program common block's modulation-source matrix at `0x4c`–`0x58`. A
+volume was written with the ten untested codes 14–23 in `0x4c`–`0x55` and a
+known-good code 5 in the three slots `0x56`–`0x58` as a control:
+
+```
+offset  written  read back   verdict
+ 0x4c       14        14      KEPT
+ 0x4d       15         0      CLEARED
+ 0x4e ..  16-23        0      CLEARED  (all)
+ 0x56        5         5      KEPT     control
+ 0x57        5         5      KEPT     control
+ 0x58        5         5      KEPT     control
+```
+
+**The controls are the finding, not the boundary.** Had all thirteen come
+back zero, the result would have been indistinguishable from the machine
+clearing the whole field for an unrelated reason. The three surviving 5s
+show the rule is **per value**, and 14 surviving beside 15 being cleared
+puts the boundary between them.
+
+Combined with mpc2emu's earlier resave gate — codes 0–7 and 13 kept; 24–27
+and 76–88 cleared — the accepted set is now **0–7, 13, 14**, with **8–12
+untested**. If those are also valid the set is a clean **0–14**, fifteen
+modulation sources, which is what the shape suggests. That is a prediction
+and is recorded as one.
+
+### What it says about `params.py`
+
+The table declares `MODSPAN1`/`MODSAMP1`/`MODSFILT1` and their siblings as
+**0..255**, transcribed. The machine plainly does not accept 0..255: it
+zeroes anything outside a small set, silently, at load time.
+
+Nothing is changed on the strength of this — the accepted set is not fully
+mapped (8–12 unknown), and inventing a bound is what §108 was held back
+from. But it is now known that the declared range is far wider than the
+machine's, and a UI offering 0..255 for these fields is offering values
+that will be discarded without a word.
+
+**Related:** §109 recorded `MODVFILT1` (the *depth*) as clamped to ±50 by
+the machine. The *source* fields beside it are validated differently — not
+clamped into range but zeroed outright. Two adjacent field families, two
+different rejection behaviours.
