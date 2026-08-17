@@ -1279,3 +1279,45 @@ been demonstrated.
 **Worth it because:** it is a whole page of the machine that s3ked can read
 and cannot present. Adding a `drum` region would make it editable the same
 way everything else is.
+
+## `MODVFILT1` has no measured DEPTH (OPEN)
+
+§109 established that it responds, that it is per-keygroup, and that the
+machine clamps it to ±50. **A clamp is a range limit, not a scale.** Nothing
+here converts a `MODVFILT1` value into octaves or cents, and it is absent
+from `scales.py` entirely — so the one modulation depth most likely to be
+set by a converter is the one with no law behind it.
+
+**Why it matters beyond this project.** The sibling mpc2emu maps a K2000
+`VelTrk` of ±10800 cents onto `MODVFILT1` with a multiplier of 25 that
+carries no rationale in its code. Asked whether 50 would be more faithful,
+the answer from `FILFRQ`'s own measured law is that **neither is**:
+
+```
+FILFRQ law   Hz = 6.4597 * exp(0.071 * FILFRQ)   r2 0.99984
+one octave   = 9.76 FILFRQ units
+25 units     = 2.56 octaves = 3073 cents
+50 units     = 5.12 octaves = 6146 cents
+K2000 full   = 10800 cents  = 9 octaves = 87.9 FILFRQ units
+FILFRQ 0..99 = 10.14 octaves end to end
+```
+
+±9 octaves cannot be expressed from any starting cutoff — the whole field is
+10.14 octaves wide. **That rests on a `MODVFILT1` unit being a `FILFRQ`
+unit, which is exactly what is unmeasured.** `K_FREQ` produces its shift in
+`FILFRQ` units (§43), so it is a reasonable guess and it is still a guess.
+
+**The measurement:** fix `FILFRQ` mid-range with headroom both ways, set
+`MODVFILT1` to several values, sweep velocity, track the corner. Use
+resonance-peak tracking, **not** a spectral centroid — §108 measured the
+centroid misleading in both directions, reading noise as brightness near the
+floor and arriving low-frequency content as darkening when the filter opens.
+
+**Caution from this project's own history:** `scales.py` records that
+`ATTAK2` showed a threefold disagreement between `MODVFILT1` 18 and 25 that
+looked like depth-dependence and was **the corner saturating at the top of
+the filter's range**. Measure away from both ends of `FILFRQ`, or the
+ceiling gets measured instead of the field.
+
+**Blocked on:** hardware plus a reference. Belongs with the cutoff
+calibration, not on its own.
