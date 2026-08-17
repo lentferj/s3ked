@@ -9714,6 +9714,63 @@ untested**. If those are also valid the set is a clean **0–14**, fifteen
 modulation sources, which is what the shape suggests. That is a prediction
 and is recorded as one.
 
+### The gap was mostly closed from data already in hand
+
+The "8–12 untested" above needed no further load. `RSCTRL` — loaded from
+disc through the same validating load path — carries its writer's hardware
+defaults in that very matrix, and they were already sitting in the block
+dumped for §113:
+
+```
+offset : 0x4c 0x4d 0x4e 0x4f 0x50 0x51 0x52 0x53 0x54 0x55 0x56 0x57 0x58
+value  :    8    6   12    6    3    6    6    6    5    8   10   10    5
+```
+
+Every one of those survived a real load, so **8, 10 and 12 are accepted**.
+Only **9 and 11** remain untested, and the clean-0–14 reading now rests on
+two unknowns rather than five.
+
+Worth noting how nearly this was missed: a probe volume was being discussed
+to answer a question that had already been answered by the *control* file's
+own contents, collected an hour earlier for an unrelated purpose. The
+lesson is not subtle — before proposing a measurement, check whether an
+existing capture already contains it.
+
+### The WRITE path does not validate at all
+
+The validation above is a property of the **load**. `PHEADER` — the
+byte-offset write s3ked actually uses — applies none of it:
+
+```
+value  read back   verdict
+    5        5     accepted
+    8..12   8..12  accepted
+   14       14     accepted
+   15       15     accepted     <- the load path ZEROES this
+   23       23     accepted     <- the load path ZEROES this
+   40       40     accepted     <- never valid anywhere
+```
+
+Original byte restored and the restore verified.
+
+**So there are two rejection regimes on one field**, and which one applies
+depends on how the value arrived:
+
+| path | behaviour |
+|---|---|
+| load from disc | illegal source codes **zeroed** silently |
+| `PHEADER` write | **anything** accepted, 0–255 |
+
+That matters directly: a value s3ked writes will sit in RAM and appear to
+work, and the same value written to a volume would be discarded on load.
+Editing and authoring do not agree, and nothing on the machine says so.
+
+It is also the third instance of the same distinction: §108 (`K_FREQ` 22
+accepted by the write path against a documented 0–12), §109 (`MODVFILT1`
+clamped to ±50 by the machine), and now this. **Accepted, preserved, and
+effective are three different things**, and a finding has to say which one
+it measured.
+
 ### What it says about `params.py`
 
 The table declares `MODSPAN1`/`MODSAMP1`/`MODSFILT1` and their siblings as
