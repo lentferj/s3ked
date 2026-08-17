@@ -176,8 +176,8 @@ there sounds:
 |---|---|
 | **all eight load types** | `ENTIRE VOLUME`, `ALL PROGS+SAMPLES`, `programs only`, `all samples`, the two cursor variants, `Multi+progs+Samps` — `t` cycles them |
 | **one item at a time** | put the cursor on a program or sample row and the load aims at exactly that, by writing the machine's own directory highlight |
-| **onto what is there, or onto an emptied machine** | loads append, so building a bank from several volumes needs the *sum* to fit |
-| **renumber afterwards** | because loads append and each volume's programs keep the numbers they were saved with |
+| **onto what is there, or onto an emptied machine** | a load *adds* to what is resident rather than replacing it, so building a bank from several volumes needs the *sum* to fit |
+| **renumber afterwards** | because each volume's programs keep the numbers they were saved with, and a second volume's arrive interleaved with the first's |
 
 The load confirms first and says whether it **fits in free memory** — the one
 thing the sampler will not tell you until it has already half-loaded and
@@ -192,6 +192,13 @@ Everything here writes to the machine, so all of it needs the write gate.
 > number 1; they do not overwrite each other, they **stack**, so one program
 > change fires all four at once. The panel's `RNUM` → `SEQU` fixes it and so
 > does this, in one keystroke.
+>
+> A load does **not** append. The machine inserts arrivals in program-number
+> order, so two volumes both numbering from 1 comb together and a program's
+> position in the list stops telling you which volume it came from. s3ked
+> therefore snapshots what is resident *before* the load and identifies the
+> arrivals afterwards, giving the new volume a contiguous range of its own
+> rather than every other number.
 
 The volume list is 7 round trips for a 100-volume disk, about 1.3 seconds,
 which is why it happens on `d` rather than at startup.
@@ -199,6 +206,31 @@ which is why it happens on `d` rather than at startup.
 `Operating System` is the one load type the TUI will not offer: it loads an OS
 off the disc over the running one, and the bridge refuses it without an
 explicit flag.
+
+#### Saving stays at the front panel, on purpose
+
+The asymmetry is deliberate and worth stating, because a disk browser that
+loads but never saves looks like an unfinished one.
+
+**This protocol has no save operation.** The complete disk surface it
+defines is *list the volumes* and *read a directory* — `RVOLLIST`/`VOLLIST`
+and `RHDDIR`/`HDDIR`. There is no write-file, no create-volume, nothing that
+commits anything to a disc. The load is not an exception to that so much as
+a side door: it works because the LOAD *page* carries a register that fires
+when written, and s3ked drives the page rather than the disk.
+
+Whether the SAVE page has an equivalent trigger is **unmeasured**. It could
+be looked for, and the precedent is not encouraging — a sweep of 48 unknown
+values hunting the LOAD page's `CLR` softkey found every one of them inert
+(`RESOLUTION_NOTES` §105) — and a save needs more than a fired action
+anyway: it needs a destination volume *name*, and no register in the
+miscellaneous bank carries a name.
+
+So the choice for now is to leave saving where it works, at the panel,
+rather than ship a speculative register hunt or a save that half-works. Load
+remotely, edit remotely, save with the machine's own front panel. If that
+changes it will be because someone measured a trigger, not because the
+protocol grew one.
 
 The samples pane shows what the selected program references; `a` swaps it for
 everything the machine holds, which is the view the integrity work is done
@@ -397,7 +429,8 @@ retried.
 
 The log is in-memory and lasts the session. That is not much of a limitation:
 a remote edit only lives in the sampler's RAM until you save to disc *on the
-machine itself*, so reloading or power-cycling is the real undo-everything.
+machine itself* ([deliberately](#saving-stays-at-the-front-panel-on-purpose)),
+so reloading or power-cycling is the real undo-everything.
 
 This follows the sibling [eosed](https://github.com/lentferj/eosed), which
 had `z`/`Z`/`h` first; s3ked had only `z` until 2026-08-15.
@@ -498,6 +531,11 @@ largest items are the fields only a person at the front panel can confirm
 (`HW_PANEL_CHECKS.md`), two modulation sources whose stimulus is not
 documented anywhere, and the second filter, which needs the optional IB304F
 board this machine does not have.
+
+**Saving to disc is not on that list.** It is absent by decision rather than
+by omission — the protocol defines no save operation at all, and the reasons
+for leaving it at the front panel are
+[set out above](#saving-stays-at-the-front-panel-on-purpose).
 
 ## License and third-party sources
 
