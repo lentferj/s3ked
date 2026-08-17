@@ -9204,6 +9204,65 @@ residual noise the centroid had been reporting. So the centroid moves the
 when signal **arrives** (real content read as darkening). Neither
 direction is safe to read alone.
 
+### ANSWERED 2026-08-17: 22 is effective, and so is 99
+
+Two measurements, each with its control.
+
+**Does the law extrapolate past 12?** Corner measured at two notes an octave
+apart, both above the pivot, with a noise source so the reference band has
+signal at either note:
+
+```
+K_FREQ  0    -0.006 octaves per octave    <- the CONTROL, near zero
+K_FREQ 12    +1.042                       <- §43's "12 is 1:1", confirmed
+K_FREQ 22    +1.854
+ratio 22/12 = 1.78 against 1.83 predicted by linear extrapolation
+```
+
+**Where does it stop?** One note eight semitones above the pivot, a low base
+so the corner has room, `K_FREQ` swept to the top of the byte:
+
+```
+K_FREQ  30    corner  211 Hz   implied FILFRQ 49.1
+       50             444                     59.6
+       70             999                     71.0
+       99            3177                     87.3
+
+units of FILFRQ shift per K_FREQ step:  0.508 .. 0.602
+§43 predicts 0.06386 * (72 - 64)     =  0.511
+```
+
+**Linear all the way to 99, at the slope §43 fitted.** The field does not
+saturate anywhere in its byte range, and the corner stalls nowhere below the
+filter's own ceiling. Values 0–24 return NaN because at that base the corner
+sits below the reference band — a limit of the measurement, not of the
+field, and visible as such because the points above it are clean.
+
+So **`K_FREQ`'s documented 0..12 is not its effective range.** 12 is where
+tracking reaches 1:1 — a musically meaningful point, not a limit — and the
+machine goes on doing exactly what the law says well past it.
+
+### The control that failed first, and why the notes had to change
+
+The first attempt used notes 60 and 72 with a sawtooth and a 50–100 Hz
+reference band, and the control came back at **+0.225 octaves per octave**
+when it should be zero. A sawtooth has no energy below its fundamental —
+261.6 Hz at note 60 — so the band that defines 0 dB held no signal at either
+note.
+
+Moving to notes 24 and 36 made it worse (+0.402, then NaN), because below
+the pivot the corner falls *out* of the band. The conflict is structural: a
+sawtooth's fundamental moves with the note, so no single band can sit in the
+passband at two notes an octave apart while staying below a corner that is
+also moving.
+
+**Noise resolves it by having energy everywhere**, which is exactly what it
+is for. With noise, notes both above the pivot, and a band below the corner
+at every setting, the control came back at −0.006.
+
+Three configurations, and only the third had a control that passed. The
+first two were not reported.
+
 ### What changed in the code, and what did not
 
 `params.py` **keeps 0..12**. The measurement shows the bound is not the

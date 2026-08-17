@@ -597,7 +597,17 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "Zero at 64 to the resolution available, from a different\n"
              "program, bank and sample -- so 64 is a CONSTANT, not a\n"
              "per-program value. The measured 64 and the fitted 63.8 agree\n"
-             "within either method's resolution.",
+             "within either method's resolution.\n"
+             "EFFECTIVE FAR BEYOND THE DOCUMENTED 0..12 (§108, measured\n"
+             "2026-08-17). Swept to the top of the byte at a note eight\n"
+             "semitones above the pivot: the corner rises linearly to\n"
+             "K_FREQ 99, at 0.508-0.602 FILFRQ units per step against the\n"
+             "0.511 this law predicts. No saturation anywhere in range. So\n"
+             "12 is where tracking reaches 1:1 -- a musically meaningful\n"
+             "point, not a limit -- and params.py's 0..12 is the DOCUMENTED\n"
+             "range rather than the effective one. The table is left as\n"
+             "transcribed; widening it is a decision about the source\n"
+             "document, not about the measurement.",
     ),
     ("keygroup", "VLOUD1"): Scale(
         "keygroup", "VLOUD1", "dB", "linear", 0.60576, -20.1778, (-50, 20),
