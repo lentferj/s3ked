@@ -9557,7 +9557,52 @@ operation are indistinguishable over the wire, both being silence. Two
 plausible shapes were tried before concluding anything, which is the only
 reason this is a finding rather than a negative.
 
-### The block is 193 because it has a LEADING byte — offsets shift by one
+### CORRECTED 2026-08-17: the block is 192. The 193rd byte is a REPLY HEADER
+
+**Everything in the two subsections below is wrong in its description and
+right in its arithmetic, and the difference matters.** Kept visible because
+the corrected reading was only reached by a decode failing loudly.
+
+The reply is not "a 193-byte block". It is a **header followed by a
+192-byte block**, and the header differs between the two operations:
+
+```
+PDATA   nibbled(item number)          + nibbled(192-byte block)  = 386 payload
+KDATA   nibbled(item number) + kg byte + nibbled(192-byte block) = 387 payload
+```
+
+The keygroup number rides as **one raw byte, not nibbled**, which makes
+`KDATA`'s payload length **odd**. Decoded that way, both blocks match the
+byte-addressed layer **192/192**, with no shift anywhere:
+
+```
+PDATA payload 386, KDATA payload 387
+  PDATA header: prog=1
+  KDATA header: prog=1, kg byte=0
+  common  192 bytes -> matches byte-addressed 0x00-0xBF   192/192
+  keygroup 192 bytes -> matches byte-addressed 0x00-0xBF  192/192
+  GROUPS common[0x2a] = 4      name common[0x03:0x0f] = 'RSCTRL'
+```
+
+**So the SysEx block and the disk block are the same 192 bytes**, and
+mpc2emu's `S3000_BLOCK_LEN = 0xc0` needs no adjustment. Its three candidate
+readings were (a) a leading byte, (b) a trailing byte, (c) a count including
+something else. The answer is **(c)**, which neither of us favoured.
+
+**How the wrong description survived a 192/192 check.** For `PDATA` the
+header is exactly one denibbled byte, so "denibble the lot and drop the
+first" produces the right 192 bytes by accident, and the full-block
+comparison passed. It only broke on `KDATA`, whose odd payload made the
+naive denibbler run off the end with an `IndexError` — a loud failure, and
+the only reason the description was revisited. Had the keygroup block been
+skipped, this section would have shipped a wrong model that verified
+perfectly against every test that existed.
+
+The earlier `//2` in a diagnostic printed `193 bytes` for `KDATA` too,
+because floor division silently absorbed the odd byte. That is what hid it
+for two rounds.
+
+### Superseded: the block is 193 because it has a LEADING byte
 
 193 is not 192 with a spare at the end. The whole-block read carries **one
 extra byte at the front**, and `block[1:193]` is byte-for-byte the structure
@@ -9600,7 +9645,8 @@ Nothing should be added to it from this measurement alone — knowing a byte
 exists is not knowing what it means, which is the standard §108 was held to.
 
 **Unimplemented capability:** the bridge has no whole-block read. Adding one
-would give a caller the full 193 bytes in a single round trip instead of
-193 byte-addressed reads, which matters for anything diffing structures
-rather than editing fields. **It must drop the leading byte**, or every
-offset a caller passes will be wrong by one and mostly still look right.
+would give a caller the full 192 bytes in a single round trip instead of
+six 32-byte reads, which matters for anything diffing structures rather
+than editing fields. **It must strip the reply header** — two nibble bytes
+for `PDATA`, and two plus a raw keygroup byte for `KDATA` — and must not
+assume the payload length is even.
