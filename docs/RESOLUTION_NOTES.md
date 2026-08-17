@@ -9557,6 +9557,36 @@ operation are indistinguishable over the wire, both being silence. Two
 plausible shapes were tried before concluding anything, which is the only
 reason this is a finding rather than a negative.
 
+### The block is 193 because it has a LEADING byte — offsets shift by one
+
+193 is not 192 with a spare at the end. The whole-block read carries **one
+extra byte at the front**, and `block[1:193]` is byte-for-byte the structure
+the byte-addressed layer exposes at offsets `0x00`–`0xBF`:
+
+```
+block[0:192]  matches byte-addressed 0x00-0xBF   129/192
+block[1:193]  matches byte-addressed 0x00-0xBF   192/192   <-- exact
+block[2:194]  matches byte-addressed 0x00-0xBF   129/192
+
+block[0] = 0x00
+block[1:5] = 01 0c 90 1e     byte-addressed[0:4] = 01 0c 90 1e
+```
+
+So **`whole_block[n + 1]` is the field at byte-addressed offset `n`.**
+
+**The reason this is dangerous rather than merely fiddly is the 129/192.** A
+misaligned read still matches **67 %** of the block, because most of a
+program's structure is zeros. Anyone checking alignment casually — or
+diffing a mostly-zero structure against a reference — sees a large majority
+agreeing and a scatter of differences, which reads as "a few fields moved"
+rather than "everything is shifted by one". The wrong answer is the
+plausible-looking one.
+
+It was caught only because the sibling mpc2emu asked the question directly
+before trusting any bytes, naming the three possible readings and predicting
+(b), a trailing byte. The measurement says (a), a leading one. Predicting
+the wrong option and checking anyway is what made it cheap.
+
 ### What it means for s3ked
 
 **We model 115 of the program block's 193 bytes and 141 of the sample
@@ -9572,4 +9602,5 @@ exists is not knowing what it means, which is the standard §108 was held to.
 **Unimplemented capability:** the bridge has no whole-block read. Adding one
 would give a caller the full 193 bytes in a single round trip instead of
 193 byte-addressed reads, which matters for anything diffing structures
-rather than editing fields.
+rather than editing fields. **It must drop the leading byte**, or every
+offset a caller passes will be wrong by one and mostly still look right.
