@@ -57,6 +57,7 @@ that should declare the board and accept the risk deliberately.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import csv
 import json
 import math
@@ -483,6 +484,70 @@ SWEEPS: Dict[str, Sweep] = {
             "unit anywhere. Everything downstream -- showing a frequency in "
             "the editor, converting a cutoff INTO an Akai program -- needs "
             "the map from that integer to hertz.",
+    ),
+    # Run this one TWICE, at two velocities, and difference the results.
+    # `Sweep` varies a PARAMETER at a fixed velocity, and the quantity wanted
+    # here is a depth per velocity -- but it needs no new axis:
+    #
+    #     corner(v, d) = base + k * d * (v - pivot)
+    #     corner(v2, d) - corner(v1, d) = k * d * (v2 - v1)
+    #
+    # so two runs differing ONLY in `velocity` give k from the slope, and the
+    # pivot cancels -- which is just as well, since §43 puts it at 64 for
+    # every other modulation field but nobody has checked it for this one.
+    #
+    #     probes/calibrate.py mod-filter --velocity 40  --out d40.csv
+    #     probes/calibrate.py mod-filter --velocity 100 --out d100.csv
+    #
+    # `corner_hz` is exponential in FILFRQ units, so the fitted exponent b
+    # converts straight to octaves: octaves per depth unit = b / ln 2 / (v2-v1).
+    "mod-filter": Sweep(
+        name="mod-filter",
+        fit="exp",
+        param="MODVFILT1", region="keygroup",
+        # POSITIVE only, and stopping at 50 because that is where the machine
+        # clamps (§109: 90 read back as 50). Negative depths close the corner
+        # further at low velocity and would sit under the reference band.
+        values=(0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50),
+        measure="corner_hz", unit="Hz",
+        hold=3.0,
+        # Same note and band as the `filter` sweep, and for the same reason
+        # (§20): at note 24 the fundamental is ~32.7 Hz and its 2nd and 3rd
+        # harmonics fall inside the reference band. The note and the band are
+        # chosen together or the band that defines 0 dB is noise.
+        note=24,
+        ref_band=(50.0, 100.0),
+        source="broadband: white noise, or failing that a bright saw",
+        prepare=_MAIN_OUT + _ENV1_OPEN + _LFO_OFF + (
+            ("keygroup", "K_FREQ", 0),        # key follow off
+            ("keygroup", "VFREQ1", 0),        # the zone's static filter offset
+            ("keygroup", "MODVFILT2", 0),     # the other two depths off, so
+            ("keygroup", "MODVFILT3", 0),     # only source 1 reaches the filter
+            ("program", "SPFILT", 0),
+            # THE ROUTE. MODVFILT1 is "amount of control of filter frequency by
+            # ASSIGNABLE SOURCE 1", and source 1 is chosen by MODSFILT1. 5 is
+            # velocity. Without this the sweep measures a depth on whatever
+            # source happens to be assigned, and a wrong answer looks exactly
+            # like a right one.
+            ("program", "MODSFILT1", 5),
+            # Mid-range, with headroom in both directions. §108 and scales.py's
+            # ATTAK2 note both record the corner SATURATING at the ends of the
+            # filter's own range and the saturation being mistaken for a
+            # property of the field. A point that runs off either end must show
+            # as a flattening curve, not as data.
+            ("keygroup", "FILFRQ", 50),
+            # Velocity must not reach the AMPLITUDE as well, or the level
+            # changes for two reasons and the corner tracker sees a moving
+            # noise floor rather than a moving corner.
+            ("program", "V_LOUD", 0),
+            ("keygroup", "VLOUD1", 0),
+        ),
+        why="MODVFILT1's DEPTH has never been measured -- §109 established "
+            "that it responds, that it is per-keygroup and that it clamps at "
+            "+-50, but a clamp is a range limit and not a scale. Nothing "
+            "converts a MODVFILT1 value into octaves, so a converter mapping "
+            "a source's velocity-to-filter amount onto this field has no "
+            "basis for its multiplier. See TODO.md.",
     ),
     "amp-attack": Sweep(
         name="amp-attack",
@@ -1517,6 +1582,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="required: a sweep writes parameters continuously")
     ap.add_argument("--dry-run", action="store_true",
                     help="run against a synthetic machine, no hardware touched")
+    ap.add_argument("--velocity", type=int,
+                    help="override the sweep's note velocity. The `mod-filter` "
+                         "sweep is run TWICE with different values and the two "
+                         "results differenced -- see its comment.")
     ap.add_argument("--out", help="write the rows here as CSV")
     ap.add_argument("--keep-wavs", help="directory to keep every recording in")
     args = ap.parse_args(argv)
@@ -1529,6 +1598,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
 
     sweep = SWEEPS[args.sweep]
+    if args.velocity is not None:
+        if not 1 <= args.velocity <= 127:
+            print(f"velocity {args.velocity} outside 1..127")
+            return 2
+        sweep = dataclasses.replace(sweep, velocity=args.velocity)
     _print_plan(sweep)
 
     if args.dry_run:
