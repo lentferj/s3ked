@@ -10814,6 +10814,53 @@ the corpus contradicts the one that looked more complete, and a table entry
 is not the place to record an unresolved conflict. What the region needs is
 the machine: set a loop on the panel, save, and read which bytes move.
 
+### CORRECTION: the argument above is invalid, and so is its rebuttal
+
+**My inference was wrong.** "The values at `0x56` are absurd for loop
+points, therefore these are not loop points" does not follow. With
+`SLOOPS` = 1 in every header, loops 2–8 are **never initialised**, so their
+contents are undefined *whatever the field means*. Absurd values in an
+uninitialised structure say nothing about the structure. mpc2emu made that
+objection and it is correct.
+
+Its own writer reaches the same layout independently, validated byte-
+identical against `akaiutil`: `loop_start` at +0, a length fraction at +4,
+`loop_len` at **+6**, `loop_times` at +10 — twelve bytes, matching
+`LBYTES`. That puts the varying family exactly on **loops 5–8's length
+fields**, which is a better account than "unnamed parameter".
+
+**But the "uninitialised" reframing does not survive either.** Restricting
+to the 74 headers that carry data there:
+
+```
++6 identical across all four records          74 of 74
+records 2-4 share a +0 value, record 1 differs 72 of 74
++6 against SLNGTH / loop1 len / loop1 start    no consistent ratio
+```
+
+```
++0  0x080075f4  0x0001c420  0x0001c420  0x0001c420
++6       2435        2435        2435        2435
+```
+
+**Uninitialised memory does not repeat like that.** Three records sharing a
+`+0` value to the byte while the fourth differs, and one value appearing in
+all four `+6` slots, in every file that has anything there at all — that is
+written structure, not residue.
+
+So the position now is worse than either side had it: **the S1000's
+loops 5–8 does not explain why three records would hold identical points,
+and the S2800's four-byte `SLXY` does not name `+6` at all — which is the
+most regular field in the region.** Neither reading accounts for the
+observed pattern.
+
+That raises the value of the hardware test rather than lowering it, and
+mpc2emu's framing of it is the right one: set a **second** loop from the
+panel and save. The S1000 reading predicts the bytes that move are
+`0x32`–`0x3d` — loop 2's record. If anything in `0x56`–`0x61` moves while
+`SLOOPS` = 2, both readings need revisiting. That is an either/or with a
+stated prediction rather than a look-and-see.
+
 ### On the 46 program and 77 keygroup fields that never vary
 
 `params.py` names many fields that are constant throughout the corpus —
