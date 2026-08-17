@@ -159,7 +159,7 @@ silently wrong one.
 - [§116](#116--modvfilt1s-depth-measured-and-the-pivot-falls-out-at-6456-2026-08-17) — `MODVFILT1`'s depth measured, and the pivot falls out at 64.56 (2026-08-17)
 - [§117](#117--one-level-scale-across-three-fields-and-a-source-that-cannot-sustain-2026-08-17) — One level scale across three fields, and a source that cannot sustain (2026-08-17)
 - [§118](#118--a-loop-as-long-as-its-sample-overruns-and-the-envelope-sweeps-that-followed-2026-08-17) — A loop as long as its sample overruns, and the envelope sweeps that followed (2026-08-17)
-- [§119](#119--params-py-against-a-corpus-and-three-false-positives-from-the-checker-2026-08-17) — `params.py` against a corpus, and three false positives from the checker (2026-08-17)
+- [§119](#119--paramspy-against-a-corpus-and-three-false-positives-from-the-checker-2026-08-17) — `params.py` against a corpus, and three false positives from the checker (2026-08-17)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
