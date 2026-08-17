@@ -156,6 +156,7 @@ silently wrong one.
 - [§113](#113--the-whole-block-reads-work-and-every-block-is-193-bytes-2026-08-17) — The whole-block reads work, and every block is 193 bytes (2026-08-17)
 - [§114](#114--the-machine-does-not-pair-stereo-halves-and-it-validates-modulation-sources-2026-08-17) — The machine does not pair stereo halves, and it validates modulation sources (2026-08-17)
 - [§115](#115--the-drum-inputs-page-is-readable-and-it-is-sixteen-inputs-2026-08-17) — The drum-inputs page is readable, and it is sixteen inputs (2026-08-17)
+- [§116](#116--modvfilt1s-depth-measured-and-the-pivot-falls-out-at-6456-2026-08-17) — `MODVFILT1`'s depth measured, and the pivot falls out at 64.56 (2026-08-17)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -10053,3 +10054,113 @@ at 17:23:03, before any write, sitting in a log.
 **s3ked is not exposed by any of this.** `params.py` has no drum region and
 the bridge has no `DDATA` path; nothing in this project can reach that
 structure by accident. Anyone adding drum editing needs this section first.
+
+## §116 — `MODVFILT1`'s depth measured, and the pivot falls out at 64.56 (2026-08-17)
+
+**Status: measured.** `probes/calibrate.py mod-filter`, two runs, 2026-08-17.
+Fills the gap TODO.md opened: §109 had established that the field responds,
+is per-keygroup and clamps at ±50, and **a clamp is a range limit, not a
+scale**.
+
+### The method: two velocities, differenced
+
+`Sweep` varies a *parameter* at a fixed velocity, and what was wanted is a
+depth *per velocity*. That needs no new axis:
+
+```
+corner(v, d)                  = base * exp(k * d * (v - pivot))
+ln corner(v2,d) - ln corner(v1,d) = k * d * (v2 - v1)
+```
+
+Two runs differing **only** in velocity give `k` from the slopes — and the
+pivot is not assumed, it is **solved for**, which is the point.
+
+```
+velocity  70   Hz = 583.76 * exp(0.013724 * MODVFILT1)   r2 0.99924
+velocity 120   Hz = 533.54 * exp(0.139889 * MODVFILT1)   r2 0.99462
+```
+
+### The result
+
+```
+PIVOT   = 64.56
+k       = 0.00252329 ln-Hz per (depth unit x velocity unit)
+
+per depth-unit per velocity-unit:
+    0.03554 FILFRQ units
+    4.368 cents
+```
+
+**The pivot is the free check and it passed.** §43 established that this
+machine references modulation to the middle of the controller's range —
+`V_LOUD`, `V_ATT1` and `K_FREQ` all pivot on 64 — and predicted the same for
+fields nobody had measured. This is one of them, solved for rather than
+assumed, and it lands on **64.56**. Four fields, three source types, one
+rule.
+
+### What it means for a converter
+
+```
+depth 12: pivot -> velocity 127 =  2.73 octaves =  3273 cents  ( 26.6 FILFRQ units)
+depth 25:                          5.68 octaves =  6819 cents  ( 55.5 FILFRQ units)
+depth 39:                          8.86 octaves = 10638 cents  ( 86.5 FILFRQ units)
+depth 50:                         11.36 octaves = 13638 cents  (111.0 FILFRQ units)
+```
+
+A K2000 `VelTrk` of ±10800 cents needs **depth ≈ 39.6** — not 25, and not
+the 50 that "double it" would reach for. But that demands **88 `FILFRQ`
+units of swing out of a 0..99 range**, so the full source depth is not
+representable from any base. The honest model is a documented lossy clamp,
+not a multiplier.
+
+### An earlier guess here was wrong, and it was flagged as a guess
+
+Before this ran, this project answered the same question by arithmetic,
+assuming **a `MODVFILT1` unit is a `FILFRQ` unit** — reasonable, since
+`K_FREQ` produces its shift in `FILFRQ` units (§43), and explicitly labelled
+an assumption at the time.
+
+It is wrong by a factor of **2.2**: at full velocity swing one depth unit is
+2.22 `FILFRQ` units, not 1. The estimate said depth 50 gives 5.12 octaves;
+measured, it gives 11.36. Recorded because the guess was directionally right
+and quantitatively useless, which is the failure mode a stated assumption is
+supposed to make visible — and did.
+
+### The saturation is real and it bounds the fit
+
+At velocity 120 every point from depth 25 upward returned **NaN**: the corner
+ran past the measurable range. The `v120` law therefore rests on depths
+5–20, and anything beyond about 55 `FILFRQ` units of swing is
+**extrapolation**.
+
+That is the same effect mpc2emu measured from the audible side — the field
+appearing to stop growing past depth 12–25 at `FILFRQ` 48 — and the same one
+`scales.py` records for `ATTAK2`, where a corner saturating at the end of the
+filter's range was mistaken for depth-dependence. **The saturation is not a
+property of the field. It is the base and the depth interacting**, and the
+base is the half that is ours to choose.
+
+### Two rig faults this exposed, both silent
+
+**The capture ports were wrong and the error message said otherwise.** The
+isolation check failed with *"silencing the program changed the recording by
+only −0.04 dB … something else is sounding on this MIDI channel"*. Both
+readings were −73 dB — the noise floor twice over, which is nothing
+*arriving*, not something else sounding. The sampler is on
+`system:capture_13/14`; the default `system:capture_1/2` carries about
+−61 dB of bleed. A level check across all twenty physical inputs found it in
+one pass.
+
+**Two full sweeps returned NaN at every point before the reference was
+added.** A sawtooth at note 24 has harmonics every 32.7 Hz, leaving a 40 dB
+null across 40–60 Hz, so the 50–100 Hz reference band is anything but flat
+and `corner_frequency`'s flatness guard correctly refused all of it. The fix
+is the mechanism the `filter` sweep already used — take a reference with the
+filter wide open and divide the source's own shape out — but
+`reference_value` sets the **swept** parameter, which is no use when the
+swept parameter is a modulation depth. `Sweep.reference_setup` now applies a
+separate parameter for the reference recording only.
+
+Both faults produced *plausible failures pointing at the wrong cause*: a
+message about channel collisions, and a field that looked inert. Neither was
+about the field under test.

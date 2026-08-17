@@ -412,6 +412,13 @@ class Sweep:
     prepare: Sequence[Tuple[str, str, int]] = field(default_factory=tuple)
     fit: str = "exp"          # "exp" or "linear"; see summarise()
     reference_value: Optional[int] = None          # take a reference at this value first
+    # Applied for the REFERENCE recording only, then put back. `reference_value`
+    # sets the SWEPT parameter, which is right when sweeping the filter itself
+    # -- FILFRQ 99 is wide open and gives the source's own shape. It is no use
+    # when sweeping a MODULATION DEPTH: the wide-open reference has to come
+    # from a different parameter. Without one, a sawtooth's comb leaves the
+    # reference band non-flat and every point returns NaN.
+    reference_setup: Sequence[Tuple[str, str, int]] = field(default_factory=tuple)
     blocked_on: Optional[str] = None
     why: str = ""
 
@@ -530,18 +537,38 @@ SWEEPS: Dict[str, Sweep] = {
             # source happens to be assigned, and a wrong answer looks exactly
             # like a right one.
             ("program", "MODSFILT1", 5),
-            # Mid-range, with headroom in both directions. §108 and scales.py's
-            # ATTAK2 note both record the corner SATURATING at the ends of the
-            # filter's own range and the saturation being mistaken for a
-            # property of the field. A point that runs off either end must show
-            # as a flattening curve, not as data.
-            ("keygroup", "FILFRQ", 50),
+            # LOW, with room to OPEN. Not "mid-range": mpc2emu measured this
+            # field on hardware at FILFRQ 48 and it saturates by depth ~12
+            # there, and by ~25 at FILFRQ 72 -- the saturation point moves
+            # with the base, so base and depth are not independent. A base of
+            # 50 would have measured the ceiling and called it the field, which
+            # is the ATTAK2 mistake (scales.py) and §108's null in one.
+            #
+            # Run this sweep at two velocities BOTH ABOVE the pivot, so the
+            # corner only ever opens. Closing it drives the quiet end below
+            # audibility, which is where that saturation lives.
+            #
+            # 60, not 40: the corner must sit WELL ABOVE the reference band,
+            # not near it. At 40 the corner is ~110 Hz against a 50-100 Hz
+            # band, so the band lands in the transition rather than the
+            # passband, `ref_flat_db` fires, and every point returns NaN --
+            # measured here, a whole sweep of them. At 60 the corner is
+            # ~457 Hz and the band is clear.
+            ("keygroup", "FILFRQ", 60),
             # Velocity must not reach the AMPLITUDE as well, or the level
             # changes for two reasons and the corner tracker sees a moving
             # noise floor rather than a moving corner.
             ("program", "V_LOUD", 0),
             ("keygroup", "VLOUD1", 0),
         ),
+        # The reference must be the SOURCE's own shape, so it is taken with
+        # the filter wide open -- FILFRQ 99 -- and with no modulation. A
+        # sawtooth at note 24 has harmonics every 32.7 Hz, which leaves a
+        # 40 dB null across 40-60 Hz; the 50-100 Hz band is then anything but
+        # flat and `ref_flat_db` correctly refuses every point. Measured here:
+        # two full sweeps of NaN before the reference was added.
+        reference_value=0,
+        reference_setup=(("keygroup", "FILFRQ", 99),),
         why="MODVFILT1's DEPTH has never been measured -- §109 established "
             "that it responds, that it is per-keygroup and that it clamps at "
             "+-50, but a clamp is a range limit and not a scale. Nothing "
@@ -1340,6 +1367,18 @@ def _sweep_points(bridge, rig, sweep: Sweep, param, program: int, keygroup: int,
     rows: List[dict] = []
     for i, value in enumerate(order):
         bridge.set_parameter(param, program, value, keygroup=keygroup)
+        # The reference recording may need a different machine state -- see
+        # `reference_setup`. Applied for that point only and put back after,
+        # so the sweep proper runs in the state `prepare` established.
+        taking_reference = sweep.reference_value is not None and i == 0
+        restore_after_reference = []
+        if taking_reference and sweep.reference_setup:
+            for region, name, temp in sweep.reference_setup:
+                field_ = p.lookup((region, name))
+                was = bridge.get_parameter(field_, program,
+                                           keygroup=keygroup)
+                restore_after_reference.append((field_, was))
+                bridge.set_parameter(field_, program, temp, keygroup=keygroup)
         wav = None
         if keep_dir:
             wav = str(Path(keep_dir) / f"{sweep.name}_{value:+04d}.wav")
@@ -1357,7 +1396,9 @@ def _sweep_points(bridge, rig, sweep: Sweep, param, program: int, keygroup: int,
                     os.unlink(path)
                 except OSError:
                     pass
-        is_ref = sweep.reference_value is not None and i == 0
+        for field_, was in restore_after_reference:
+            bridge.set_parameter(field_, program, was, keygroup=keygroup)
+        is_ref = taking_reference
         if not is_ref:
             rows.append({"value": value, sweep.measure: got})
         if verbose:

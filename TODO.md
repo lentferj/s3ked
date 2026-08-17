@@ -1280,7 +1280,28 @@ been demonstrated.
 and cannot present. Adding a `drum` region would make it editable the same
 way everything else is.
 
-## `MODVFILT1` has no measured DEPTH (OPEN)
+## `MODVFILT1` has no measured DEPTH (CLOSED 2026-08-17 — §116)
+
+**Measured.** `probes/calibrate.py mod-filter`, two velocities differenced:
+
+```
+pivot = 64.56          <- solved for, not assumed; §43 predicted 64
+k     = 0.00252329 ln-Hz per (depth unit x velocity unit)
+        = 0.03554 FILFRQ units, or 4.368 cents, per depth x velocity unit
+```
+
+A K2000 `VelTrk` of ±10800 cents needs depth ≈ 39.6, which would demand 88
+`FILFRQ` units of a 0..99 range — so the full source depth is not
+representable from any base, and the honest model is a documented lossy
+clamp rather than a multiplier.
+
+**Still open:** the fit at velocity 120 rests on depths 5–20; everything
+above ran off the measurable range. Beyond ~55 `FILFRQ` units of swing is
+extrapolation.
+
+<details><summary>original entry</summary>
+
+## (was) `MODVFILT1` has no measured DEPTH
 
 §109 established that it responds, that it is per-keygroup, and that the
 machine clamps it to ±50. **A clamp is a range limit, not a scale.** Nothing
@@ -1321,3 +1342,5 @@ ceiling gets measured instead of the field.
 
 **Blocked on:** hardware plus a reference. Belongs with the cutoff
 calibration, not on its own.
+
+</details>
