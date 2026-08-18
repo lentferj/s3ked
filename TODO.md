@@ -1258,8 +1258,22 @@ documents.
 **Partly answered 2026-08-17** (§115): record byte 0 is the note, byte 3 the
 V-curve (0-based), `chan` is a **global** field at header `0x0f` rather than
 per record, and `input` is a scope selector that is not stored at all. Seven
-of nine record bytes named; bytes 7 and 8 remain open and are zero
-everywhere.
+of nine record bytes named; bytes 7 and 8 remain open.
+
+**Bytes 7 and 8 are no longer zero everywhere** (2026-08-18, §132). The aux
+specimen wrote input 1's full record, including those two positions, which
+now read 7 and 9 and are carried in `AUXKEY 1` on HD4. `DDATA` proved
+writable and the machine accepted both without snapping.
+
+That removes the obstacle — a field that is zero in every record cannot be
+located — but it does **not** name them. Naming needs somebody looking at
+the drum-inputs page for input 1 and reading off which two displayed
+parameters moved. A panel job, not a probe.
+
+**Located on disk 2026-08-18** (§133): mpc2emu's diff puts them at `+0x07`
+and `+0x08` of the record, stored verbatim like the other seven. So the
+positions are settled and only the names are missing — the panel reading is
+now the *only* thing between this item and closed.
 
 **Byte 7 is a divisor, isolated on a single variable.** Writing 42 into
 byte 7 alone — byte 8 left at zero, one byte differing from a verified
@@ -1426,8 +1440,8 @@ Swept without an event: the byte bank 10–127 and the **word bank** 0–31,
 both written own-value; `byte[7]` across its types, which deletes from
 memory and never from the disk (§128, §129).
 
-**Blocked on:** nothing — it needs hardware time, and the machine is
-available. Untried, in order of promise:
+**Blocked on:** hardware time, and **mpc2emu holds the lead on the sampler**
+(2026-08-18). Untried, in order of promise:
 
 - `byte[8]` / `byte[9]` at values other than 1. `byte[8] = 0`
   (`ENTIRE VOLUME`) is the strongest untested candidate.

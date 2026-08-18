@@ -172,6 +172,8 @@ silently wrong one.
 - [§129](#129--byte7-is-a-memory-delete-and-where-a-volume-delete-is-not-2026-08-18) — `byte[7]` is a memory delete, and where a volume delete is not (2026-08-18)
 - [§130](#130--save-type-0-writes-every-file-type-a-volume-holds-2026-08-18) — Save type 0 writes every FILE TYPE a volume holds (2026-08-18)
 - [§131](#131--the-directory-has-six-file-types-s3ked-models-two-2026-08-18) — The directory has six file types; s3ked models two (2026-08-18)
+- [§132](#132--ddata-is-writable-so-the-aux-specimen-needs-no-panel-2026-08-18) — `DDATA` is writable, so the aux specimen needs no panel (2026-08-18)
+- [§133](#133--both-aux-files-decoded-and-115-confirmed-from-the-disk-2026-08-18) — Both aux files decoded, and §115 confirmed from the disk (2026-08-18)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -11820,3 +11822,224 @@ Six is a floor, not a total. These are the types a type-0 save produced from
 a machine holding one program. A volume containing cue lists, or the
 `BOOT SYSTEM#` and `FLASH VOLnn` entries the flash device reports, may carry
 more.
+
+## §132 — `DDATA` is writable, so the aux specimen needs no panel (2026-08-18)
+
+mpc2emu holds an RE procedure for the Akai aux files (`.D`, `.M3`, `.X`,
+`.T`) that had never been run. Their captures are undecodable for a specific
+reason: every record holds the same values, because nothing on the machine
+was ever configured, and **a file that varies nowhere cannot distinguish a
+per-record field from a file-wide constant**, or say where one record ends.
+
+The procedure assumed somebody at the front panel setting values and writing
+down what they set. It does not need one.
+
+### `DDATA` (`0x0F`) takes a write
+
+`RDDATA`/`DDATA` are documented *bidirectional* and §115 had only ever read.
+A one-byte feasibility test — input 1's first field, 60 → 36 — returned
+`REPLY 0` and moved exactly that byte and no other.
+
+That matters beyond convenience. Their step 3 is "write down exactly what was
+set, including anything that refused a value", and it is the decoding key —
+the run is worthless without it. **A key produced by reading the machine back
+is not transcribed by anybody.** All three of tonight's errors were in
+records rather than in measurements (§131), so removing the human
+transcription step is worth more here than the saved trip.
+
+### The specimen, to their spec
+
+```
+input  1  @0x10  [36, 51, 26, 3, 5, 11, 12, 7, 9]   every byte set
+input  2  @0x19  [38, ...]        input  5  @0x34  [55, ...]
+input  3  @0x22  [41, ...]        input  6  @0x3d  [99, ...]
+input  4  @0x2b  [47, ...]
+inputs 7-16      untouched -- the controls
+```
+
+Every value accepted; nothing refused or snapped. Controls verified
+unchanged, and the six first-field values all distinct.
+
+Their traps, and why each is in the numbers: the gaps are **non-uniform**, so
+an arithmetic that is not the record stride cannot match them; inputs 7–16
+are left alone, because without controls "the machine rewrote the whole file"
+and "each record holds its own value" look identical; **every** byte of input
+1 is set, including the two positions that read `0` in every record, which
+would otherwise stay exactly as undecodable as the file is now; and no value
+comes from `{0, 2, 4, 10, 25, 50, 60}`, the values an unconfigured record
+already contains, where a change would be invisible.
+
+Saved as **`AUXKEY 1`** on HD4 with a **type-0** save, so the same volume is
+also the "what does `ENTIRE` look like" reference their `build_akai_volume`
+gap needs (§130): nine entries, all six file types, `DRUM INPUTS` at 162
+bytes carrying the configured values.
+
+Key written to `~/temp/s3ked-logs/aux_specimen.json` — original, requested
+and read-back images of all 162 bytes.
+
+**One caveat on that key**, spotted by mpc2emu: its `original` is the state
+*after* the one-byte feasibility test, so input 1's first field already read
+36 and shows as unchanged. Five inputs appear to move their first field and
+the sixth does not. The value is right and the baseline is one write late.
+
+### Step 1 for the multi, and a probe bug worth recording
+
+The multi file is a 32-byte header plus 16 parts of 192. Dumped read-only so
+mpc2emu can choose values against real defaults rather than guess — their
+drum exclusion set came from reading the actual bytes, and a draft that used
+`60` duly showed that record unchanged.
+
+Defaults that matter: `PMCHAN` is the part number and `PRNAME` is set on
+part 0 only, so those two already vary; everything else is identical across
+all sixteen. The exclusion set computed from the parts is
+**`{0, 1, 24, 25, 50, 99, 127, 255}`** — *not* "avoid 0", which is what an
+assumption would have produced: five fields hold non-zero defaults, and
+`PLAYHI`=127, `OUTPUT`=255, `STEREO`=99 sit at the top of their ranges.
+
+**The first run of that dump was wrong and nearly went out.** It reported
+"every part identical, no offsets differ". `get_header_bytes` defaults
+`selector=0`, and for this region the selector is exactly what separates the
+file header from the parts — so it read the header sixteen times. The tell
+was that all sixteen "parts" matched the header byte for byte, name field
+included.
+
+That is the fourth detector-aimed-at-the-wrong-thing tonight and the first
+caught before it was reported. The probe now voids its own dump if part 0
+equals the header, which is the §WRONGLAYER remedy written as an assertion
+rather than as a resolution to be careful.
+
+### The multi specimen, and what its key does NOT prove
+
+mpc2emu returned a value table computed against those defaults. All fifteen
+writes were accepted exactly; controls (parts 0, 4–15) byte-identical;
+nothing refused or snapped. Saved as **`AUXKEY 2`**, type-0.
+
+`PMCHAN = 22` was stored verbatim — deliberately outside a plausible MIDI
+channel while inside the declared `0..255`. That does **not** vindicate the
+range: it says the register holds 22, not that the machine does anything
+sensible with it. The `K_FREQ 0..12` suspicion in `params.py` is untouched by
+this.
+
+**The caveat that limits the key.** Writing `-13` requires something to
+decide which byte `-13` is, and `params.encode_field` supplied it — so those
+bytes are s3ked's *assumption*, not a measurement:
+
+```
+PANPOS    -13  -> 243     two's complement (s3ked's reading)
+PTUNOCM   -37  -> 219     two's complement
+TRANSPOSE +19  ->  19     identical under all three candidate encodings
+```
+
+A readback agreeing with that confirms our encoder against itself and
+nothing more. The key therefore records the **raw bytes as the measurement**
+and marks the semantic labels as interpretation, in its first field, so a
+later reader cannot take one for the other.
+
+What it does buy: the disk file can be diffed against the raw readback,
+which settles whether the disk stores the same representation as RAM.
+**Whether `243` means `-13` needs the front panel showing `PANPOS` for part
+1** — a five-second look, and one this session cannot take. Added to the
+card-crossing batch rather than guessed.
+
+### An accident worth keeping
+
+Doing the two files in sequence produced three volumes rather than two:
+
+```
+VOLUME_005   unconfigured baseline (already extracted)
+AUXKEY 1     drum inputs configured, multi still default
+AUXKEY 2     drum inputs configured AND multi configured
+```
+
+`AUXKEY 1` vs `AUXKEY 2` is a single-file diff — everything identical except
+the multi — which isolates the multi's disk layout without the drum changes
+in the way. That was not planned; it fell out of the ordering, and it is
+worth more than either specimen alone.
+
+### Also the first end-to-end use of the new API
+
+`save_to_new_volume(0, name="AUXKEY 1")` created and named the volume in one
+call, against hardware. §127's mechanism, driven through the interface rather
+than through a probe.
+
+## §133 — Both aux files decoded, and §115 confirmed from the disk (2026-08-18)
+
+mpc2emu ran `akai_aux_diff.py` against the two specimens of §132 while the
+card was in the PC. Recorded here because the results confirm this project's
+own RAM-side findings from the other side of the medium, and because one of
+them is a fact about `s3ked` rather than about their tooling.
+
+### `DRUM INPUTS.D`
+
+```
+14 changed bytes, 5 runs, stride 9
+record 0 (input 1)  +0x00..+0x08   36 51 26 3 5 11 12 7 9
+records 1..5        +0x00 only     38 41 47 55 99
+```
+
+**All nine fields are stored verbatim** — not scaled, not packed, not
+offset. The byte on disk equals the number written over SysEx.
+
+And the layout matches §115 exactly, measured from the disk rather than
+inferred from RAM: **stride 9 from `0x10`, second bank at `0x5b`, input 16
+one byte short at `0x9a`**. §115 derived that from `162` against an expected
+`163`; the disk agrees.
+
+`+0x07` and `+0x08` are located for the first time. They read `0` in every
+capture either project held, and **a field that never varies cannot be
+found** — which is precisely why mpc2emu's procedure demanded every field of
+input 1 be set rather than only the interesting ones. Their positions are
+now known; **their meanings are not**, and naming them is the panel job in
+`TODO.md`.
+
+### `MULTI FILE.M3`
+
+```
+1024-byte header + 16 parts x 192 = 4096 exactly
+part 0 @0x0400    part 1 @0x04c0
+```
+
+**The 192-byte stride was measured, not assumed.** `VOSCL` planted at three
+parts (83 / 62 / 88) read back at `0x506`, `0x5c6`, `0x686` — 192 apart,
+twice. Two parts would have given the spacing once and no way to know it
+repeats, which is why the plan asked for a third.
+
+**All thirteen fields sit at the same intra-part offset on disk as in RAM.**
+So the disk stores the RAM representation, and `s3ked`'s `multipart` offsets
+are the file's offsets. That was the question §132 said the diff could
+settle, and it is settled.
+
+**`PANPOS` = `243` and `PTUNOCM` = `219` appear byte-for-byte as written —
+and that still does not say what `243` means.** Those bytes came from
+`params.encode_field`'s two's-complement assumption; the disk faithfully
+storing our assumption is not evidence for it. §132's caveat is unchanged
+and the panel reading stays open.
+
+### The type byte, from the directory
+
+`0xf0` program, `0xf3` sample, `0x74` take list, `0x78` effects, `0x64` drum,
+**`0xed` multi** — read off the disk directory entries rather than through
+RAM. §131's correction confirmed independently.
+
+### What the specimen found in their differ
+
+Worth recording because it is a general shape, not a detail of their code.
+
+`akai_aux_diff.py` inferred the record stride as **1**. Input 1's nine
+adjacent changed fields produced nine gaps of 1, which outvoted the four
+gaps of 9 between records. Its docstring *already warned* that adjacent
+changes within one record are not strides.
+
+**The warning was correct and the wrong number shipped anyway.** A caveat in
+prose does not defend against a figure the tool prints with confidence — the
+reader believes the number. It is the same failure as a comment doing safety
+work for `_MISC_LOAD_TYPE` (§127): the knowledge existed, in prose, next to
+code that did not act on it.
+
+Fixed on their side to collapse each run of adjacent changes to a single
+point, and to refuse to name a stride at all when no gap repeats.
+
+Their note on it is the part to keep: a file where only one field per record
+changed would never have exposed it. **The specimen designed to make fields
+findable also made a bug findable**, because "every field of one record set"
+is exactly the input that breaks a naive stride inference.
