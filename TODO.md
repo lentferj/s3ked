@@ -1579,3 +1579,19 @@ sampler. Not urgent — nothing else waits on it.
 149.5 / 148.5 / 149.2 dB/Hz across three notes on `NSWHITE` — identical, so
 it is the capture chain rather than the sampler. Confirming that on a source
 whose content both projects have verified settles the attribution.
+
+## `LOOPAT1` is the loop END — settled (CLOSED)
+
+`LOOPAT1` is where playback returns; `LLNGTH1` measures backwards from it.
+Confirmed on hardware by content discrimination, 0.7998 against 0.0412 with
+orthogonal references (§136), and stated plainly in the S3000XL manual, in
+`ConvertWithMoss`, and by 82.9% of 16493 factory sample headers.
+
+**For the sibling's writer:** it wrote the intended loop *start* into `LOOPAT`,
+so every looped sample it produced asked for `[start - length, start]` —
+negative whenever `LOOPAT` is 0, which was all of them. Cause of the silent and
+degraded playback; fix is to write the loop end.
+
+**Open:** `LOOPAT` = `SLNGTH` exactly does not loop, one past the last valid
+frame index. And the confirming capture plays the right region with no
+measurable periodicity — region right, repetition unproven.

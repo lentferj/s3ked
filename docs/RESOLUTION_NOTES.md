@@ -176,6 +176,7 @@ silently wrong one.
 - [§133](#133--both-aux-files-decoded-and-115-confirmed-from-the-disk-2026-08-18) — Both aux files decoded, and §115 confirmed from the disk (2026-08-18)
 - [§134](#134--the-delete-page-and-a-warning-i-got-the-size-of-wrong-2026-08-18) — The DELETE page, and a warning I got the size of wrong (2026-08-18)
 - [§135](#135--retracted-nswhite-is-white-noise-i-was-measuring-a-program-stack-2026-08-18) — **RETRACTED**: `NSWHITE` is white noise; I was measuring a program stack (2026-08-18)
+- [§136](#136--loopat1-is-the-loop-end-not-the-loop-start-2026-08-18) — `LOOPAT1` is the loop END, not the loop start (2026-08-18)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -12291,3 +12292,103 @@ had 31% of samples pinned at full scale. At a clean level he reports "no
 rhythmic fluctuation, one steady sound", and the envelope measures flat to
 **sd 0.093 dB** over 19.6 s. So mpc2emu's "gap-and-repeat structure" is a
 recording artefact and not a property of the machine or the loop.
+
+## §136 — `LOOPAT1` is the loop END, not the loop start (2026-08-18)
+
+**The finding is one sentence and it was documented before we began.**
+
+> `LOOPAT1` (keygroup `0x26`) is the point at which playback returns; `LLNGTH1`
+> (`0x2c`) measures **backwards** from it. The loop is
+> `[LOOPAT - LLNGTH, LOOPAT]`.
+
+The S3000XL manual says so — *"when playback reaches this point, it will go back
+to the point determined by the field described below"*. `ConvertWithMoss` names
+the field `getEndMarker()` and documents it *"the end of the looped region (not
+the start!)"*, converting it as `setStart(marker - coarseLength)`. And 82.9% of
+16493 factory sample headers put `LOOPAT` within 1% of `SLNGTH` — the loop is
+the tail, which is what a sustain loop is.
+
+### Confirmed on hardware
+
+Period cannot distinguish the two readings — it is `LLNGTH` under both, which is
+why several probes that looked decisive were not. **Content can.** References
+regenerated from the sample's seed and verified against the disc at correlation
+1.000000 over all 352800 frames:
+
+```
+LOOPAT 220500  LLNGTH 44100  SLNGTH 352800    (both read back before playing)
+
+vs forward reading  [220500, 264600]   +0.0412    noise floor
+vs end     reading  [176400, 220500]   +0.7998    MATCH
+the two references, orthogonal:          0.0032
+```
+
+### Consequence
+
+The sibling mpc2emu's writer put the intended loop **start** into `LOOPAT`, so
+every looped sample it produced asked for `[start - length, start]` — with
+`LOOPAT 0`, a negative start, on 100% of them. Factory material does this in
+1.2% of cases. That is the cause of the silent, degraded and
+position-dependent playback chased through this section's history, and the fix
+is to write the loop end.
+
+One genuine hardware fact came out of the probes: **`LOOPAT` = `SLNGTH` exactly
+does not loop** — one past the last valid frame index — while `LOOPAT 220500` in
+the same sample does.
+
+### What this cost, and the reason it is worth recording
+
+Seventeen commits and most of an evening, for a fact stated in the manual, in an
+independent implementation's source, and in the corpus. **Eleven claims were
+made and ten withdrawn.** None was a measurement error; every one was a reading
+error on sound data.
+
+The pattern in all ten was identical: **the right axis with the wrong predicate,
+stated at full confidence, on evidence that could not distinguish it from its
+neighbour.** "A looped program plays the sample before it." "A loop at slot 0 is
+silent." "It is positional, not ordinal." "`loop_start == 0` is the trigger."
+Each fitted every observation held at the time, and each died to one control.
+
+Three things would each have ended it on the first evening:
+
+* **Read the documentation.** The manual and `ConvertWithMoss` both state the
+  semantics plainly. Neither was consulted until the tenth claim.
+* **Check the corpus before theorising about the machine.** The rule implied
+  that nine in ten commercial library discs ship a silent first instrument —
+  absurd on its face, and unchecked until Jan asked whether the corpus
+  represented our material.
+* **Ask the machine rather than a speaker.** One readback of a resident header
+  excluded a whole class in a single command; three discs had failed to.
+
+The general form, which arrived three times from three directions: **before
+asking the hardware, ask whether the answer is already held.** Building and
+measuring are the available actions, so they become the method; checking what
+already exists is cheaper and was skipped every time.
+
+### Transferable findings from the wreckage
+
+* **A safeguard is the expensive place to be wrong**, because nobody re-derives
+  it. Two of the discs' own checks failed silently: one-shot and loop sharing
+  PCM made an "identify the content" test two-valued, and "disjoint period sets"
+  were not disjoint under the harmonics an autocorrelation actually reports. A
+  check's claimed properties must be tested as arithmetic, not asserted in prose.
+* **Take the first autocorrelation peak above threshold, not the largest.** A
+  fundamental is always the earliest peak; harmonics are later by construction.
+  Argmax reported the 2x harmonic on three of ten captures and manufactured two
+  false "cross-volume leaks".
+* **Resample before correlating across sample rates.** References at 44100
+  against captures at 48000 compare different time scales and return noise for
+  *both* candidates — which reads as "matches neither" and looks like a finding.
+* **A test whose two hypotheses predict the same observation is not a test.**
+  Write down what *each* reading predicts before running it.
+* **An overstated limitation is as wrong as an overstated finding**, and easier
+  to get away with: nobody argues with someone talking their own result down.
+* **`SLOCAT` is machine-owned.** The machine recomputes the sample-data address
+  on load and ignores what is stored, which is why writing a plausible address
+  changed nothing.
+
+### Open
+
+The confirming capture plays the correct region and shows **no periodicity** —
+self-similarity 0.0407 across 0.3–9 s where a 1.000 s loop should peak at 1.000.
+Region right, repetition unproven. Left open rather than explained.
