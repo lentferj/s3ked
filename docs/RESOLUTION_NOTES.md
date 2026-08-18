@@ -175,6 +175,7 @@ silently wrong one.
 - [§132](#132--ddata-is-writable-so-the-aux-specimen-needs-no-panel-2026-08-18) — `DDATA` is writable, so the aux specimen needs no panel (2026-08-18)
 - [§133](#133--both-aux-files-decoded-and-115-confirmed-from-the-disk-2026-08-18) — Both aux files decoded, and §115 confirmed from the disk (2026-08-18)
 - [§134](#134--the-delete-page-and-a-warning-i-got-the-size-of-wrong-2026-08-18) — The DELETE page, and a warning I got the size of wrong (2026-08-18)
+- [§135](#135--retracted-nswhite-is-white-noise-i-was-measuring-a-program-stack-2026-08-18) — **RETRACTED**: `NSWHITE` is white noise; I was measuring a program stack (2026-08-18)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -12143,3 +12144,150 @@ Two corrections fell out of the same photograph:
   declared range describes what the register will HOLD, not what the machine
   will ACT ON.** Recorded in the parameter's notes, where somebody choosing a
   value will meet it.
+
+## §135 — RETRACTED: `NSWHITE` is white noise; I was measuring a program stack (2026-08-18)
+
+> **RETRACTED the same hour, by mpc2emu.** This section concluded the
+> sample's content was pitched. It is not. Three programs shared
+> PRGNUM 0 — `TEST PROGRAM` (sine), `NSWHITE` (noise), and
+> `6-VEL MALLET` on `PMCHAN 255` = OMNI, which answers on every
+> channel. My program change sounded the sine ON TOP OF the noise.
+> The corrected measurement is at the end of this section.
+
+Jan asked, while the loop test was running, whether the sample sounded right.
+It does not, and the measurement says why.
+
+### The finding
+
+Playing the `NSWHITE` program at three notes, capturing, and taking the
+spectral peak:
+
+```
+note 48   expected 130.8 Hz   peak 130.8 Hz   follows
+note 60   expected 261.6 Hz   peak 261.7 Hz   follows
+note 72   expected 523.3 Hz   peak 523.3 Hz   follows
+```
+
+**The peak tracks the keyboard.** White noise cannot do that. Lag-1 sample
+correlation is `+0.999`, where white noise is ~0, and the power density is
+piled into the fundamental's band roughly 46 dB above the 2–8 kHz region.
+
+The sample plays 1:1 — `SPITCH 60`, note 60, `STUNO`/`KGTUNO` both 0 — so
+this is not transposition. The filter is wide open (`FILFRQ 99`, `FILQ 0`,
+no modulation), so it is not the filter. **The content itself is pitched.**
+
+This is what Jan heard on 2026-08-17 and said at the time: *"it does not
+really sound like constant white noise"*. That observation was correct and
+the session carried on using the source anyway.
+
+### What it does NOT touch, and this is most of it
+
+**`corner_from_difference` does not need a white source.** It measures
+resonance-on minus resonance-off spectra of the same note, and that
+difference cancels the source's own shape exactly — its docstring is
+explicit that the source is a sawtooth falling 6 dB/octave and that
+differencing is *why* it works. §54's law and §116's method are built on
+that, so "the source is not flat" is a condition they were designed for
+rather than an assumption they rest on.
+
+**§118's envelope sweeps are already clear.** Three of them gave
+non-monotonic data on the noise source, were **withheld rather than
+published**, and were re-run on sine where all three reproduced. The source
+misbehaving was caught then; the correct three are the sine ones.
+
+**Anything expressed as a ratio survives.** Ratios of corners, spans in
+octaves, the §116 pivot solved from slopes — none of these depends on the
+source being flat, only on it being the *same* between the two runs.
+
+### THE CORRECTED MEASUREMENT
+
+With `TEST PROGRAM` renumbered to 100 and `NSWHITE` alone on program 0, no
+OMNI program resident, the same three notes:
+
+```
+            stacked (wrong)        isolated (correct)
+note 48     peak 130.8 Hz          peak 5512.1 Hz
+note 60     peak 261.7 Hz          peak    5.6 Hz
+note 72     peak 523.3 Hz          peak   11.0 Hz
+lag-1       +0.999 at every note   +0.845 / +0.551 / +0.241
+```
+
+**The pitch tracking is gone.** The peaks are now arbitrary, which is what
+the argmax of a noise spectrum is. And lag-1 *falls as the note rises* —
++0.845, +0.551, +0.241 — which is precisely what resampled noise does: a
+higher note plays the sample faster, so adjacent output samples are less
+alike. A pitched source cannot produce that gradient.
+
+mpc2emu had already measured their own file off the disk image — lag-1
+−0.0016, spectrum flat within ~9 dB over six octaves, no peak at 261.6 Hz.
+File and machine now agree.
+
+**A 20–200 Hz excess remains, ~17 dB above the rest, and it is NOT the
+sampler**: it reads 149.5 / 148.5 / 149.2 dB/Hz at the three notes, i.e.
+identical regardless of playback rate. Anything in the played sample shifts
+with the note. It is additive rumble in the capture chain.
+
+**That is a rate-invariance test and it is worth naming**, because it
+attributes a signal without needing to know what the signal is. Play the
+same material at several pitches: whatever comes from the sample moves,
+whatever comes from anywhere else does not. It needs no reference, no
+calibration and no hypothesis about the interferer — and it would have
+caught §135 itself, since the stacked sine *did* move with the note while
+the noise floor under it did not.
+
+**TEST 2's conclusion survives and now has valid evidence.** Isolated,
+`NSWHITE` sustained 6.40–6.70 s on a 6 s hold at all three notes. The
+earlier result was right and was measured through a stack; mpc2emu was
+correct that a sustaining sine says nothing about a noise sample's loop
+mode, and correct to say so before either of us relied on it.
+
+### What I got wrong, and how
+
+I checked the filter (`FILFRQ 99`, open), the tuning (`SPITCH 60`, note 60,
+`STUNO`/`KGTUNO` 0), and the sample header. All correct, all irrelevant.
+**I never checked whether anything else was sounding.** The one question I
+did not ask was the one that mattered, and the evidence for the wrong answer
+was internally consistent: a tone tracking the keyboard, a high lag-1, and a
+46 dB density step are all exactly what a stack produces.
+
+`verify_isolation` exists in `probes/calibrate.py` for this, and I did not
+use it. It is not enough to own the instrument that would have caught it.
+
+### The §116 concern is void
+
+The check recorded below rested on this source's energy being ~46 dB down by
+2–8 kHz. That figure came from the stacked measurement — it is the tone/floor
+step, not a property of the noise. **The premise is withdrawn**, and with it
+the concern about `corner_from_difference`'s 45 dB gate. `TODO.md` amended.
+
+### (superseded) the original concern
+
+**One real concern, and it is a check rather than a retraction.**
+`corner_from_difference` gates on bins where the reference has signal within
+`gate_db = 45` of its own peak. This source's energy is ~46 dB down by
+2–8 kHz — right at that gate. If §116's runs were made on this sample rather
+than on a sawtooth, the eligible bins may have been confined near the
+fundamental, and its docstring separately warns the method is **unusable
+below about 500 Hz** because the peak snaps to the nearest harmonic.
+
+§116's fitted bases are 533.54 and 583.76 Hz — just above that floor.
+
+That is close enough to two stated limits to be worth re-examining, and not
+close enough to justify withdrawing a finding whose r² are 0.995 and 0.999.
+**Recorded as an open check, not a retraction.**
+
+### Separately: the output level moved
+
+Jan lowered the **Akai's output volume** (not the capture gain) at 16:24 to
+stop the clipping. Absolute dBFS figures recorded before that are on a
+different scale from anything measured after. Relative findings are
+unaffected — the standing rule that a relative finding survives a retracted
+ruler and an absolute one generally does not.
+
+### And the rhythm
+
+The pumping Jan heard earlier was **the clipping**: the first loop capture
+had 31% of samples pinned at full scale. At a clean level he reports "no
+rhythmic fluctuation, one steady sound", and the envelope measures flat to
+**sd 0.093 dB** over 19.6 s. So mpc2emu's "gap-and-repeat structure" is a
+recording artefact and not a property of the machine or the loop.

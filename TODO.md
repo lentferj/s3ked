@@ -1512,3 +1512,70 @@ register acts" and not "this register can do X" (§128).
 `SKED VOL B`, `MIXED DEMO` — created while establishing §127. Harmless, and
 they stay until either the delete above is found or the image is reformatted.
 mpc2emu holds a byte-identical pre-session backup.
+
+## Re-examine §116 against its source (CLOSED — premise withdrawn, §135)
+
+**CLOSED 2026-08-18.** This item rested on `NSWHITE` producing a pitched
+tone. It does not — that was a program stack, three programs sharing PRGNUM
+0 with an OMNI among them, and the "~46 dB down by 2-8 kHz" figure was the
+tone-over-floor step rather than a property of the source. Isolated, the
+sample measures as noise. **The premise is withdrawn and so is the concern.**
+
+The original text follows for the record.
+
+~~`NSWHITE` produces a pitched tone that tracks the keyboard, not white noise
+(§135).~~ `corner_from_difference` is source-agnostic by construction, so most
+of what was measured with it is unaffected — but two of its own stated limits
+sit close to this source's properties:
+
+- it gates on bins within **45 dB** of the reference's peak, and this source
+  is ~46 dB down by 2–8 kHz;
+- it is **unusable below ~500 Hz**, and §116's fitted bases are 533.54 and
+  583.76 Hz.
+
+**What to do:** re-run one §116 point with a genuinely broadband source and
+compare. If the corner agrees, §116 stands as written. If it does not, the
+velocity/depth law needs re-fitting — the *method* is sound either way.
+
+**Not blocked on hardware** beyond a source. Making one is the real task:
+this project has no way to send sample data (no MIDI Sample Dump Standard),
+so a broadband sample has to arrive on the disk, which mpc2emu's image
+writer can now do.
+
+**Do not delete `NSWHITE`.** It is the specimen this was found with, and
+§133's disk decode references the same volume.
+
+## A calibration disc exists and needs a card crossing (OPEN)
+
+`/home/lentferj/temp/HD6.img` — 64 MB, volume `CALNOISE`, built by mpc2emu
+2026-08-18 after §135. Manifest at `HD6.manifest.json`.
+
+```
+NOISE W 1SHOT   PRGNUM 120  ch 0   white, one-shot, 20 s
+NOISE P 1SHOT   PRGNUM 121  ch 1   pink,  one-shot, 20 s
+NOISE W LOOP    PRGNUM 122  ch 2   white, looped,   20 s
+NOISE P LOOP    PRGNUM 123  ch 3   pink,  looped,   20 s
+```
+
+**It carries the three properties tonight's failure paid for**: program
+numbers well out of the way, explicit channels, **no `PMCHAN 255` anywhere**
+— verified by reading the written bytes back rather than by intending it —
+and names that announce themselves in a program list.
+
+**And its flatness travels in the file.** The manifest records spectrum and
+lag-1 measured on the frames actually written, in the run that wrote them:
+white `lag-1 = -0.0022`, flat within ~11 dB from 62 Hz to 8 kHz. Pink is
+`+0.8713`, which is **correct and not a fault** — pink noise is correlated by
+construction, that being what −3 dB/octave means.
+
+**That white lag-1 is the number that would have caught §135.** If a capture
+of this source ever reads `+0.999`, the manifest says at once that the
+machine is not playing what was written.
+
+**Blocked on:** the card being in the PC to write the image, then in the
+sampler. Not urgent — nothing else waits on it.
+
+**First use when it lands:** re-run the 20–200 Hz rumble check. It measured
+149.5 / 148.5 / 149.2 dB/Hz across three notes on `NSWHITE` — identical, so
+it is the capture chain rather than the sampler. Confirming that on a source
+whose content both projects have verified settles the attribution.
