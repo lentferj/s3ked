@@ -684,6 +684,42 @@ SAMPLE_FILE_OVERHEAD = 150
 #: walk stopped at entry 0 (§104).
 ITEM_PROGRAM = 0x70
 ITEM_SAMPLE = 0x73
+
+#: Four more types a volume holds, read from directories the machine wrote
+#: (§131). Until then `bridge.py` named the two above and nothing else, so
+#: `is_program` and `is_sample` both returned False for these and every
+#: consumer saw them as belonging to no category -- present in the list,
+#: counted in its length, summed into `size_bytes`, and invisible to anything
+#: that filtered on the two flags.
+ITEM_DRUM_INPUTS = 0x64     # 'd'
+ITEM_MULTI = 0x6D           # 'm' -- the machine writes 0xED, the S3000 form
+ITEM_TAKE_LIST = 0x74       # 't'
+ITEM_EFFECTS = 0x78         # 'x'
+
+#: **The type byte is an ASCII letter naming the file**, with bit 7 marking
+#: the S3000 generation -- which is why program, sample and multi arrive as
+#: `0xf0`, `0xf3`, `0xed` while the other three have the bit clear.
+#:
+#: So this table is a convenience for the letters whose meaning is known, and
+#: NOT the model. An enumeration is a list of what has been seen; the format
+#: is a letter, and every letter is legal. `kind()` falls through to the
+#: letter itself rather than to "unknown" for that reason -- the sibling
+#: mpc2emu's image writer has always modelled it as a range rule, because a
+#: real library disc turned up `.X`, `.D`, `.Q` and `.M3` and an enumeration
+#: would have dropped them.
+ITEM_TYPE_NAMES = {
+    ITEM_PROGRAM: "program",
+    ITEM_SAMPLE: "sample",
+    ITEM_DRUM_INPUTS: "drum inputs",
+    ITEM_MULTI: "multi",
+    ITEM_TAKE_LIST: "take list",
+    ITEM_EFFECTS: "effects",
+}
+
+#: Generation, by the range the raw byte falls in (mpc2emu's writer's rule).
+ITEM_GENERATIONS = ((0x41, 0x5A, "S900"), (0x61, 0x7A, "S1000"),
+                    (0xE1, 0xFA, "S3000"))
+
 #: Mask that drops the generation bit, so a type can be compared once.
 ITEM_GENERATION_MASK = 0x7F
 
@@ -720,6 +756,46 @@ class _DirectoryEntry:
     @property
     def is_program(self) -> bool:
         return self.item_type & ITEM_GENERATION_MASK == ITEM_PROGRAM
+
+    @property
+    def kind(self) -> str:
+        """What this entry is, by name -- `"program"`, `"multi"`, ...
+
+        Returns `"unknown (0xNN)"` rather than guessing. A volume written by
+        a type-0 save holds four types beyond the program/sample pair
+        (§131), and before that was measured they were simply neither, which
+        is the failure this property exists to stop: a caller asking
+        `is_program or is_sample` gets False twice and concludes nothing is
+        there.
+        """
+        masked = self.item_type & ITEM_GENERATION_MASK
+        known = ITEM_TYPE_NAMES.get(masked)
+        if known:
+            return known
+        # Not "unknown": the byte is a letter, so say which letter. A file
+        # whose type is 'q' is a q-file, and naming it that keeps it visible
+        # and identifiable to whoever meets it next -- which is the whole
+        # reason the four types above went unnoticed for so long.
+        if 0x41 <= masked <= 0x5A or 0x61 <= masked <= 0x7A:
+            return f"type '{chr(masked).lower()}'"
+        return f"unknown (0x{masked:02x})"
+
+    @property
+    def generation(self) -> str:
+        """`"S900"`, `"S1000"`, `"S3000"`, or `"?"` -- from the raw byte's range."""
+        for low, high, name in ITEM_GENERATIONS:
+            if low <= self.item_type <= high:
+                return name
+        return "?"
+
+    @property
+    def is_known_kind(self) -> bool:
+        """False for a type this project has never seen.
+
+        Worth checking before summing `size_bytes` for a capacity estimate:
+        an unrecognised entry still occupies the medium.
+        """
+        return (self.item_type & ITEM_GENERATION_MASK) in ITEM_TYPE_NAMES
 
     @property
     def size_bytes(self) -> int:
@@ -1784,8 +1860,17 @@ class S3kBridge:
         machine creates it.
 
         ``save_type`` uses :data:`s3k.messages.LOAD_TYPES`, the same table
-        the load side uses: 1 `ALL PROGS+SAMPLES` saves everything resident,
-        5 `Cursor Item only` saves the single highlighted entry.
+        the load side uses. The types are different KINDS of save, not more
+        and less of one (§130):
+
+        * **0 `ENTIRE VOLUME` — the whole machine.** Programs and samples
+          *plus* the effects file, the multi file, the drum-input page and
+          the take list. This is a complete backup of the instrument's
+          state and it is the only type that writes the global structures.
+        * 1 `ALL PROGS+SAMPLES` — everything resident, and **nothing else**.
+          A librarian offering only this silently drops the effects and the
+          multi.
+        * 5 `Cursor Item only` — the single highlighted directory entry.
 
         **The machine names the volume itself**, `VOLUME nnn`, and nothing
         the host sends at save time changes that. Pass ``name`` to have it

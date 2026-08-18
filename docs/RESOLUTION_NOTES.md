@@ -170,6 +170,8 @@ silently wrong one.
 - [§127](#127--retraction-remote-save-exists-and-so-does-remote-rename-2026-08-18) — **RETRACTION**: remote save exists, and so does remote rename (2026-08-18)
 - [§128](#128--hunting-a-volume-delete-102-registers-no-event-one-wedge-2026-08-18) — Hunting a volume delete: 102 registers, no event, one wedge (2026-08-18)
 - [§129](#129--byte7-is-a-memory-delete-and-where-a-volume-delete-is-not-2026-08-18) — `byte[7]` is a memory delete, and where a volume delete is not (2026-08-18)
+- [§130](#130--save-type-0-writes-every-file-type-a-volume-holds-2026-08-18) — Save type 0 writes every FILE TYPE a volume holds (2026-08-18)
+- [§131](#131--the-directory-has-six-file-types-s3ked-models-two-2026-08-18) — The directory has six file types; s3ked models two (2026-08-18)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -11664,3 +11666,157 @@ Those two are mpc2emu's material. This is a check on entry count and total
 size rather than a byte-level diff, which is more than "it was never
 selected" and less than proof; mpc2emu holds a byte-identical backup and
 will diff it properly when the card is next in a PC.
+
+## §130 — Save type 0 writes every FILE TYPE a volume holds (2026-08-18)
+
+> **Reframed the same day, and the correction is the interesting part.**
+> This section first said `ENTIRE VOLUME` "means the entire machine".
+> Jan's response: *maybe that actually is "entire volume" — how else
+> would you store multi, drum and FX?* He is right. A volume is a
+> container of typed files and those are among the types; the name on
+> the tin was accurate and the surprise was mine. What was actually
+> discovered is what a volume can contain — see §131.
+
+Chasing the volume delete through `byte[8]`/`byte[9]` at type 0
+(`ENTIRE VOLUME`) found no delete and found something better.
+
+`byte[8] = 0` into a volume holding one program produced:
+
+```
+TEST PROGRAM     384      the resident program
+TL1              160      the take list
+EFFECTS FILE    7312      the effects setups
+DRUM INPUTS      162      the drum-input assignments
+MULTI FILE      4096      the multi
+```
+
+**`ENTIRE VOLUME` means every file type a volume can hold.** Type 1
+`ALL PROGS+SAMPLES` writes programs and samples and nothing else; type 0
+additionally writes the effects file, the multi file, the drum-input page
+and the take list.
+
+The practical consequence survives the reframing and is what matters to a
+caller: `save_to_new_volume(0)` and `save_to_new_volume(1)` are not "more"
+and "less" of one thing. **A librarian offering only type 1 silently drops
+the effects and the multi**, and the user finds out when they reload.
+
+`byte[9] = 0` on the same volume left it byte-identical, which is what a
+rewrite of unchanged content looks like and is consistent with §127's
+reading of that register.
+
+### Still no volume delete
+
+Unchanged from §129, with one candidate now eliminated: these registers only
+ever WRITE, and the type selects what is written. The reading that made type
+0 worth trying — "operate on the whole volume" — is settled as "write the
+whole machine".
+
+What remains untried is selectors 3 (dword), 4/5 (smpte) and 7 (16-byte
+flag), which this project has never addressed at all, and the possibility
+that the family has no per-volume delete. The latter is a panel question,
+not a probe question.
+
+## §131 — The directory has six file types; s3ked models two (2026-08-18)
+
+Following §130's reframing: if `ENTIRE VOLUME` means every file type a
+volume holds, then how many types are there? Read the raw `item_type` byte
+(directory entry offset 16) of every entry on a volume written with type 0:
+
+```
+raw   masked  ASCII  what it is        s3ked saw it
+0xf0   0x70    'p'   program           yes
+0xf3   0x73    's'   sample            yes
+0xed   0x6d    'm'   MULTI FILE        NO
+0x64   0x64    'd'   DRUM INPUTS       NO
+0x74   0x74    't'   TL1 (take list)   NO
+0x78   0x78    'x'   EFFECTS FILE      NO
+```
+
+**CORRECTED.** The first version of this table printed `0x6d` in the RAW
+column for the multi. `0x6d` is its *masked* value; the byte the machine
+writes is `0xed`, on its own boot volume and on ours. mpc2emu caught it by
+noticing that `0x6d` renders as `.M` while the file their reader extracted
+from this machine is `MULTI FILE.M3`, reachable only from `0xed`. One column
+carried masked values and raw values in different rows — the mistake is
+mixing two layers in one column, and it is the same shape as every other
+error tonight.
+
+They asked whether the machine might write BOTH forms, an S1000-era `0x6d`
+and an S3000 `0xed`, the way it does for `p`/`s`. **It does not**, on the
+evidence available: `0xed` on the machine's own `BOOT SYSTEM#` and `0xed` on
+a volume this session had it write. Their writer is correct and there is no
+bug on their side.
+
+`bridge.py` defines `ITEM_PROGRAM = 0x70` and `ITEM_SAMPLE = 0x73` and
+nothing else. `is_program` and `is_sample` both return **False** for the
+other four, so every consumer of `hd_directory` sees them as neither —
+present in the list, counted in the length, and belonging to no category.
+
+That is not a cosmetic gap:
+
+* **A directory listing shows them as blank-typed rows**, or drops them if
+  it filters on the two flags.
+* **`size_bytes` is still summed over them**, so a "will this volume fit"
+  check is quietly comparing the wrong total against free memory — the same
+  arithmetic §71's partial-load warning depends on.
+* **Anything that enumerates a volume to copy it will silently omit them**,
+  which is the librarian bug §130 describes, one layer down.
+
+### It is not an enumeration at all — it is a letter
+
+The masked values read as ASCII: `p` program, `s` sample, `m` multi, `t`
+take list, `x` effects, `d` drum inputs. **The type byte is a letter naming
+the file, and bit 7 marks the S3000 generation.** That is why the high bit is
+set on program, sample and multi — the three this machine writes in S3000
+form — and clear on the other three.
+
+mpc2emu's image writer already had this right and models it as a *rule over
+ranges* rather than a table of known values:
+
+```
+0x41-0x5a   S900    -> 'A9'..'Z9'
+0x61-0x7a   S1000   -> 'A'..'Z'
+0xe1-0xfa   S3000   -> 'A3'..'Z3'
+```
+
+which names all six of these plus the twenty other letters in each range,
+and falls through to `x<hex>` rather than to nothing. They wrote it that way
+because a real library disc turned up `.X`, `.D`, `.Q` and `.M3` and dropping
+the extensions would have lost the only thing saying what those files were —
+i.e. they met this problem from the reading side, where it is visible, and
+solved it structurally.
+
+**Adopted here.** An enumeration of six is a list of what has been seen; a
+range rule is a model of what the format is. `"six is a floor, not a total"`
+was the right instinct expressed in the wrong structure — the fix is not to
+keep adding rows.
+
+### A transcription fault that behaves like a measurement fault
+
+Worth separating from §WRONGLAYER, because the remedy is different.
+
+The byte was **read correctly and written down wrongly**. One column held raw
+values in five rows and a masked value in the sixth, and because raw and
+masked coincide whenever the high bit is clear, the mix was invisible in
+every row except the one where it was not. Re-reading the byte off the
+machine — the obvious way to check a byte — would have confirmed `0xed`
+every time and never touched the table that said `0x6d`.
+
+So: **a fault in the record cannot be found by repeating the measurement.**
+Only comparing the record against something outside it will do.
+
+What found it was exactly that, and mpc2emu is clear that no analysis was
+involved: they ran the six values through their own converter, saw `0x6d`
+produce `.M`, and already had a file called `MULTI FILE.M3` extracted from
+this machine. **The claim collided with an artefact that already existed.**
+
+That is the cheapest check in this whole project and it needed nothing but a
+file that was already on a disk. Reasoning agrees with itself; a converted
+file does not care what either session thinks. Where an artefact exists —
+an extracted file, a saved image, a rendered name — check the claim against
+*it* rather than against the reasoning that produced it.
+
+Six is a floor, not a total. These are the types a type-0 save produced from
+a machine holding one program. A volume containing cue lists, or the
+`BOOT SYSTEM#` and `FLASH VOLnn` entries the flash device reports, may carry
+more.

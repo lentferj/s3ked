@@ -4227,3 +4227,60 @@ async def test_opening_the_disk_browser_forces_a_media_re_read():
             await pilot.pause()
         assert getattr(app.bridge, "media_refreshes", 0) >= 1, (
             "the browser listed the disk without re-reading it")
+
+
+def test_the_directory_knows_six_file_types_not_two():
+    """A volume holds more than programs and samples (§131).
+
+    `bridge.py` named ITEM_PROGRAM and ITEM_SAMPLE and nothing else, so
+    `is_program` and `is_sample` both returned False for the drum-input,
+    multi, take-list and effects entries a type-0 save writes. They were
+    present in the directory, counted in its length, summed into
+    `size_bytes`, and belonged to no category -- so anything filtering on
+    the two flags dropped them silently.
+
+    Raw item_type values as read from the machine's own BOOT SYSTEM# volume
+    and from a type-0 save. **0xED, not 0x6D, for the multi** -- the first
+    version of this test said 0x6D, which is its MASKED value, and mpc2emu
+    caught it: 0x6D renders as `.M` while the file their reader extracts from
+    this machine is `MULTI FILE.M3`, reachable only from 0xED.
+    """
+    from s3k import bridge as b
+
+    observed = {
+        0xF0: ("program", "S3000"),
+        0xF3: ("sample", "S3000"),
+        0xED: ("multi", "S3000"),
+        0x64: ("drum inputs", "S1000"),
+        0x74: ("take list", "S1000"),
+        0x78: ("effects", "S1000"),
+    }
+
+    for raw, (expected, generation) in observed.items():
+        entry = b._DirectoryEntry(index=0, name="X",
+                                  raw=bytes(16) + bytes([raw]) + bytes(7))
+        assert entry.kind == expected, f"item_type {raw:#04x}"
+        assert entry.is_known_kind, f"item_type {raw:#04x} must be recognised"
+        assert entry.generation == generation, f"item_type {raw:#04x}"
+
+    # The type byte is a LETTER, so an unlisted one must still be named
+    # rather than swallowed -- an enumeration is what hid four types for
+    # months. 'q' is a real extension on library discs.
+    qfile = b._DirectoryEntry(index=0, name="X",
+                              raw=bytes(16) + bytes([ord("q") | 0x80]) + bytes(7))
+    assert qfile.kind == "type 'q'"
+    assert qfile.generation == "S3000"
+
+    # the two that were always modelled must keep their flags
+    assert b._DirectoryEntry(index=0, name="X",
+                             raw=bytes(16) + b"\xf0" + bytes(7)).is_program
+    assert b._DirectoryEntry(index=0, name="X",
+                             raw=bytes(16) + b"\xf3" + bytes(7)).is_sample
+
+    # and an unseen type must say so rather than pass as something
+    stranger = b._DirectoryEntry(index=0, name="X",
+                                 raw=bytes(16) + b"\x11" + bytes(7))
+    assert not stranger.is_known_kind
+    assert "unknown" in stranger.kind
+    assert stranger.generation == "?"
+    assert not stranger.is_program and not stranger.is_sample
