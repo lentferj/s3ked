@@ -2327,12 +2327,174 @@ def test_the_bridge_guards_the_operating_system_load():
 
         exclusive_channel = 0
 
+        # trigger_load now reads the page mode before it writes, because
+        # bytes 6-9 are shared with the SAVE page and the mode decides what
+        # writing them does. The fake has to answer it.
+        def _misc_byte(self, index, value=None, *, timeout=None):
+            return 10          # LOAD
+
     with pytest.raises(ValueError, match="guarded"):
         Bare().trigger_load(6)
     assert sent == [], "a guarded type must not reach the wire"
 
     Bare().trigger_load(6, force=True)
     assert len(sent) == 1, "force=True means it"
+
+
+def test_the_load_trigger_does_not_care_which_page_is_showing():
+    """The page is cosmetic. This test asserted the opposite for a while.
+
+    It used to require that `trigger_load` REFUSE on the SAVE page, on the
+    theory that bytes 6-9 were one shared register whose meaning the page
+    decided -- so a load fired on the SAVE page might commit to disk.
+
+    §127 measured both halves and both are false. `byte[6]` LOADS from
+    either page (fired in mode 9, memory grew), and the save registers are
+    `byte[8]` and `byte[9]`, which `trigger_load` never touches. The guard
+    blocked a legal operation and prevented nothing.
+
+    What replaces it is the property that actually matters: the load writes
+    byte[6], and ONLY byte[6]. That is the invariant which keeps a load from
+    ever becoming a save or a delete.
+    """
+    from s3k import bridge as b
+
+    sent = []
+
+    class Fake(b.S3kBridge):
+        def __init__(self, mode):
+            self._mode = mode
+
+        def invalidate_structure(self):
+            pass
+
+        def _drain(self):
+            pass
+
+        def _send(self, frame, write=False):
+            sent.append(frame)
+
+        def _misc_byte(self, index, value=None, *, timeout=None):
+            return self._mode
+
+        exclusive_channel = 0
+
+    for mode in (9, 10):
+        sent.clear()
+        Fake(mode).trigger_load(1)
+        assert len(sent) == 1, f"a load must fire in mode {mode}"
+        # byte 5 of the frame is the item index low byte -- the register
+        # number. It must be the LOAD register and never a neighbour.
+        assert sent[0][5] == b.S3kBridge._MISC_LOAD, (
+            "the load must write byte[6]; byte[7] deletes, byte[8] and "
+            "byte[9] write to a disk")
+
+
+def test_the_action_registers_are_four_distinct_operations():
+    """Guards the naming that nearly cost a user their disk.
+
+    `_MISC_LOAD_TYPE = (6, 7, 8, 9)` sat in the bridge described as "the
+    load type, mirrored". Only `[:1]` was ever written, which is the one
+    reason iterating it never deleted resident data and then wrote to a
+    medium. They are four separate operations (§127).
+    """
+    from s3k import bridge as b
+
+    assert b.S3kBridge._MISC_LOAD == 6
+    assert b.S3kBridge._MISC_DELETE == 7
+    assert b.S3kBridge._MISC_SAVE_NEW == 8
+    assert b.S3kBridge._MISC_SAVE_SELECTED == 9
+    assert len(set(b.S3kBridge._MISC_ACTION_REGISTERS)) == 4
+    assert not hasattr(b.S3kBridge, "_MISC_LOAD_TYPE"), (
+        "the name implied four mirrors of one field and invited iteration")
+
+
+def test_saving_writes_the_right_register_and_can_name_the_volume():
+    """Remote save exists. Four wordings of "it does not" have been wrong.
+
+    This test has asserted, in turn: that saving was fenced behind a
+    confirmation; that the capability was absent; that no mechanism had been
+    found. All three were wrong, and the last two were argued from
+    measurements that could not have detected a save (§122, §127).
+
+    So it now asserts the mechanism, register by register, because that is
+    the part that can be checked without a sampler:
+
+      byte[8] creates a volume, byte[9] rewrites the selected one, and a
+      rename is a NAME-bank write rather than either.
+    """
+    from s3k import bridge as b
+    from s3k import messages as m
+
+    sent = []
+
+    class Fake(b.S3kBridge):
+        def __init__(self):
+            pass
+
+        def invalidate_structure(self):
+            pass
+
+        def _drain(self):
+            pass
+
+        def _send(self, frame, write=False):
+            sent.append(frame)
+
+        def _receive(self, timeout=None, accept=None):
+            return b"REPLY-OK"
+
+        def _raise_for_reply(self, reply, what):
+            pass
+
+        def load_source(self, *, timeout=None):
+            return {"volume": 3}
+
+        exclusive_channel = 0
+
+    br = Fake()
+
+    sent.clear()
+    br.save_to_new_volume(1)
+    assert sent[0][5] == b.S3kBridge._MISC_SAVE_NEW, "a new volume is byte[8]"
+
+    sent.clear()
+    br.save_to_selected_volume(1)
+    assert sent[0][5] == b.S3kBridge._MISC_SAVE_SELECTED, "a rewrite is byte[9]"
+
+    # the rename goes to the NAME bank, not the byte bank -- selector 6.
+    sent.clear()
+    br.rename_volume("MIXED DEMO")
+    assert sent[0][7] == b.S3kBridge._MISC_BANK_NAME, (
+        "renaming is a name-bank write; the byte bank cannot carry a name")
+    assert sent[0][5] == b.S3kBridge._MISC_NAME_VOLUME
+
+    # an unknown save type is an unknown operation, same rule as loading
+    import pytest
+    with pytest.raises(ValueError):
+        br.save_to_new_volume(99)
+
+
+def test_select_page_refuses_undocumented_modes():
+    """An unknown value in this register froze the machine twice (§85, §90)."""
+    import pytest
+    from s3k import bridge as b
+
+    class Bare(b.S3kBridge):
+        def __init__(self):
+            self.written = []
+
+        def _misc_byte(self, index, value=None, *, timeout=None):
+            if value is not None:
+                self.written.append(value)
+                return value
+            return self.written[-1] if self.written else 10
+
+    bare = Bare()
+    with pytest.raises(ValueError, match="documented pages"):
+        bare.select_page(11)
+    assert bare.written == [], "an undocumented mode must not reach the wire"
+    assert bare.select_page(9) == 9
 
 
 async def test_the_disk_pane_says_what_to_press_before_it_is_read():

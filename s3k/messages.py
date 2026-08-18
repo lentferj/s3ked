@@ -65,6 +65,7 @@ from dataclasses import dataclass
 from typing import ClassVar, Dict, Iterable, List, Sequence, Tuple
 
 __all__ = [
+    "MAIN_MENU_PAGES",
     "SOX",
     "EOX",
     "MANUFACTURER_ID",
@@ -248,6 +249,31 @@ class Postpone(enum.IntFlag):
 #: Mask for the item index proper, once the :class:`Postpone` bits are removed.
 ITEM_INDEX_MASK = 0x0FFF
 
+
+#: The main-menu pages, read off the panel while the mode register stepped
+#: (§84). EDIT is a modifier lamp rather than a page, which is what makes
+#: the document's "eleven modes from eight keys" work out: the odd values
+#: are the even page with EDIT lit.
+#:
+#: **0 cannot be written.** Writing 9 or 10 succeeds; writing 0 answers with
+#: device error code 1, so a caller can move the panel onto a disk page but
+#: not back off it by this route.
+#:
+#: An UNDOCUMENTED value here has frozen this machine twice (§85, §90), so
+#: callers should refuse anything not in this table rather than send it.
+MAIN_MENU_PAGES = {
+    0: "SINGLE",
+    1: "SINGLE + EDIT",
+    2: "MULTI",
+    3: "MULTI + EDIT",
+    4: "SAMPLE",
+    5: "SAMPLE + EDIT",
+    6: "EFFECTS",
+    7: "EFFECTS + EDIT",
+    8: "GLOBAL",
+    9: "SAVE",
+    10: "LOAD",
+}
 
 #: The LOAD page's "type of load" list, by the value the register takes.
 #: Read off the panel 2026-08-14 by stepping the field one entry at a time

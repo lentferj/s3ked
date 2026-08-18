@@ -1288,6 +1288,14 @@ class S3kBridge:
     #: the button positions: GLOBAL is the second button of the second row and
     #: reads 8, where its position would be 5.
     _MISC_MODE = 91
+    #: Main-menu pages this project names (§84). SAVE sits immediately left
+    #: of LOAD on the panel and one value apart in the register.
+    _MODE_SAVE = 9
+    _MODE_LOAD = 10
+    #: The SAVE page's own state, and the ONLY byte besides the cursor and
+    #: the mode that differs between pages 9 and 10 (SAVE_PLAN, phase A).
+    #: Reads 22 on LOAD and 1 on SAVE. Meaning not established.
+    _MISC_PAGE_STATE = 97
     #: **The selected VOLUME**, 0-based; the panel shows it 1-based. Watched
     #: while a person stepped the volume: it read 4, 5, 1, 2 against a panel
     #: reading 005, 006, 002, 003, and writing it moves both the panel and
@@ -1331,7 +1339,32 @@ class S3kBridge:
     #: waveform memory and then loads, and it is a panel chain with its own
     #: on-screen confirmation (§75). The effect is reachable: see
     #: :meth:`clear_memory`, which deletes what is resident.
-    _MISC_LOAD_TYPE = (6, 7, 8, 9)
+    #: **These four are NOT mirrors of one field.** They were called that
+    #: here from §71 until §127, on the strength of reading alike. They read
+    #: alike and they do entirely different things when written:
+    #:
+    #:     byte[6]  LOAD
+    #:     byte[7]  delete from memory
+    #:     byte[8]  SAVE, creating a new volume in the selected slot
+    #:     byte[9]  SAVE, rewriting the selected volume
+    #:
+    #: and **none of them cares which page the panel shows**. `byte[91]`
+    #: decides what the LCD displays, nothing more: `byte[6]` loads from the
+    #: SAVE page and `byte[8]` saves from the LOAD page, both measured.
+    #:
+    #: The old name is kept nowhere on purpose. A tuple called "the load
+    #: type, mirrored" invites iteration, and iterating this one deletes
+    #: resident data and then writes to a disk. Only `[:1]` was ever written,
+    #: which is the single reason that never happened.
+    _MISC_LOAD = 6
+    _MISC_DELETE = 7
+    _MISC_SAVE_NEW = 8
+    _MISC_SAVE_SELECTED = 9
+
+    #: Kept only so a caller that reads the block sees all four; **never
+    #: iterate this to write.** See above.
+    _MISC_ACTION_REGISTERS = (_MISC_LOAD, _MISC_DELETE,
+                              _MISC_SAVE_NEW, _MISC_SAVE_SELECTED)
 
     #: Miscellaneous-data banks, by selector byte: the spec lists 1 byte,
     #: 2 word, 3 dword, 4 smpte, 5 signed smpte, 6 name, 7 16-byte flag (§5).
@@ -1562,7 +1595,7 @@ class S3kBridge:
         untested -- the same trap as ``byte[49]``, which the panel writes and
         the machine never reads back (§70).
         """
-        return self._misc_byte(self._MISC_LOAD_TYPE[0], timeout=timeout)
+        return self._misc_byte(self._MISC_LOAD, timeout=timeout)
 
     def load_type_name(self, *, timeout: Optional[float] = None) -> str:
         """:meth:`load_type`, rendered. Unknown values say so rather than lie."""
@@ -1644,15 +1677,219 @@ class S3kBridge:
                 f"load type {load_type} ({m.LOAD_TYPES[load_type]}) is "
                 f"guarded; pass force=True to mean it"
             )
+        # THE PAGE DECIDES WHAT THIS REGISTER DOES. Bytes 6-9 are NOT
+        # page-specific: they read the same in mode 9 and mode 10
+        # (SAVE_PLAN, phase A). So this write fires a LOAD only if the
+        # machine is on the LOAD page -- on the SAVE page the same write may
+        # commit a SAVE to disk, which is a different and irreversible thing.
+        #
+        # Checked every time rather than documented, because the cost of
+        # being wrong is a write to somebody's medium and the cost of the
+        # check is one read.
+        mode = self._misc_byte(self._MISC_MODE, timeout=timeout)
+        # No page check. There used to be one here, refusing to write while
+        # the machine showed the SAVE page, on the theory that bytes 6-9 were
+        # one shared register whose meaning the page decided. §127 measured
+        # both halves of that and both are false: byte[6] LOADS from either
+        # page, and the save registers are byte[8] and byte[9], which this
+        # method does not touch. The guard prevented a legal load and
+        # prevented nothing else.
         self.invalidate_structure()      # a load replaces the whole bank
-        for index in self._MISC_LOAD_TYPE[:1]:
-            frame = m.HeaderData(
-                command=m.Command.MISCDATA, index=index, selector=1, offset=0,
-                data=bytes([load_type]),
-                exclusive_channel=self.exclusive_channel,
-            ).encode()
-            self._drain()
-            self._send(frame, write=True)
+        frame = m.HeaderData(
+            command=m.Command.MISCDATA, index=self._MISC_LOAD, selector=1,
+            offset=0, data=bytes([load_type]),
+            exclusive_channel=self.exclusive_channel,
+        ).encode()
+        self._drain()
+        self._send(frame, write=True)
+
+    # -- saving ---------------------------------------------------------
+    #
+    # Destination is the ordinary selection: drive, device, partition and
+    # volume, set with the same methods a load uses. There is no separate
+    # save destination and no need to be on any particular page -- the page
+    # register only drives the LCD (§127).
+    #
+    # Selecting a volume slot one past the last used one is how a NEW volume
+    # is made: the panel shows INACTIVE and the machine creates it on save.
+    # select_volume() refuses that slot, correctly for a load and wrongly for
+    # a save, so the save methods write the register directly.
+
+    def page_mode(self, *, timeout: Optional[float] = None) -> int:
+        """Which main-menu page the machine is showing (§84).
+
+        0 SINGLE, 2 MULTI, 4 SAMPLE, 6 EFFECTS, 8 GLOBAL, 9 SAVE, 10 LOAD;
+        the odd values between are the same page with EDIT lit.
+        """
+        return self._misc_byte(self._MISC_MODE, timeout=timeout)
+
+    def select_page(self, mode: int, *,
+                    timeout: Optional[float] = None) -> int:
+        """Put the machine on a main-menu page. Returns what it reads back.
+
+        **Mode 0 is not writable.** Writing 9 or 10 succeeds; writing 0
+        (SINGLE) answers with device error code 1, so a caller cannot put
+        the panel back where it found it. Anything that changes the page
+        should expect to leave it changed -- a probe that assumed otherwise
+        failed in its own `finally` and lost two complete measurements
+        before they were written out.
+
+        Out-of-range values are refused here rather than sent: an unknown
+        value in this register froze the machine twice (§85, §90).
+        """
+        if mode not in m.MAIN_MENU_PAGES:
+            raise ValueError(
+                f"mode {mode} is not one of the documented pages "
+                f"{sorted(m.MAIN_MENU_PAGES)}; an unknown value in this "
+                f"register has frozen this machine twice (§85, §90)"
+            )
+        self._misc_byte(self._MISC_MODE, mode, timeout=timeout)
+        return self._misc_byte(self._MISC_MODE, timeout=timeout)
+
+    def save_source(self, *, timeout: Optional[float] = None) -> Dict[str, int]:
+        """What the SAVE page is pointed at.
+
+        **The destination is the same selection the LOAD page uses** --
+        drive, device, partition and volume are shared registers, measured
+        rather than assumed (SAVE_PLAN phase A). Set them with
+        :meth:`select_drive`, :meth:`select_device`, :meth:`select_partition`
+        and :meth:`select_volume` exactly as for a load.
+
+        ``page_state`` is byte[97], the only other byte that differs between
+        the two pages. It reads 22 on LOAD and 1 on SAVE. **Its meaning is
+        not established** and it is reported raw rather than named.
+        """
+        out = self.load_source(timeout=timeout)
+        out["page_state"] = self._misc_byte(self._MISC_PAGE_STATE,
+                                            timeout=timeout)
+        out["on_save_page"] = out["mode"] == self._MODE_SAVE
+        return out
+
+    #: Selector for the miscellaneous NAME bank. The selector table has been
+    #: in these notes since §5 -- 1 byte, 2 word, 3 dword, 4 smpte, 5 signed
+    #: smpte, **6 name**, 7 16-byte flag -- and only the byte and word banks
+    #: were ever swept, which is why volume naming looked impossible until
+    #: §127. Index 6 of this bank is the selected volume's name.
+    _MISC_BANK_NAME = 6
+    _MISC_NAME_VOLUME = 6
+
+    def save_to_new_volume(self, save_type: int = 1, *,
+                           name: Optional[str] = None,
+                           timeout: Optional[float] = None) -> Dict[str, int]:
+        """Create a volume from what is in memory. **This writes to a disk.**
+
+        Writes `byte[8]`, which saves into the selected slot and creates the
+        volume if nothing is there. Select the slot one past the last used
+        volume to make a new one -- the panel shows `INACTIVE` and the
+        machine creates it.
+
+        ``save_type`` uses :data:`s3k.messages.LOAD_TYPES`, the same table
+        the load side uses: 1 `ALL PROGS+SAMPLES` saves everything resident,
+        5 `Cursor Item only` saves the single highlighted entry.
+
+        **The machine names the volume itself**, `VOLUME nnn`, and nothing
+        the host sends at save time changes that. Pass ``name`` to have it
+        renamed immediately afterwards -- two operations, not one, and that
+        is a property of the machine rather than of this method
+        (:meth:`rename_volume`).
+
+        The volume register is written directly rather than through
+        :meth:`select_volume`, which validates against the visible volume
+        count. That check is right for a load, where an inactive volume holds
+        nothing to load, and wrong here, where an inactive slot is precisely
+        the target.
+
+        **Do not poll while it works** -- see :meth:`trigger_load`.
+        """
+        if save_type not in m.LOAD_TYPES:
+            raise ValueError(
+                f"save type {save_type} is not one of {sorted(m.LOAD_TYPES)}; "
+                f"the register performs what it is given, so an unknown value "
+                f"is an unknown operation"
+            )
+        self._fire(self._MISC_SAVE_NEW, save_type)
+        if name is not None:
+            time.sleep(self._SAVE_SETTLE)
+            self.rename_volume(name, timeout=timeout)
+        return self.load_source(timeout=timeout)
+
+    def save_to_selected_volume(self, save_type: int = 1, *,
+                                timeout: Optional[float] = None) -> Dict[str, int]:
+        """Write memory into the volume already selected. **DESTRUCTIVE.**
+
+        `byte[9]`. Unlike :meth:`save_to_new_volume` this rewrites a volume
+        that exists, and **the machine resets its name to the default**
+        `VOLUME nnn` when it does -- measured, and how §127 found this
+        register at all: a test volume called `NOISE` came back as
+        `VOLUME 003` with its contents intact and a superset written over
+        them.
+
+        So a rewrite costs the volume's name. Re-apply it with
+        :meth:`rename_volume` if it mattered.
+        """
+        if save_type not in m.LOAD_TYPES:
+            raise ValueError(
+                f"save type {save_type} is not one of {sorted(m.LOAD_TYPES)}")
+        self._fire(self._MISC_SAVE_SELECTED, save_type)
+        return self.load_source(timeout=timeout)
+
+    #: Seconds to let a save settle before the rename that follows it. A save
+    #: returns before the machine has finished; renaming into that window
+    #: races the volume's creation.
+    _SAVE_SETTLE = 3.0
+
+    def rename_volume(self, name: str, *,
+                      timeout: Optional[float] = None) -> str:
+        """Rename the selected volume. **This writes to a disk.**
+
+        Writes a 12-character Akai-encoded name to index 6 of the
+        miscellaneous NAME bank, which the machine applies to whichever
+        volume is currently selected. Acknowledged with `REPLY` like any
+        other write, so a refusal is reported rather than guessed at.
+
+        This is the only way to name a volume remotely: saving cannot do it,
+        and a `VOLLIST` write is not merely refused but unanswered -- the
+        machine returns nothing at all, which is what "only used in response
+        to request" means in practice (§127).
+        """
+        payload = bytes(m.encode_name(name, m.NAME_LENGTH))
+        frame = m.HeaderData(
+            command=m.Command.MISCDATA, index=self._MISC_NAME_VOLUME,
+            selector=self._MISC_BANK_NAME, offset=0, data=payload,
+            exclusive_channel=self.exclusive_channel,
+        ).encode()
+        self._drain()
+        self._send(frame, write=True)
+        self._raise_for_reply(
+            self._receive(timeout, accept=_ONLY_REPLY),
+            f"renaming the selected volume to {name!r}")
+        return name
+
+    def _fire(self, index: int, value: int) -> None:
+        """Write an action register. **The write IS the operation.**
+
+        There is no arm-then-fire on these: writing the register performs it,
+        and the value selects which variant. The machine stops acknowledging
+        while it works, so this sends without waiting for a reply -- a
+        timeout here would be the operation running, not a failure.
+        """
+        self.invalidate_structure()
+        frame = m.HeaderData(
+            command=m.Command.MISCDATA, index=index, selector=1, offset=0,
+            data=bytes([value]), exclusive_channel=self.exclusive_channel,
+        ).encode()
+        self._drain()
+        self._send(frame, write=True)
+
+    def trigger_save(self, save_type: int = 1, *,
+                     timeout: Optional[float] = None) -> Dict[str, int]:
+        """Deprecated spelling of :meth:`save_to_new_volume`.
+
+        Kept because this name carried, for several commits, a docstring
+        asserting that remote save did not exist. Anything that imported it
+        on that basis should get the working call rather than an error.
+        """
+        return self.save_to_new_volume(save_type, timeout=timeout)
 
     def load_source(self, *, timeout: Optional[float] = None) -> Dict[str, int]:
         """What the front panel's LOAD page currently shows.

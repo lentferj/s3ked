@@ -93,7 +93,7 @@ def size_of(kind: str, operand: str) -> int:
 
 def parse_s1000(path: Path):
     """name -> offset, per block, by walking the declarations."""
-    lines = path.read_text(errors="replace").splitlines()
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     starts = []
     for i, line in enumerate(lines):
         for marker, region in S1000_BLOCKS:
@@ -148,7 +148,7 @@ def parse_s1000(path: Path):
 
 def parse_s2800(path: Path):
     """name -> offset, from explicit `Offset: N bytes` statements."""
-    text = path.read_text(errors="replace")
+    text = path.read_text(encoding="utf-8", errors="replace")
     out = {}
     for m in re.finditer(r"Parameter:\s*(\w+)\s*\n+\s*Offset:\s*(\d+)\s*bytes",
                          text):

@@ -162,6 +162,12 @@ silently wrong one.
 - [§119](#119--paramspy-against-a-corpus-and-three-false-positives-from-the-checker-2026-08-17) — `params.py` against a corpus, and three false positives from the checker (2026-08-17)
 - [§120](#120--an-unnamed-16-bit-field-in-every-loop-record-2026-08-17) — An unnamed 16-bit field in every loop record (2026-08-17)
 - [§121](#121--every-offset-cross-checked-against-both-documents-2026-08-17) — Every offset cross-checked against both documents (2026-08-17)
+- [§122](#122--the-save-page-is-reachable-and-its-action-is-not-2026-08-18) — The SAVE page is reachable and its action is not (2026-08-18)
+- [§123](#123--every-document-is-silent-on-the-undefined-opcodes-2026-08-18) — Every document is silent on the undefined opcodes (2026-08-18)
+- [§124](#124--what-122-does-not-establish-and-the-gap-an-operator-found-2026-08-18) — What §122 does not establish, and the gap an operator found (2026-08-18)
+- [§125](#125--the-document-quote-was-misread-and-the-reductio-that-showed-it-2026-08-18) — The document quote was misread, and the reductio that showed it (2026-08-18)
+- [§126](#126--the-lakai-source-no-save-and-a-third-transport-2026-08-18) — The Lakai source: no save, and a third transport (2026-08-18)
+- [§127](#127--retraction-remote-save-exists-and-so-does-remote-rename-2026-08-18) — **RETRACTION**: remote save exists, and so does remote rename (2026-08-18)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -10992,3 +10998,520 @@ two documents contradicting each other over one region.
 
 The transcription is sound. What it transcribes is a separate question, and
 the machine remains the only authority on that.
+
+## §122 — The SAVE page is reachable and its action is not (2026-08-18)
+
+> **RETRACTED — see §127.** Remote save exists. `byte[8]` creates a
+> volume and `byte[9]` rewrites one; this section tested `byte[6]`, which
+> loads, and watched the volume directory, which a load does not change.
+> The measurements below are real and every conclusion from them is
+> withdrawn.
+
+Branch `save-page`. §84 names mode 9 SAVE and mode 10 LOAD, and the panel
+puts the two buttons side by side. Phase A (`SAVE_PLAN.md`) found the pages
+share every register but three, **including `byte[6..9]`, the load type —
+the register whose writing fires a load (§71, §93)**. That raised the
+obvious hypothesis and the obvious hazard at once: one trigger, with the
+mode deciding what it does.
+
+It is not. Four runs, and the fourth is the one that makes the other three
+mean anything.
+
+### The register's real domain, measured rather than assumed
+
+`byte[6]` was swept 0–15 in mode 9. Values 0–7 read back exactly; **8–15 all
+read back 7**. The register is three bits wide and saturates, and 0–7 is
+precisely `LOAD_TYPES` — `ENTIRE VOLUME` through `Multi+progs+Samps`. So the
+sweep covered its entire legal domain, not an arbitrary slice of it. That
+distinction is what separates this from §105, which needed 48 values because
+the field's width was unknown.
+
+### Three negatives
+
+| run | target | values | result |
+|---|---|---|---|
+| `byte[6]`, mode 9 | empty slot 3 | 1 | no volume created |
+| `byte[6]`, mode 9 | empty slot 3 | 0–15 (whole domain) | no volume created |
+| `byte[6]`, mode 9 | **existing** volume | 0–7 | directory byte-identical |
+| `byte[97]`, mode 9 | — | 0, 2, 3, 4, 5 | every write ignored |
+
+The existing-volume run was aimed at a benign explanation that turns out not
+to have existed. The reasoning was: creating a volume needs a **name**, no
+register in the bank carries one, so an inert result against an empty slot
+is ambiguous between "cannot save" and "cannot name it" — and saving into an
+existing volume needs only an index, so it discriminates.
+
+**The premise was wrong, and the operator's panel knowledge is what
+corrected it.** The machine lets you select one slot past the last used
+volume, displays it as `INACTIVE`, and on saving *names it itself* —
+`VOLnnn`. There is no name for a host to supply.
+
+That makes the empty-slot run the stronger of the two, not the weaker.
+Slot 3 was precisely the first inactive slot, which is the case the front
+panel supports; the remote write needed nothing the protocol lacks, and
+nothing happened. The existing-volume run remains a valid second negative
+by a different route. Both stand; only my reason for preferring one of them
+was mistaken.
+
+A note for whoever reads this next: that mistaken premise would have become
+a *published protocol limitation* — "remote save is impossible because
+volume names cannot be transmitted" — and it is not true. It was an
+inference about the machine drawn without asking the machine, or the person
+holding it.
+
+`byte[97]` is the only byte that is page-specific and unexplained (LOAD 22,
+SAVE 1). It ignores writes, the same way `byte[49]` reads the panel cursor
+and ignores writes (§96). It moved 1 → 22 during the run, but not in
+response to any written value — reading the directory is what moves it. It
+is a display state, not a control.
+
+**One line of that run is worth naming as uninformative:** writing 22 and
+reading back 22 was logged as `HELD`, and it holds nothing — the byte
+already read 22. A test whose pass condition is already satisfied before the
+write is not a test. The same trap as §113's naive denibbler looking correct
+on even-length payloads.
+
+### The positive control, without which none of the above counts
+
+Three negatives from one sending path prove nothing about the machine if the
+path is broken — a dropped frame, a wrong selector, and every page in the
+protocol would look inert. So the **same raw poke, the same byte, in mode
+10**, aimed at a sample present on the disk and absent from memory:
+
+```
+RAM before: 2 samples, 31.414 MB free
+write byte[6] = 5  (Cursor Item only)
+RAM after : 3 samples, 30.867 MB free   (559.2 kB consumed)
+```
+
+The item arrived. **The route is live, so the negatives stand.**
+
+Choosing the item was itself load-bearing. The first attempt aimed at the
+volume already selected and **refused to run**, because every sample on it
+was already resident — "no change" there would not distinguish a working
+load from a broken one. The guard is in the probe, not in the write-up.
+
+### What this establishes
+
+**The SAVE page can be reached, configured and read over SysEx, and the two
+registers most likely to fire it do not.** — including to a fresh volume,
+which the machine would have named on its own.
+
+**AMENDED 2026-08-18, see §124.** This section originally concluded that the
+page "cannot be fired over SysEx" full stop. It does not support that: only
+`byte[6]` and `byte[97]` were tested, and the load trigger is a register
+rather than an opcode, so §123's opcode survey does not close the remaining
+~126 bytes of the bank. The measurements below stand; the conclusion drawn
+from them reached past them. Its destination drive, partition and volume are the
+same registers `s3ked` already drives; only the commit is absent. §113
+already found no save opcode anywhere in the protocol, and this closes the
+remaining route — the shared page register — by measurement rather than by
+inference.
+
+That is consistent with the family's design rather than surprising in it.
+This is an *editor/librarian* protocol: it edits what is in memory and moves
+data in. The disk surface is `RVOLLIST`/`VOLLIST` and `RHDDIR`/`HDDIR`, both
+readers. Committing memory to a medium stays a front-panel act, which is
+what `README` already says and now says on evidence.
+
+**Consequence for the code, and it is not optional.** Because the trigger is
+shared, `trigger_load()` asserts `byte[91] != 9` before writing. The guard
+was written before any of these runs, when the hazard was still only
+plausible. It stays: the runs show the write does not *save*, not that it is
+safe to fire blind on an unknown page.
+
+RAM was returned to its pre-control state — the loaded sample deleted, free
+memory back to 31.414 MB exactly.
+
+## §123 — Every document is silent on the undefined opcodes (2026-08-18)
+
+> **Still true, and it answered the wrong question — see §127.** The
+> save mechanism is a register write, not an opcode, so an opcode survey
+> could never have found it.
+
+§122 left one route to a remote save unexcluded: four opcode ranges below
+`0x45` that `s3ked` does not define — `0x17`–`0x1c`, `0x1e`–`0x26`,
+`0x39`–`0x40`, `0x43`–`0x44`. `0x39`–`0x40` sits immediately after the disk
+block, which is where a disk writer would live if one had been left out of
+the documents.
+
+**Read the documents before putting an undefined opcode on the wire.** This
+is offline, free, and reversible, and probing is none of those.
+
+### The survey, with its control
+
+Every opcode-to-description statement was extracted from all four local
+sources. The extraction is only worth as much as its control, so the same
+extractor was checked against opcodes already known to be there:
+
+| document | opcodes it yielded | which is exactly |
+|---|---|---|
+| `lakai_s1000_sysex.html` | `0x00`–`0x16`, `0x1d` | the S1000 base set |
+| `lakai_s2800_sysex.html` | `0x00`, `0x27`–`0x38` | the S3000 extensions |
+| `lakai_s2000_sysex.html` | `0x41`, `0x42` | the multi extensions |
+| the archive.org OCR | `0x41`, `0x42` | same document, other format |
+
+Their union is precisely the 44 opcodes `Command` defines — no more, no
+fewer. **Every gap is bracketed on both sides by opcodes the same extractor
+found in the same file**: `0x16` and `0x1d` around the first, `0x38` below
+and `0x41` above the disk-adjacent one. So a gap is the document's silence
+and not the regex's failure. Without that bracketing the result would have
+been worthless, because an extractor that finds nothing looks identical to a
+document that says nothing.
+
+**No document defines anything in any of the four ranges.**
+
+### The fourth document does not exist
+
+The survey was asked to cover a CD3000 source as well. It is not in the
+local cache and it is not anywhere: the Lakai project — the canonical
+transcription for this family — hosts exactly three SysEx documents, the
+three above. The CD3000 owner's manual on archive.org contains no operation
+code table at all, being a manual rather than a protocol document.
+
+So "all four sources are silent" is really *all three that exist*, and the
+fourth was never a source. Worth stating plainly rather than quietly
+reducing the claim.
+
+### What this is worth
+
+An opcode range undefined across every surviving document of a family is
+likely genuinely unused, rather than secretly holding a writer. That is a
+weaker statement than a probe would give and it is obtained at no risk to an
+irreplaceable machine — and §122 already established the capability is not
+missing, only un-automated: the panel saves, and names the new volume
+itself.
+
+**The trade was judged and declined.** A remote save would be a convenience;
+an undefined opcode on a vintage sampler is not bounded by "might format the
+disc" — it could reach NVRAM, calibration or firmware state, and being
+disk-*adjacent* is not evidence of being *merely* disk-adjacent. §85 and §90
+already froze this machine with out-of-range values on a **documented**
+register. A moderate convenience against a small chance of irreversible harm
+is the wrong side of the trade, and backups do not change it, because the
+disc is the part that can be restored.
+
+### The capability exists — off this protocol entirely
+
+Worth recording so nobody re-opens this looking for a MIDI answer: writing
+Akai volumes is a **solved problem over SCSI**, by operating on the disk or
+image directly rather than asking the sampler to do it. `akaiutil` does it,
+and this project's own sibling tooling already writes Akai disk images. What
+does not exist is a *SysEx* route, which is exactly what §122 measured.
+
+If remote save is ever wanted, that is the direction — not `0x39`.
+
+## §124 — What §122 does not establish, and the gap an operator found (2026-08-18)
+
+§122 concluded "the SAVE page is reachable and its action is not". §123
+supported it with the opcode survey. Jan read both and said he could not
+believe it: on the panel you choose the next volume and press SAVE, and
+that is the whole operation.
+
+**He is right that the argument has a hole, and it is worth naming exactly
+where.**
+
+### The hole
+
+§123's finding is about **opcodes**. The load trigger *is not an opcode*.
+It is a `MISCDATA` write to `byte[6]` — an ordinary register in the
+miscellaneous bank. So "all four disk opcodes are readers" does not exclude
+a save trigger; it only excludes a save *opcode*. A save trigger could be
+any other byte in that bank, one that reads identically on both pages and
+does nothing on the LOAD page.
+
+Phase A does not close this either. It compared the two pages' **values**,
+and a trigger need not differ between them — `byte[6]` does not.
+
+So what §122 actually measured is narrower than what §122 concluded:
+
+* **measured** — `byte[6]` is inert in mode 9 across its whole domain,
+  against an empty slot and an existing volume, with a live positive
+  control; `byte[97]` ignores writes.
+* **not measured** — the other ~126 bytes of the bank, written while the
+  machine is on the SAVE page.
+
+The conclusion was drawn from the tested part and stated over the untested
+part. That is the §RIGHTNUMBER shape again — the measurements are sound and
+the explanation reached past them — and this time the reach was in the
+direction of a *negative*, which is worse, because a negative closes a
+question and nobody re-opens it.
+
+### What the documents say, both ways
+
+For the conclusion, the S2800 document states the design outright:
+
+> "There are no functions within MIDI system exclusive to provide direct
+> access to and from disk files. Directories and files can be loaded into
+> the S3000 and the data then accessed. However, if external parties wish
+> to get data directly from disk, it is available via SCSI."
+
+Against it, the S2000/S3000XL document — the one that *introduced* the
+separate SAVE mode, and the one covering this exact machine — says:
+
+> "Much of the S3000 SysEx system will be valid for the S2000. **Additional
+> commands will be provided to reflect the new functions.**"
+
+Future tense, and it then documents only the multi opcodes. Its transcriber
+states in his own foreword that he typed it from a printout and marked
+passages he believed were wrong. **The specification is incomplete for
+precisely the model in question, and says so.**
+
+The S2800 document also refers to "the Miscellaneous function BTSORT"
+twice without ever defining it, so the bank is known to carry *named
+functions* whose list is not in any document held here.
+
+### The experiment that would settle it, and why it is safe
+
+Write every register in the bank **its own current value**, on the SAVE
+page, with the destination set to an empty volume slot.
+
+Nothing changes state — each byte holds what it already held — but any
+write-triggered action still fires, because for `byte[6]` the *write* is
+the trigger irrespective of value. It is the minimum perturbation that can
+still detect the thing being looked for, and unlike the opcode probe both
+sessions declined, it stays inside the documented register bank at values
+the machine is itself holding.
+
+Prepared as `savehunt.py`. **Not run — blocked by this session's permission
+classifier.** Recorded here so the next session does not have to re-derive
+the design, and so the gap is on the record whether or not the run happens.
+
+### Until it runs
+
+The honest statement is: **no remote save has been found, and the mechanism
+that performs loads has been only partly examined.** That is weaker than
+§122's ending and it is what the evidence supports. §122 and `SAVE_PLAN.md`
+are amended to point here.
+
+## §125 — The document quote was misread, and the reductio that showed it (2026-08-18)
+
+§123 and §124 leaned on one sentence from the S2800 document:
+
+> "There are no functions within MIDI system exclusive to provide direct
+> access to and from disk files. Directories and files can be loaded into
+> the S3000 and the data then accessed. However, if external parties wish to
+> get data directly from disk, it is available via SCSI."
+
+I read that as "the protocol cannot perform disk operations" and used it as
+the strongest evidence that no remote save exists.
+
+**That reading is wrong, and Jan refuted it in one line: by that logic,
+loading would not be possible either.**
+
+It is not a subtle objection, it is a proof. Loading over SysEx is not a
+hypothesis here — this project fires loads routinely, and §122's own
+positive control fired one and watched 559.2 kB arrive. A reading of the
+sentence that forbids what the machine is observably doing is a wrong
+reading of the sentence.
+
+### What it actually says
+
+**"Direct access to and from disk files"** means the *host* reading or
+writing file bytes over MIDI — pulling a sample off the disc into the
+computer without the sampler's involvement. That is what is absent, and
+that is what "available via SCSI" is offered as the alternative to. The
+emphasis on SCSI is the tell: SCSI is how you get *at the data*, not how you
+press a button.
+
+Commanding the machine to perform a disk operation is a different thing
+entirely, and the same sentence grants it: *"Directories and files **can be
+loaded** into the S3000"*. Loading is a commanded disk operation, it is
+documented as available, and it works.
+
+So the sentence is silent on remote save. It was never evidence either way.
+
+### What this leaves
+
+Stripping out the misreading, and stripping out §123's opcode survey — which
+covers *opcodes*, while the load command is a register write and not an
+opcode at all (§124) — the evidence against a remote save reduces to:
+
+* `byte[6]` inert on the SAVE page across its whole domain, two destinations,
+  with a live positive control.
+* `byte[97]` ignores writes.
+
+**Two registers out of roughly 128.** That is a genuine result and it is not
+a conclusion. The bank sweep described in §124 is the experiment that would
+settle it, and until it runs the honest position is that no remote save has
+been *found*, not that none exists.
+
+### The general point, because this is three in one night
+
+§RIGHTNUMBER, then §124, now this. Each time the measurement was sound and
+the sentence next to it reached further than the measurement did. Here the
+reach was into a *document*: a quotation that supported the conclusion was
+accepted at the speed of agreement, while the same quotation contained the
+counter-example — "can be loaded" — in its second clause.
+
+**A document that appears to confirm what you already believe deserves the
+same hostile reading as one that contradicts it.** The test Jan applied
+takes one second and should be routine: *does this claim also forbid
+something I know the machine does?*
+
+## §126 — The Lakai source: no save, and a third transport (2026-08-18)
+
+`lakai.tar.gz` (v0.1, 2012) added to the document directory. It is the
+source of the Linux Akai tools whose HTML transcriptions §1 already cites,
+so it is the closest thing to an independent implementation of this
+protocol that exists.
+
+**It implements no save, and defines no opcode this project does not have.**
+`lakai.h` lists `0x27`–`0x38` with the same meanings, including
+`LC_S3RVLI`/`LC_S3VLI` and `LC_S3RHDENT`/`LC_S3HDENT` annotated exactly as
+the documents annotate them — *"only used in response to request"*.
+
+A wishlist in the header does contain the lines `VolumeList entry (R/W)`
+and `Harddisk Directory entry (R/W)`, which look like a claim that those
+are writable. **They are not evidence.** The block sits inside `#if 0`,
+under a heading reading "yet unsorted", among entries for samplers the
+author had no information about (`S5000/S6000: ?? (need more info)`). It is
+a to-do list of things to look into, not a record of things established.
+Reading it as a finding would be the §125 mistake again — accepting a
+supportive-looking line at the speed of agreement.
+
+### What it does add
+
+Lakai does not use the serial MIDI port at all. It drives the sampler over
+**SCSI**, with three modes:
+
+```
+LAKAI_MODE_NORMAL      standard MIDI over serial
+LAKAI_MODE_SCSI_MIDI   the same SysEx protocol tunnelled over SCSI
+LAKAI_MODE_SCSI_BULK   bulk transfer for sample data
+```
+
+Its backup and restore — the one thing its ROADMAP claims as working — move
+memory blocks over SCSI bulk, "bypassing the MIDI protocol" in the author's
+own words. So the third-party implementation that *does* get data on and off
+the machine wholesale does it exactly where the S2800 document said to, and
+not through the editor protocol.
+
+That is consistent with there being no remote save in SysEx. **It is not
+proof of it**, and after §125 it is worth being explicit about the
+difference: a tool not implementing something is evidence about the tool.
+`liblakai` never claimed to cover the disk pages.
+
+### Status of the question
+
+Unchanged by this. The bank sweep (§124) remains the experiment that would
+settle it, and it has still not run.
+
+## §127 — RETRACTION: remote save exists, and so does remote rename (2026-08-18)
+
+**§122 is wrong. §123, §124, §125 and §126 are all downstream of it and
+inherit the error.** Remote save works. Remote volume creation works. Remote
+volume rename works. A volume was built and named tonight without anyone
+touching the front panel.
+
+Jan said, twice, that he did not believe the negative. He was right twice.
+
+### The mechanism
+
+`byte[6..9]` are **four independent action registers**, not one field
+mirrored four times. This project has called them "the load type, mirrored"
+since §71 on the strength of them reading alike. They read alike; they do
+entirely different things when written.
+
+| register | action |
+|---|---|
+| `byte[6]` | **LOAD** |
+| `byte[7]` | delete from memory |
+| `byte[8]` | **SAVE — creates a new volume** in the selected slot |
+| `byte[9]` | **SAVE — rewrites the selected volume** |
+
+**None of them cares which page the panel shows.** `byte[91]` — this
+project's "mode" — decides what the LCD displays and nothing else. `byte[6]`
+was fired in mode 9 and loaded; `byte[8]` was fired in mode 10 and saved.
+
+Naming is a **separate bank**. The miscellaneous selector table has been in
+these notes since §5 — *1 byte, 2 word, 3 dword, 4 smpte, 5 signed smpte,
+**6 name**, 7 16-byte flag* — and only the byte and word banks were ever
+swept. The name bank holds:
+
+```
+index 1 'DRUM INPUTS'    index 3 'NOISE'      index 5 'TAKE 1'
+index 2 'NEW NAME'       index 4 'NSWHITE'    index 6,7 'NEW NAME'
+```
+
+**Writing name-bank index 6 renames the selected volume**, acknowledged with
+`REPLY 0`. Verified on two volumes with different names, with the whole
+volume list diffed each time to confirm nothing else moved.
+
+Saving cannot name at creation — `byte[8]` always produces `VOLUME nnn` —
+so the sequence is create-then-rename. End to end:
+
+```
+select empty slot -> byte[8]=1 -> created 'VOLUME 010'
+select it -> name-bank[6]='MIXED DEMO' -> renamed
+read back: 3 programs + 2 samples, exactly what memory held
+```
+
+### How §122 got it wrong, in detail
+
+Not one mistake. Three, stacked, each of which alone would have produced the
+same false negative.
+
+**1. The wrong variable.** The "existing volume" run wrote `byte[6]` and
+then checked *the volume's directory* for a change. `byte[6]` is the LOAD
+trigger. A load changes **RAM**, not the directory. The instrument could not
+have detected the thing it was pointed at. It was almost certainly loading
+v2 repeatedly, eight times, invisibly.
+
+**2. A destination with nothing to show.** The empty-slot runs aimed
+`byte[6]` at a slot with nothing in it. A working load trigger produces no
+observable change there either.
+
+**3. The wrong register.** Both runs tested `byte[6]`, chosen because Phase
+A found bytes 6–9 shared between the pages and the project already believed
+they were mirrors. The save register was `byte[8]`, two along, and the
+belief that made 6 representative of 8 was itself the error.
+
+Then §123 was built on top: an opcode survey, correct in itself, answering a
+question about *opcodes* while the mechanism was a register write. And §125
+correctly caught that a document quotation had been misread — but the
+correction was applied to the argument and not to the conclusion, which was
+left standing on the two remaining measurements. Both of which were the ones
+above.
+
+### What actually found it
+
+Writing every register **its own current value**. State-neutral by
+construction — no byte changes — but any write-triggered action still fires,
+because for these registers the *write* is the trigger and the value is a
+type. `byte[8]` fired on the eighth write.
+
+That technique is the transferable part of tonight, and it is worth stating
+as a rule: **when hunting a trigger, write values that cannot change state.**
+It separates "this register acts" from "this value is valid", which every
+sweep in §105 and §122 conflated.
+
+### The cost of the error, honestly
+
+`byte[7]` deleted a program during the culprit-hunt and, earlier, resident
+samples. `byte[9]` rewrote v2 from memory, which reset its name from `NOISE`
+to `VOLUME 003` — contents intact, superset of what was there. Both on the
+disposable image, both with the material present elsewhere, nothing lost
+that was not replaceable. But they were fired blind, and they were fired
+because the registers next to a known one were assumed to be copies of it.
+
+**The near-miss that matters more:** `_MISC_LOAD_TYPE = (6, 7, 8, 9)` has
+been in `bridge.py` all along, described as the load type mirrored. Only
+`[:1]` of it is ever written. Any future code iterating that tuple — the
+obvious thing to do with a tuple of mirrors — would have deleted from memory
+and written to disk. The name was wrong, the comment was wrong, and a slice
+was the only thing standing between them and a user's disk.
+
+### Standing correction
+
+§122's measurements were real; every conclusion drawn from them is
+withdrawn. §123 and §126 remain true about opcodes and about `liblakai`, and
+irrelevant to the question they were recruited to answer. §125's catch was
+right and its scope was too small.
+
+**The pattern across all of them is one thing: a negative result was allowed
+to rest on an instrument nobody had validated against a positive.** §122 ran
+a positive control on the *transport* — the same poke loaded an item, so the
+frames were reaching the machine — and treated that as validating the
+experiment. It validated the wire. It said nothing about whether the
+detector could see a save, and it could not.

@@ -487,6 +487,76 @@ class DemoBridge:
                 "volume": getattr(self, "_volume", 0),
                 "cursor_value": 0, "mode": self._mode}
 
+    #: The demo starts where a machine with a disk usually sits.
+    _page_mode = 10
+
+    def page_mode(self, *, timeout: Optional[float] = None):
+        return self._page_mode
+
+    def select_page(self, mode: int, *, timeout: Optional[float] = None):
+        """Mirrors S3kBridge.select_page, INCLUDING refusing mode 0.
+
+        A fake that accepted 0 would let a caller write a restore path that
+        cannot work on the machine -- which is the shape of defect this
+        project has now hidden behind a permissive demo four times.
+        """
+        from s3k import messages as _m
+        if mode not in _m.MAIN_MENU_PAGES:
+            raise ValueError(f"mode {mode} is not a documented page")
+        if mode == 0:
+            from s3k.bridge import DeviceError
+            raise DeviceError("device reported an error writing misc byte 91 "
+                              "(code 1)")
+        self._page_mode = mode
+        return self._page_mode
+
+    def save_source(self, *, timeout: Optional[float] = None):
+        out = self.load_source(timeout=timeout)
+        out["page_state"] = 1 if self._page_mode == 9 else 22
+        out["on_save_page"] = self._page_mode == 9
+        return out
+
+    def save_to_new_volume(self, save_type: int = 1, *, name=None,
+                           timeout: Optional[float] = None):
+        """Mirrors S3kBridge.save_to_new_volume (§127).
+
+        The demo has no medium, so this records the volume it would have
+        created and the name it would have been given. A fake that silently
+        did nothing would let the app drop the rename and still pass.
+        """
+        if save_type not in m.LOAD_TYPES:
+            raise ValueError(f"save type {save_type} is not documented")
+        self.saved = getattr(self, "saved", [])
+        self.saved.append({"type": save_type,
+                           "volume": getattr(self, "_volume", 0),
+                           "name": name})
+        if name is not None:
+            self.rename_volume(name)
+        return self.load_source(timeout=timeout)
+
+    def save_to_selected_volume(self, save_type: int = 1, *,
+                                timeout: Optional[float] = None):
+        if save_type not in m.LOAD_TYPES:
+            raise ValueError(f"save type {save_type} is not documented")
+        self.rewritten = getattr(self, "rewritten", [])
+        self.rewritten.append({"type": save_type,
+                               "volume": getattr(self, "_volume", 0)})
+        # the machine resets a rewritten volume's name to the default, and
+        # the demo must too or the app will look correct here and surprise
+        # somebody on hardware
+        self.renames = getattr(self, "renames", [])
+        self.renames.append(f"VOLUME {getattr(self, '_volume', 0) + 1:03d}")
+        return self.load_source(timeout=timeout)
+
+    def rename_volume(self, name: str, *, timeout: Optional[float] = None):
+        self.renames = getattr(self, "renames", [])
+        self.renames.append(name)
+        return name
+
+    def trigger_save(self, save_type: int = 1, *,
+                     timeout: Optional[float] = None):
+        return self.save_to_new_volume(save_type, timeout=timeout)
+
     def refresh_media(self, *, timeout: Optional[float] = None):
         """Mirrors S3kBridge.refresh_media (§112).
 
