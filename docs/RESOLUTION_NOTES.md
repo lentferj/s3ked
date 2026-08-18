@@ -174,6 +174,7 @@ silently wrong one.
 - [§131](#131--the-directory-has-six-file-types-s3ked-models-two-2026-08-18) — The directory has six file types; s3ked models two (2026-08-18)
 - [§132](#132--ddata-is-writable-so-the-aux-specimen-needs-no-panel-2026-08-18) — `DDATA` is writable, so the aux specimen needs no panel (2026-08-18)
 - [§133](#133--both-aux-files-decoded-and-115-confirmed-from-the-disk-2026-08-18) — Both aux files decoded, and §115 confirmed from the disk (2026-08-18)
+- [§134](#134--the-delete-page-and-a-warning-i-got-the-size-of-wrong-2026-08-18) — The DELETE page, and a warning I got the size of wrong (2026-08-18)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -12043,3 +12044,102 @@ Their note on it is the part to keep: a file where only one field per record
 changed would never have exposed it. **The specimen designed to make fields
 findable also made a bug findable**, because "every field of one record set"
 is exactly the input that breaks a naive stride inference.
+
+## §134 — The DELETE page, and a warning I got the size of wrong (2026-08-18)
+
+Jan photographed the front panel's DELETE page while mpc2emu held the
+sampler. Three results, and one correction to my own handling of the first.
+
+### The delete-type enum
+
+```
+0  cursor item only     3  ENTIRE VOLUME
+1  all programs only    4  OPERATING SYSTEM
+2  all samples
+```
+
+Softkeys read `SAVE VOLS REN DEL SCSI FORM` with **`GO` on F8**. Two things
+follow that matter more than the enum itself:
+
+* **`ENTIRE VOLUME` exists, so the delete is real.** §129 left open the
+  possibility that this family has no per-volume delete and a partition is
+  only cleared by reformatting. Closed: the capability exists and it is the
+  *remote route* that is missing, not the operation.
+* **The trigger is a separate key.** On this page the type is selected and
+  `GO` fires it — unlike the LOAD and SAVE registers where the write *is*
+  the operation (§127). If the remote form mirrors the panel, there is an
+  arm-then-fire pair to find, and **the arming half is safe to look for
+  while the firing half is not.**
+
+### The correction: what `OPERATING SYSTEM` does
+
+mpc2emu flagged type 4 as a hazard and I wrote it into `TODO.md` as erasing
+the machine's firmware, on an instrument that cannot be replaced. **That was
+an overclaim, and I made it by taking a plausible reading and recording it
+without checking.** Jan queried it.
+
+It deletes the **OS file on the selected medium**. The evidence is our own
+protocol table, not an outside claim: `LOAD_TYPES[6]` is `Operating System`,
+so an OS can be *loaded from* a medium — which makes it a file on that
+medium, and the symmetric delete removes that file. `bridge.py` has guarded
+load type 6 behind an explicit flag all along for exactly that reason. The
+`BOOT SYSTEM#` volume's nine directory entries contain no OS-typed file, so
+the OS sits outside the volume directory.
+
+**The warning survives at its true size.** Sweeping a register carrying this
+enum still walks through `3 ENTIRE VOLUME`, which destroys a volume, and `4`,
+which can strip a boot medium's OS — recoverable only if an OS file exists
+elsewhere. Neither is a power-cycle recovery. What changed is the magnitude,
+not the conclusion.
+
+This is the same failure as everything else today, in its purest form yet:
+**the measurement was somebody else's, correct, and I amplified it past what
+it said.** A warning is a claim. Being cautious does not exempt it from
+having to be true — an overstated hazard spends the same credibility as an
+overstated finding, and the next warning is read in its light.
+
+### The drum record, six of nine named
+
+With the §132 specimen live, the panel showed:
+
+```
++0x00  36  ->  note C_1        (MIDI 36 displayed as C_1)
++0x01  51  ->  sens 51         verbatim
++0x02  26  ->  trig 26         verbatim
++0x03   3  ->  V-curve 4       0-based stored, 1-based displayed
++0x04   5  ->  capture 5 mS    verbatim, unit mS
++0x05  11  ->  recover 11 mS   verbatim, unit mS
++0x06  12  ->  ?
++0x07   7  ->  ?
++0x08   9  ->  ?
+```
+
+Unattributed display fields: `on-time 804 mS`, `chan 1`, `unit 1`,
+`input ALL`. `on-time` is not a u16 in any adjacent pair, so it is scaled,
+table-indexed, or elsewhere.
+
+mpc2emu also corrected their own §133 wording: "all nine fields stored
+verbatim" was true of *file byte == register value*, which is what they
+measured, **and false as anyone would naturally read it** — six display
+verbatim, `V-curve` is off by one, three do not appear at all. A sentence
+accurate in its own terms and misleading in its plain reading.
+
+### The multi's signed encoding, settled
+
+`243` displays as **`Pan L13`**. Offset-by-50 would give 193 and
+sign-magnitude 115, so **two's complement is confirmed** — and
+`params.encode_field`'s assumption (§132) was right. One glance settled all
+three signed fields, as designed.
+
+Two corrections fell out of the same photograph:
+
+* **`@23` is labelled `Lev` on the panel, not "stereo".** The name in
+  `params.py` is the Akai document's and is kept — this table is a
+  transcription and renaming it would silently diverge from the source — but
+  the panel label is now in its `notes`, because that is what the person at
+  the machine sees.
+* **`PMCHAN` 22 displays as `Ch 16`.** Stored verbatim to 255, clamped in
+  use. **This is the `K_FREQ` shape demonstrated rather than suspected: a
+  declared range describes what the register will HOLD, not what the machine
+  will ACT ON.** Recorded in the parameter's notes, where somebody choosing a
+  value will meet it.

@@ -2994,7 +2994,13 @@ _PARAMS: List[Parameter] = [
     _p("multipart", 16, "PMCHAN", 1, "multipart.midi", 0, 255,
         values={255: "OMNI"}, models="S2000/S3000XL/S3200XL",
         desc="MIDI channel this part responds to, irrespective of part number",
-        notes='range as written: "255 signifies OMNI, 0 to 15 indicate MIDI channel"'),
+        notes='range as written: "255 signifies OMNI, 0 to 15 indicate MIDI '
+              'channel". MEASURED 2026-08-18 (§134): the register STORES any '
+              'value to 255 -- 22 was written and read back verbatim -- but '
+              'the panel displays 22 as "Ch 16", so it is CLAMPED IN USE. '
+              'The declared range describes what the register holds, not what '
+              'the machine acts on; the same distinction K_FREQ is suspected '
+              'of and this one is demonstrated'),
     _p("multipart", 18, "PRIORT", 1, "multipart.midi", 0, 3,
         values={0: "low", 1: "norm", 2: "high", 3: "hold"}, models="S2000/S3000XL/S3200XL",
         desc="Priority of voices playing this part"),
@@ -3007,7 +3013,13 @@ _PARAMS: List[Parameter] = [
         notes="the source leaves this Range field blank (OCR reads \"Rsngs:\"); "
               "see the program header's OUTPUT for the model-dependent meanings"),
     _p("multipart", 23, "STEREO", 1, "multipart.output", 0, 99, models="S2000/S3000XL/S3200XL",
-        desc="Left and right output levels"),
+        desc="Left and right output levels",
+        notes='the PANEL labels this field "Lev", not "Stereo" (§134): a '
+              'planted 61 appeared under Lev. The name here is the Akai '
+              "document's and is kept, because this table is a transcription "
+              'and renaming it would silently diverge from the source -- but '
+              'anything user-facing should say Lev, which is what the person '
+              'at the machine sees'),
     _p("multipart", 24, "PANPOS", 1, "multipart.output", -50, 50, models="S2000/S3000XL/S3200XL",
         desc="Balance between left and right outputs"),
     _p("multipart", 70, "VOSCL", 1, "multipart.output", 0, 99, models="S2000/S3000XL/S3200XL",

@@ -1431,26 +1431,76 @@ settles a documented conflict rather than only naming a field.
 there and 108 carry zero, which is two populations of files rather than a
 parameter.
 
-## Is there a remote volume DELETE? (OPEN)
+## Is there a remote volume DELETE? (OPEN — READ THE WARNING FIRST)
+
+> ### ⚠ DO NOT SWEEP A DELETE REGISTER'S VALUES
+>
+> The front panel's DELETE page carries this type enum (photographed
+> 2026-08-18, §134):
+>
+> ```
+> 0  cursor item only     3  ENTIRE VOLUME
+> 1  all programs only    4  OPERATING SYSTEM
+> 2  all samples
+> ```
+>
+> **What type 4 actually does — corrected.** The first version of this
+> warning said it erases the machine's firmware and called the instrument
+> unreplaceable. **That was an overclaim and it was mine**, taken from a
+> plausible reading and written down without checking. Jan queried it.
+>
+> It deletes the **OS file on the selected medium**, not the sampler's own
+> boot code. Our own table is the evidence: `LOAD_TYPES[6]` is
+> `Operating System`, so an OS can be *loaded from* a medium — which makes
+> it a file on that medium, and the symmetric delete removes that file.
+> `bridge.py` already guards load type 6 for the same reason. The
+> `BOOT SYSTEM#` volume's nine directory entries include no OS-typed file
+> either, so the OS lives outside the volume directory rather than in it.
+>
+> **The warning stands anyway, at its true size.** Sweeping values on a
+> register carrying this enum walks through `3 ENTIRE VOLUME`, which
+> destroys a volume outright, and `4`, which can strip the OS from a boot
+> medium — recoverable only if an OS file exists elsewhere to reload. Jan's
+> machine boots to the flash device. Neither is a power-cycle recovery.
+>
+> §105's rule applies with more teeth than when it was written: a reachable
+> page does not imply a reachable softkey — **and here a value that looks
+> inert may not be.** Any future work on this item must name the value it is
+> about to write and why, one at a time. No sweeps.
 
 **Status:** open. Remote save, volume creation and volume rename all work
 (§127). Removing a volume does not, by any route tried.
+
+**The delete itself is real and is NOT absent** (§134). `ENTIRE VOLUME` is on
+the panel's DELETE page, so the earlier "perhaps this family has no
+per-volume delete" possibility is closed. What is missing is the remote
+route, not the capability.
 
 Swept without an event: the byte bank 10–127 and the **word bank** 0–31,
 both written own-value; `byte[7]` across its types, which deletes from
 memory and never from the disk (§128, §129).
 
 **Blocked on:** hardware time, and **mpc2emu holds the lead on the sampler**
-(2026-08-18). Untried, in order of promise:
+(2026-08-18).
 
-- `byte[8]` / `byte[9]` at values other than 1. `byte[8] = 0`
-  (`ENTIRE VOLUME`) is the strongest untested candidate.
-- selectors 3, 4, 5 and 7 of the miscellaneous data. The name bank was found
-  at selector 6 and volume naming had been called impossible until somebody
-  read the §5 table; three selectors have still never been addressed.
-- confirming from the front panel whether this family HAS a per-volume
-  delete at all. If a partition is only cleared by reformatting, there is
-  nothing to find, and that answer comes from the panel rather than a probe.
+Untried, in order of promise — **and note the first entry is no longer a
+value sweep**:
+
+- **selectors 3, 4, 5 and 7** of the miscellaneous data, never addressed by
+  this project at all. The name bank turned up at selector 6 and volume
+  naming had been called impossible until somebody read the §5 table. This
+  is now the *first* candidate rather than the second, because it explores
+  addresses rather than values and cannot stumble onto a type enum.
+- the panel's own page structure. Softkeys read
+  `SAVE VOLS REN DEL SCSI FORM` with **`GO` on F8** — the trigger is a
+  *separate key* from the type selection, unlike the LOAD and SAVE
+  registers where the write IS the operation. If DELETE works that way
+  remotely too, there is an arm-then-fire pair to find, and the arming half
+  is safe to look for while the firing half is not.
+- `byte[8]` / `byte[9]` at other values — **deprioritised and fenced.**
+  Those are save registers whose type table is `LOAD_TYPES`, not the delete
+  enum, so they are probably not the risk. "Probably" is not the standard
+  that applies when value 4 of some enum on this page erases the firmware.
 
 **Caveat that applies to every negative above:** own-value sweeps fire a
 register with whatever type it is already set to, so they detect "this
