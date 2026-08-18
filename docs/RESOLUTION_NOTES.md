@@ -168,6 +168,8 @@ silently wrong one.
 - [§125](#125--the-document-quote-was-misread-and-the-reductio-that-showed-it-2026-08-18) — The document quote was misread, and the reductio that showed it (2026-08-18)
 - [§126](#126--the-lakai-source-no-save-and-a-third-transport-2026-08-18) — The Lakai source: no save, and a third transport (2026-08-18)
 - [§127](#127--retraction-remote-save-exists-and-so-does-remote-rename-2026-08-18) — **RETRACTION**: remote save exists, and so does remote rename (2026-08-18)
+- [§128](#128--hunting-a-volume-delete-102-registers-no-event-one-wedge-2026-08-18) — Hunting a volume delete: 102 registers, no event, one wedge (2026-08-18)
+- [§129](#129--byte7-is-a-memory-delete-and-where-a-volume-delete-is-not-2026-08-18) — `byte[7]` is a memory delete, and where a volume delete is not (2026-08-18)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -11515,3 +11517,150 @@ a positive control on the *transport* — the same poke loaded an item, so the
 frames were reaching the machine — and treated that as validating the
 experiment. It validated the wire. It said nothing about whether the
 detector could see a save, and it could not.
+
+## §128 — Hunting a volume delete: 102 registers, no event, one wedge (2026-08-18)
+
+§127 left seven disposable volumes on the test image and no way to remove
+them. The panel has a delete; every other panel disk action has turned out
+to be a register in the miscellaneous bank, so the bank was the place to
+look.
+
+### The run
+
+Resumed the write-own-value sweep from `byte[10]`, with a disposable volume
+selected so any volume-scoped operation landed on it, and with `v0`/`v1`
+name-checked after every write so the sweep could not quietly eat somebody
+else's material.
+
+**Bytes 10 to 111 — 102 registers — produced no event at all.** Volume
+count, resident programs and resident samples held constant across every
+one. At `byte[111]` the machine stopped answering and did not come back on a
+quiet bus. It needed a power cycle.
+
+`byte[111]` reads 0 and was written 0. Whether it caused the wedge or merely
+preceded it is **not** established — §71 has precedent for this machine
+going quiet mid-operation and returning, and for it sitting at BUSY until
+power-cycled. One correlation is not a cause, and re-testing it costs
+another power cycle.
+
+### The limitation this exposes in the technique
+
+Writing a register its own current value is state-neutral and still fires
+anything write-triggered, which is what found `byte[8]`. But the value is
+not inert to the *operation*: for these registers the value is a **type**.
+`byte[7]` fired a delete because its current value happened to be a type
+that deletes something.
+
+So a register whose current value is a harmless type will fire harmlessly
+and look exactly like a register that does nothing.
+
+**A null result from an own-value sweep is therefore much weaker than a null
+result from a value sweep.** It says "no register acted *with the type it
+was already set to*", not "no register acts". §127's success made the
+technique look stronger than it is, and this is the boundary.
+
+That is the same shape as §WRONGLAYER, one level down: the sweep is a real
+control for *does this register act*, and not a control for *does this
+register do the thing I am looking for*.
+
+### What that leaves
+
+Not a negative about the machine. A delete may well live in:
+
+* one of these same registers at a **different value** — the obvious next
+  step, and cheap for `byte[7]`/`byte[8]`/`byte[9]` whose semantics are
+  known;
+* the **name bank or another selector**, since volume naming turned out to
+  live in a bank nobody had swept (§127);
+* `byte[112]`–`byte[127]`, which the wedge cut short.
+
+Recorded rather than concluded. The distinction is the entire lesson of
+§122.
+
+## §129 — `byte[7]` is a memory delete, and where a volume delete is not (2026-08-18)
+
+Continues §128. The hunt for a remote volume delete, with what each attempt
+actually established.
+
+### `byte[7]` deletes from MEMORY, and its value is a type
+
+§128 named the weakness of the own-value sweep: for these registers the
+value is a **type**, so writing a register the value it already holds fires
+only whatever that type happens to be. `byte[7]` was the obvious place to
+apply the correction, since it is the delete register and its types looked
+likely to follow `LOAD_TYPES`.
+
+With a disposable volume selected:
+
+```
+byte[7] = 0  (ENTIRE VOLUME)      -> all 4 resident SAMPLES deleted
+byte[7] = 2,3,4,5,7               -> nothing left to act on
+volume list                        -> unchanged throughout, 10 volumes
+```
+
+**The types apply to memory, not to the disk.** `byte[7] = 0` did not delete
+the selected volume; it emptied resident sample memory. The register's
+neighbours address the disk and it does not, which is one more reason the
+"four mirrors" name was wrong in every direction.
+
+Cost: the machine's autoloaded waveform set — sine, square, sawtooth, pulse
+— went with it. They live on the autoload volume and reload on boot, so the
+cost was a reload rather than a loss, but it was not predicted and is
+recorded rather than tidied away.
+
+### Where a volume delete is NOT
+
+| surface | swept | result |
+|---|---|---|
+| byte bank 10–111 | own-value | no event (§128) |
+| byte bank 112–127 | own-value | no event |
+| **word bank 0–31** | own-value | no event |
+| `byte[7]` types 0,2,3,4,5,7 | value sweep | memory only, never the disk |
+
+The word bank had **never been swept**. s3ked uses `word[6]` and `word[7]`
+and nothing else, and §127's lesson was that a bank nobody looked in is
+exactly where volume naming was hiding. It is now looked in, and it is not
+there either.
+
+Type 6 `Operating System` was excluded deliberately from the `byte[7]`
+sweep. An OS delete on a machine that boots from the disk under test is not
+a disposable experiment, and the value of finding out is much smaller than
+the cost of being right.
+
+### Standing state of the question
+
+**Open, and not answered in the negative.** The own-value passes carry
+§128's caveat, and the only value sweep run so far was on `byte[7]`. What is
+untried:
+
+* `byte[8]` and `byte[9]` at values other than 1 — `byte[8] = 0`
+  (`ENTIRE VOLUME`) has never been fired and is the closest thing to an
+  untested candidate with a plausible reading.
+* the remaining selectors. The name bank was found at selector 6 by looking
+  at the §5 table; selectors 3 (dword), 4/5 (smpte) and 7 (16-byte flag)
+  have still never been addressed by this project at all.
+* the possibility that this family simply has no per-volume delete and a
+  partition is cleared by reformatting. That would be a real answer and it
+  needs the panel to confirm, not a probe.
+
+### The machine wedged and came back
+
+`byte[111]`, written its own value, preceded a total loss of response —
+`RSTAT` unanswered on a quiet bus for several minutes. A power cycle
+restored it fully: version 17.00, 31.75 MB free, and it boots to the flash
+device rather than the hard disk, so `select_device(1)` is needed before
+anything on HD4.
+
+**Nothing on the disk was harmed by the wedge.** Verified afterwards by
+entry count and byte total against the readings taken before any writes:
+
+```
+v0  VF NEW      30 entries  8125128 bytes   identical
+v1  VF OLD      30 entries  8125128 bytes   identical
+v2  NOISE        4 entries   353952 bytes   identical, name restored
+```
+
+Those two are mpc2emu's material. This is a check on entry count and total
+size rather than a byte-level diff, which is more than "it was never
+selected" and less than proof; mpc2emu holds a byte-identical backup and
+will diff it properly when the card is next in a PC.

@@ -1416,3 +1416,35 @@ settles a documented conflict rather than only naming a field.
 **Not** the 0x8d–0x95 bytes: 72 of 182 blocks carry a single fixed value
 there and 108 carry zero, which is two populations of files rather than a
 parameter.
+
+## Is there a remote volume DELETE? (OPEN)
+
+**Status:** open. Remote save, volume creation and volume rename all work
+(§127). Removing a volume does not, by any route tried.
+
+Swept without an event: the byte bank 10–127 and the **word bank** 0–31,
+both written own-value; `byte[7]` across its types, which deletes from
+memory and never from the disk (§128, §129).
+
+**Blocked on:** nothing — it needs hardware time, and the machine is
+available. Untried, in order of promise:
+
+- `byte[8]` / `byte[9]` at values other than 1. `byte[8] = 0`
+  (`ENTIRE VOLUME`) is the strongest untested candidate.
+- selectors 3, 4, 5 and 7 of the miscellaneous data. The name bank was found
+  at selector 6 and volume naming had been called impossible until somebody
+  read the §5 table; three selectors have still never been addressed.
+- confirming from the front panel whether this family HAS a per-volume
+  delete at all. If a partition is only cleared by reformatting, there is
+  nothing to find, and that answer comes from the panel rather than a probe.
+
+**Caveat that applies to every negative above:** own-value sweeps fire a
+register with whatever type it is already set to, so they detect "this
+register acts" and not "this register can do X" (§128).
+
+## Seven disposable volumes left on the HD4 test image (OPEN)
+
+`VOLUME 005`, `VOLUME 006`, `VOLUME 009`, `MIXED KIT 1`, `SKED VOL A`,
+`SKED VOL B`, `MIXED DEMO` — created while establishing §127. Harmless, and
+they stay until either the delete above is found or the image is reformatted.
+mpc2emu holds a byte-identical pre-session backup.
