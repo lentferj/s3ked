@@ -1753,23 +1753,18 @@ class S3kBridge:
                 f"load type {load_type} ({m.LOAD_TYPES[load_type]}) is "
                 f"guarded; pass force=True to mean it"
             )
-        # THE PAGE DECIDES WHAT THIS REGISTER DOES. Bytes 6-9 are NOT
-        # page-specific: they read the same in mode 9 and mode 10
-        # (SAVE_PLAN, phase A). So this write fires a LOAD only if the
-        # machine is on the LOAD page -- on the SAVE page the same write may
-        # commit a SAVE to disk, which is a different and irreversible thing.
+        # No page check, and no mode read. There used to be a guard here
+        # refusing to write while the machine showed the SAVE page, on the
+        # theory that bytes 6-9 were one shared register whose meaning the
+        # page decided. §127 measured both halves and both are false:
+        # `byte[6]` LOADS from either page, and the save registers are
+        # `byte[8]` and `byte[9]`, which this method never touches.
         #
-        # Checked every time rather than documented, because the cost of
-        # being wrong is a write to somebody's medium and the cost of the
-        # check is one read.
-        mode = self._misc_byte(self._MISC_MODE, timeout=timeout)
-        # No page check. There used to be one here, refusing to write while
-        # the machine showed the SAVE page, on the theory that bytes 6-9 were
-        # one shared register whose meaning the page decided. §127 measured
-        # both halves of that and both are false: byte[6] LOADS from either
-        # page, and the save registers are byte[8] and byte[9], which this
-        # method does not touch. The guard prevented a legal load and
-        # prevented nothing else.
+        # The read that fed that guard outlived it and was doing real harm:
+        # it is a round trip on every load, and calling it while the machine
+        # is busy with a previous load gets a short REPLY that the extended
+        # decoder cannot parse. That is how a 23 MB load turned into a
+        # ValueError instead of a load.
         self.invalidate_structure()      # a load replaces the whole bank
         frame = m.HeaderData(
             command=m.Command.MISCDATA, index=self._MISC_LOAD, selector=1,
