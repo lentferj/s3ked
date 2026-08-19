@@ -177,6 +177,7 @@ silently wrong one.
 - [§134](#134--the-delete-page-and-a-warning-i-got-the-size-of-wrong-2026-08-18) — The DELETE page, and a warning I got the size of wrong (2026-08-18)
 - [§135](#135--retracted-nswhite-is-white-noise-i-was-measuring-a-program-stack-2026-08-18) — **RETRACTED**: `NSWHITE` is white noise; I was measuring a program stack (2026-08-18)
 - [§136](#136--loopat1-is-the-loop-end-not-the-loop-start-2026-08-18) — `LOOPAT1` is the loop END, not the loop start (2026-08-18)
+- [§137](#137--the-rate-snap-confirmed-by-ear-and-a-detune-discriminator-2026-08-19) — The rate snap confirmed by ear, and a detune discriminator (2026-08-19)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -11241,7 +11242,7 @@ So what §122 actually measured is narrower than what §122 concluded:
   machine is on the SAVE page.
 
 The conclusion was drawn from the tested part and stated over the untested
-part. That is the §RIGHTNUMBER shape again — the measurements are sound and
+part. That is the familiar shape again — the measurements are sound and
 the explanation reached past them — and this time the reach was in the
 direction of a *negative*, which is worse, because a negative closes a
 question and nobody re-opens it.
@@ -11347,7 +11348,7 @@ been *found*, not that none exists.
 
 ### The general point, because this is three in one night
 
-§RIGHTNUMBER, then §124, now this. Each time the measurement was sound and
+§122, then §124, now this. Each time the measurement was sound and
 the sentence next to it reached further than the measurement did. Here the
 reach was into a *document*: a quotation that supported the conclusion was
 accepted at the speed of agreement, while the same quotation contained the
@@ -12260,7 +12261,7 @@ if it moves one out of the way.
 sample zones; reading zone 1 and stopping is what made a two-zone keygroup look
 like a one-zone one, and a 3 dB level step then looks like a machine artefact
 rather than two samples summing (`+3.01 dB` for two incoherent sources). Read
-all four zones, as §RIGHTNUMBER's cousin: the partial read that agrees with
+all four zones. It is the same lesson's cousin: the partial read that agrees with
 expectation is the one nobody re-checks.
 
 ### What I got wrong, and how
@@ -12413,3 +12414,83 @@ already exists is cheaper and was skipped every time.
 The confirming capture plays the correct region and shows **no periodicity** —
 self-similarity 0.0407 across 0.3–9 s where a 1.000 s loop should peak at 1.000.
 Region right, repetition unproven. Left open rather than explained.
+
+## §137 — The rate snap confirmed by ear, and a detune discriminator (2026-08-19)
+
+Ten keys of a converted 35-keygroup flute program were played on the machine
+and captured back, to answer one question from the converter's side: a source
+sample recorded at 24000 Hz had been resampled to 44100 to fit the two rates
+this family supports. (That pair is selected by `byte 0x01` of the sample
+header, **bit 0 only** — 0 = 22050, 1 = 44100 — with `SSRATE` at 0x8a purely
+descriptive; established 2026-08-19 and not yet written up as a section of its
+own.) Does it still play **at pitch**
+next to neighbours that needed no resampling?
+
+It does. The resampled key measured **+11.8 cents**; the other nine averaged
+**+10.5 (sd 3.7)**. It sits inside its neighbours' spread, so the rate snap is
+confirmed on hardware and not only in the file.
+
+### The part worth keeping: how the pitch was measured
+
+Three estimators were run on the *same ten captures* and gave three answers:
+
+| method | key 71 | key 89 |
+|---|---|---|
+| argmax of the spectrum | **+1204** | +10 |
+| first peak above 8% of max | −10 | **−26** |
+| per-harmonic, 1..8 | +4 | +12 |
+
+Argmax put key 71 an octave high because its second harmonic is stronger than
+its fundamental. The first-peak estimator — adopted in §136 precisely to fix
+argmax — then put key 89 26 cents flat, which would have read as *the rate snap
+failing on exactly the sample under test*. Both were artefacts of the estimator.
+
+**The discriminator: measure the deviation at every harmonic separately.** Search
+for a peak within ±3.5% of `k × expected` for k = 1..8, interpolate parabolically,
+and take the median. A real detune shifts **every** harmonic by the same cents;
+an estimator artefact does not. On that method each key's harmonics agreed within
+2–10 cents of each other, and that internal agreement *is* the validation — it
+is carried in the data, needs no second run, and costs one loop over k.
+
+This generalises past pitch. **When an estimator has a redundant reading
+available, take it and require the readings to agree.** §136's first-peak rule
+was a better estimator than argmax and still had no way to say "I am wrong right
+now"; the per-harmonic form does. An estimator that cannot fail visibly will
+eventually fail invisibly, and on the one measurement that mattered.
+
+### The offset that was not ours, and the framing that caught it
+
+All ten keys read about **+10 cents sharp**, uniformly. Uniformity says
+*global*: a tuning field, or the machine's master tune. It was reported to the
+converter as a **separate observation**, explicitly not folded into the result.
+
+It is in the source material. Measured offline against the original file, the
+samples are recorded sharp of the roots they declare, per-sample, by amounts
+tracking what the hardware gave (source median +8.6 against +11.5 here,
+r = +0.71; key 77 is +13.8 in the file and measured +13, key 71 is +4.8 and
+measured +4). A converter bug or a master-tune error would both be a
+**constant**; this is neither. Both sides' tune fields are zero, and the
+converter's calibration tone measures 300.0 Hz dead on, which independently
+clears the master tune.
+
+So: nothing to fix, in either project. The reason that was established rather
+than chased is that the observation went across labelled as an observation. **A
+finding stated with its own confidence attached gets checked; one folded into
+the result gets acted on.** Had "+10 cents, likely a tuning field" been reported
+as part of the conclusion, the other side would have gone looking for a bug that
+was never there.
+
+### Two operational notes
+
+**Gate the level before the set, not after.** The first ten captures were all
+pinned at 0 dBFS, up to 30% of samples clipped. Clipping adds harmonics but does
+not move `f0`, so the *pitch* answer survived it — and the waveform comparison
+the captures were actually taken for did not. The re-run measures the worst key
+first and refuses the set unless it is clean, which costs one note.
+
+**`PRGNUM 0` collision is ordinary AKAI practice, not a converter defect.**
+The hazard in §135 stands — a boot program on `PRGNUM 0` stacks with a loaded
+volume's program and must be moved before anything is auditioned — but the
+corpus puts **98.3% of 2408 factory volumes** on `PRGNUM 0` as well. Every
+library disc has the same collision and users renumber. Worth recording so it is
+not filed as a bug introduced on our side.

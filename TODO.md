@@ -1595,3 +1595,18 @@ degraded playback; fix is to write the loop end.
 **Open:** `LOOPAT` = `SLNGTH` exactly does not loop, one past the last valid
 frame index. And the confirming capture plays the right region with no
 measurable periodicity — region right, repetition unproven.
+
+## The two playback rates are not written up (OPEN 2026-08-19)
+
+**Status:** established on hardware, recorded only inside §137.
+
+`byte 0x01` of the sample header selects the playback rate and does it with
+**bit 0 alone** — 0 = 22050, 1 = 44100. `SSRATE` (0x8a) is descriptive and does
+not drive it: writing 255 into the bit-0 field is accepted, which is the usual
+lesson that acceptance is not validation on this machine. §137 confirms the
+consequence by ear (a 24000 Hz source resampled to 44100 plays at pitch), but
+the finding itself has no section, so it exists only as a sentence inside
+another one's preamble.
+
+**Blocked on:** nothing. It needs the original sweep data written up, or a
+re-run to regenerate it.
