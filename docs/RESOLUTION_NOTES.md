@@ -12242,6 +12242,27 @@ earlier result was right and was measured through a stack; mpc2emu was
 correct that a sustaining sine says nothing about a noise sample's loop
 mode, and correct to say so before either of us relied on it.
 
+### A loading hazard that follows from this
+
+`TEST PROGRAM` — or whatever the machine boots with — **survives every `CLR`**,
+because the last resident program cannot be deleted, and it sits on `PRGNUM 0`.
+A converted volume whose program is also `PRGNUM 0` with `PMCHAN 255` (OMNI)
+therefore **stacks with it on every channel**, on a machine the converter's
+author never sees.
+
+That is not hypothetical: it is what produced §135's false finding, and it
+recurred on a release-verification disc hours later. Anything measuring or
+auditioning a loaded volume must check the resident program table for a
+duplicate `PRGNUM` and for `PMCHAN 255` **before** sounding a note, and say so
+if it moves one out of the way.
+
+**A layered zone is the same trap one level down.** A keygroup carries four
+sample zones; reading zone 1 and stopping is what made a two-zone keygroup look
+like a one-zone one, and a 3 dB level step then looks like a machine artefact
+rather than two samples summing (`+3.01 dB` for two incoherent sources). Read
+all four zones, as §RIGHTNUMBER's cousin: the partial read that agrees with
+expectation is the one nobody re-checks.
+
 ### What I got wrong, and how
 
 I checked the filter (`FILFRQ 99`, open), the tuning (`SPITCH 60`, note 60,
