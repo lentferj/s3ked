@@ -12549,10 +12549,21 @@ seconds of pure loop.
     the source samples, measured off disc   : median +9.0          (+2.0..+14.6)
 
 The machine plays back what was written. The sharpness is in the recorded
-material, not in the writer and not in the playback path. Paired per sample
-rather than per key (see below) the two sets correlate at **r = +0.775** with a
-mean difference of **+0.94 cents**, so what is left is estimator noise at the
-±3 cent level and there is nothing further in it.
+material, not in the writer and not in the playback path.
+
+**A matching distribution is the weaker claim.** Two distributions can coincide
+while every individual sample is wrong, so the sets were also paired one to one
+— by the sample's `SPITCH`, not by the key, which the octave offset below makes
+essential. Over all 35 paired points:
+
+    mean(hardware - source) = +0.32 cents   sd 2.52   range -4.4..+7.2
+    r = +0.678        trend across the keyboard = +0.27 cents/octave
+
+No constant offset, no key-dependent trend across three octaves, and a residual
+that is scatter at the ±2.5 cent level — about what two different pitch
+estimators on two signal paths produce on their own. The correlation is what the
+distribution comparison could not show: the machine reproduces **each sample's
+own** detune, not merely the same overall spread. Nothing further in it.
 
 **Cents survive transposition; nothing else does.** Every keygroup on this
 volume plays its sample an octave above the sample's own root, so nothing was
