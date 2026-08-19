@@ -178,6 +178,7 @@ silently wrong one.
 - [§135](#135--retracted-nswhite-is-white-noise-i-was-measuring-a-program-stack-2026-08-18) — **RETRACTED**: `NSWHITE` is white noise; I was measuring a program stack (2026-08-18)
 - [§136](#136--loopat1-is-the-loop-end-not-the-loop-start-2026-08-18) — `LOOPAT1` is the loop END, not the loop start (2026-08-18)
 - [§137](#137--the-rate-snap-confirmed-by-ear-and-a-detune-discriminator-2026-08-19) — The rate snap confirmed by ear, and a detune discriminator (2026-08-19)
+- [§138](#138--35-keys-swept-the-loops-hold-and-two-estimator-traps-2026-08-20) — 35 keys swept: the loops hold, and two estimator traps (2026-08-20)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -12533,3 +12534,69 @@ volume's program and must be moved before anything is auditioned — but the
 corpus puts **98.3% of 2408 factory volumes** on `PRGNUM 0` as well. Every
 library disc has the same collision and users renumber. Worth recording so it is
 not filed as a bug introduced on our side.
+
+## §138 — 35 keys swept: the loops hold, and two estimator traps (2026-08-20)
+
+Every distinct sample on a converted 35-keygroup volume was played for 10 s and
+captured: keys 67..101, velocity 110, one WAV per key kept on disk. The set
+answers two questions at once, because the loops on this volume are short and
+early (0.15–0.60 s long, all closed by 2.57 s), so a 10 s hold is about nine
+seconds of pure loop.
+
+### Pitch: two methods, two signal paths, same distribution
+
+    captures, harmonic median, early window : mean +9.22  sd 3.19  (+2.7..+16.4)
+    the source samples, measured off disc   : median +9.0          (+2.0..+14.6)
+
+The machine plays back what was written. The sharpness is in the recorded
+material, not in the writer and not in the playback path. Paired per sample
+rather than per key (see below) the two sets correlate at **r = +0.775** with a
+mean difference of **+0.94 cents**, so what is left is estimator noise at the
+±3 cent level and there is nothing further in it.
+
+**Cents survive transposition; nothing else does.** Every keygroup on this
+volume plays its sample an octave above the sample's own root, so nothing was
+captured at unity. That does not harm a pitch comparison: transposition is a
+pure frequency ratio, multiplying every partial by exactly 2 while moving the
+reference pitch by exactly 1200 cents, so the *deviation* is preserved. It does
+invalidate anything about **timbre**, and it halves every **loop period** — a
+loop measured here runs at twice the source's rate. Pitch conclusions carry
+across the octave; tone conclusions do not.
+
+### Loops: 34 of 35 flat, and the 35th was not what it looked like
+
+Late-window minus early-window detune, over the 34 keys with a valid late
+window: **mean +0.21 cents, sd 0.69, range −0.5..+2.6**. Amplitude is as flat —
+every one holds within 0.5 dB from 1 s to 9.5 s. No tick, no drift, no dropout
+across roughly nine seconds of loop on each of 34 keys.
+
+One key (87) fell silent in its capture between 5 s and 7 s, and was first
+reported as **+31.4 cents of pitch drift** against a spread of ±0.7 everywhere
+else. Two separate faults produced that number.
+
+**Trap 1: a relative threshold cannot detect silence.** The estimator skipped a
+harmonic whose magnitude fell below 2% of *the maximum in the same window*. In a
+window containing only noise that threshold scales down with the noise, so every
+harmonic passes and the estimator returns a confident reading of nothing. The
+window was at −85 dBFS. Gate on an **absolute** floor — here −60 dBFS — before
+trusting any spectral estimate, and record whether the gate passed
+(`late_window_valid`) rather than silently emitting a number. A threshold
+defined relative to the data it is filtering has no fixed point.
+
+**Trap 2: one event is not a finding.** Replayed three times, key 87 sustains
+the full 10 s at a flat −16.2 dBFS and never falls silent. So the dropout is a
+single unexplained event in that one capture — not a property of the sample, the
+loop, or the keygroup. It is recorded as unexplained rather than attributed,
+because three clean repeats rule out the explanations that were available and
+suggest none.
+
+### What the internal checks did not catch
+
+Both of this session's errors — capturing the wrong sample (§137) and reading
+silence as drift — passed every internal consistency check that was running. The
+captures were clean, the harmonics agreed, the numbers were reproducible. That
+is not a coincidence: **internal checks test whether the measurement is sound,
+and say nothing about whether the specimen is the right one or whether there is
+a signal at all.** Both classes need their own gate, and neither is expensive:
+ask the machine which key addresses which sample, and check the RMS before
+estimating a pitch from it.
