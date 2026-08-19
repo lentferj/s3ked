@@ -12417,22 +12417,50 @@ Region right, repetition unproven. Left open rather than explained.
 
 ## §137 — The rate snap confirmed by ear, and a detune discriminator (2026-08-19)
 
-Ten keys of a converted 35-keygroup flute program were played on the machine
-and captured back, to answer one question from the converter's side: a source
-sample recorded at 24000 Hz had been resampled to 44100 to fit the two rates
-this family supports. (That pair is selected by `byte 0x01` of the sample
-header, **bit 0 only** — 0 = 22050, 1 = 44100 — with `SSRATE` at 0x8a purely
-descriptive; established 2026-08-19 and not yet written up as a section of its
-own.) Does it still play **at pitch**
-next to neighbours that needed no resampling?
+Ten keys of a converted 35-keygroup flute program were played on the machine and
+captured back, to answer one question from the converter's side: a source sample
+recorded at 24000 Hz had been resampled to 44100 to fit the two rates this family
+supports. (That pair is selected by `byte 0x01` of the sample header, **bit 0
+only** — 0 = 22050, 1 = 44100 — with `SSRATE` at 0x8a purely descriptive;
+established 2026-08-19 and not yet written up as a section of its own.) Does the
+resampled one still play **at pitch** next to neighbours that needed no
+resampling?
 
-It does. The resampled key measured **+11.8 cents**; the other nine averaged
-**+10.5 (sd 3.7)**. It sits inside its neighbours' spread, so the rate snap is
-confirmed on hardware and not only in the file.
+It does. The resampled sample measures **+7.4 cents** against its four nearest
+own-sample neighbours' **+7.6 (sd 5.3)**, so it sits inside their spread and the
+rate snap is confirmed on hardware and not only in the file.
 
-### The part worth keeping: how the pitch was measured
+### First: the wrong key was captured, and the machine knew
 
-Three estimators were run on the *same ten captures* and gave three answers:
+The resampled sample was identified across the session boundary **by name** —
+`F5-3` — together with the assertion that it sounded at MIDI key 89. Ten keys
+were captured on that basis and the result reported.
+
+Key 89 does not play `F5-3`. It plays `F4-3`. Reading the program's keygroup
+table settles it in one pass: 35 keygroups, 35 **distinct** zone-1 samples, no
+sample used twice, and the mapping runs key 68 → `G#2-3`, 69 → `A2-3`, … 100 →
+`E5-3`, 101 → `F5-3`. The naming convention puts C4 at MIDI 84, which is two
+octaves from the one the key numbers were being read in — so every sample name
+in the conversation was off by two octaves and stayed self-consistent while
+being wrong. `F5-3` lives in keygroup 34 and is reached at **key 101**.
+
+**Identify the thing under test by the machine's own reference, not by a name
+passed between sessions.** The keygroup table is the authority on which key
+plays which sample, it costs one read of 192 bytes per keygroup, and it was
+available the whole time. A name agreed between two parties is not evidence that
+either has the same object in mind — and the octave error was invisible from
+both ends, because each side's naming was internally consistent.
+
+Worth noting what did *not* catch it. The ten captures were clean, the harmonics
+agreed, the target landed inside its neighbours' spread — every internal check
+passed, because they all test whether the measurement is sound, and this was a
+sound measurement of the wrong thing. **No amount of internal consistency
+identifies your specimen.**
+
+### The part that stands on its own: how the pitch was measured
+
+Three estimators were run on the *same* captures and gave three answers for the
+same note:
 
 | method | key 71 | key 89 |
 |---|---|---|
@@ -12442,15 +12470,15 @@ Three estimators were run on the *same ten captures* and gave three answers:
 
 Argmax put key 71 an octave high because its second harmonic is stronger than
 its fundamental. The first-peak estimator — adopted in §136 precisely to fix
-argmax — then put key 89 26 cents flat, which would have read as *the rate snap
-failing on exactly the sample under test*. Both were artefacts of the estimator.
+argmax — then put key 89 26 cents flat, a reading that would have looked like a
+resampled sample landing out of tune.
 
 **The discriminator: measure the deviation at every harmonic separately.** Search
 for a peak within ±3.5% of `k × expected` for k = 1..8, interpolate parabolically,
 and take the median. A real detune shifts **every** harmonic by the same cents;
-an estimator artefact does not. On that method each key's harmonics agreed within
-2–10 cents of each other, and that internal agreement *is* the validation — it
-is carried in the data, needs no second run, and costs one loop over k.
+an estimator artefact does not. Each key's harmonics then agreed within 2–10
+cents of each other, and that internal agreement *is* the validation — it is
+carried in the data, needs no second run, and costs one loop over k.
 
 This generalises past pitch. **When an estimator has a redundant reading
 available, take it and require the readings to agree.** §136's first-peak rule
@@ -12458,20 +12486,31 @@ was a better estimator than argmax and still had no way to say "I am wrong right
 now"; the per-harmonic form does. An estimator that cannot fail visibly will
 eventually fail invisibly, and on the one measurement that mattered.
 
+The same discriminator caught a fault on the converter's side within the hour:
+its own search window spanned 300–2500 Hz, so for a note at 1174.7 Hz the second
+harmonic at 2349 Hz fell inside the window and won, reading exactly +1204 cents.
+An octave is the signature.
+
 ### The offset that was not ours, and the framing that caught it
 
-All ten keys read about **+10 cents sharp**, uniformly. Uniformity says
+The captures read about **+10 cents sharp**, fairly uniformly. Uniformity says
 *global*: a tuning field, or the machine's master tune. It was reported to the
 converter as a **separate observation**, explicitly not folded into the result.
 
-It is in the source material. Measured offline against the original file, the
-samples are recorded sharp of the roots they declare, per-sample, by amounts
-tracking what the hardware gave (source median +8.6 against +11.5 here,
-r = +0.71; key 77 is +13.8 in the file and measured +13, key 71 is +4.8 and
-measured +4). A converter bug or a master-tune error would both be a
-**constant**; this is neither. Both sides' tune fields are zero, and the
-converter's calibration tone measures 300.0 Hz dead on, which independently
-clears the master tune.
+It is in the source material. The original samples are recorded sharp of the
+roots they declare — median about +8 cents — and measured against them the
+machine reproduces what was written to within **+0.9 cents mean (sd 5.3)** over
+the eight keys that have their own sample. Both projects write zero in every
+tune field, and the converter's calibration tone measures 300.0 Hz dead on,
+which independently clears the master tune.
+
+**No per-key claim is supported.** A correlation of r = +0.71 between per-key
+source detune and per-key hardware detune was reported and then withdrawn: it
+came from the 300–2500 Hz window above, and from including two keys whose
+comparison was invalid. Re-measured it is r = −0.31 — no structure, ±5 cents of
+scatter, about what two different pitch estimators compared across a 48 kHz
+capture will produce on their own. The conclusion (the detune is in the source)
+never depended on the correlation; the evidence for it is the +0.9 cent mean.
 
 So: nothing to fix, in either project. The reason that was established rather
 than chased is that the observation went across labelled as an observation. **A
