@@ -180,6 +180,7 @@ silently wrong one.
 - [§137](#137--the-rate-snap-confirmed-by-ear-and-a-detune-discriminator-2026-08-19) — The rate snap confirmed by ear, and a detune discriminator (2026-08-19)
 - [§138](#138--35-keys-swept-the-loops-hold-and-two-estimator-traps-2026-08-20) — 35 keys swept: the loops hold, and two estimator traps (2026-08-20)
 - [§139](#139--the-filter-corner-measured-against-an-outside-ground-truth-2026-08-20) — The filter corner measured against an outside ground truth (2026-08-20)
+- [§140](#140--cwms-firmware-tables-cross-checked-and-a-corpus-that-stays-silent-2026-08-20) — CWM's firmware tables cross-checked, and a corpus that stays silent (2026-08-20)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -12727,3 +12728,92 @@ measuring the outside party's *definition* on our own hardware moved that to
 1.76x and turned a contradiction into a bounded, characterised offset with a
 short list of causes. The remaining gap is now a question someone can answer,
 instead of a discrepancy someone can dismiss.
+
+## §140 — CWM's firmware tables cross-checked, and a corpus that stays silent (2026-08-20)
+
+§139 measured the filter against ConvertWithMoss's firmware-derived table. The
+same publication carried three other tables, and those were checked too — by us
+acoustically, by CWM out of the operating system, and by the converter project
+against 101 131 keygroups from 11 410 programs on 43 factory discs. Three
+methods with nothing in common.
+
+### The three that agree
+
+**One gain table behind every level field.** CWM read a 255-step hardware gain
+table of 0.237 dB per step, 60.5 dB total. Mapped onto a 0..99 parameter that
+predicts 0.611 dB per unit:
+
+    PRLOUD 0.61872   SUSTN1 0.60676   VLOUD1 0.60576   V_LOUD 0.596862
+    firmware prediction 0.61097        -- ours land -0.6% to +2.2% of it
+
+This does not merely match §117's "one level scale across three fields"; it
+**explains** it. Those fields share a slope because they index one table.
+
+**Sustain is an attenuation, not a fraction of level.** CWM: setting 50 sits
+30.4 dB down. Our law: −29.73 dB. Independently, our own note had recorded half
+amplitude at SUSTN1 89 and the law gives 89.1. The two derivations differ by
+0.69%.
+
+**One envelope rate table.** CWM: a single table serves attack, decay and
+release of both envelopes, rates spanning 16384:1, looked up with `99 - setting`.
+Over 99 steps that is an exponent of 0.09802 per unit. Measured here on five
+stages separately: DECAY1 0.09776, RELSE1 0.09683, ATTAK2 0.09703, DECAY2
+0.09844, RELSE2 0.09692 — every one within 1.2%. Again it explains rather than
+matches: §59's "the attack and the release are one law, across both envelopes"
+is what sharing a rate table looks like from outside.
+
+`ATTAK1` remains the exception at 0.10844, +10.6% off. 71.6% of factory
+keygroups set it to 0, far above `DECAY1` (1.5%) or `RELSE1` (0.2%), which is
+consistent with the amplitude attack being a different law — but only
+consistent-with: an instrument wanting an instant attack gives that histogram
+under either law. Left open.
+
+### The corpus control, which is the part worth copying
+
+A bimodal `SUSTN1` distribution on its own proves nothing — "designers use the
+extremes" explains it just as well. What makes it evidence is the **control**:
+the sibling envelope fields, same keygroups, same designers, same 0..99 range.
+
+    field      n        median   in 20..80    at 0     at 99
+    ATTAK1   101131        0       17.3%     71.6%      0.0%
+    DECAY1   101131       50       69.3%      1.5%     11.4%
+    SUSTN1   101131       99        2.5%     19.9%     74.4%
+    RELSE1   101131       45       95.5%      0.2%      0.1%
+
+`DECAY1` and `RELSE1` live in the middle of their range 69% and 95% of the time.
+`SUSTN1` does 2.5%. **The avoidance is specific to the one field**, not a habit
+of the people who cut the discs — which is exactly what a scale where 20..80
+means −48 dB to −11 dB predicts, and inexplicable if the field were a fraction
+of level. A distribution becomes evidence when a sibling that shares every
+confound except the hypothesis behaves differently.
+
+### The corpus cannot test the filter question, and says so
+
+§139's finding — 12 dB/octave here against the S1000's 18 — predicts that
+`FILFRQ` is not portable between generations. The corpus was asked, with the
+falsifying outcome named in advance: distributions landing on top of each other
+would be evidence against.
+
+They do not land on top of each other. They are offset **the opposite way** to
+the prediction — S1000 median 80 against S3000 57, where the prediction was
+S1000 about 11 units lower. And the number means nothing:
+
+* **zero programs appear in both generations.** No name is present as both `.P1`
+  and `.P3` anywhere in the corpus, so the clean paired test does not exist.
+* **no disc is mixed** — 31 S1000-only, 12 S3000-only.
+* the two sets are therefore different libraries, and different *material*:
+  orchestral and acoustic collections against synth dumps. Synth samples get
+  filtered and orchestral ones get left open, which swamps the 0.82 octaves at
+  issue by an order of magnitude.
+
+**The verdict is that the corpus is silent, not that it disagrees.** It cannot
+separate a filter law from a library's taste in material. That closes the
+corpus route: settling the S1000 side needs an S1000, and no amount of factory
+discs substitutes.
+
+Recording this matters more than a supporting number would have. A
+contrary-looking figure was available, correctly labelled uninterpretable by the
+party who produced it, and reported as such rather than as either support or
+refutation. **A confounded measurement pointing away from your hypothesis is
+exactly as worthless as one pointing towards it**, and it is much harder to
+throw away.

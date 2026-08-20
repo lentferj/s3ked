@@ -1675,3 +1675,15 @@ between S1000 and S3000XL, in either direction, and an Akai→Akai passthrough o
 the value is not sound-preserving.
 
 Still open: the S1000's own corner law, which needs an S1000 to measure.
+
+### Update 2026-08-20 (second): the corpus route is closed
+
+The generation split was tested against 101 131 keygroups from 43 factory discs
+and **the corpus cannot answer it**: no program appears in both generations, no
+disc is mixed, and the S1000 and S3000 discs hold different material
+(orchestral against synth dumps), which moves `FILFRQ` far more than the 0.82
+octaves under test. The distributions differ, in the opposite direction to the
+prediction, and are uninterpretable — see §140.
+
+So the S1000 corner law needs **an S1000**. There is no corpus-side substitute
+and no further analysis of the discs we have will produce one.
