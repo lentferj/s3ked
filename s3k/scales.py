@@ -209,7 +209,27 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "Cross-checks: two independent runs read 919 and 930 Hz at\n"
              "FILFRQ 70, 1.2% apart. The law was fitted on 62..92 and then\n"
              "predicted 44, 50 and 56 -- corners it had not seen -- to within\n"
-             "0.2%, 0.5% and 2.2%.",
+             "0.2%, 0.5% and 2.2%.\n"
+             "\n"
+             "**§139 MEASURED THE -3 dB CORNER AND GOT A DIFFERENT NUMBER:**\n"
+             "  7.60732 * exp(0.07245 v), from dividing each setting's\n"
+             "  spectrum by the same source wide open, at FILQ 0.\n"
+             "That law is 1.29x ABOVE this one, constant to sd 0.031 across\n"
+             "FILFRQ 40..84 -- so the two disagree by a fixed factor rather\n"
+             "than drifting, and one of them is measuring something other\n"
+             "than what it says. This section argues the resonance peak sits\n"
+             "AT the corner and does not move with FILQ (919 Hz at sixteen\n"
+             "settings, §53), which is what makes the disagreement a puzzle\n"
+             "rather than a definition: a peak that is Q-independent should\n"
+             "not sit 1.29x below the -3 dB point of the same filter.\n"
+             "UNRESOLVED. Which to use meanwhile:\n"
+             "  * a converter mapping a source format's CUTOFF wants §139 --\n"
+             "    every format means the -3 dB point by 'cutoff', and §139\n"
+             "    measures that directly rather than through an indicator;\n"
+             "  * anything asking WHERE THE RESONANCE SITS wants this one.\n"
+             "Both are S3000XL. Neither has been checked on an S1000, and\n"
+             "§139 measured 12 dB/octave here against the S1000's specified\n"
+             "18, so neither should be applied across the generation.",
         endpoints={99: "wide open"},
     ),
     ("keygroup", "KGTUNO"): Scale(

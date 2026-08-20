@@ -1728,3 +1728,45 @@ hedge.
 
 **Blocked on:** an S1000. Unchanged, but the reason to want one is stronger:
 nobody has measured this, so the measurement is not a duplicate of anything.
+
+## Measure the S1000 filter law with a borrowed machine (PLANNED 2026-08-20)
+
+**Status:** designed, not built. Procedure in
+`docs/re_procedures/s1000_filter_disc.md`.
+
+Build a disc of test presets — one program per `FILFRQ` setting over a sawtooth,
+wide-open references bracketing each — hand it to somebody who owns an S1000,
+have them record one note per program, and analyse the recordings here. Played
+on our S3000XL first, the same disc is a **paired test** and removes the
+material confound that made the corpus comparison uninterpretable (§140).
+
+Built by **patching a genuine factory `.P1`/`.S1` pair**, not by generating S1000
+files: the sibling converter emits 192-byte S3000 blocks only and has no S1000
+path, whereas a `.P1` is 300 bytes with `FILFRQ` at keygroup+`0x07`, so N
+programs is N copies with one byte different.
+
+**Blocked on:** a volunteer with an S1000 **and** a BlueSCSI-class adapter or a
+Gotek. Floppy is not the universal option it appears to be — the AKAI format is
+not DOS and cannot be written on a PC drive.
+
+## `FILFRQ`: §54 and §139 disagree by a constant 1.29x (OPEN 2026-08-20)
+
+**Status:** both measured here, on the same machine, by different methods.
+
+    §54   6.4597  * exp(0.07100 v)   from the RESONANCE PEAK
+    §139  7.60732 * exp(0.07245 v)   from the -3 dB CORNER at FILQ 0
+
+§139 is 1.29x above §54, constant to sd 0.031 across `FILFRQ` 40..84 — a fixed
+factor, not drift, so one of them is measuring something other than what it
+says. It is not obviously definitional: §54 argues the resonance peak sits **at**
+the corner and does not move with `FILQ` (919 Hz at sixteen settings, §53), and
+a Q-independent peak should not sit 1.29x below the −3 dB point of the same
+filter.
+
+Meanwhile, recorded in `scales.py`: a converter mapping a source format's
+*cutoff* wants **§139**, which measures the −3 dB point directly and is what
+every format means by the word; anything asking where the resonance sits wants
+§54.
+
+**Blocked on:** nothing. One run measures both quantities on one sweep — take
+the −3 dB crossing and the FILQ-difference peak from the same captures.
