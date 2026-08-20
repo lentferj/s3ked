@@ -12898,6 +12898,19 @@ Anyone reading a section without reading forward from it will find the retracted
 step indistinguishable from the settled one. That is a property of the format,
 and it is the cost of keeping the history rather than editing it.
 
+**A correction can preserve the claim it corrects.** The converter's first fix
+for its stale filter-board blocker said the board was no longer an obstacle
+*because s3ked measured envelope 2 with a resonance tracker instead*. True, and
+beside the point: it disputes the workaround and leaves the premise standing, so
+anyone who later obtained a board would reasonably conclude the original blocker
+had been legitimate and merely circumvented. The premise survives its own
+correction. The fact is that the IB304F gates filter 2 and never gated envelope 2
+at all — which retires the claim rather than routing around it.
+
+The test for a correction is therefore not "is this true" but **"if the
+circumstance that made the workaround necessary went away, would the claim come
+back?"** If it would, the premise has not been addressed.
+
 **This project named the pattern a week earlier and then repeated it.** §87
 found `params.py` claiming fifteen fields needed the IB304F filter board, citing
 §19 — a `FILFRQ` measurement that does not mention the board at all — and called
