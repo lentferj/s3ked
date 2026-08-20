@@ -12870,21 +12870,72 @@ the plateau definition and the rig entirely.
 `ATTAK1`'s 10.6% is not an error and not a coincidence: **the amplitude attack
 is not driven by the shared rate table.** Five stages share one exponent because
 they share one table; this one does not, because it is a rise time over a fixed
-distance rather than a rate over a variable one — which is what §- had already
+distance rather than a rate over a variable one — which is what §31 had already
 argued from the linear-ramp shape and could not then demonstrate.
 
 **And there is a law to convert with, which matters outside this project.** The
 attack was being discarded by the converter — every voice written as `ATTAK1` 0,
 including a 6.554 s pad swell — on the grounds that s3ked had found the attack
-"fits neither a rate nor a duration". That finding is about `ATTAK2`, the filter
-envelope, which was open for exactly that reason until §67 settled it as a rate.
-`ATTAK1` is a different field and has been a measured rise time throughout:
+"fits neither a rate nor a duration".
+
+**That is a real quotation of this project, and it was withdrawn the same day it
+was written.** §29 varied the span and reported that the attack fit neither a
+rate nor a duration. §31, dated 2026-08-11 like §29, explained why: a
+linear-in-amplitude ramp read on a dB axis is a curve, and a slope taken from
+the middle of a curve depends on how far the curve extends. The span-dependence
+was the detector, and §31 concluded in as many words that **`ATTAK1` is a
+genuine duration**. It has been a measured rise time ever since:
 
     seconds -> ATTAK1 = ln(seconds / 0.000201173) / 0.10844
       0.05 s -> 51      0.5 s -> 72      2.0 s -> 85      6.554 s -> 96
 
-Two fields whose names differ by one character, one open question, and a
-converter silently dropping every attack it was given. **A finding cited across
-a project boundary should carry the field it applies to, not the parameter
-family** — `ATTAK2` and `ATTAK1` are no more interchangeable than two samples
-with the same name.
+So the citation named the right field and the wrong *version*. **A finding
+quoted across a project boundary must carry when it was true, not only what it
+said.** An append-only log of an investigation is mostly intermediate states,
+and they are written in the same voice as the conclusions — §29 does not
+announce that it is about to be superseded, because at the time it was not.
+Anyone reading a section without reading forward from it will find the retracted
+step indistinguishable from the settled one. That is a property of the format,
+and it is the cost of keeping the history rather than editing it.
+
+**I diagnosed this wrongly first, and said so to the other project before
+checking.** My reading was that `ATTAK2`'s open rate-or-duration question had
+leaked onto `ATTAK1` — a tidy story about two fields whose names differ by one
+character, told without opening §29. It was wrong, it was confidently
+transmitted, and it was written into the other project's notes before I caught
+it. The failure is the one this section is otherwise about: a plausible causal
+account attached to the wrong object, passing every check available from inside
+because the account was internally coherent. **The rule that keeps failing is
+the one I keep restating — go and read the source — and restating it is not the
+same as doing it.**
+
+### A passing test held the error in place
+
+The converter carried a unit test asserting that the attack does not vary with
+its source — named for the justification, that no law had survived. It passed
+for twelve days and it was **correct about the code**. It pinned a behaviour
+whose stated reason named the wrong field, so the suite that exists to catch
+this class of error was holding this instance of it steady.
+
+**A test only checks the claim it was given.** A green suite says the code does
+what someone once decided; it cannot say that the decision was right, and a test
+named after a finding inherits that finding's errors without inheriting its
+uncertainty. Worse, it converts an open question into settled infrastructure:
+nobody re-opens a question a test appears to have closed.
+
+The second-order point is sharper still. The replacement test, first written,
+exercised the conversion helper directly — and so would have passed with the
+wiring reverted, which is the exact regression it exists to catch. **Confirm a
+new test fails against the state it is meant to prevent**, or it is decoration.
+
+Audited here for the same disease: this project's negative tests are guards on
+its *own* behaviour — the write gate refusing, destructive commands staying off
+the allowlist, unknown parameters erroring rather than crashing. Those are safe,
+because they assert a policy we chose rather than a fact about the machine.
+
+The exposure is elsewhere: **findings that record a field as inert**. That class
+has already been wrong three times — §45 retracted by §51, `K_DAR3` in §48,
+`PRSDEP` in §44, each an "it does nothing" that turned out to be a detector aimed
+wrong. None of them is pinned by a test, which is the only reason they were
+cheap to retract. Keep it that way: an inertness finding is the last thing that
+should acquire a test.
