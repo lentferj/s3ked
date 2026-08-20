@@ -12898,6 +12898,14 @@ Anyone reading a section without reading forward from it will find the retracted
 step indistinguishable from the settled one. That is a property of the format,
 and it is the cost of keeping the history rather than editing it.
 
+**This project named the pattern a week earlier and then repeated it.** §87
+found `params.py` claiming fifteen fields needed the IB304F filter board, citing
+§19 — a `FILFRQ` measurement that does not mention the board at all — and called
+it *an assumption wearing a citation, the most persuasive form a wrong claim can
+take in this project, because the reference makes it look checked*. That is the
+same object as everything in this section. Naming a failure mode in a resolution
+note does not inoculate against it; §141 was written by someone who had read §87.
+
 **I diagnosed this wrongly first, and said so to the other project before
 checking.** My reading was that `ATTAK2`'s open rate-or-duration question had
 leaked onto `ATTAK1` — a tidy story about two fields whose names differ by one
