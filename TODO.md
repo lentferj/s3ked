@@ -1596,7 +1596,7 @@ degraded playback; fix is to write the loop end.
 frame index. And the confirming capture plays the right region with no
 measurable periodicity — region right, repetition unproven.
 
-## The two playback rates are not written up (OPEN 2026-08-19)
+## The two playback rates are not written up (CLOSED 2026-08-20 — §142)
 
 **Status:** established on hardware, recorded only inside §137.
 
@@ -1608,8 +1608,10 @@ consequence by ear (a 24000 Hz source resampled to 44100 plays at pitch), but
 the finding itself has no section, so it exists only as a sentence inside
 another one's preamble.
 
-**Blocked on:** nothing. It needs the original sweep data written up, or a
-re-run to regenerate it.
+**Closed by §142**, written from the original 2026-08-18 captures rather than
+from a re-run — the data was still on disk, which is the cheaper half of "ask
+whether the answer is already held". The load path remains untested and is
+carried by the converter's discriminator disc, not by this item.
 
 ## Our `FILFRQ` law disagrees with ConvertWithMoss's firmware table (MEASURED 2026-08-20)
 

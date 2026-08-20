@@ -182,6 +182,7 @@ silently wrong one.
 - [§139](#139--the-filter-corner-measured-against-an-outside-ground-truth-2026-08-20) — The filter corner measured against an outside ground truth (2026-08-20)
 - [§140](#140--cwms-firmware-tables-cross-checked-and-a-corpus-that-stays-silent-2026-08-20) — CWM's firmware tables cross-checked, and a corpus that stays silent (2026-08-20)
 - [§141](#141--attak1-settled-the-attack-is-not-on-the-shared-rate-table-2026-08-20) — `ATTAK1` settled: the attack is not on the shared rate table (2026-08-20)
+- [§142](#142--the-two-playback-rates-byte-0x01-bit-0-decides-ssrate-does-not-2026-08-20) — The two playback rates: `byte 0x01` bit 0 decides, `SSRATE` does not (2026-08-20)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -12960,3 +12961,79 @@ has already been wrong three times — §45 retracted by §51, `K_DAR3` in §48,
 wrong. None of them is pinned by a test, which is the only reason they were
 cheap to retract. Keep it that way: an inertness finding is the last thing that
 should acquire a test.
+
+## §142 — The two playback rates: `byte 0x01` bit 0 decides, `SSRATE` does not (2026-08-20)
+
+Written up from the original 2026-08-18 captures, which is why it is dated here
+and measured there. `TODO.md` carried it for two days as a finding that existed
+only as a sentence inside another section's preamble.
+
+**`byte 0x01` of the sample header selects the playback rate, and bit 0 alone
+does it: 0 = 22050, 1 = 44100.** `SSRATE` at `0x8a` is descriptive and does not
+drive playback.
+
+### The experiment, and why it needed no disc
+
+Two models fitted every calibration point equally well:
+
+* **A** — `byte 0x01` bit 0 selects the rate, `SSRATE` is descriptive
+* **B** — the machine reads `SSRATE` and picks the nearest supported rate
+
+Four samples stored at 44100, 22050, 11025 and 32000 could not separate them,
+because on both models the same four sound the same. **Two hypotheses that
+predict the same observation are not a test** (§136), and the way out is a
+sample whose flag *contradicts* its `SSRATE`.
+
+The converter project built a disc to carry that contradiction. It was not
+needed: the samples were already resident and `byte 0x01` is writable over
+SysEx, so the contradiction can be created in RAM in seconds. **Before asking
+for a disc, a card crossing and a person, ask whether the machine already holds
+the material** — the same rule that ended three chases in this project's history.
+
+    RATE 44100 sample (flag 1, sounds 300 Hz)  -> force flag 0
+        A predicts 150 Hz     B predicts 300 Hz
+    RATE 22050 sample (flag 0, sounds 300 Hz)  -> force flag 1
+        A predicts 600 Hz     B predicts 300 Hz
+
+### The result
+
+    RATE 44100: flag 1 -> 300.0 Hz,  forced flag 0 -> 150.0 Hz   ratio 0.500
+    RATE 22050: flag 0 -> 300.0 Hz,  forced flag 1 -> 600.0 Hz   ratio 2.000
+
+Exactly a half and exactly a double. **Model A, unambiguously.**
+
+The confirming detail is that the *whole spectrum* scales, not just the tone:
+the second partial moves 700 -> 350 Hz and 700 -> 1400 Hz with it. A playback
+rate change scales everything; anything that merely reinterpreted a pitch would
+not. That check costs one extra peak search and separates "the rate changed"
+from "the note changed".
+
+### What this does not establish
+
+Every byte here was written **into RAM over SysEx**. Whether a **load** honours
+the same byte is untested, and it is exactly the question the converter's
+discriminator disc is built to answer — so this finding should not be quoted as
+though it covered the load path.
+
+That caveat is not attack-specific or rate-specific. Every law this project
+holds — the filter corner, the envelope laws, the level scales — was established
+by writing fields into a resident program. Several behaviours *are* confirmed
+end to end from a disc (the loop-at pool base, the release test, the rate snap
+of §137), so much of the load path demonstrably preserves what is written. This
+is a missing read-back rather than a suspicion, and it is worth one read when a
+disc is next loaded.
+
+### How much rides on it, from the corpus
+
+Measured across 19 340 factory sample headers by the converter project:
+
+* **4242 (22.0%) carry a nonzero `SSRATE` that contradicts `byte 0x01`**,
+  including 1290 declaring 48000 — a rate this machine cannot play at all.
+* **all 5331 `.S1` headers carry index 1**, so the byte may not carry a rate
+  meaning in the S1000 generation at all.
+
+So a reader that trusts `SSRATE` gets a fifth of the corpus wrong, and 1290
+files would resample to a rate the hardware does not have. The second figure is
+the more interesting one: this finding is measured on an S3000XL, and §139 has
+already shown once today that this family shares a protocol without sharing its
+hardware.
