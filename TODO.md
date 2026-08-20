@@ -1610,3 +1610,54 @@ another one's preamble.
 
 **Blocked on:** nothing. It needs the original sweep data written up, or a
 re-run to regenerate it.
+
+## Our `FILFRQ` law disagrees with ConvertWithMoss's firmware table (MEASURED 2026-08-20)
+
+**Status:** measured on hardware; the disagreement is real, constant, and
+unexplained. Neither number is withdrawn.
+
+ConvertWithMoss added a 100-entry `FILTER_CUTOFF` table to its Akai S-1000
+converter on 2026-08-20, read out of the sampler's operating system (v4.40) and
+documented as the −3 dB points of the three one-pole stages which form the
+18 dB/octave low-pass. That is an independent, firmware-derived ground truth for
+a quantity we had only ever fitted, so it is worth reconciling.
+
+Measured here on the **S3000XL** with the plain cascade (`FILQ` 0), using a
+sawtooth harmonic comb divided by its own spectrum at `FILFRQ` 99 so the source,
+the speaker path and the interface response cancel:
+
+    FILFRQ    measured    CWM table    §54 law
+        40       139.3          243      110.6
+        56       444.5          788      344.3
+        72      1403.8         2517     1072.3
+        84      3363.1         5640     2513.9
+
+    over FILFRQ 40..84:  measured / CWM  = 0.5668  (sd 0.0116)
+                         measured / §54  = 1.2886  (sd 0.0311)
+    slope: measured 1.045 octaves per 10 steps, CWM 0.984, §54 1.024
+
+Two keys an octave and a half apart (MIDI 28 and 46) agree within ~1% at every
+setting, so the measurement is not the loose part. **The slopes agree; only the
+absolute placement does not.** CWM's table sits 1.76x (0.82 octaves) above what
+this machine does, and our own §54 law sits 1.29x (0.37 octaves) below it.
+
+Above `FILFRQ` 84 the measured ratio drifts upward (0.65 at 88, 0.80 at 92) as
+the corner approaches the source's own bandwidth — that is the measurement
+running out of headroom, not the law bending, and those two points should not be
+used.
+
+**Candidate explanations, none yet tested:**
+
+1. **A single stage versus the cascade.** For N one-pole stages in series the
+   cascade's −3 dB point is `sqrt(2^(1/N) - 1)` of one stage's corner: 0.5098
+   for N = 3. We measure 0.5668. If CWM's table is really one stage's corner
+   rather than the cascade's, that accounts for most of the gap but leaves 11%.
+2. **Different machine.** They read S1000 firmware; this is an S3000XL. The
+   family shares a protocol, not necessarily a filter implementation.
+3. **§54 measured a different quantity again** — it was fitted to the resonance
+   peak, not the −3 dB corner, so it was never the same number as either of
+   these and should not be quoted as if it were.
+
+**Blocked on:** nothing here. Distinguishing (1) from (2) needs either an S1000
+to measure or the firmware coefficients themselves, and (3) needs §54 re-derived
+against this run.

@@ -179,6 +179,7 @@ silently wrong one.
 - [§136](#136--loopat1-is-the-loop-end-not-the-loop-start-2026-08-18) — `LOOPAT1` is the loop END, not the loop start (2026-08-18)
 - [§137](#137--the-rate-snap-confirmed-by-ear-and-a-detune-discriminator-2026-08-19) — The rate snap confirmed by ear, and a detune discriminator (2026-08-19)
 - [§138](#138--35-keys-swept-the-loops-hold-and-two-estimator-traps-2026-08-20) — 35 keys swept: the loops hold, and two estimator traps (2026-08-20)
+- [§139](#139--the-filter-corner-measured-against-an-outside-ground-truth-2026-08-20) — The filter corner measured against an outside ground truth (2026-08-20)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -12611,3 +12612,83 @@ and say nothing about whether the specimen is the right one or whether there is
 a signal at all.** Both classes need their own gate, and neither is expensive:
 ask the machine which key addresses which sample, and check the RMS before
 estimating a pitch from it.
+
+## §139 — The filter corner measured against an outside ground truth (2026-08-20)
+
+ConvertWithMoss published a 100-entry `FILTER_CUTOFF` table for the Akai S-1000
+on 2026-08-20, read out of the sampler's operating system (v4.40). It is the
+first outside number this project has had for a quantity it had only fitted, and
+it disagreed with §54 by a factor of about 2.25 — so it was worth measuring
+rather than arguing about.
+
+### Measuring the same quantity, which is the whole trick
+
+§54's law came from the **resonance peak**. CWM's table is the **−3 dB corner of
+the plain cascade**. Those are different numbers about the same filter, and
+comparing them directly is the §137 mistake in another costume: the specimen has
+to match before the arithmetic means anything.
+
+So the corner was measured the way CWM defines it — `FILQ` 0, no resonance:
+
+* a **sawtooth** through the filter gives a harmonic comb, dense enough to
+  sample the transfer function at every multiple of the fundamental;
+* each harmonic's magnitude is divided by **its own magnitude at `FILFRQ` 99**,
+  wide open. That cancels the source spectrum, the amplifier, the speaker and
+  the interface response in a single step, and leaves the filter alone;
+* the corner is where that ratio crosses −3 dB, interpolated in log-frequency;
+* harmonics whose *reference* magnitude is below an absolute floor are dropped
+  before any of this — the §138 lesson, applied in advance for once.
+
+Two source keys an octave and a half apart (MIDI 28, f0 41 Hz; MIDI 46, f0
+116 Hz) were swept independently. **They agree within about 1% at every
+setting**, which is the check that the method, not merely the arithmetic, is
+sound.
+
+### The result
+
+    FILFRQ    measured    CWM table    §54 law
+        40       139.3          243      110.6
+        56       444.5          788      344.3
+        72      1403.8         2517     1072.3
+        84      3363.1         5640     2513.9
+
+    over FILFRQ 40..84:  measured / CWM = 0.5668  (sd 0.0116)
+                         measured / §54 = 1.2886  (sd 0.0311)
+    slope: measured 1.045 oct/10 steps, CWM 0.984, §54 1.024
+
+**The slopes agree; the placement does not.** All three describe the same
+exponential curve — about one octave per ten steps — and sit at three different
+heights. CWM's table is 1.76x (0.82 octaves) above what this machine does; §54
+is 1.29x (0.37 octaves) below it.
+
+The scatter is the informative part: sd 0.0116 on the ratio to CWM, over eleven
+settings spanning four and a half octaves. **A constant ratio is a definition
+mismatch or a different machine; it is not measurement error**, which would
+scatter, and it is not a wrong law shape, which would drift with `FILFRQ`.
+
+Above `FILFRQ` 84 the ratio does drift (0.65 at 88, 0.80 at 92), because the
+corner is approaching the source's own bandwidth and the crossing gets squeezed
+against it. That is the instrument running out, not the law bending, and those
+two points are excluded rather than quietly averaged in.
+
+### What is not concluded
+
+Nothing is withdrawn, and CWM is not corrected. For three one-pole stages in
+series the cascade's −3 dB point is 0.5098 of one stage's corner, against the
+0.5668 measured — the right size and direction for "their table is one stage,
+not the cascade", but 11% short of it. The other live possibility is simply that
+they read **S1000** firmware while this is an **S3000XL**: this family shares a
+protocol, which is not a promise that it shares a filter.
+
+What *can* be said is that §54 was never the same quantity as either, and should
+stop being quoted as though it were. `TODO.md` carries what would settle it.
+
+### The part that generalises
+
+An outside number that disagrees with yours is worth more than one that agrees,
+and the first move is never to defend or adopt it — it is to check that both
+sides are naming the same thing. Here the two disagreed by 2.25x on paper, and
+measuring the outside party's *definition* on our own hardware moved that to
+1.76x and turned a contradiction into a bounded, characterised offset with a
+short list of causes. The remaining gap is now a question someone can answer,
+instead of a discrepancy someone can dismiss.
