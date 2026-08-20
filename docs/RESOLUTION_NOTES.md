@@ -181,6 +181,7 @@ silently wrong one.
 - [§138](#138--35-keys-swept-the-loops-hold-and-two-estimator-traps-2026-08-20) — 35 keys swept: the loops hold, and two estimator traps (2026-08-20)
 - [§139](#139--the-filter-corner-measured-against-an-outside-ground-truth-2026-08-20) — The filter corner measured against an outside ground truth (2026-08-20)
 - [§140](#140--cwms-firmware-tables-cross-checked-and-a-corpus-that-stays-silent-2026-08-20) — CWM's firmware tables cross-checked, and a corpus that stays silent (2026-08-20)
+- [§141](#141--attak1-settled-the-attack-is-not-on-the-shared-rate-table-2026-08-20) — `ATTAK1` settled: the attack is not on the shared rate table (2026-08-20)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -12817,3 +12818,73 @@ party who produced it, and reported as such rather than as either support or
 refutation. **A confounded measurement pointing away from your hypothesis is
 exactly as worthless as one pointing towards it**, and it is much harder to
 throw away.
+
+## §141 — `ATTAK1` settled: the attack is not on the shared rate table (2026-08-20)
+
+§140 left one thing open. Five envelope stages match the exponent implied by
+CWM's single firmware rate table to within 1.2%; `ATTAK1` sits 10.6% off at
+0.10844, and the corpus could only say the field is used differently, not why.
+
+CWM's model makes that testable without a converted bank. Their attack, decay
+and release all come from one linear accumulator — `time = FULL_SWING / (rate *
+44100)` with the rate looked up at `99 - setting` — which predicts specific
+attack times, 5 to 9 times longer than this project's law at every setting. Two
+decades of span, so the test needs order of magnitude and not precision.
+
+Measured on a resident sine with `SUSTN1` 99 so the note holds at full, `V_LOUD`
+0, time from note-on to 90% and 50% of the plateau:
+
+    ATTAK1   t90 meas    0.9 x ours    CWM predicts    t90/CWM
+        70      0.320         0.358           2.797       0.11
+        80      1.060         1.060           7.316       0.14
+        90      3.140         3.136          19.021       0.17
+        99      8.600         8.322          47.553       0.18
+
+**CWM's linear-accumulator model does not describe this machine's attack** —
+about 7x too slow throughout, t90/CWM 0.14 with sd 0.03. At `ATTAK1` 99 it
+predicts 47.6 s where the note reaches full level in 8.6.
+
+**Our law is confirmed, and extended past the range it was fitted on.** For
+`ATTAK1` >= 70 the ratio of the measurement to `0.9 x 0.000201173 *
+exp(0.10844 v)` is **0.982, sd 0.053** — and 99 was never fitted (the fit ran
+55..90). Below 70 the numbers fall to the 20 ms analysis window and are floor
+limited, not disagreeing: at `ATTAK1` 40 the whole attack is shorter than one
+window.
+
+### A shape test that needs no law at all
+
+`t50/t90` is a pure shape ratio — it does not depend on the time law, only on
+the curve:
+
+    linear ramp in amplitude   0.5/0.9   = 0.556
+    exponential approach       ln2/ln10  = 0.301
+    measured, ATTAK1 70..99    0.500  0.547  0.548  0.558
+
+The amplitude attack is a **linear ramp**, confirmed independently of any fitted
+constant. That is worth more than the agreement on absolute times, because a
+ratio of two measurements from the same capture cancels the level calibration,
+the plateau definition and the rig entirely.
+
+### What this closes
+
+`ATTAK1`'s 10.6% is not an error and not a coincidence: **the amplitude attack
+is not driven by the shared rate table.** Five stages share one exponent because
+they share one table; this one does not, because it is a rise time over a fixed
+distance rather than a rate over a variable one — which is what §- had already
+argued from the linear-ramp shape and could not then demonstrate.
+
+**And there is a law to convert with, which matters outside this project.** The
+attack was being discarded by the converter — every voice written as `ATTAK1` 0,
+including a 6.554 s pad swell — on the grounds that s3ked had found the attack
+"fits neither a rate nor a duration". That finding is about `ATTAK2`, the filter
+envelope, which was open for exactly that reason until §67 settled it as a rate.
+`ATTAK1` is a different field and has been a measured rise time throughout:
+
+    seconds -> ATTAK1 = ln(seconds / 0.000201173) / 0.10844
+      0.05 s -> 51      0.5 s -> 72      2.0 s -> 85      6.554 s -> 96
+
+Two fields whose names differ by one character, one open question, and a
+converter silently dropping every attack it was given. **A finding cited across
+a project boundary should carry the field it applies to, not the parameter
+family** — `ATTAK2` and `ATTAK1` are no more interchangeable than two samples
+with the same name.
