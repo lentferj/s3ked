@@ -66,12 +66,12 @@ silently wrong one.
 - [§23](#23--ptuno-shares-kgtunos-scale-stuno-stores-and-does-nothing-2026-08-11) — PTUNO shares KGTUNO's scale; STUNO stores and does nothing (2026-08-11)
 - [§24](#24--lforat-measured-and-all-eight-sweeps-are-done-2026-08-11) — `LFORAT` measured, and all eight sweeps are done (2026-08-11)
 - [§25](#25--lfo1-drives-pitch-measured-not-inferred-2026-08-11) — LFO1 drives pitch. Measured, not inferred (2026-08-11)
-- [§26](#26--sustn1-is-db-linear-attak2-has-its-own-law-and-one-detector-was-never-measuring-2026-08-11) — `SUSTN1` is dB-linear, `ATTAK2` has its own law, and one detector was never measuring (2026-08-11)
+- [§26](#26--constants-superseded-the-attak1attak2-laws-only-the-sustn1-db-linearity-and-the-detector-finding-stand--sustn1-is-db-linear-attak2-has-its-own-law-and-one-detector-was-never-measuring-2026-08-11) — CONSTANTS SUPERSEDED (the `ATTAK1`/`ATTAK2` laws only; the `SUSTN1` dB-linearity and the detector finding stand) — `SUSTN1` is dB-linear, `ATTAK2` has its own law, and one detector was never measuring (2026-08-11)
 - [§27](#27--the-measured-laws-become-a-feature-units-in-and-out-2026-08-11) — The measured laws become a feature: units in and out (2026-08-11)
 - [§28](#28--superseded-by-58-three-of-four-laws-the-rate-findings-stand--envelope-2-measured-and-one-law-found-underneath-all-of-them-2026-08-11) — SUPERSEDED by §58 (three of four laws; the RATE findings stand) — Envelope 2 measured, and one law found underneath all of them (2026-08-11)
 - [§29](#29--retraction-the-envelope-model-in-28-is-wrong-and-so-was-my-reason-for-believing-it-2026-08-11) — RETRACTION. The envelope model in §28 is wrong, and so was my reason for believing it (2026-08-11)
-- [§30](#30--the-decay-rates-measured-properly-2026-08-11) — The decay rates, measured properly (2026-08-11)
-- [§31](#31--both-attacks-measured-only-one-of-them-is-a-time-2026-08-11) — Both attacks measured. Only one of them is a time (2026-08-11)
+- [§30](#30--constants-superseded-by-5859-the-decay2relse2-laws-re-measured-in-seconds-through-the-resonance-tracker-decay1-and-the-rate-not-duration-findings-stand--the-decay-rates-measured-properly-2026-08-11) — CONSTANTS SUPERSEDED by §58/§59 (the `DECAY2`/`RELSE2` laws, re-measured in seconds through the resonance tracker; `DECAY1` and the rate-not-duration findings stand) — The decay rates, measured properly (2026-08-11)
+- [§31](#31--constants-superseded-attak1-by-141-attak2-by-58-both-shape-findings-stand-and-141-reconfirms-the-linear-ramp--both-attacks-measured-only-one-of-them-is-a-time-2026-08-11) — CONSTANTS SUPERSEDED (`ATTAK1` by §141, `ATTAK2` by §58; both SHAPE findings stand and §141 reconfirms the linear ramp) — Both attacks measured. Only one of them is a time (2026-08-11)
 - [§32](#32--replication-and-a-retraction-of-my-own-justification-2026-08-11) — Replication, and a retraction of my own justification (2026-08-11)
 - [§33](#33--superseded-by-53-filq-is-resonance-and-it-peaks-below-the-corner-2026-08-11) — SUPERSEDED by §53. `FILQ` is resonance, and it peaks below the corner (2026-08-11)
 - [§34](#34--where-a-release-starts-and-the-first-real-cross-validation-2026-08-11) — Where a release starts, and the first real cross-validation (2026-08-11)
@@ -2165,7 +2165,7 @@ only reason it was caught is that a factor of exactly two is implausible.
 
 ---
 
-## §26 — `SUSTN1` is dB-linear, `ATTAK2` has its own law, and one detector was never measuring (2026-08-11)
+## §26 — CONSTANTS SUPERSEDED (the `ATTAK1`/`ATTAK2` laws only; the `SUSTN1` dB-linearity and the detector finding stand) — `SUSTN1` is dB-linear, `ATTAK2` has its own law, and one detector was never measuring (2026-08-11)
 
 Three results from mpc2emu's two asks, and a correction to §25 that came out of
 answering them.
@@ -2542,7 +2542,7 @@ yet measured (every one of them fitted a time constant), and the attack shape.
 
 ---
 
-## §30 — The decay rates, measured properly (2026-08-11)
+## §30 — CONSTANTS SUPERSEDED by §58/§59 (the `DECAY2`/`RELSE2` laws, re-measured in seconds through the resonance tracker; `DECAY1` and the rate-not-duration findings stand) — The decay rates, measured properly (2026-08-11)
 
 §29 established that a decay value sets a slew rate but could name that rate at
 exactly one point, because every sweep to that date had fitted a time constant.
@@ -2609,7 +2609,7 @@ time" even with the rate known. Any converter has to carry the level with it.
 
 ---
 
-## §31 — Both attacks measured. Only one of them is a time (2026-08-11)
+## §31 — CONSTANTS SUPERSEDED (`ATTAK1` by §141, `ATTAK2` by §58; both SHAPE findings stand and §141 reconfirms the linear ramp) — Both attacks measured. Only one of them is a time (2026-08-11)
 
 §30 left the attacks open. They are now measured, and they are **not the same
 kind of thing as each other**.

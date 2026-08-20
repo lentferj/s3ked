@@ -299,3 +299,62 @@ def test_the_resolution_notes_index_matches_the_sections():
 
     absent = [h for h, a in zip(headings, anchors) if a not in set(linked)]
     assert not absent, f"sections missing from the index: {absent[:3]}"
+
+
+def test_a_section_whose_law_was_refitted_says_so_in_its_heading():
+    """Refinement is invisible where retraction is visible.
+
+    A retracted finding gets a later section saying so, and a reader who reads
+    forward will find it. A *refitted constant* leaves the earlier section
+    correct as written -- the prose still holds, only the numbers moved -- so
+    nothing marks it and nothing ever will unless the heading does.
+
+    That is not hypothetical: the converter project quoted §31's ATTAK1 law
+    while §141 held the current one, and separately built a behaviour on §29
+    that §31 had withdrawn the same day. It cost every attack in its output.
+
+    This checks the structural property only -- that a section stating a law
+    which `scales.py` no longer holds carries a marker in its heading. It does
+    NOT check that any finding is true; a test cannot do that, and a test that
+    pins a finding is how a wrong one survives (see §141).
+    """
+    import pathlib
+    import re
+
+    from s3k import scales
+
+    notes = (pathlib.Path(__file__).resolve().parent.parent
+             / "docs" / "RESOLUTION_NOTES.md").read_text(encoding="utf-8")
+    current = {key[1]: (sc.a, sc.b) for key, sc in scales.SCALES.items()}
+
+    heads = [(m.start(), m.group(0)) for m in
+             re.finditer(r"^## §\d+[a-z]? — .+$", notes, re.M)]
+    law = re.compile(
+        r"\b([A-Z][A-Z0-9_]{3,9})\b[^\n]{0,60}?=\s*"
+        r"([0-9]*\.?[0-9]+(?:e-?\d+)?)\s*\*\s*exp\(\s*(-?[0-9]*\.?[0-9]+)")
+    # a newer section may quote the law it supersedes; those lines say so
+    quoting = re.compile(r"previous|earlier|withdraw|supersed|retract|was\b",
+                         re.I)
+
+    stale = []
+    for i, (start, head) in enumerate(heads):
+        end = heads[i + 1][0] if i + 1 < len(heads) else len(notes)
+        if "SUPERSEDED" in head:
+            continue
+        for line in notes[start:end].splitlines():
+            if quoting.search(line):
+                continue
+            for m in law.finditer(line):
+                param, a, b = m.group(1), float(m.group(2)), float(m.group(3))
+                if param not in current:
+                    continue
+                ta, tb = current[param]
+                moved = (abs(a - ta) / max(abs(ta), 1e-12) > 0.02
+                         or abs(b - tb) / max(abs(tb), 1e-12) > 0.02)
+                if moved:
+                    stale.append(f"{head.split(' — ')[0]} states {param} = "
+                                 f"{a:g}*exp({b:g}) but scales.py holds "
+                                 f"{ta:g}*exp({tb:g})")
+    assert not stale, (
+        "section states a superseded law without a marker in its heading:\n  "
+        + "\n  ".join(stale[:6]))
