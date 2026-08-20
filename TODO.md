@@ -1689,3 +1689,42 @@ prediction, and are uninterpretable — see §140.
 
 So the S1000 corner law needs **an S1000**. There is no corpus-side substitute
 and no further analysis of the discs we have will produce one.
+
+### Update 2026-08-20 (third): what exists in the literature, and what does not
+
+Searched for a published S1000 filter law. **No acoustic measurement of the
+parameter-to-hertz mapping appears to exist anywhere public.** What exists is
+three things, none of them a measurement:
+
+1. **The specification.** "18 dB/octave, non-resonant" is Akai's own published
+   figure for the S1000 and is repeated everywhere. It is a *slope*, not a law —
+   it says nothing about which setting produces which frequency.
+
+2. **MAME's `sound/l6009.cpp`** (Robin Whittle, Devin Acker), emulating the
+   S1000's sound LSI. It applies a first-order IIR three times, and the comment
+   is an explicit hedge: *"-18dB filter with no resonance and only one settable
+   coefficient (**most likely** just three -6dB first order filters in
+   series)"*, with a TODO conceding that `ENV_SHIFT` is "basically a complete
+   guess". **There is no coefficient table** — the register value is used
+   directly. So it publishes an implementation, not a parameter-to-hertz law.
+
+3. **ConvertWithMoss's `FILTER_CUTOFF`, published 2026-08-20** — the first
+   parameter-to-hertz table for this family that we can find anywhere. Its
+   scaling table and coefficients come from the OS v4.40 disassembly, but the
+   conversion of a coefficient into hertz assumes **three one-pole stages at
+   44.1 kHz**, and they take the envelope accumulator width explicitly "from the
+   emulation of the sound hardware", flagged as such at the constant.
+
+**So CWM's hertz values inherit MAME's "most likely three".** If the pole count
+is wrong, every entry is wrong by the corresponding factor — and a wrong pole
+count is exactly the shape of the constant 1.76x offset in §139. That does not
+make them wrong: §139 measured an **S3000XL** at 12 dB/octave, and the S1000 is
+specified at 18, so the two are very possibly both right about different
+machines. It does mean the S1000 number has never been checked against an S1000.
+
+Which leaves §139's measurement plausibly the **first measured** filter law in
+this family, and the S1000 side resting on a chain of two derivations and one
+hedge.
+
+**Blocked on:** an S1000. Unchanged, but the reason to want one is stronger:
+nobody has measured this, so the measurement is not a duplicate of anything.
