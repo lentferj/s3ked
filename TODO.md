@@ -1770,3 +1770,29 @@ every format means by the word; anything asking where the resonance sits wants
 
 **Blocked on:** nothing. One run measures both quantities on one sweep — take
 the −3 dB crossing and the FILQ-difference peak from the same captures.
+
+### Sweep 85..98 first, because that is where the material actually lives
+
+Measured by the converter across four S3000 factory discs, 1555 keygroups:
+
+    FILFRQ 85..98    685 keygroups
+    FILFRQ 99        868 keygroups
+    FILFRQ 40..84      2 keygroups
+
+**Two.** Both of this project's laws are fitted on 40..84, and that range holds
+0.1% of real voices; 44% sit in 85..98, where the law is an interpolation
+between two measured endpoints and nothing else.
+
+The fit range was never chosen — it was **imposed by the instrument**. §54's
+own bounds note says it: below 44 the corner drops under the lowest note's
+fundamental and above 92 the source runs out of harmonics above the corner, so
+the sawtooth, not the machine, set the limits. The material then turned out to
+live almost entirely outside them.
+
+**Calibrating over the range you can measure is not the same as calibrating over
+the range that is used, and nothing warns you when they do not overlap.** The
+fix is a source with harmonics far enough above the corner to bracket it at
+`FILFRQ` 98 — a lower root, or a brighter waveform than a sawtooth, or a noise
+sample if the Sample Dump Standard is ever implemented.
+
+Worth more than any refinement inside 40..84.
