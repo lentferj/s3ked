@@ -183,6 +183,7 @@ silently wrong one.
 - [§140](#140--cwms-firmware-tables-cross-checked-and-a-corpus-that-stays-silent-2026-08-20) — CWM's firmware tables cross-checked, and a corpus that stays silent (2026-08-20)
 - [§141](#141--attak1-settled-the-attack-is-not-on-the-shared-rate-table-2026-08-20) — `ATTAK1` settled: the attack is not on the shared rate table (2026-08-20)
 - [§142](#142--the-two-playback-rates-byte-0x01-bit-0-decides-ssrate-does-not-2026-08-20) — The two playback rates: `byte 0x01` bit 0 decides, `SSRATE` does not (2026-08-20)
+- [§143](#143--the-loader-honours-byte-0x01-and-a-converted-attack-survives-a-load-2026-08-20) — The loader honours `byte 0x01`, and a converted attack survives a load (2026-08-20)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -13054,3 +13055,73 @@ What does stand is the narrower point: this finding is measured on an S3000XL
 and speaks for the S3000 generation. §139 established today that this family
 shares a protocol without sharing its hardware, so the S1000 side is open on
 this byte as it is on the filter.
+
+## §143 — The loader honours `byte 0x01`, and a converted attack survives a load (2026-08-20)
+
+§142 established on resident samples that `byte 0x01` bit 0 selects the playback
+rate and `SSRATE` does not, and said plainly what it could not cover: every byte
+in it was written into RAM over SysEx, so the **load** path was untested. The
+converter project built a disc to close that, and it closes a second question at
+the same time.
+
+`RATEREAD 01`, loaded as ENTIRE VOLUME from SCSI id 7, seven programs on MIDI
+channel 1.
+
+### The rate: the index wins, and the controls say so first
+
+    program        byte 0x01   SSRATE     measured
+    RR1 CONTROL        1        44100      300.0 Hz     (expect 300)
+    RR2 CONTROL        0        22050      150.0 Hz     (expect 150)
+    RR3 CONFLICT       1        22050      300.0 Hz     index 300 / SSRATE 150
+    RR4 CONFLICT       0        44100      150.0 Hz     index 150 / SSRATE 300
+
+**Both conflicts resolve to `byte 0x01`, in opposite directions.** The loader
+honours the index and ignores `SSRATE` — including RR4, where `SSRATE` declares
+44100 and the sample plays at half that.
+
+The controls are what make this readable, and they were run first with the rule
+that a failure there stops everything: if RR1 and RR2 do not produce 300 and 150
+on this exact material, the conflicts are comparisons against a prediction
+rather than against a measurement. §122 lacked that control and paid for it with
+a false negative and two days. The converter built these in from its own
+independent burn, which is a better sign than if it had copied ours.
+
+**One check I recommended did not apply, and saying so matters.** §142 gained
+confidence from the whole spectrum scaling — the second partial moving with the
+fundamental — which separates a rate change from a reinterpreted pitch. These
+tones are pure sines: every partial after the first sits at 0.00 of the peak.
+The discriminator needs harmonic content and there is none, so it contributed
+nothing here. What replaces it is better anyway: RR1 and RR2 are the *same
+material* at both rates, so the conflicts are read against measured references
+rather than computed ones.
+
+### The load path preserves an envelope, and a converted attack is correct
+
+`ATTAK1` read back over SysEx from the loaded programs — before a note was
+played — is **72, 85, 96**, exactly what the disc holds. Then timed:
+
+    program        ATTAK1   t90 measured   predicted   ratio
+    RR5 ATK SHORT     72        0.44 s       0.45 s     0.978
+    RR6 ATK MID       85        1.86 s       1.82 s     1.022
+    RR7 ATK LONG      96        6.18 s       6.01 s     1.028
+
+Within 2.8% across a fourteen-fold span. These were written by the converter
+**from source times** of 0.5, 2.0 and 6.554 s rather than from bytes either
+project chose, so one note tests the conversion law, the writer and the load
+path together.
+
+**The failure this rules out is the quiet one.** A sign error in the conversion
+produces an *instant* attack, which is exactly what the converter's previous
+fixed default produced — so a disc full of instant attacks would look like a
+clean conversion of a bank that happened to have no attacks. Nothing in the
+file, the headers or the sound distinguishes those two cases. Only timing a note
+against a prediction does.
+
+### What this generalises to
+
+§142's caveat was never rate-specific: **every law this project holds was
+established by writing fields into a resident program over SysEx.** This is the
+first end-to-end confirmation that a load preserves one of them, and it covers
+`ATTAK1` and the rate byte only. The rest remain confirmed in RAM and unconfirmed
+through a load — a missing read-back rather than a suspicion, and now one that
+costs a single SysEx read whenever a disc is loaded for another purpose.
