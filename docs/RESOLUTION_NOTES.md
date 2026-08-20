@@ -12671,14 +12671,49 @@ corner is approaching the source's own bandwidth and the crossing gets squeezed
 against it. That is the instrument running out, not the law bending, and those
 two points are excluded rather than quietly averaged in.
 
-### What is not concluded
+### The filter order settles which explanation it is
 
-Nothing is withdrawn, and CWM is not corrected. For three one-pole stages in
-series the cascade's −3 dB point is 0.5098 of one stage's corner, against the
-0.5668 measured — the right size and direction for "their table is one stage,
-not the cascade", but 11% short of it. The other live possibility is simply that
-they read **S1000** firmware while this is an **S3000XL**: this family shares a
-protocol, which is not a promise that it shares a filter.
+Two explanations were open: their table names one stage rather than the cascade
+(a label, same machine), or the two machines differ. **The roll-off slope
+distinguishes them, and it says the machines differ.**
+
+Measured from the same captures, fitting dB against log-frequency in the
+asymptotic region — above 2.2x the corner, above the noise floor:
+
+    FILFRQ 40..56, both source keys:  -12.26 -12.29 -12.15 -12.02 -11.98
+                                      -12.35 -12.29 -12.25 -12.17 -12.14
+                                      dB/octave, r2 0.996..1.000
+
+**−12.2 dB/octave is two poles**, not the three one-pole stages CWM read out of
+the S1000's operating system for an 18 dB/octave low-pass. One pole is
+−6.02 dB/octave; 2.03 is what these fit.
+
+Only the low settings are used. Above `FILFRQ` 72 the measured slope shallows to
+−9.1..−10.7, which is the stopband running out of room before the noise floor
+rather than the filter changing; and the `FILFRQ` 99 reference is flat through
+the region fitted at low settings (its own corner is near 10 kHz), so it is not
+subtracting real roll-off there.
+
+**A first attempt at this was discarded rather than reported.** Fitting the full
+transfer function for both the per-stage corner and the pole count gave rms
+errors of 1.3–8 dB, a pole count drifting monotonically from 1.65 to 5.70 with
+the setting, and disagreement between the two source keys — a shape fit needs
+stopband points that low settings do not leave above the noise. The asymptotic
+slope needs far less of the curve and is correspondingly better conditioned. An
+ill-conditioned fit that yields a plausible average (it gave N = 3.12) is the
+most dangerous kind of wrong number.
+
+### What follows, and what is still not concluded
+
+The family shares a protocol; it does not share a filter. A program carrying
+`FILFRQ` 60 does not describe the same sound on an S1000 and an S3000XL, so
+**passing the value through unchanged between the two is not sound-preserving**,
+and neither is converting one machine's value through the other's law.
+
+Not concluded: the exact S1000 law, which needs an S1000. Nothing of CWM's is
+corrected here — their table is a reading of S1000 firmware and this is an
+S3000XL measurement, and the pole count now says those are two different
+filters rather than two descriptions of one.
 
 What *can* be said is that §54 was never the same quantity as either, and should
 stop being quoted as though it were. `TODO.md` carries what would settle it.

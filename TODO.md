@@ -1661,3 +1661,17 @@ used.
 **Blocked on:** nothing here. Distinguishing (1) from (2) needs either an S1000
 to measure or the firmware coefficients themselves, and (3) needs §54 re-derived
 against this run.
+
+### Update 2026-08-20: the filter ORDER differs, so it is a machine difference
+
+The roll-off slope was measured from the same captures: **−12.2 dB/octave, two
+poles** (r² 0.996–1.000, both source keys, `FILFRQ` 40..56), against the three
+one-pole stages at 18 dB/octave that CWM read out of S1000 firmware. That
+settles explanation (1) against (2) above: **the two machines have different
+filters**, not one filter under two labels.
+
+Consequence for anything converting between formats: `FILFRQ` is not portable
+between S1000 and S3000XL, in either direction, and an Akai→Akai passthrough of
+the value is not sound-preserving.
+
+Still open: the S1000's own corner law, which needs an S1000 to measure.
