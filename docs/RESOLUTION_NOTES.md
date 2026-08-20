@@ -13117,6 +13117,40 @@ clean conversion of a bank that happened to have no attacks. Nothing in the
 file, the headers or the sound distinguishes those two cases. Only timing a note
 against a prediction does.
 
+### A failure with no true yes-or-no answer
+
+Two things went wrong getting this run out, and they are not the same kind of
+thing.
+
+The first is the familiar one. Four SCSI ids each returned a well-formed
+100-volume listing beginning `BOOT SYSTEM#`, and the conclusion drawn was that
+the card was not in the sampler. It was: `device_type` was 0, the flash, so
+`select_drive` was faithfully switching ids on the wrong device. **A verified
+drive select and a directory that parses are not evidence you are on the medium
+you think** — §112 again, in a different coat. Nobody doubts a listing that
+parses.
+
+The second has a different shape and is worth separating. A capture subprocess
+timed out and the script let the exception propagate **without killing it**, so
+an orphaned client stayed registered with JACK. Registering a new client forces
+a graph reorder, which waits on every registered client including the dead one —
+so the server refused every new connection while serving the existing graph
+perfectly. Asked "is JACK running fine?", the honest answer was **yes for the
+audio already running and no for anything new**, and reporting either alone was
+wrong.
+
+**A partial failure looks like a working system from one side and a dead one
+from the other, and a yes/no question about it has no true answer.** The way out
+is not to answer it but to say which side you are on: 35 clients registered and
+Carla at 99.5% CPU on one hand, `jack_lsp` timing out at 25 s on the other. Both
+observations were available in one command, and having both is what named the
+cause — a stale `jackrec` registration still in the client list with no process
+behind it.
+
+Two operational consequences, both cheap: **never let a timeout propagate past a
+live subprocess**, and prefer one long-lived client over a process per capture,
+so a failure cannot strand a registration at all.
+
 ### What this generalises to
 
 §142's caveat was never rate-specific: **every law this project holds was
