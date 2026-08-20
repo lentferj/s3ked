@@ -13025,15 +13025,32 @@ disc is next loaded.
 
 ### How much rides on it, from the corpus
 
-Measured across 19 340 factory sample headers by the converter project:
+Measured by the converter project across its whole disc corpus:
 
-* **4242 (22.0%) carry a nonzero `SSRATE` that contradicts `byte 0x01`**,
-  including 1290 declaring 48000 — a rate this machine cannot play at all.
-* **all 5331 `.S1` headers carry index 1**, so the byte may not carry a rate
-  meaning in the S1000 generation at all.
+* **4242 of 19 340 headers (22.0%) carry a nonzero `SSRATE` that contradicts
+  `byte 0x01`**, including 1290 declaring 48000 — a rate this machine cannot
+  play at all. A reader trusting `SSRATE` gets a fifth of them wrong.
+* **`byte 0x01` is 1 in all 35 990 `.S1` headers** — 0.00% at zero — against
+  5.25% at zero in 18 293 `.S3` headers.
+* a naive "always prefer `byte 0x01`" fix changes the read rate on 9.0% of
+  `.S1` and 20.5% of `.S3` headers, so a converter has to branch on generation
+  whatever this section says.
 
-So a reader that trusts `SSRATE` gets a fifth of the corpus wrong, and 1290
-files would resample to a rate the hardware does not have. The second figure is
-the more interesting one: this finding is measured on an S3000XL, and §139 has
-already shown once today that this family shares a protocol without sharing its
-hardware.
+**The constant does not mean what it looks like it means, and this section said
+it did for about forty minutes.** The first write-up read 35 990 invariant
+headers as evidence that the byte might carry no rate meaning in the S1000
+generation. It is not: ConvertWithMoss observed the byte varying on
+**machine-recorded** S1000 material, where a 22050 recording leaves `SSRATE` at
+zero and is marked by the index alone. This corpus is entirely library CD-ROMs,
+mastered at 44100, which is precisely where an invariant 1 is expected.
+
+**A field constant across 35 990 specimens bounds the corpus, not the machine.**
+Invariance is the one observation that cannot distinguish "this field does
+nothing" from "nothing here exercised this field", and it is seductive because
+the sample size feels overwhelming — 35 990 is a large number attached to a
+question it cannot answer.
+
+What does stand is the narrower point: this finding is measured on an S3000XL
+and speaks for the S3000 generation. §139 established today that this family
+shares a protocol without sharing its hardware, so the S1000 side is open on
+this byte as it is on the filter.
