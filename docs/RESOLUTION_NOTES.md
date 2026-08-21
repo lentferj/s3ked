@@ -13387,6 +13387,30 @@ Moving toward the other party's number felt like converging on the answer, and
 the number being converged on was a mean — the one form least able to report
 what was happening at its own edge.
 
+### What this invalidated downstream
+
+Changing the law changed the converter's *output*, not merely its reading. Every
+one of the 95 keygroups on the test disc that carry a filter setting moved — a
+147 Hz target used to select `FILFRQ` 44 and now selects 40 — and **ten
+keygroups stopped being written wide open**, because settings above the old
+fitted top had been collapsing to 99 and now carry a measured corner instead.
+That last part is the fidelity gain, and it is the only part of §146 audible on
+a disc.
+
+So a test disc built before this is not comparable to one built after, and the
+sibling rebuilt theirs. **A stale test artefact is worse than a missing one,
+because it answers** — the same failure as the card's slot map describing a
+volume that had been overwritten (both facts now live on the card rather than
+in a message), and as the machine serving a cached directory for a card sitting
+on the desk (§112).
+
+Checked here rather than assumed: this project's own captures from that disc
+record pitch, loop drift, timing and level, and **no filter field**, so the
+§143 and §137 conclusions are unaffected. The `peak_dbfs` and `rms_dbfs` figures
+in them are specific to the old build, since a filter setting moves a level —
+but those were never used as absolute references, having been recorded at the
+time as meaningless away from that bench.
+
 ### The top of the range is simply open
 
 `FILFRQ` 98 differs from the wide-open 99 by **2.2 dB across the entire band**.
