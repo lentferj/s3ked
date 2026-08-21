@@ -185,6 +185,7 @@ silently wrong one.
 - [§142](#142--the-two-playback-rates-byte-0x01-bit-0-decides-ssrate-does-not-2026-08-20) — The two playback rates: `byte 0x01` bit 0 decides, `SSRATE` does not (2026-08-20)
 - [§143](#143--the-loader-honours-byte-0x01-and-a-converted-attack-survives-a-load-2026-08-20) — The loader honours `byte 0x01`, and a converted attack survives a load (2026-08-20)
 - [§144](#144--the-s3000xl-imports-s1000-p1-as-a-pass-through-2026-08-21) — The S3000XL imports S1000 `.P1` as a pass-through (2026-08-21)
+- [§145](#145--both-filter-laws-are-right-54s-interpretation-is-not-2026-08-21) — Both filter laws are right; §54's interpretation is not (2026-08-21)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -13239,3 +13240,59 @@ volunteer disc in `docs/re_procedures/s1000_filter_disc.md`.
 The distinction is worth holding onto because a pass-through result is the one
 most likely to be over-read: it looks like "S1000 and S3000 are the same" and it
 says only "the importer does not alter the number".
+
+## §145 — Both filter laws are right; §54's interpretation is not (2026-08-21)
+
+§54 and §139 disagreed by a constant 1.29x and `TODO.md` carried it as an open
+question, with the note that it was "not obviously definitional" because §54
+argues the resonance peak sits **at** the corner. One sweep measures both
+quantities from the same captures and settles it.
+
+40 Hz sawtooth, MIDI 36, one program. At each `FILFRQ`: capture at `FILQ` 0 and
+at `FILQ` 15, plus one wide-open reference. The corner comes from dividing
+`FILQ` 0 by the reference; the peak comes from differencing `FILQ` 15 against
+`FILQ` 0 at the same setting, which is §54's own method.
+
+    FILFRQ   corner(-3dB)   res peak   peak/corner   §139 pred   §54 pred
+        44          189.2      160.0         0.846       184.4      146.9
+        52          339.9      280.0         0.824       329.1      259.2
+        60          592.4      480.0         0.810       587.6      457.4
+        68         1046.0      800.0         0.765      1049.1      807.2
+        76         1894.8     1440.0         0.760      1873.0     1424.5
+        84         3425.3     2520.0         0.736      3344.0     2513.9
+
+    corner / §139   1.017  sd 0.012
+    peak   / §54    1.037  sd 0.038
+    peak   / corner 0.790  sd 0.039       resonance boost 21.2 dB
+
+**Neither run was faulty.** §139 reproduces to 1.7% and §54 to 3.7%, on the same
+audio, in the same session. Both laws describe real features of this filter.
+
+**What is refuted is §54's claim that the two are the same feature.** The
+resonance peak sits at **0.79 of the −3 dB corner**, not at it — which is the
+1.29x, arriving from the other side. §54 measured the peak accurately and then
+said it was the corner, and that sentence has been carried in `scales.py` ever
+since as the justification for calling the field's unit "Hz" without saying
+which hertz.
+
+So the disagreement was definitional after all, and the reason it did not look
+definitional is that one of the definitions was wrong.
+
+### What this does not explain
+
+The ratio is not quite constant: 0.846 at `FILFRQ` 44 falling to 0.736 at 84,
+a 13% drift across the range. A fixed filter topology should give a fixed
+ratio. And 21 dB of resonance on a two-pole design (§139) predicts a peak
+essentially **at** the corner, not a fifth below it, so the simple resonant
+low-pass model does not account for 0.79 either.
+
+Both are recorded and neither is explained. The empirical facts stand on their
+own and are what a converter needs; the topology that produces them does not
+follow from this run.
+
+### For anything mapping a source format's cutoff
+
+Use §139. It measures the −3 dB point, which is what every format means by
+"cutoff", and it is now confirmed twice on separate days with different sources.
+§54 remains correct for **where the resonance sits** and should be labelled that
+way rather than as the corner.

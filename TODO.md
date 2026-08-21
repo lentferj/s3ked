@@ -1749,7 +1749,7 @@ programs is N copies with one byte different.
 Gotek. Floppy is not the universal option it appears to be — the AKAI format is
 not DOS and cannot be written on a PC drive.
 
-## `FILFRQ`: §54 and §139 disagree by a constant 1.29x (OPEN 2026-08-20)
+## `FILFRQ`: §54 and §139 disagree by a constant 1.29x (CLOSED 2026-08-21 — §145)
 
 **Status:** both measured here, on the same machine, by different methods.
 
@@ -1768,8 +1768,11 @@ Meanwhile, recorded in `scales.py`: a converter mapping a source format's
 every format means by the word; anything asking where the resonance sits wants
 §54.
 
-**Blocked on:** nothing. One run measures both quantities on one sweep — take
-the −3 dB crossing and the FILQ-difference peak from the same captures.
+**Closed by §145.** Both laws reproduce on one sweep — §139 to 1.7%, §54 to
+3.7% — so the 1.29x is definitional. The resonance peak sits at **0.790 of the
+−3 dB corner** (sd 0.039), so §54's claim that the peak locates the corner is
+what was wrong, not either measurement. `scales.py` now labels §54's law as the
+resonance peak.
 
 ### Sweep 85..98 first, because that is where the material actually lives
 
