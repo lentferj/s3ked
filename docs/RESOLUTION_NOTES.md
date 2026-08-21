@@ -13210,6 +13210,16 @@ addresses moving prove the machine wrote where it owns memory while leaving
 every semantic field alone. **An all-identity result needs something in it that
 changed**, or it is only evidence that the measurement was inert.
 
+**And the control was already in the data, filed as noise.** The pool addresses
+were reported here as "not a mapping, ignore them" — correct about the mapping
+question, and wrong about what they were for. The thing that validated the whole
+result had been classified as the thing to disregard.
+
+So the operational form, which is cheaper than re-running: **given a null
+already in hand, go back to what you set aside and ask whether any of it shows
+the instrument was connected.** In this case it was free — the bytes were
+already read, already saved, and already dismissed in writing.
+
 ### The extension bytes default to zero
 
 A 150-byte S1000 keygroup cannot carry the S3000 extension fields, so whatever

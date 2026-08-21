@@ -1784,9 +1784,14 @@ that range holds 0.1% of voices; 44% sit in 85..98, where the law is an
 interpolation between two measured endpoints and nothing else.
 
 **Qualified 2026-08-21: this is generation-specific and the first version of
-this entry overstated it.** On **S1000** material the fit is placed far better —
-of 14 661 `.P1` keygroups carrying a real filter setting, **6869 sit inside
-40..84**. So "fitted where the material is not" is true of the S3000 discs and
+this entry overstated it.** The full corpus, both generations:
+
+    generation      keygroups   40..84   85..98   99 (open)
+    .P3 (S3000)          1555        2      685         868
+    .P1 (S1000)         76086     6869     6541       61425
+
+The fit is **badly placed for S3000 material and well placed for S1000
+material**. So "fitted where the material is not" is true of the S3000 discs and
 false of the S1000 ones, and the unqualified claim was the same error this entry
 is about: a correct measurement generalised past the population it was taken
 from. The 85..98 sweep stays the priority because that is where S3000 material
