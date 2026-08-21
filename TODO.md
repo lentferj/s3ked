@@ -1774,7 +1774,7 @@ every format means by the word; anything asking where the resonance sits wants
 what was wrong, not either measurement. `scales.py` now labels §54's law as the
 resonance peak.
 
-### Sweep 85..98 first, because that is where the material actually lives
+### Sweep 85..98 first, because that is where the material actually lives (DONE 2026-08-21 — §146)
 
 Measured by the converter across four **S3000** factory discs, 1555 keygroups:
 

@@ -186,6 +186,7 @@ silently wrong one.
 - [§143](#143--the-loader-honours-byte-0x01-and-a-converted-attack-survives-a-load-2026-08-20) — The loader honours `byte 0x01`, and a converted attack survives a load (2026-08-20)
 - [§144](#144--the-s3000xl-imports-s1000-p1-as-a-pass-through-2026-08-21) — The S3000XL imports S1000 `.P1` as a pass-through (2026-08-21)
 - [§145](#145--both-filter-laws-are-right-54s-interpretation-is-not-2026-08-21) — Both filter laws are right; §54's interpretation is not (2026-08-21)
+- [§146](#146--the-top-decade-measured-and-my-objection-to-the-reference-was-right-for-the-wrong-reason-2026-08-21) — The top decade measured, and my objection to the reference was right for the wrong reason (2026-08-21)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -13296,3 +13297,77 @@ Use §139. It measures the −3 dB point, which is what every format means by
 "cutoff", and it is now confirmed twice on separate days with different sources.
 §54 remains correct for **where the resonance sits** and should be labelled that
 way rather than as the corner.
+
+## §146 — The top decade measured, and my objection to the reference was right for the wrong reason (2026-08-21)
+
+`FILFRQ` 85..98 carries 44% of S3000 factory voices (685 of 1555 keygroups)
+and both this project's law and the sibling converter interpolated it between
+two measured endpoints. A disc built for it: a **Schroeder-phase harmonic
+complex**, 499 harmonics at equal amplitude, flat to 18 kHz at 4.2 dB crest —
+where a sawtooth is ~12 dB crest with harmonics 50 dB down at 16 kHz, which is
+what capped the fit at 84 in the first place.
+
+    FILFRQ   corner Hz    §139 law   ratio   depth@18k   status
+        68        1036        1049   0.987       -48.4   measured
+        72        1412        1402   1.007       -42.9   measured
+        76        1876        1873   1.002       -37.9   measured
+        80        2508        2503   1.002       -32.7   measured
+        84        3421        3344   1.023       -27.3   measured
+        86        3984        3865   1.031       -24.5   measured
+        88        4643        4468   1.039       -21.6   measured
+        90        5512        5165   1.067       -18.6   marginal
+        92        6888        5970   1.154       -14.7   marginal
+        94        8481        6901   1.229       -11.1   marginal
+        96       10933        7977   1.371        -7.0   not measurable
+        98          --        9221      --        -2.2   not measurable
+
+### §139 is confirmed, and it stops being right at 88
+
+Inside its fitted range the law reproduces at **1.0041, sd 0.0116** — four parts
+in a thousand, on a different source, a different session and a different
+method of anchoring. That is the strongest confirmation it has had.
+
+Above 88 the measured corner rises **faster than the exponential**, and the gap
+grows monotonically: 3% at 86, 7% at 90, 15% at 92, 23% at 94. Extrapolating
+§139 past its fit therefore understates the corner, by increasing amounts, in
+exactly the band where nearly half of real material sits.
+
+### The top of the range is simply open
+
+`FILFRQ` 98 differs from the wide-open 99 by **2.2 dB across the entire band**.
+They are the same filter. So the law does not merely bend at the top — it
+**saturates**: somewhere above 94 the corner leaves the audible range and
+further settings do nothing. A converter should treat 96..99 as open rather
+than assigning them frequencies, and this project should stop quoting a law
+there at all.
+
+### My objection to the reference was right, and my reason for it was wrong
+
+Before the run I argued the wide-open program could not be the divisor because
+its own corner sat near 9.9 kHz — extrapolated from §139 — so the top rungs
+would have no −3 dB crossing. The prediction was correct: 96 and 98 have no
+usable crossing.
+
+**The mechanism was not.** `FILFRQ` 99 is flat to 18 kHz (−1.3 dB), so it is a
+perfectly good divisor and the reference never rolled off at all. The top rungs
+are unmeasurable because *they* converge on the reference, not because the
+reference falls away. Same observation, opposite cause — and the reasoning I
+used to predict it came from extrapolating the very law this run was built to
+test.
+
+A correct prediction from a wrong mechanism is worth recording precisely because
+nothing about the outcome exposes it. Had the design not also been checked
+against the data, "the reference cannot divide the top rungs" would have entered
+the notes with a false explanation attached and been quoted for years.
+
+### `FILQ` extends §145's ratio, and it keeps falling
+
+§145 found the resonance peak at 0.790 of the corner across 40..84, drifting 13%
+with no explanation. Above 84 the drift continues in the same direction:
+
+    FILFRQ 84  peak/corner 0.714     FILFRQ 92  0.593
+    FILFRQ 88              0.681     FILFRQ 96  0.538
+
+So it is not a constant with noise but a real trend, and the resonance boost
+falls too, 13.9 dB at 84 to 10.3 dB at 96. Still unexplained; now unexplained
+over a wider range and with a clear direction rather than a suspicion of one.
