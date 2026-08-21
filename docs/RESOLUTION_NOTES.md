@@ -3774,6 +3774,18 @@ the detector can produce that.* Written before the run, not after.
 Three groups: the pan LFO (§39), the whole per-zone velocity block (§45), and
 five of six envelope scaling fields (here). Fourteen fields.
 
+> **SUPERSEDED COUNT — it is five, not fourteen, and this paragraph is the one
+> that gets quoted.** §51 withdrew the per-zone velocity block (§45 tested the
+> wrong thing) and §52 withdrew the pan LFO group (all five of those fields
+> work; only the pan *destination* is dead). What survives is the five envelope
+> scaling fields in the table above — `V_REL1`, `O_REL1`, `V_ATT2`, `V_REL2`,
+> `V_ENV2` — with `K_DAR1` as the positive control beside them.
+>
+> **And the IB304F is not the candidate.** §50 withdrew that outright, with a
+> documentary refutation: the board adds direct-to-disk recording, reverb, a
+> digital EQ and a second filter. Nothing about envelope scaling. Why the five
+> are inert remains open and no hardware option is implicated.
+
 Everything at program level and the two keygroup routes that do work —
 `V_ATT1` and `K_DAR1` — behave normally. The common factor among the dead
 ones, if there is one, is not visible from here; the optional IB304F board
