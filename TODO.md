@@ -1773,15 +1773,24 @@ the −3 dB crossing and the FILQ-difference peak from the same captures.
 
 ### Sweep 85..98 first, because that is where the material actually lives
 
-Measured by the converter across four S3000 factory discs, 1555 keygroups:
+Measured by the converter across four **S3000** factory discs, 1555 keygroups:
 
     FILFRQ 85..98    685 keygroups
     FILFRQ 99        868 keygroups
     FILFRQ 40..84      2 keygroups
 
-**Two.** Both of this project's laws are fitted on 40..84, and that range holds
-0.1% of real voices; 44% sit in 85..98, where the law is an interpolation
-between two measured endpoints and nothing else.
+**Two.** Both of this project's laws are fitted on 40..84, and on this material
+that range holds 0.1% of voices; 44% sit in 85..98, where the law is an
+interpolation between two measured endpoints and nothing else.
+
+**Qualified 2026-08-21: this is generation-specific and the first version of
+this entry overstated it.** On **S1000** material the fit is placed far better —
+of 14 661 `.P1` keygroups carrying a real filter setting, **6869 sit inside
+40..84**. So "fitted where the material is not" is true of the S3000 discs and
+false of the S1000 ones, and the unqualified claim was the same error this entry
+is about: a correct measurement generalised past the population it was taken
+from. The 85..98 sweep stays the priority because that is where S3000 material
+lives, but the fitted range is not misplaced everywhere.
 
 The fit range was never chosen — it was **imposed by the instrument**. §54's
 own bounds note says it: below 44 the corner drops under the lowest note's

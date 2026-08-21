@@ -13197,8 +13197,18 @@ All twenty returned exactly 20 / 50 / 80. **AKAI's import is a pass-through**,
 so this project's S3000 semantics apply unchanged to a `.P1` source.
 
 Only three fields varied otherwise, and none is a mapping: `PRGNUM` (60/61/62 by
-design) and `KGRP1@`/`NXTKG@`, which are object-pool addresses and machine-owned. Their moving by 24 bytes per program is the pool laying out three
-programs, not the importer rewriting anything.
+design) and `KGRP1@`/`NXTKG@`, which are object-pool addresses and
+machine-owned. Their moving by 24 bytes per program is the pool laying out
+three programs, not the importer rewriting anything.
+
+**Those two moving fields are what make this a finding rather than an absence.**
+A readback in which nothing at all changed is indistinguishable from a readback
+that was not live — the same numbers come back from a stale cache (§112), from
+the wrong device (§144's own near-miss the day before), or from a load that
+silently did nothing, and every one of those has happened here. The pool
+addresses moving prove the machine wrote where it owns memory while leaving
+every semantic field alone. **An all-identity result needs something in it that
+changed**, or it is only evidence that the measurement was inert.
 
 ### The extension bytes default to zero
 
