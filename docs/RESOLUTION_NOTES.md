@@ -13333,16 +13333,36 @@ what capped the fit at 84 in the first place.
         96       10933        7977   1.371        -7.0   not measurable
         98          --        9221      --        -2.2   not measurable
 
-### §139 is confirmed, and it stops being right at 88
+### §139 is confirmed, and it departs at its own upper bound
 
 Inside its fitted range the law reproduces at **1.0041, sd 0.0116** — four parts
 in a thousand, on a different source, a different session and a different
 method of anchoring. That is the strongest confirmation it has had.
 
-Above 88 the measured corner rises **faster than the exponential**, and the gap
-grows monotonically: 3% at 86, 7% at 90, 15% at 92, 23% at 94. Extrapolating
-§139 past its fit therefore understates the corner, by increasing amounts, in
+**But the departure begins at 84, not above it**, which the range-average hides:
+
+    68  0.987      80  1.002   <- last flat point
+    72  1.007      84  1.023   <- departure begins, INSIDE the fit
+    76  1.002      86  1.031
+
+    68..80  mean 0.9996  sd 0.0073
+    68..84  mean 1.0043  sd 0.0114     (§139's own fitted range)
+    68..88  mean 1.0131  sd 0.0170
+
+§139 was fitted 40..84, so the first point to go is **its own upper bound** —
+where a fit is least constrained and has the fewest neighbours to hold it. The
+useful boundary for a converter is therefore **80, not 84**: above that, use
+measured corners rather than the law.
+
+Beyond it the gap grows monotonically — 3% at 86, 7% at 90, 15% at 92, 23% at
+94 — so extrapolating §139 understates the corner, by increasing amounts, in
 exactly the band where nearly half of real material sits.
+
+The averaging is the trap worth naming: 1.0043 over the fitted range reads as
+uniform agreement and is in fact a flat run of four points plus one that has
+already begun to leave. **A mean over a range answers a question about the
+range, not about its endpoints**, and a law is most likely to fail precisely at
+the endpoint that its own fit was anchored on.
 
 ### The top of the range is simply open
 
