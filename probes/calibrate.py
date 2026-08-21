@@ -818,6 +818,65 @@ _MEASUREMENTS = frozenset({
 })
 
 
+#: Minimum dB a real note lifts above its own pre-roll. Anything less means
+#: nothing was triggered.
+SOUNDED_MIN_LIFT_DB = 20.0
+
+
+def lift_over_preroll(wav: str, t_on: float, *, window: float = 1.0) -> float:
+    """dB by which the note rises above the silence before it in the same take.
+
+    **This is the check that asks whether a note happened at all**, which is
+    not the same question as whether it was too loud, and is the one a capture
+    script is most likely to omit. A clipping check passes silence: silence
+    does not clip.
+
+    It has cost this project three times. A capture of a program on a MIDI
+    channel the machine was not answering on came back at the noise floor and
+    was reported as thirty usable takes. A capture at a note above every
+    keygroup's range did the same an hour later. And in §138 a note that had
+    stopped sounding was measured as 31 cents of pitch drift, because the
+    estimator's threshold was relative to the window's own contents and
+    scaled down with the noise.
+
+    The measurement needs **no absolute reference and no level assumption**,
+    which is what makes it portable between rigs: it compares the take with
+    itself. A real note lifts 50-65 dB here; a dropped one lifts zero.
+
+    Returns the lift in dB. Compare against :data:`SOUNDED_MIN_LIFT_DB`.
+    """
+    import wave as _wave
+
+    import numpy as _np
+
+    with _wave.open(wav, "rb") as handle:
+        rate = handle.getframerate()
+        frames = handle.getnframes()
+        raw = handle.readframes(frames)
+        channels = handle.getnchannels()
+    data = _np.frombuffer(raw, dtype=_np.int16).astype(float)
+    if channels > 1:
+        data = data.reshape(-1, channels).mean(axis=1)
+
+    def _rms_db(chunk):
+        if not len(chunk):
+            return float("-inf")
+        return 20 * _np.log10(
+            max(float(_np.sqrt(_np.mean(chunk ** 2))), 1e-9) / 32768)
+
+    pre = data[:max(int((t_on - 0.1) * rate), 0)]
+    note = data[int((t_on + 0.1) * rate):int((t_on + 0.1 + window) * rate)]
+    if not len(pre) or not len(note):
+        return 0.0
+    return _rms_db(note) - _rms_db(pre)
+
+
+def sounded(wav: str, t_on: float, *, window: float = 1.0,
+            minimum: float = SOUNDED_MIN_LIFT_DB) -> bool:
+    """Did this take contain a note? See :func:`lift_over_preroll`."""
+    return lift_over_preroll(wav, t_on, window=window) >= minimum
+
+
 def _measure(kind: str, wav: str, t_on: float, t_off: float,
              reference=None, ref_band: Tuple[float, float] = (100.0, 500.0)
              ) -> Tuple[float, object]:

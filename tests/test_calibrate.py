@@ -1083,3 +1083,63 @@ def test_the_synthetic_rig_takes_the_same_argument():
     import inspect
     sig = inspect.signature(cal._SyntheticRig.play_and_record)
     assert "release_velocity" in sig.parameters
+
+
+def test_lift_over_preroll_separates_a_note_from_a_dropped_take(tmp_path):
+    """The check that asks whether a note happened, not whether it clipped.
+
+    A clipping check passes silence, because silence does not clip. This has
+    cost three sessions: a capture on a MIDI channel the machine was not
+    answering on, a capture at a note above every keygroup's range an hour
+    later, and §138's silence measured as 31 cents of pitch drift.
+
+    The measurement compares the take with itself, so it needs no absolute
+    reference and survives a change of rig or gain.
+    """
+    import wave
+
+    import numpy as np
+
+    rate = 48000
+    t_on = 0.7
+
+    def _write(path, amplitude):
+        pre = np.random.default_rng(0).normal(0, 3, int(t_on * rate))
+        note = np.random.default_rng(1).normal(0, amplitude, int(1.5 * rate))
+        data = np.concatenate([pre, note]).astype("<i2")
+        with wave.open(str(path), "wb") as handle:
+            handle.setnchannels(1)
+            handle.setsampwidth(2)
+            handle.setframerate(rate)
+            handle.writeframes(data.tobytes())
+
+    played = tmp_path / "played.wav"
+    dropped = tmp_path / "dropped.wav"
+    _write(played, 3000.0)      # a real note
+    _write(dropped, 3.0)        # the note-on never reached the machine
+
+    assert cal.lift_over_preroll(str(played), t_on) > 50
+    assert abs(cal.lift_over_preroll(str(dropped), t_on)) < 3
+    assert cal.sounded(str(played), t_on)
+    assert not cal.sounded(str(dropped), t_on)
+
+
+def test_sounded_does_not_pass_a_take_that_merely_fails_to_clip(tmp_path):
+    """The specific wrong verdict this replaces: "no clipping, peaks
+    -70..-65 dBFS, RESULT: usable" on thirty silent takes."""
+    import wave
+
+    import numpy as np
+
+    rate, t_on = 48000, 0.7
+    quiet = np.random.default_rng(2).normal(0, 8, int((t_on + 1.5) * rate))
+    path = tmp_path / "quiet.wav"
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(rate)
+        handle.writeframes(quiet.astype("<i2").tobytes())
+
+    peak = 20 * np.log10(max(abs(quiet).max(), 1) / 32768)
+    assert peak < -50, "well clear of clipping, which is the trap"
+    assert not cal.sounded(str(path), t_on), "and still not a note"
