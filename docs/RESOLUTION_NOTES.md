@@ -184,6 +184,7 @@ silently wrong one.
 - [§141](#141--attak1-settled-the-attack-is-not-on-the-shared-rate-table-2026-08-20) — `ATTAK1` settled: the attack is not on the shared rate table (2026-08-20)
 - [§142](#142--the-two-playback-rates-byte-0x01-bit-0-decides-ssrate-does-not-2026-08-20) — The two playback rates: `byte 0x01` bit 0 decides, `SSRATE` does not (2026-08-20)
 - [§143](#143--the-loader-honours-byte-0x01-and-a-converted-attack-survives-a-load-2026-08-20) — The loader honours `byte 0x01`, and a converted attack survives a load (2026-08-20)
+- [§144](#144--the-s3000xl-imports-s1000-p1-as-a-pass-through-2026-08-21) — The S3000XL imports S1000 `.P1` as a pass-through (2026-08-21)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -13159,3 +13160,62 @@ first end-to-end confirmation that a load preserves one of them, and it covers
 `ATTAK1` and the rate byte only. The rest remain confirmed in RAM and unconfirmed
 through a load — a missing read-back rather than a suspicion, and now one that
 costs a single SysEx read whenever a disc is loaded for another purpose.
+
+## §144 — The S3000XL imports S1000 `.P1` as a pass-through (2026-08-21)
+
+The machine reads S1000 files, so **its import routine is the S1000-to-S3000
+mapping** and it will state that mapping if asked. No audio is involved: load a
+volume of `.P1` programs with known values, read them back over SysEx, compare.
+
+`S1000IMPORT`, one volume, 17 genuine `.P1` programs (type `0x70`) against a
+40 Hz sawtooth `.S1`, all patched copies of a real factory `.P1` rather than
+generated — the sibling converter has no S1000 output path, and inventing one
+to test S1000 handling would have put the untested thing inside the experiment.
+
+### It loads, and the ladder is exact
+
+`CLR`, then ENTIRE VOLUME from SCSI id 7. **All 17 programs arrived.** The
+`FILFRQ` ladder read back:
+
+    expected  30 40 50 55 60 65 70 75 80 84 88 92 95 99
+    read      30 40 50 55 60 65 70 75 80 84 88 92 95 99
+
+Identical, and monotonic. The step of 5 was the point: a non-monotonic readback
+would have meant the load went wrong rather than that the mapping is strange,
+and that distinction is not available from a single value.
+
+### Every semantic field is identity
+
+Three probe programs set **all twenty** fields the converter emits to 20, 50 and
+80. Three values because one point cannot separate identity from a scale, and
+two cannot separate a scale from an offset.
+
+    program    POLYPH OSHIFT PRLOUD LFORAT MWLDEP B_PTCH SPLOUD SPATT SPFILT VOSCL
+    keygroup   FILFRQ ATTAK1 DECAY1 SUSTN1 RELSE1 ATTAK2 DECAY2 SUSTN2 RELSE2 V_ENV2
+
+All twenty returned exactly 20 / 50 / 80. **AKAI's import is a pass-through**,
+so this project's S3000 semantics apply unchanged to a `.P1` source.
+
+Only three fields varied otherwise, and none is a mapping: `PRGNUM` (60/61/62 by
+design) and `KGRP1@`/`NXTKG@`, which are object-pool addresses and machine-owned. Their moving by 24 bytes per program is the pool laying out three
+programs, not the importer rewriting anything.
+
+### The extension bytes default to zero
+
+A 150-byte S1000 keygroup cannot carry the S3000 extension fields, so whatever
+the machine puts there is its own default. Read at keygroup 151/152/153 on all
+three probes: **`[0, 0, 0]`**. A default nobody had written down, for one extra
+read on an experiment run for another purpose.
+
+### What it does not answer
+
+**Identity is not equivalence.** The same number arriving unchanged does not
+mean it sounds the same: §139 measured this machine's filter at 12 dB/octave
+against the S1000's specified 18, so `FILFRQ` 60 can import untouched and still
+produce a different corner on the two machines. This settles what the *value*
+does and leaves what the *machine* does with it exactly where it was — with the
+volunteer disc in `docs/re_procedures/s1000_filter_disc.md`.
+
+The distinction is worth holding onto because a pass-through result is the one
+most likely to be over-read: it looks like "S1000 and S3000 are the same" and it
+says only "the importer does not alter the number".
