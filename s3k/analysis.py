@@ -90,6 +90,9 @@ __all__ = ["ZoneRef", "Audit", "collect", "keygroups_for_note"]
 #: The four velocity zones of a keygroup, in order.
 ZONE_FIELDS = ("SNAME1", "SNAME2", "SNAME3", "SNAME4")
 
+#: ``PMCHAN`` value meaning "answer on every channel".
+OMNI = 255
+
 
 @dataclass(frozen=True)
 class ZoneRef:
@@ -196,6 +199,31 @@ class ZoneRef:
 
 
 @dataclass
+class ProgramInfo:
+    """A program's identity on the MIDI bus, for the stacking check."""
+
+    index: int
+    name: str
+    #: The program-change number the program answers to, or ``None`` if the
+    #: header could not be read.
+    prgnum: Optional[int] = None
+    #: The MIDI channel, 0-based. **255 is OMNI** -- it answers on every
+    #: channel, which is what makes it stack with everything.
+    pmchan: Optional[int] = None
+
+    def sounds_with(self, other: "ProgramInfo") -> bool:
+        """Would a single program change fire both of these together?"""
+        if self.prgnum is None or other.prgnum is None:
+            return False
+        if self.prgnum != other.prgnum:
+            return False
+        if self.pmchan is None or other.pmchan is None:
+            return False
+        return (self.pmchan == other.pmchan
+                or self.pmchan == OMNI or other.pmchan == OMNI)
+
+
+@dataclass
 class Audit:
     """A cross-reference of what points at what, and what points at nothing."""
 
@@ -208,6 +236,8 @@ class Audit:
     #: distinguished from empty zones, so their usage counts are a lower
     #: bound and they may look like orphans when they are not.
     indistinguishable: List[str] = field(default_factory=list)
+    #: Every program's bus identity, for :meth:`stacked`.
+    programs: List[ProgramInfo] = field(default_factory=list)
 
     def _resident_set(self) -> set:
         return {name.strip() for name in self.resident}
@@ -235,6 +265,36 @@ class Audit:
         reachable = {id(r) for r in self.dangling()}
         return [r for r in self.dangling(include_unreachable=True)
                 if id(r) not in reachable]
+
+    def stacked(self) -> List[List[ProgramInfo]]:
+        """Groups of programs a single program change fires together.
+
+        **This is the check that must run before a note is sounded**
+        (RESOLUTION_NOTES §135). Programs sharing a ``PRGNUM`` on overlapping
+        channels all sound at once, and the boot program -- which survives
+        every ``CLR``, because the last resident program cannot be deleted --
+        sits on ``PRGNUM`` 0 where a loaded volume's first program usually
+        lands.
+
+        The failure it prevents is not a silence but a plausible sound. Two
+        programs playing together are thicker, not obviously wrong, and every
+        measurement taken through them is of neither one. That produced a
+        retracted finding here (§135) and, on the sibling converter, an A/B
+        disc whose pairs would each have played two different presets at once.
+
+        Returns one list per colliding group, largest first; an empty result
+        means nothing stacks.
+        """
+        groups: List[List[ProgramInfo]] = []
+        for info in self.programs:
+            for group in groups:
+                if any(info.sounds_with(other) for other in group):
+                    group.append(info)
+                    break
+            else:
+                groups.append([info])
+        return sorted([g for g in groups if len(g) > 1],
+                      key=len, reverse=True)
 
     def usage(self, sample: str) -> List[ZoneRef]:
         """Every zone naming ``sample``. The "who uses this" question."""
@@ -415,9 +475,10 @@ def collect(bridge, *, programs: Optional[Sequence[str]] = None,
             progress=None) -> Audit:
     """Walk every keygroup of every program and build the cross-reference.
 
-    Read-only. Four reads per keygroup plus one per program, so a bank of
-    nine programs averaging four keygroups is about 150 round trips -- under
-    two seconds at the measured ~94 reads/s.
+    Read-only. Four reads per keygroup plus two per program -- ``GROUPS``,
+    and one 2-byte ``PRGNUM``/``PMCHAN`` read for :meth:`Audit.stacked` --
+    so a bank of nine programs averaging four keygroups is about 160 round
+    trips, under two seconds at the measured ~94 reads/s.
 
     **The keygroup range comes from ``GROUPS`` and is not guessed.** Reading
     a keygroup past the end does not fail: the extended layer does not
@@ -437,7 +498,20 @@ def collect(bridge, *, programs: Optional[Sequence[str]] = None,
     offsets = [p.lookup(("keygroup", f)).offset for f in ZONE_FIELDS]
     key_offset = p.lookup(("keygroup", "LONOTE")).offset
 
+    ident_offset = p.lookup(("program", "PRGNUM")).offset
     for index, program_name in enumerate(names):
+        # PRGNUM and PMCHAN are adjacent, so a program's bus identity is one
+        # 2-byte read. Failure is not fatal: the stacking check reports what
+        # it could read and sounds_with() declines on a missing value rather
+        # than guessing that two programs do not collide.
+        info = ProgramInfo(index=index, name=program_name)
+        try:
+            ident = bridge.get_header_bytes("program", index, ident_offset, 2,
+                                            timeout=timeout)
+            info.prgnum, info.pmchan = int(ident[0]), int(ident[1])
+        except Exception:
+            pass
+        audit.programs.append(info)
         try:
             count = int(bridge.get_parameter(groups_field, index,
                                              timeout=timeout))

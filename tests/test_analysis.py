@@ -178,7 +178,8 @@ def test_the_walk_is_bounded_by_GROUPS_and_not_by_a_guess():
     audit = a.collect(fake)
 
     assert len(audit.references) == 1
-    assert fake.reads == 5, "four zones plus one key range, and no more"
+    assert fake.reads == 6, \
+        "four zones, one key range, one identity read, and no more"
 
 
 def test_programs_playing_silence_groups_by_program_worst_first():
@@ -254,7 +255,10 @@ def test_the_walk_costs_four_reads_per_zone_plus_one_per_keygroup():
     bank = {"KIT": [["A", "B", None, None], ["C", None, None, None]]}
     fake = FakeBank(bank, ["A", "B", "C"])
     a.collect(fake)
-    assert fake.reads == 2 * (4 + 1), "two keygroups, four zones plus a range"
+    # plus one 2-byte PRGNUM/PMCHAN read per program, which is what makes
+    # Audit.stacked() possible -- see the §135 rule it enforces
+    assert fake.reads == 2 * (4 + 1) + 1, \
+        "two keygroups, four zones plus a range, plus one identity read"
 
 
 def test_an_unencodable_sample_name_does_not_abort_the_whole_audit():
@@ -402,3 +406,50 @@ def test_keygroups_for_note_reports_overlap_and_ignores_dead_ranges():
     dead = Spans([(90, 30), (60, 72)])
     assert a.keygroups_for_note(dead, 0, 65) == [1]
     assert a.keygroups_for_note(dead, 0, 40) == []
+
+
+def test_stacked_finds_programs_a_single_program_change_fires_together():
+    """The §135 rule, as code rather than as a sentence in a note.
+
+    Two programs sharing a PRGNUM on overlapping channels sound at once. The
+    failure that matters is not silence but a plausible sound: thicker, not
+    obviously wrong, and every measurement taken through it is of neither
+    program. That produced a retracted finding here, and on the sibling
+    converter an A/B disc whose every pair would have played two different
+    presets simultaneously.
+    """
+    audit = a.Audit(programs=[
+        a.ProgramInfo(0, "TEST PROGRAM", 0, 0),
+        a.ProgramInfo(1, "LOADED", 0, 0),          # boot program collision
+        a.ProgramInfo(2, "ON CH 2", 5, 1),
+        a.ProgramInfo(3, "OMNI", 5, a.OMNI),       # OMNI stacks with anything
+        a.ProgramInfo(4, "ALONE", 9, 3),
+    ])
+    groups = audit.stacked()
+    assert [[i.name for i in g] for g in groups] == [
+        ["TEST PROGRAM", "LOADED"], ["ON CH 2", "OMNI"]]
+    assert "ALONE" not in [i.name for g in groups for i in g]
+
+
+def test_stacked_does_not_claim_two_programs_are_safe_when_it_cannot_tell():
+    """An unreadable identity must not read as "no collision".
+
+    The check exists to refuse; a header it could not read is the one case
+    where refusing to answer beats answering cheaply.
+    """
+    audit = a.Audit(programs=[
+        a.ProgramInfo(0, "KNOWN", 0, 0),
+        a.ProgramInfo(1, "UNREADABLE", None, None),
+    ])
+    assert audit.stacked() == []
+    assert not a.ProgramInfo(0, "X", 0, 0).sounds_with(
+        a.ProgramInfo(1, "Y", None, None))
+
+
+def test_collect_populates_the_bus_identity_of_every_program():
+    bank = {"KIT": [["A", None, None, None]]}
+    audit = a.collect(FakeBank(bank, ["A"]))
+    assert [i.name for i in audit.programs] == ["KIT"]
+    # FakeBank serves keygroups only, so the identity read fails and is
+    # recorded as unknown rather than guessed
+    assert audit.programs[0].prgnum is None
