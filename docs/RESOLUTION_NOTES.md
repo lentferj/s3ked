@@ -13362,7 +13362,30 @@ The averaging is the trap worth naming: 1.0043 over the fitted range reads as
 uniform agreement and is in fact a flat run of four points plus one that has
 already begun to leave. **A mean over a range answers a question about the
 range, not about its endpoints**, and a law is most likely to fail precisely at
-the endpoint that its own fit was anchored on.
+the endpoint that its own fit was anchored on — which is exactly where an
+average has least to say.
+
+### How the departure was nearly lost, which is a shape of its own
+
+The converter project computed 1.0131, noticed it disagreed with the 1.0041
+reported here, found the cause — its window had included 86 and 88 — and filed
+the discrepancy as resolved. **The discrepancy was the result.** The departure
+was in hand and was recorded as a windowing mistake.
+
+The explanation was *true*: the windows really did differ. That is what makes
+this shape distinct from the others in these notes. A wrong object leaves a
+mismatch if anyone looks; a sufficient-but-partial explanation leaves a gap
+nobody probes; a right conclusion from a wrong mechanism leaves nothing. **This
+one leaves a correct account of the anomaly that answers a different question
+than the one worth asking.** A false explanation fails under checking. A true
+one that resolves the wrong question absorbs the anomaly permanently, and does
+it while looking like diligence.
+
+The reconciling direction is the tell, and it is worth having as a rule:
+**agreement is a poor stopping condition when one side is a summary statistic.**
+Moving toward the other party's number felt like converging on the answer, and
+the number being converged on was a mean — the one form least able to report
+what was happening at its own edge.
 
 ### The top of the range is simply open
 
