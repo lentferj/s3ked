@@ -189,6 +189,7 @@ silently wrong one.
 - [§146](#146--the-top-decade-measured-and-my-objection-to-the-reference-was-right-for-the-wrong-reason-2026-08-21) — The top decade measured, and my objection to the reference was right for the wrong reason (2026-08-21)
 - [§147](#147--pmchan-did-not-predict-the-channel-the-machine-answered-on-2026-08-21) — `PMCHAN` did not predict the channel the machine answered on (2026-08-21)
 - [§148](#148--envelope-2s-depth-into-the-filter-measured-2026-08-22) — Envelope 2's depth into the filter, measured (2026-08-22)
+- [§149](#149--a-flat-spectrum-is-not-a-stationary-one-2026-08-22) — A flat spectrum is not a stationary one (2026-08-22)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -13638,3 +13639,68 @@ the fix is in the amount-to-depth conversion rather than anywhere else.
 Note that the level multiplies the depth: at `SUSTN2` 15 the same depth byte
 delivers less than a fifth of what it delivers at 99. **A converter writing
 depth without looking at the sustain level is setting one factor of a product.**
+
+## §149 — A flat spectrum is not a stationary one (2026-08-22)
+
+§146 needed a source flat to 18 kHz and got one: a **Schroeder-phase harmonic
+complex**, 499 harmonics at equal amplitude, 4.2 dB crest factor. It made that
+measurement possible where a sawtooth could not.
+
+Pointed at a **rise time** it failed completely, and the reason is the same
+property that made it good.
+
+### The Schroeder complex is a chirp inside every period
+
+Schroeder phase (`phi_n = pi n^2 / N`) spreads a period's energy across the
+period instead of piling it into one sample — that is what buys 4.2 dB crest
+against an impulse train's twenty-plus. The mechanism is that **the waveform
+sweeps through its frequencies within each period.** It is a chirp.
+
+So its *long-window* spectrum is flat and its *short-window* spectrum is not
+even approximately constant:
+
+    5.3 ms window, tracking the centroid of a held note:
+        300 -> 5000 -> 300 Hz, oscillating at the source's own 40 Hz period
+
+That is the source, not the filter. Widening the window to one full period
+suppresses it and costs exactly the time resolution a rise time needs, and
+residual drift between 44.1 kHz playback and 48 kHz capture keeps it moving
+anyway. Four detector variants were tried against it and all four failed; every
+failure was the instrument.
+
+### Pink noise fails too, and the second construction proves why
+
+The converter project then built a noise disc, and tried pink as the natural
+second source. Two independent generators:
+
+    Voss-McCartney octave summing    centroid 403..5842 Hz    63.1% spread
+    1/sqrt(f) spectral shaping       centroid 197..4053 Hz    78.4% spread
+    white                            centroid 8764..12715 Hz   7.5% spread
+
+**The second construction is stationary by design in the frequency domain and
+failed anyway**, which is the tell that the generator was not at fault. Pink
+concentrates its energy at low frequencies, below what a 5 ms window can
+resolve, so the low end lands differently in every window. That is a property of
+pink against a short window and no implementation avoids it.
+
+Building it twice, two different ways, is what separated "my generator is
+broken" from "this class of source cannot do this job". A single failing
+implementation would have been debugged instead.
+
+### The rule
+
+**Steady-state flatness and short-time stationarity are different properties,
+and a source can have one without the other.** Before choosing a source, ask
+which one the measurement needs:
+
+* **a corner, a transfer function, a spectrum** — needs flatness over the band,
+  measured with a long window. Schroeder is excellent and a sawtooth runs out.
+* **a rise time, a contour, anything resolved in time** — needs the *short-time*
+  spectrum to be constant at the window length the measurement uses. White noise
+  qualifies; pink does not at short windows; a periodic waveform qualifies only
+  if its period is far shorter than the window.
+
+The check is one line and neither project ran it before building: **measure the
+centroid spread across short windows of the source itself, at the window length
+the measurement will use.** 7.5% is usable. 63% is a source that will produce
+four plausible detectors and four wrong answers.
