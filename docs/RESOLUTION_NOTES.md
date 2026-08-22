@@ -187,6 +187,7 @@ silently wrong one.
 - [§144](#144--the-s3000xl-imports-s1000-p1-as-a-pass-through-2026-08-21) — The S3000XL imports S1000 `.P1` as a pass-through (2026-08-21)
 - [§145](#145--both-filter-laws-are-right-54s-interpretation-is-not-2026-08-21) — Both filter laws are right; §54's interpretation is not (2026-08-21)
 - [§146](#146--the-top-decade-measured-and-my-objection-to-the-reference-was-right-for-the-wrong-reason-2026-08-21) — The top decade measured, and my objection to the reference was right for the wrong reason (2026-08-21)
+- [§147](#147--pmchan-did-not-predict-the-channel-the-machine-answered-on-2026-08-21) — `PMCHAN` did not predict the channel the machine answered on (2026-08-21)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -13450,3 +13451,54 @@ with no explanation. Above 84 the drift continues in the same direction:
 So it is not a constant with noise but a real trend, and the resonance boost
 falls too, 13.9 dB at 84 to 10.3 dB at 96. Still unexplained; now unexplained
 over a wider range and with a clear direction rather than a suspicion of one.
+
+## §147 — `PMCHAN` did not predict the channel the machine answered on (2026-08-21)
+
+Thirty captures were taken as the noise floor because they were played on the
+channel every program header named.
+
+    every program in the volume          PMCHAN 0   (= MIDI channel 1)
+    channel 1                            SILENT, every program, every note
+    channels 2..16                       all sound
+
+The programs were resident, their samples were resident, the notes were inside
+every keygroup's range, and the machine answered SysEx on the same cable
+throughout. Nothing was wrong with the load, the audio path or the note data.
+Playing on channel 2 produced correct, program-specific sound immediately.
+
+### What this is not
+
+**It is not a stable property of this machine.** Channel 1 worked earlier the
+same day — the §146 filter sweep ran on it at 17:07 and produced twelve
+measured corners. By 23:11 it did not. Whatever changed, changed in between,
+and it is not established what. Recording this as "the S3000XL does not answer
+on channel 1" would be a bigger claim than the evidence, and would be wrong the
+next time the machine boots.
+
+What it **is**: `PMCHAN` is a value in a header, and reading it does not
+establish which channel the device is currently listening on. The two agreed
+for weeks and then did not.
+
+### Why it is expensive rather than merely annoying
+
+A wrong channel produces **silence, not an error**. Nothing refuses, nothing
+warns, and the capture files are the right length with the right sample rate.
+The failure is indistinguishable from a program that makes no sound — which is
+exactly what the same night's brief claimed about one of the programs, so a
+believable explanation was already waiting for the result.
+
+The sibling converter hit the identical shape on a K2000 within hours, with an
+extra twist worth carrying: **its preset selection was confirmed over SysEx,
+which is channel-independent**, since SysEx carries its own device id. A
+confirmed select proves the cable and the id and says nothing at all about the
+channel note-ons go out on. From the outside that looks like a working MIDI
+link.
+
+### The check
+
+Do not read `PMCHAN` and believe it. **Play a note and confirm sound**, which
+is one capture, and which `probes/calibrate.sounded()` now answers directly
+as a library call. If nothing sounds, sweep the channels before suspecting anything else:
+sixteen notes is cheaper than one wrong conclusion about the audio path, and it
+distinguishes "the machine is not listening where I am sending" from every
+other cause of silence in one pass.
