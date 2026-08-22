@@ -13618,10 +13618,54 @@ said something different:
   It produced a "−35 dB deficit" that was almost-nothing against
   almost-nothing, and sent this measurement out as urgent on the strength of it.
 * **spectral centroid** — stable to **0–2 Hz** across takes of the same
-  program, against differences of 43–252 Hz between builds. As a contour in
-  100 ms steps it tracks what a filter envelope actually does, and it is what
-  finally showed the fix working (contour error down 59–65%, shape correlation
-  0.78 → 0.97).
+  program, and as a **contour in short steps** it tracks what a filter envelope
+  actually does. That is what showed the fix working: contour error down 59–65%,
+  shape correlation 0.78 → 0.97.
+
+  **But a centroid over a long window, on a wide band, is not that metric**, and
+  the whole-window figures first reported here were contaminated — see below.
+
+### The whole-window centroid was wrong, and it inverted a sign
+
+A "late window" centroid over 1.0–3.0 s and 40 Hz–16 kHz gave the two builds as
+**−218 Hz apart at note 79** — a sign reversal against the +97 and +43 measured
+at notes 69 and 57, reported as key-dependent and unexplained.
+
+**It does not reproduce as a contour.** Every 0.5 s block inside the same window
+gives the same pair as +3 Hz:
+
+    block        p0 centroid   p0 dB    p20 centroid   p20 dB
+    1.0-1.5 s            578   -30.1             575    -42.2
+    1.5-2.0 s            577   -30.0             574    -41.5
+    2.0-2.5 s            577   -30.3             575    -42.3
+    2.5-3.0 s            578   -30.0             575    -41.9
+    WHOLE 1.0-3.0        627   -30.1             846    -42.0    diff -219
+
+A long window's centroid is an energy-weighted mean of its sub-windows, and the
+per-block energies are flat — so this cannot be time-weighting. **It is the
+noise floor.** `p20` is 12 dB quieter, so in the 8–16 kHz region it sits at the
+floor while `p0` still has signal, and the floor drags the quieter program's
+centroid up by 271 Hz against the louder one's 49.
+
+Restricting the band removes it, and the sign goes with it:
+
+    band          whole-window diff    0.5 s block diff
+    40 Hz-16 kHz             -219                   +3
+    40 Hz-8 kHz              +143                 +203
+    40 Hz-4 kHz              +234                 +252
+    40 Hz-2 kHz              +238                 +243
+
+**So the note-79 sign reversal is withdrawn.** The difference is positive at all
+three notes, as the contour showed.
+
+The rule is one this project already applies to filter work and did not apply
+here: **include only the band where the reference actually has signal.** §139
+gates every harmonic against an absolute floor and §146 excludes settings whose
+transfer function is too shallow to resolve; the centroid was computed over a
+fixed 40 Hz–16 kHz with no such gate. A spectral statistic over a band holding
+nothing measures the noise, and how much it measures depends on how quiet the
+program is — so it manufactures differences between programs that differ only
+in level.
 
 **Use the centroid contour for filter work.** The general form is worth more
 than the specific choice: a metric has to be validated against the *material*,
