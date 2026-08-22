@@ -1841,3 +1841,24 @@ time (§149).
 
 **Blocked on:** nothing but a fresh start. The hardware, the source and the
 question are all in place.
+
+## What actually selects the answering MIDI channel (OPEN 2026-08-22)
+
+**Status:** two sessions, identical `PMCHAN 0` in every program header,
+opposite results — §147 found channel 1 silent and 2..16 live, §151 found
+channel 1 live and 2..4 silent. A field that reads the same while the
+behaviour reverses is not the field that decides.
+
+**Blocked on:** nothing external. The suspect is the global/multi assignment,
+which `analysis.collect` does not read — the S3000XL/S2000 multi opcodes
+(`41`/`42`) are implemented in the bridge but no audit path reads a multi
+part's channel mapping. Reading it in both states would settle it.
+
+**Why it is worth closing rather than living with:** the workaround (§151)
+is a four-take lift check at session start, which is cheap but is a
+measurement standing in for a read. Every session that plays notes pays it,
+and a session that forgets pays §147's thirty captures instead.
+
+**Do not** attempt this by writing `PMCHAN` and watching what happens until
+the multi state is *read* first — with two unknowns live, a write that
+appears to work proves nothing.

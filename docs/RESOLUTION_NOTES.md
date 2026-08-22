@@ -191,6 +191,7 @@ silently wrong one.
 - [§148](#148--envelope-2s-depth-into-the-filter-measured-2026-08-22) — Envelope 2's depth into the filter, measured (2026-08-22)
 - [§149](#149--a-flat-spectrum-is-not-a-stationary-one-2026-08-22) — A flat spectrum is not a stationary one (2026-08-22)
 - [§150](#150--nine-attempts-no-measurement-and-the-control-that-was-missing-2026-08-22) — Nine attempts, no measurement, and the control that was missing (2026-08-22)
+- [§151](#151--the-answering-channel-reversed-back-and-the-check-that-caught-it-costs-20-seconds-2026-08-22) — The answering channel reversed back, and the check that caught it costs 20 seconds (2026-08-22)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -13896,3 +13897,55 @@ gate. Every one was **a number borrowed from somewhere the data had not been**:
 
 7.5% and 35% were never the same number. Neither was `r >= 0.99` against
 programs that self-correlate at 0.66.
+
+## §151 — The answering channel reversed back, and the check that caught it costs 20 seconds (2026-08-22)
+
+§147 recorded a session in which every program header read `PMCHAN 0`
+(= MIDI channel 1), channel 1 was silent on every program and every note,
+and channels 2..16 all sounded. §147 stopped short of a mechanism and
+concluded only that the field could not be trusted to predict the channel.
+
+Loading two converted volumes for mpc2emu was the next occasion to care.
+Every header again read `PMCHAN 0`. Measured, note 48 velocity 100, gated on
+lift over each take's own pre-roll (§144's absolute gate, 20 dB):
+
+    ch 1   PRGNUM 73 (bass program)     69.3 dB    SOUNDS
+    ch 2   PRGNUM 73 (bass program)      0.3 dB    silent
+    ch 3   PRGNUM 73 (bass program)      0.1 dB    silent
+    ch 4   PRGNUM 73 (bass program)      0.0 dB    silent
+    ch 1   PRGNUM 81 (organ program)    70.7 dB    SOUNDS
+
+So the behaviour reversed: this session the machine answers on exactly the
+channel `PMCHAN` names, and is silent on the neighbours §147 found live.
+
+**This does not rehabilitate `PMCHAN`.** Two sessions, identical field
+values, opposite results — that is the definition of a field that does not
+determine the outcome by itself. Something outside the program header moves
+between sessions (the global/multi assignment is the obvious suspect and is
+not yet read by `analysis.collect`). Until that is identified and read, the
+channel is a *measured* quantity, not a *read* one.
+
+**The operational rule, which is the part worth keeping.** The check is four
+takes and about twenty seconds: one program, four channels, gate on lift. It
+is cheaper than one wasted capture set, let alone §147's thirty. Run it at
+the start of any session that will play notes, and run it on a program from
+*each* volume loaded, so a positive result cannot be a single volume's luck
+— here 73 (MX1) and 81 (MX2) were both proven.
+
+Two takes make it a discriminator rather than a hope: a session that only
+plays channel 1 and hears sound learns nothing about whether it was right or
+lucky, because §147's failure mode is silent by construction.
+
+### Second-hand: the key range is a per-volume fact, not a habit
+
+The same load exposed a related trap. MX1's programs are all 24..79, but
+MX2's are mostly 24..66, and its three 12-string programs stop at **56**.
+Note 60 is safe across both; note 72 is silent on most of MX2 and would
+read as a dead channel to anyone gating on lift.
+
+This is §137's error in a new costume — there, thirty captures were played
+at note 81, above every keygroup's 24..79 range, with the ranges on screen
+and only note 69 checked. The rule stands and generalises: **read the key
+range out of the loaded set and choose the note from the table, never from
+the note that worked last time.** `analysis.collect` already reads
+`LONOTE`/`HINOTE`; there is no excuse for choosing by habit.
