@@ -822,6 +822,12 @@ _MEASUREMENTS = frozenset({
 #: nothing was triggered.
 SOUNDED_MIN_LIFT_DB = 20.0
 
+#: A pre-roll above this is holding the previous note's decay, and every level
+#: read against it is depressed by the tail (§153). Measured: a clean floor
+#: sits near -88 dBFS on this rig, and a loud neighbour two seconds earlier
+#: puts it at -62.8. -80 leaves room for rig noise without admitting a tail.
+PREROLL_FLOOR_MAX_DBFS = -80.0
+
 
 def lift_over_preroll(wav: str, t_on: float, *, window: float = 1.0) -> float:
     """dB by which the note rises above the silence before it in the same take.
@@ -875,6 +881,55 @@ def sounded(wav: str, t_on: float, *, window: float = 1.0,
             minimum: float = SOUNDED_MIN_LIFT_DB) -> bool:
     """Did this take contain a note? See :func:`lift_over_preroll`."""
     return lift_over_preroll(wav, t_on, window=window) >= minimum
+
+
+def preroll_floor_dbfs(wav: str, t_on: float) -> float:
+    """Level of the silence a lift is measured against, in dBFS.
+
+    :func:`lift_over_preroll` needs no absolute reference because it compares
+    a take with itself -- and that is exactly what makes it vulnerable across
+    a *sequence* of takes. The pre-roll is only a floor if it is quiet, and a
+    previous note still decaying into it raises the subtrahend, so the lift
+    loses whatever the tail contributed.
+
+    Measured on long-release material (§153), one program, one note:
+
+        gap 0.0 s   lift 34.0 dB   floor  -62.8 dBFS
+        gap 2.0 s   lift 61.1 dB   floor  -87.5 dBFS
+        gap 6.0 s   lift 62.0 dB   floor  -88.2 dBFS
+
+    A contaminated take does not look wrong, it looks **quieter** -- which is
+    indistinguishable from the level difference a fidelity comparison is
+    trying to measure. Print this beside every lift and retake anything above
+    :data:`PREROLL_FLOOR_MAX_DBFS`; a sounded/silent verdict survives the
+    contamination, a level comparison does not.
+    """
+    import wave as _wave
+
+    import numpy as _np
+
+    with _wave.open(wav, "rb") as handle:
+        rate = handle.getframerate()
+        raw = handle.readframes(handle.getnframes())
+        channels = handle.getnchannels()
+    data = _np.frombuffer(raw, dtype=_np.int16).astype(float)
+    if channels > 1:
+        data = data.reshape(-1, channels).mean(axis=1)
+    pre = data[:max(int((t_on - 0.1) * rate), 0)]
+    if not len(pre):
+        return float("-inf")
+    return 20 * _np.log10(
+        max(float(_np.sqrt(_np.mean(pre ** 2))), 1e-9) / 32768)
+
+
+def preroll_is_clean(wav: str, t_on: float,
+                     *, maximum: float = None) -> bool:
+    """Is this take's pre-roll quiet enough to measure a LEVEL against?
+
+    See :func:`preroll_floor_dbfs`. Not needed for a sounded/silent verdict.
+    """
+    limit = PREROLL_FLOOR_MAX_DBFS if maximum is None else maximum
+    return preroll_floor_dbfs(wav, t_on) <= limit
 
 
 def _measure(kind: str, wav: str, t_on: float, t_off: float,

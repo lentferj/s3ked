@@ -192,6 +192,8 @@ silently wrong one.
 - [§149](#149--a-flat-spectrum-is-not-a-stationary-one-2026-08-22) — A flat spectrum is not a stationary one (2026-08-22)
 - [§150](#150--nine-attempts-no-measurement-and-the-control-that-was-missing-2026-08-22) — Nine attempts, no measurement, and the control that was missing (2026-08-22)
 - [§151](#151--the-answering-channel-reversed-back-and-the-check-that-caught-it-costs-20-seconds-2026-08-22) — The answering channel reversed back, and the check that caught it costs 20 seconds (2026-08-22)
+- [§152](#152--clr-leaves-one-program-behind-and-it-stacks-with-whatever-loads-next-2026-08-22) — CLR leaves one program behind, and it stacks with whatever loads next (2026-08-22)
+- [§153](#153--a-lift-is-only-as-good-as-its-pre-roll-and-a-decaying-neighbour-subtracts-from-it-2026-08-22) — A lift is only as good as its pre-roll, and a decaying neighbour subtracts from it (2026-08-22)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -13949,3 +13951,93 @@ and only note 69 checked. The rule stands and generalises: **read the key
 range out of the loaded set and choose the note from the table, never from
 the note that worked last time.** `analysis.collect` already reads
 `LONOTE`/`HINOTE`; there is no excuse for choosing by habit.
+
+## §152 — CLR leaves one program behind, and it stacks with whatever loads next (2026-08-22)
+
+A program named `TEST PROGRAM` kept turning up at PRGNUM 0 after a
+`clear_memory`, with a dangling sample reference. The first time it was
+noticed the evidence had scrolled past a `tail` and the question was left
+open between two possibilities: CLR does not remove program headers, or one
+of the loaded volumes supplied it.
+
+Logged to a file instead of a pipe, the answer is the first, and it was
+already written down — in `clear_memory`'s own docstring:
+
+> **The last program cannot be deleted.** The delete is acknowledged OK and
+> the list stays at one.
+
+    after CLR:   1 program, 0 samples   ['TEST PROGRAM']
+
+CLR removed ten programs and the sample and stopped. So the residue is the
+machine declining to empty the program list, not a leak. **The finding was
+in the repository before the session that re-derived it from hardware.**
+
+### The part that is not harmless
+
+The residue sits at whatever PRGNUM it had. Load a volume whose programs
+start at PRGNUM 0 — the S3000 and S1000 original volumes both do — and
+§135 stacking applies immediately:
+
+    Audit.stacked(): [TEST PROGRAM (prgnum 0), <volume's first program> (prgnum 0)]
+
+A program change to 0 fired both. Here the residue was inaudible because its
+sample was gone, measured across the deletion at **65.1 dB stacked → 64.8 dB
+alone, −0.3 dB**. That is luck, not a rule: a residue whose sample is still
+resident would have layered silently under the first program of every volume
+loaded afterwards, and would read as a conversion fault rather than as
+contamination.
+
+**Operational rule.** After CLR, the program list is *one*, not zero. Read
+it before loading and diff it afterwards, so the report is "these six are
+new" rather than "there are seven". Once a volume is loaded the residue is
+no longer the last program and `delete_program` removes it — do that before
+handing the machine to anyone measuring, and confirm with `Audit.stacked()`.
+
+## §153 — A lift is only as good as its pre-roll, and a decaying neighbour subtracts from it (2026-08-22)
+
+§144 introduced `lift_over_preroll` to gate on whether a note sounded,
+comparing a take against its own pre-roll so that no absolute reference is
+needed. That property is exactly what makes it vulnerable in a *sequence* of
+takes: the pre-roll is only a floor if it is actually quiet.
+
+Same program, same note, same session, two harnesses:
+
+    PRGNUM 2     33.9 dB      (measured immediately after a loud neighbour)
+    PRGNUM 2     62.1 dB      (measured with the neighbour decayed)
+
+The mechanism, measured directly by reporting the pre-roll's own level:
+
+    gap 0.0 s, pre 0.8 s ->  lift 34.0 dB   pre-roll floor  -62.8 dBFS
+    gap 2.0 s, pre 0.8 s ->  lift 61.1 dB   pre-roll floor  -87.5 dBFS
+    gap 6.0 s, pre 1.5 s ->  lift 62.0 dB   pre-roll floor  -88.2 dBFS
+
+The previous note's tail lifts the floor by 25 dB and the lift loses the
+same 25 dB, because a lift is a difference and the contamination lands in
+the subtrahend. Two seconds of silence is enough for these patches;
+electric-piano material with long releases is the worst case, and the
+program that provoked it had six keygroups in layered pairs.
+
+**This does not threaten a sounded/silent verdict** — everything here was
+30 dB clear of the 20 dB gate even while depressed. It threatens *comparing
+levels between takes*, which is precisely what a conversion-fidelity score
+does.
+
+### The fix, and why it is two changes rather than one
+
+1. **Enforce a silent gap before the capture window** (2.5 s used here), not
+   merely between note-off and the next note-on.
+2. **Report the pre-roll floor beside every lift**, and retake anything
+   above −80 dBFS.
+
+The second is the one that matters, and it is the same lesson as §149's
+positive control: a contaminated take does not look wrong, it looks
+*quieter*. Without the floor printed next to it there is no signal
+distinguishing "this patch is 10 dB down" from "this take followed a loud
+one" — and the first is a finding while the second is an artefact.
+
+Re-measured under both rules, the six programs read 64.9 / 66.2 / 62.1 /
+66.1 / 68.0 / 52.6 dB with every floor at −88 dBFS, reproducing the
+uncontaminated run within 0.5 dB. The 52.6 dB outlier survived the check and
+was separately confirmed real: captured unsummed it reads L 52.0 / R 51.7,
+so it is a level difference in the source and not a hard-panned pair
+cancelling in a mono sum (the artefact `jcap.stop_channels` exists for).

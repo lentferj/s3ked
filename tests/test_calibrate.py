@@ -1143,3 +1143,58 @@ def test_sounded_does_not_pass_a_take_that_merely_fails_to_clip(tmp_path):
     peak = 20 * np.log10(max(abs(quiet).max(), 1) / 32768)
     assert peak < -50, "well clear of clipping, which is the trap"
     assert not cal.sounded(str(path), t_on), "and still not a note"
+
+
+def test_a_decaying_neighbour_in_the_preroll_depresses_the_lift(tmp_path):
+    """§153. A lift is a difference, so contamination lands in the subtrahend.
+
+    The same note measured twice reads 28 dB apart on hardware -- 33.9 dB
+    taken straight after a loud neighbour, 62.1 dB once it had decayed. The
+    take does not look wrong, it looks *quieter*, which is exactly the thing
+    a conversion-fidelity comparison is trying to measure.
+
+    This reproduces the failure and asserts the floor is what separates them.
+    """
+    import wave
+
+    import numpy as np
+
+    rate = 48000
+    t_on = 1.5
+    rng = np.random.default_rng(7)
+
+    def _write(path, tail_amplitude):
+        n_pre = int(t_on * rate)
+        pre = rng.normal(0, 2, n_pre)
+        if tail_amplitude:                       # previous note still decaying
+            decay = np.exp(-np.linspace(0, 4, n_pre))
+            pre = pre + rng.normal(0, tail_amplitude, n_pre) * decay
+        note = rng.normal(0, 3000.0, int(1.5 * rate))
+        data = np.concatenate([pre, note]).astype("<i2")
+        with wave.open(str(path), "wb") as handle:
+            handle.setnchannels(1)
+            handle.setsampwidth(2)
+            handle.setframerate(rate)
+            handle.writeframes(data.tobytes())
+        return path
+
+    clean = _write(tmp_path / "clean.wav", 0.0)
+    dirty = _write(tmp_path / "dirty.wav", 60.0)   # floor ~ -63 dBFS,
+                                                   # as measured on hardware
+
+    lift_clean = cal.lift_over_preroll(str(clean), t_on)
+    lift_dirty = cal.lift_over_preroll(str(dirty), t_on)
+
+    # the identical note reads far quieter purely because of what preceded it
+    assert lift_clean - lift_dirty > 20
+
+    # and the floor is what tells them apart -- the lift alone cannot
+    assert cal.preroll_floor_dbfs(str(clean), t_on) < cal.PREROLL_FLOOR_MAX_DBFS
+    assert cal.preroll_floor_dbfs(str(dirty), t_on) > cal.PREROLL_FLOOR_MAX_DBFS
+    assert cal.preroll_is_clean(str(clean), t_on)
+    assert not cal.preroll_is_clean(str(dirty), t_on)
+
+    # the sounded/silent verdict survives the contamination; only the LEVEL
+    # comparison is damaged. Both are far clear of the 20 dB gate.
+    assert cal.sounded(str(clean), t_on)
+    assert cal.sounded(str(dirty), t_on)
