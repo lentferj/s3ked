@@ -207,30 +207,40 @@ which is why it happens on `d` rather than at startup.
 off the disc over the running one, and the bridge refuses it without an
 explicit flag.
 
-#### Saving stays at the front panel, on purpose
+#### Saving, and the paragraph that used to sit here
 
-The asymmetry is deliberate and worth stating, because a disk browser that
-loads but never saves looks like an unfinished one.
+`S` saves what is in memory to the disc — behind the write gate, then a
+screen mirroring the Load one, then a confirmation naming what it will write
+and over what.
 
-**This protocol has no save operation.** The complete disk surface it
-defines is *list the volumes* and *read a directory* — `RVOLLIST`/`VOLLIST`
-and `RHDDIR`/`HDDIR`. There is no write-file, no create-volume, nothing that
-commits anything to a disc. The load is not an exception to that so much as
-a side door: it works because the LOAD *page* carries a register that fires
-when written, and s3ked drives the page rather than the disk.
+**This section used to say saving was impossible, and it was wrong.** It is
+left described rather than quietly replaced, because how it was wrong is
+worth more than the feature.
 
-Whether the SAVE page has an equivalent trigger is **unmeasured**. It could
-be looked for, and the precedent is not encouraging — a sweep of 48 unknown
-values hunting the LOAD page's `CLR` softkey found every one of them inert
-(`RESOLUTION_NOTES` §105) — and a save needs more than a fired action
-anyway: it needs a destination volume *name*, and no register in the
-miscellaneous bank carries a name.
+The claim was that the protocol defines no save: the disk surface is *list
+the volumes* and *read a directory*, with no write-file and no create-volume,
+and the load works only because the LOAD *page* carries a register that fires
+when written. All of that is still true. The error was concluding that the
+SAVE page therefore had nothing equivalent.
 
-So the choice for now is to leave saving where it works, at the panel,
-rather than ship a speculative register hunt or a save that half-works. Load
-remotely, edit remotely, save with the machine's own front panel. If that
-changes it will be because someone measured a trigger, not because the
-protocol grew one.
+It does. `byte[8]` creates a volume from what is resident and `byte[9]`
+overwrites the selected one — two registers, not one with a flag. A first
+sweep missed them and recorded a **false negative** (`RESOLUTION_NOTES` §122)
+by making three mistakes at once: it tested `byte[6]`, which is the *load*
+trigger; it watched the volume directory, which a load changes anyway; and it
+aimed at an empty slot. The positive control it ran validated the wire, not
+the detector. §127 is the retraction.
+
+The other half — *"a save needs a destination volume name, and no register in
+the miscellaneous bank carries a name"* — was wrong the same way. The
+selector table listing a **name bank** had been in these notes since §5; only
+the byte and word banks were ever swept. Index 6 of that bank renames the
+selected volume.
+
+So the machine names a new volume `VOLUME nnn` itself, and naming it
+otherwise is a **second operation** rather than an argument to the save. The
+TUI offers it and says so, because a rewrite resets the name even when the
+save is a subset of what was there.
 
 The samples pane shows what the selected program references; `a` swaps it for
 everything the machine holds, which is the view the integrity work is done
@@ -428,9 +438,9 @@ through `Z`, the remaining log is **kept** rather than discarded, so it can be
 retried.
 
 The log is in-memory and lasts the session. That is not much of a limitation:
-a remote edit only lives in the sampler's RAM until you save to disc *on the
-machine itself* ([deliberately](#saving-stays-at-the-front-panel-on-purpose)),
-so reloading or power-cycling is the real undo-everything.
+a remote edit only lives in the sampler's RAM until it is
+[saved to disc](#saving-and-the-paragraph-that-used-to-sit-here), so reloading
+or power-cycling is the real undo-everything.
 
 This follows the sibling [eosed](https://github.com/lentferj/eosed), which
 had `z`/`Z`/`h` first; s3ked had only `z` until 2026-08-15.
@@ -532,10 +542,11 @@ largest items are the fields only a person at the front panel can confirm
 documented anywhere, and the second filter, which needs the optional IB304F
 board this machine does not have.
 
-**Saving to disc is not on that list.** It is absent by decision rather than
-by omission — the protocol defines no save operation at all, and the reasons
-for leaving it at the front panel are
-[set out above](#saving-stays-at-the-front-panel-on-purpose).
+**Saving to disc used to head that list, on the grounds that the protocol had
+no save at all.** It does have one, the reasons that paragraph gave were
+wrong in both halves, and
+[what it said and why it was wrong](#saving-and-the-paragraph-that-used-to-sit-here)
+is kept above rather than deleted.
 
 ## License and third-party sources
 

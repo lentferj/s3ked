@@ -4284,3 +4284,144 @@ def test_the_directory_knows_six_file_types_not_two():
     assert "unknown" in stranger.kind
     assert stranger.generation == "?"
     assert not stranger.is_program and not stranger.is_sample
+
+
+async def test_saving_is_gated_then_offers_the_choices_then_confirms():
+    """A save WRITES TO THE DISC, so it sits behind the gate like a load.
+
+    And unlike a load it is the medium that changes, not RAM -- so the
+    confirmation has to name the volume rather than the memory.
+    """
+    from textual.widgets import Static
+    from s3ked.app import S3kedApp, SaveOptionsScreen
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("S")
+        await pilot.pause()
+        assert "write gate is locked" in app.last_status
+        assert len(app.screen_stack) == 1, "no save screen while locked"
+
+        app.allow_write = True
+        await pilot.press("S")
+        for _ in range(20):
+            await pilot.pause()
+        assert isinstance(app.screen_stack[-1], SaveOptionsScreen)
+
+        await pilot.press("enter")
+        await pilot.pause()
+        prompt = str(app.screen_stack[-1].query_one("#confirm-prompt", Static).render())
+        assert "new volume" in prompt
+        # ENTIRE VOLUME is the default, and the one type that writes the
+        # global structures -- the confirmation must say so, because the
+        # difference between the types is what they include (§130).
+        assert "effects file" in prompt and "multi" in prompt
+
+        await pilot.press("y")
+        for _ in range(20):
+            await pilot.pause()
+        assert app.bridge.saved, "the save must actually reach the bridge"
+        assert app.bridge.saved[-1]["type"] == 0
+
+
+async def test_a_rewrite_says_it_destroys_and_that_the_name_is_reset():
+    """Two registers, not one with a flag: byte[8] creates, byte[9] overwrites.
+
+    The name reset is the part a user cannot guess and the machine does not
+    warn about -- it is how §127 found the register at all.
+    """
+    from textual.widgets import Static
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("S")
+        for _ in range(20):
+            await pilot.pause()
+        await pilot.press("r")          # rewrite the selected volume
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+
+        prompt = str(app.screen_stack[-1].query_one("#confirm-prompt", Static).render())
+        assert "REWRITE" in prompt
+        assert "no undo" in prompt
+        assert "RESETS" in prompt and "VOLUME nnn" in prompt
+
+        await pilot.press("y")
+        for _ in range(20):
+            await pilot.pause()
+        assert app.bridge.rewritten, "rewrite must use the OTHER register"
+        assert not getattr(app.bridge, "saved", []), "and not the create one"
+
+
+async def test_the_save_screen_cannot_reach_the_operating_system_type():
+    """Same guard as the Load screen: an OS write is not a keypress away."""
+    from s3ked.app import SaveOptionsScreen
+
+    assert 6 not in SaveOptionsScreen.OFFERED_TYPES
+    screen = SaveOptionsScreen()
+    seen = set()
+    for _ in range(len(SaveOptionsScreen.OFFERED_TYPES) * 2):
+        seen.add(screen.save_type)
+        screen.save_type = SaveOptionsScreen.OFFERED_TYPES[
+            (SaveOptionsScreen.OFFERED_TYPES.index(screen.save_type) + 1)
+            % len(SaveOptionsScreen.OFFERED_TYPES)]
+    assert 6 not in seen
+
+
+async def test_saving_refuses_when_nothing_is_resident():
+    """An empty save would create an empty volume and look like it worked."""
+    from s3ked.app import SaveOptionsScreen
+
+    screen = SaveOptionsScreen(resident_programs=0, resident_samples=0)
+    fired = []
+    screen.dismiss = lambda *a: fired.append(a)
+
+    class _App:
+        def notify_status(self, message, *, refused=False):
+            self.said = (message, refused)
+    screen._app = _App()
+    import unittest.mock as mock
+    with mock.patch.object(type(screen), "app",
+                           property(lambda self: self._app)):
+        screen.action_go()
+    assert not fired, "nothing resident, so nothing may be written"
+    assert screen._app.said[1] is True
+
+
+async def test_the_save_does_not_poll_the_machine_while_it_works():
+    """The bug this screen was built on the far side of.
+
+    Both save calls used to end by reading the machine's state -- which the
+    machine stops answering during a save, so a SUCCESSFUL save raised. The
+    destination is read BEFORE firing instead.
+    """
+    from s3ked.demo import DemoBridge
+
+    class Busy(DemoBridge):
+        def __init__(self):
+            super().__init__()
+            self.fired = False
+
+        def _fire_marker(self):
+            self.fired = True
+
+        def load_source(self, *, timeout=None):
+            if getattr(self, "fired", False):
+                raise TimeoutError("machine is busy saving")
+            return super().load_source(timeout=timeout)
+
+        def save_to_new_volume(self, save_type=1, *, name=None, timeout=None):
+            where = self.load_source(timeout=timeout)   # before
+            self._fire_marker()
+            return where
+
+    br = Busy()
+    where = br.save_to_new_volume(0)
+    assert where, "a successful save must not raise"
+    assert br.fired

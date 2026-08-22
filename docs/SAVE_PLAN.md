@@ -199,9 +199,30 @@ feature. It stays refused for this branch's entire life.
 
 ## Ordering
 
-1. Branch, plan, tell mpc2emu. *(this document)*
-2. Phase A, and record it.
-3. Bridge: `save_source()` and the setters, with tests against the demo.
-4. TUI Save screen, tests.
-5. Phase B when the operator is available.
-6. Phase C written up as evidence, not as a confirmation.
+1. Branch, plan, tell mpc2emu. *(this document)* — **done**
+2. Phase A, and record it. — **done**
+3. Bridge: `save_source()` and the setters, with tests against the demo. —
+   **done**
+4. TUI Save screen, tests. — **done 2026-08-22**: `SaveOptionsScreen`,
+   `VolumeNameScreen`, bound to `S` behind the write gate.
+5. Phase B when the operator is available. — **done**
+6. Phase C written up as evidence, not as a confirmation. — **done, and
+   retracted.** Phase C concluded there is no remote save. §127 is the
+   retraction: `byte[8]` creates a volume and `byte[9]` overwrites one.
+
+## What actually happened to this plan
+
+**The fencing in the section above never applied**, because the finding it
+was fencing turned out to be false. `trigger_save()` exists as a deprecated
+spelling of `save_to_new_volume()` rather than as a refusal, and it says so.
+
+Phase C's negative was a false one, and §122 records the three mistakes that
+produced it: it tested `byte[6]`, which is the *load* trigger; it watched the
+volume directory, which a load changes anyway; and it aimed at an empty slot.
+Its positive control validated the wire and not the detector.
+
+Two things in this document survived intact and are worth keeping: the
+observation that the destination registers are **shared with the LOAD page**
+(phase A), which is why the Save screen does not offer them again, and the
+instinct that the value was in the screen rather than the trigger — the
+screen still turns "set nine things on the panel by hand" into one dialog.

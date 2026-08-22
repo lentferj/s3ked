@@ -44,6 +44,7 @@ from __future__ import annotations
 import argparse
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -841,6 +842,202 @@ class EditValueScreen(ModalScreen[Optional[str]]):
         self.dismiss(None)
 
 
+class VolumeNameScreen(ModalScreen[Optional[str]]):
+    """Type a name for the volume a save is about to create or rewrite.
+
+    Naming is a **separate operation from saving** on this machine, not an
+    argument to it: the save names the volume `VOLUME nnn` itself and nothing
+    sent at save time changes that (§127). So this asks for a name the app
+    will apply afterwards, and says so, rather than implying the save carries
+    it.
+    """
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    def __init__(self, current: str = "") -> None:
+        super().__init__()
+        self.current = current
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="edit-box"):
+            yield Label("[b]Name the volume[/b]")
+            yield Label("Applied after the save, as a second operation — "
+                        "the machine names it itself first.", id="edit-desc")
+            yield Label(f"up to {m.NAME_LENGTH} characters, "
+                        "upper case, from the Akai character set")
+            yield Input(value=self.current, id="edit-input")
+
+    def on_mount(self) -> None:
+        self.query_one("#edit-input", Input).focus()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        self.dismiss(event.value)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class SaveOptionsScreen(ModalScreen[Optional[Tuple[int, bool, Optional[str]]]]):
+    """What to save, and where to put it. The Load screen's mirror.
+
+    The destination registers are the **same ones the Load page uses** --
+    drive, device, partition and volume are shared, measured rather than
+    assumed (SAVE_PLAN phase A). So this screen does not offer them again:
+    they are set from the Disk pane and shown here as what they are.
+
+    What it does offer is the two things that are only meaningful on this
+    side:
+
+    - **What to save** -- the same eight types the load side uses, and they
+      are different KINDS of save rather than more and less of one (§130).
+      `ENTIRE VOLUME` is the only one that writes the effects file, the multi
+      file, the drum-input page and the take list; a librarian offering only
+      `ALL PROGS+SAMPLES` silently drops all four. `Operating System` is
+      absent for the same reason as on the Load screen.
+    - **New volume, or rewrite the selected one.** These are two different
+      registers, not one with a flag: `byte[8]` creates, `byte[9]` overwrites
+      (§127). Rewriting is destructive and **also resets the volume's name**,
+      which is how the register was found in the first place.
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+        Binding("enter", "go", "Continue"),
+        Binding("t", "next_type", "Save type"),
+        Binding("w", "new_volume", "New volume"),
+        Binding("r", "rewrite", "Rewrite selected"),
+        Binding("e", "edit_name", "Name"),
+    ]
+
+    #: Panel order minus the guarded one, exactly as the Load screen offers.
+    OFFERED_TYPES = (0, 1, 2, 3, 4, 5, 7)
+
+    #: Types that act on the highlighted directory entry rather than on
+    #: everything resident.
+    CURSOR_TYPES = frozenset({4, 5})
+
+    def __init__(self, *, save_type: int = 0,
+                 volume: Optional[int] = None,
+                 volume_count: Optional[int] = None,
+                 volume_name: str = "",
+                 resident_programs: int = 0,
+                 resident_samples: int = 0) -> None:
+        super().__init__()
+        self.save_type = save_type if save_type in self.OFFERED_TYPES else 0
+        self.rewrite = False
+        self.new_name: Optional[str] = None
+        self.volume = volume
+        self.volume_count = volume_count
+        self.volume_name = volume_name
+        self.resident_programs = resident_programs
+        self.resident_samples = resident_samples
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="loadopts-box"):
+            yield Label("[b]Save[/b]")
+            yield Label("")
+            yield Label("", id="saveopts-what")
+            yield Label("", id="saveopts-where")
+            yield Label("", id="saveopts-name")
+            yield Label("", id="saveopts-warn")
+            yield Label("")
+            yield Label("[b]t[/b] type   [b]w[/b] new volume   "
+                        "[b]r[/b] rewrite selected   [b]e[/b] name   "
+                        "[b]enter[/b] go   [b]esc[/b] cancel")
+
+    def on_mount(self) -> None:
+        self._redraw()
+
+    def _redraw(self) -> None:
+        name = m.LOAD_TYPES.get(self.save_type, "unnamed")
+        extra = ""
+        if self.save_type == 0:
+            extra = ("[dim]— effects, multi, drum inputs and take list "
+                     "too[/dim]")
+        elif self.save_type == 1:
+            extra = "[dim]— programs and samples only[/dim]"
+        elif self.save_type in self.CURSOR_TYPES:
+            extra = "[dim]— the row selected in the Disk pane[/dim]"
+        self.query_one("#saveopts-what", Label).update(
+            rf"  [dim]what:[/dim]  [b]{name}[/b]  \[[b]t[/b]] {extra}")
+
+        mark = lambda on: "[b]>[/b]" if on else " "
+        if self.rewrite:
+            target = (f"volume {self.volume + 1}"
+                      + (f" [b]{self.volume_name}[/b]" if self.volume_name else "")
+                      if self.volume is not None else "the selected volume")
+        else:
+            nxt = ("" if self.volume_count is None
+                   else f" (slot {self.volume_count + 1})")
+            target = f"a new volume{nxt}"
+        self.query_one("#saveopts-where", Label).update(
+            f"  [dim]where:[/dim]  {mark(not self.rewrite)} ne[b]w[/b] volume"
+            f"    {mark(self.rewrite)} [b]r[/b]ewrite selected"
+            f"\n  [dim]target:[/dim]  {target}")
+
+        if self.new_name:
+            shown = f"[b]{self.new_name}[/b]"
+        elif self.rewrite:
+            shown = ("[dim]machine resets it to VOLUME nnn — "
+                     "press e to set one[/dim]")
+        else:
+            shown = "[dim]machine names it VOLUME nnn — press e to set one[/dim]"
+        self.query_one("#saveopts-name", Label).update(
+            f"  [dim]name:[/dim]   {shown}")
+
+        warn = ""
+        if self.rewrite:
+            warn = ("  [b]This overwrites a volume that exists.[/b] There is "
+                    "no undo,\n  and the volume's name is reset even if the "
+                    "save is a subset.")
+        self.query_one("#saveopts-warn", Label).update(warn)
+
+    def action_next_type(self) -> None:
+        offered = self.OFFERED_TYPES
+        at = offered.index(self.save_type) if self.save_type in offered else 0
+        self.save_type = offered[(at + 1) % len(offered)]
+        self._redraw()
+
+    def action_new_volume(self) -> None:
+        self.rewrite = False
+        self._redraw()
+
+    def action_rewrite(self) -> None:
+        self.rewrite = True
+        self._redraw()
+
+    def action_edit_name(self) -> None:
+        def took(value) -> None:
+            if value is None:
+                return
+            value = value.strip().upper()
+            if not value:
+                self.new_name = None
+                self._redraw()
+                return
+            try:
+                m.encode_name(value, m.NAME_LENGTH)
+            except ValueError as exc:
+                # encode_name refuses what the machine cannot store rather
+                # than substituting, which is the behaviour to surface here:
+                # a silently mangled name is how a volume gets two of them.
+                self.app.notify_status(f"name: {exc}", refused=True)
+                return
+            self.new_name = value
+            self._redraw()
+        self.app.push_screen(VolumeNameScreen(self.new_name or ""), took)
+
+    def action_go(self) -> None:
+        if self.resident_programs == 0 and self.resident_samples == 0:
+            self.app.notify_status(
+                "nothing resident to save", refused=True)
+            return
+        self.dismiss((self.save_type, self.rewrite, self.new_name))
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
 class S3kedApp(App):
     """The editor."""
 
@@ -905,6 +1102,9 @@ class S3kedApp(App):
         Binding("[", "partition_prev", "Prev partition", show=False),
         Binding("]", "partition_next", "Next partition", show=False),
         Binding("l", "load_volume", "Load"),
+        # Capital: a save WRITES TO THE DISC, and the shifted key keeps it
+        # off the same reflex as `l`. It is still gated on top of that.
+        Binding("S", "save_volume", "Save"),
         Binding("escape", "close_disk", "Back", show=False),
         Binding("s", "source", "SCSI"),
         Binding("g", "menu", "Main menu"),
@@ -2285,6 +2485,119 @@ class S3kedApp(App):
                         f"left alone")
         self.call_from_thread(self.notify_status, message)
         self._load_catalog(announce=False)
+
+    def action_save_volume(self) -> None:
+        """Save what is in memory to the disc. **Writes to the medium.**
+
+        Behind the write gate like every other operation that changes the
+        device, and unlike a load it changes the *disc* rather than RAM --
+        so the confirmation names the volume it is about to create or destroy
+        rather than the memory it will use.
+        """
+        if not self.allow_write:
+            self.notify_status(
+                "write gate is locked — press w to arm it", refused=True)
+            return
+        self._open_save_options()
+
+    @work(thread=True)
+    def _open_save_options(self) -> None:
+        # Read the destination fresh. It is the same selection the LOAD page
+        # uses -- shared registers -- so the Disk pane's current volume is
+        # where a rewrite would land, and the person may have moved it.
+        volume = count = None
+        vol_name = ""
+        try:
+            with self._bridge_lock:
+                where = self.bridge.save_source()
+                volume = where.get("volume")
+                names = [str(v.name).rstrip() for v in self.bridge.volume_list()]
+            count = len(names)
+            if volume is not None and 0 <= volume < count:
+                vol_name = names[volume]
+        except Exception as exc:
+            self.call_from_thread(
+                self.notify_status, f"save: cannot read the destination: {exc}")
+            return
+        self.call_from_thread(self._show_save_options, volume, count, vol_name)
+
+    def _show_save_options(self, volume, count, vol_name) -> None:
+        def chosen(options) -> None:
+            if options is None:
+                return
+            self._confirm_save(*options)
+
+        self.push_screen(
+            SaveOptionsScreen(volume=volume, volume_count=count,
+                              volume_name=vol_name,
+                              resident_programs=len(self._programs),
+                              resident_samples=len(self._samples)),
+            chosen)
+
+    def _confirm_save(self, save_type: int, rewrite: bool,
+                      name: Optional[str]) -> None:
+        """Say exactly what is about to be written, and over what."""
+        type_name = m.LOAD_TYPES.get(save_type, save_type)
+        counted = f"{len(self._programs)} program(s), {len(self._samples)} sample(s)"
+        if rewrite:
+            headline = f"REWRITE the selected volume with {type_name}?"
+            detail = (
+                f"\n\n{counted} in memory are written over a volume that "
+                f"already exists. There is no undo.\n\n"
+                "The machine also RESETS that volume's name to VOLUME nnn, "
+                "even though the save may be a subset of what was there.")
+        else:
+            headline = f"Create a new volume — {type_name}?"
+            detail = f"\n\n{counted} in memory are written to a new volume."
+        if save_type == 0:
+            detail += ("\n\nENTIRE VOLUME also writes the effects file, the "
+                       "multi file, the drum-input page and the take list.")
+        elif save_type == 1:
+            detail += ("\n\nALL PROGS+SAMPLES writes no effects file, no "
+                       "multi, no drum inputs and no take list. Only "
+                       "ENTIRE VOLUME does.")
+        if name:
+            detail += (f"\n\nThen renamed to {name!r} — a second operation, "
+                       "which can fail on its own.")
+
+        def go(confirmed) -> None:
+            if confirmed:
+                self._save_worker(save_type=save_type, rewrite=rewrite,
+                                  name=name)
+
+        self.push_screen(ConfirmScreen(headline + detail), go)
+
+    @work(thread=True)
+    def _save_worker(self, *, save_type: int, rewrite: bool,
+                     name: Optional[str]) -> None:
+        """Fire the save. **Does not poll while it works.**
+
+        The machine stops acknowledging during a save, so a status read here
+        would time out on a SUCCESSFUL write -- the bug this method exists on
+        the far side of, and the same one that made `trigger_load` fail
+        mid-load. The bridge reads the destination BEFORE firing and returns
+        that; nothing is asked of the machine again until the disk is re-read.
+        """
+        self.call_from_thread(self.notify_status, "saving…")
+        try:
+            with self._bridge_lock:
+                if rewrite:
+                    where = self.bridge.save_to_selected_volume(save_type)
+                    if name:
+                        time.sleep(getattr(self.bridge, "_SAVE_SETTLE", 3.0))
+                        self.bridge.rename_volume(name)
+                        where["name"] = name
+                else:
+                    where = self.bridge.save_to_new_volume(save_type, name=name)
+        except Exception as exc:
+            self.call_from_thread(self.notify_status, f"save: {exc}")
+            return
+        told = name or where.get("name")
+        self.call_from_thread(
+            self.notify_status,
+            f"saved — {m.LOAD_TYPES.get(save_type, save_type)}"
+            + (f", named {told}" if told else "")
+            + "; press d to re-read the disc")
 
     def _show_volumes(self, volumes, entries, source=None,
                       source_error=None) -> None:

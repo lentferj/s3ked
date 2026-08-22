@@ -1887,11 +1887,18 @@ class S3kBridge:
                 f"the register performs what it is given, so an unknown value "
                 f"is an unknown operation"
             )
+        # Read the destination BEFORE firing, not after. The machine stops
+        # answering while it saves, so the read that used to sit at the end of
+        # this method polled a busy device and raised on a SUCCESSFUL save --
+        # three lines below a docstring saying not to. Same shape as the
+        # vestigial mode read removed from trigger_load.
+        where = self.load_source(timeout=timeout)
         self._fire(self._MISC_SAVE_NEW, save_type)
         if name is not None:
             time.sleep(self._SAVE_SETTLE)
             self.rename_volume(name, timeout=timeout)
-        return self.load_source(timeout=timeout)
+            where["name"] = name
+        return where
 
     def save_to_selected_volume(self, save_type: int = 1, *,
                                 timeout: Optional[float] = None) -> Dict[str, int]:
@@ -1910,8 +1917,9 @@ class S3kBridge:
         if save_type not in m.LOAD_TYPES:
             raise ValueError(
                 f"save type {save_type} is not one of {sorted(m.LOAD_TYPES)}")
+        where = self.load_source(timeout=timeout)      # before, not after
         self._fire(self._MISC_SAVE_SELECTED, save_type)
-        return self.load_source(timeout=timeout)
+        return where
 
     #: Seconds to let a save settle before the rename that follows it. A save
     #: returns before the machine has finished; renaming into that window

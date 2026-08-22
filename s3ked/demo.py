@@ -527,17 +527,20 @@ class DemoBridge:
         if save_type not in m.LOAD_TYPES:
             raise ValueError(f"save type {save_type} is not documented")
         self.saved = getattr(self, "saved", [])
+        where = self.load_source(timeout=timeout)      # before, as the bridge does
         self.saved.append({"type": save_type,
                            "volume": getattr(self, "_volume", 0),
                            "name": name})
         if name is not None:
             self.rename_volume(name)
-        return self.load_source(timeout=timeout)
+            where["name"] = name
+        return where
 
     def save_to_selected_volume(self, save_type: int = 1, *,
                                 timeout: Optional[float] = None):
         if save_type not in m.LOAD_TYPES:
             raise ValueError(f"save type {save_type} is not documented")
+        where = self.load_source(timeout=timeout)      # before, as the bridge does
         self.rewritten = getattr(self, "rewritten", [])
         self.rewritten.append({"type": save_type,
                                "volume": getattr(self, "_volume", 0)})
@@ -546,7 +549,7 @@ class DemoBridge:
         # somebody on hardware
         self.renames = getattr(self, "renames", [])
         self.renames.append(f"VOLUME {getattr(self, '_volume', 0) + 1:03d}")
-        return self.load_source(timeout=timeout)
+        return where
 
     def rename_volume(self, name: str, *, timeout: Optional[float] = None):
         self.renames = getattr(self, "renames", [])
