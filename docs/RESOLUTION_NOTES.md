@@ -188,6 +188,7 @@ silently wrong one.
 - [§145](#145--both-filter-laws-are-right-54s-interpretation-is-not-2026-08-21) — Both filter laws are right; §54's interpretation is not (2026-08-21)
 - [§146](#146--the-top-decade-measured-and-my-objection-to-the-reference-was-right-for-the-wrong-reason-2026-08-21) — The top decade measured, and my objection to the reference was right for the wrong reason (2026-08-21)
 - [§147](#147--pmchan-did-not-predict-the-channel-the-machine-answered-on-2026-08-21) — `PMCHAN` did not predict the channel the machine answered on (2026-08-21)
+- [§148](#148--envelope-2s-depth-into-the-filter-measured-2026-08-22) — Envelope 2's depth into the filter, measured (2026-08-22)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -13517,3 +13518,93 @@ converting, so its silence on its own source cannot be a dead port. That
 retires the whole "the input is broken" branch without a second run and without
 coordinating anything — and a control obtained from a signal you did not have
 to arrange is one nobody has to remember to run.
+
+## §148 — Envelope 2's depth into the filter, measured (2026-08-22)
+
+The converter needed a number nobody had: **how far does one unit of filter
+modulation depth move the corner?** Its writer converts a source envelope amount
+with a flat `amount * 50`, assuming full depth spans the same range on both
+machines, and the converted programs measured 25–35 dB short in the 1–4 kHz
+band.
+
+### The field is `MODVFILT3`, established by asking the machine
+
+The programs under test set `MODSFILT3 = 10` (env2) at program level and carry
+the depth in **`MODVFILT3`**, keygroup offset 153 — not `MODVFILT1`, which §116
+measured. Found by searching every single-byte keygroup field for the three
+values the converter said it had written (43/41/27) and finding exactly one
+that held them. Every field that differed between the new build and the old:
+
+    ATTAK2 0->40   DECAY2 50->73   SUSTN2 99->25   RELSE2 45->69   MODVFILT3 0->43
+
+### The law
+
+Envelope parked at full sustain — `ATTAK2` 0, `DECAY2` 0, `SUSTN2` 99 — so the
+corner during the note is the base shifted by depth alone, with no timing to
+disentangle. Base `FILFRQ` 40, `FILQ` 0, against FILTERTOP's Schroeder complex.
+
+    MODVFILT3    corner Hz    octaves    oct/unit
+            0          142      0.000
+            5          376      1.405      0.2810
+           10          994      2.806      0.2806
+           15         2486      4.129      0.2753
+           20         7913      5.799      0.2899
+
+**octaves ≈ 0.278 × depth** at `SUSTN2` 99. Above depth 20 the corner leaves
+the measurable band entirely — the same saturation §146 found at the top of
+`FILFRQ`.
+
+**The product form holds.** Depth 10 fixed, `SUSTN2` swept:
+
+    SUSTN2 25  0.715 oct    50  1.401    75  2.114    99  2.806
+    octaves / (depth x SUSTN2) = 0.002862, 0.002802, 0.002819, 0.002834
+
+Consistent to ±1%, so:
+
+    octaves = 0.00283 * SUSTN2 * depth
+
+### Slots 1 and 3 are the same law
+
+Measured in one session, identical configuration, env2 routed to each slot in
+turn:
+
+    slot 1   0.29016 oct/unit        slot 3   0.29010 oct/unit      ratio 1.000
+
+Corners agreed to the hertz at every depth. The assignable slots are
+interchangeable for this source, which was not safe to assume — slots 2 and 3
+were on this project's own untested list.
+
+### It disagrees with the recorded law by 35%, and I cannot explain it
+
+`scales.py` carries `octaves = 0.002075 * SUSTN2 * MODVFILT1` from the §57/§58
+era. This run gives **0.00283**, 35% higher. At `SUSTN2` 99, depth 10, the old
+law predicts 2.05 octaves and the corner moves **2.81**.
+
+Two candidates, neither sufficient:
+
+* **The old ruler was the resonance peak, not the −3 dB corner.** A constant
+  offset would cancel in a ratio of frequencies, so that alone cannot do it —
+  but §145 showed the peak/corner ratio *drifts*, 0.846 at `FILFRQ` 44 to 0.538
+  at 96, and a ruler whose offset changes with frequency does not cancel out of
+  an octave measurement. Worked through, that accounts for roughly 12% of the
+  35%.
+* **Ceiling compression**, of the kind §58 found in the same era. **Tested and
+  not confirmed**: repeating the sweep at base `FILFRQ` 55 and 70 gave a
+  *higher* apparent shift, not a compressed one, and the highest-base points
+  are simply ill-determined because the corner approaches the band edge
+  (§146's problem again).
+
+So the discrepancy is recorded and not resolved. The new number is the better
+one — a −3 dB corner measured against a flat source with the crossing well
+inside the band — but the old one is not explained away, and saying which is
+right is not the same as knowing why the other is wrong.
+
+### What it means for a converter
+
+At the converter's own settings — `SUSTN2` 25, depth 43 — the filter sweeps
+**3.0 octaves**. If the source envelope means five, that is the shortfall, and
+the fix is in the amount-to-depth conversion rather than anywhere else.
+
+Note that the level multiplies the depth: at `SUSTN2` 15 the same depth byte
+delivers less than a fifth of what it delivers at 99. **A converter writing
+depth without looking at the sustain level is setting one factor of a product.**
