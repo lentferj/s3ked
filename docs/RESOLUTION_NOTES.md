@@ -13469,6 +13469,30 @@ every keygroup's range, and the machine answered SysEx on the same cable
 throughout. Nothing was wrong with the load, the audio path or the note data.
 Playing on channel 2 produced correct, program-specific sound immediately.
 
+### It reversed the next day
+
+2026-08-22, same machine, a different volume resident:
+
+    PRGNUM 60, note 60:
+      MIDI channel 1    lift +44.0 dB   SOUNDS
+      channels 2..6     lift  ~0.0 dB   silent
+
+**The exact reverse of the day before.** So the machine does not have a dead
+channel and does not have a good one; which channel answers changes between
+sessions, and the program headers read `PMCHAN 0` throughout both.
+
+It cost a second time before it was checked: a capture run went out on channel 2
+on the strength of yesterday's result and returned a lift of 0.1 dB. Yesterday's
+answer is no better a guide than the header was.
+
+One candidate, untested: a **load of ENTIRE VOLUME writes the multi** as well as
+the programs (§130 for the save side), and a multi part claims a channel
+irrespective of any program's `PMCHAN`. All eight parts were read on 2026-08-22
+sitting on `PMCHAN` 0 with a placeholder program name. If a loaded volume's
+multi claims channel 1 with a part pointing at nothing, that channel would go
+silent while others fall through — and the behaviour would then change with
+whatever volume was last loaded, which matches. **Not established.**
+
 ### What this is not
 
 **It is not a stable property of this machine.** Channel 1 worked earlier the
