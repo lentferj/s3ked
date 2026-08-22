@@ -822,11 +822,21 @@ _MEASUREMENTS = frozenset({
 #: nothing was triggered.
 SOUNDED_MIN_LIFT_DB = 20.0
 
-#: A pre-roll above this is holding the previous note's decay, and every level
-#: read against it is depressed by the tail (§153). Measured: a clean floor
-#: sits near -88 dBFS on this rig, and a loud neighbour two seconds earlier
-#: puts it at -62.8. -80 leaves room for rig noise without admitting a tail.
+#: Default contamination threshold **for this bench only**. A clean floor sits
+#: near -88 dBFS on this rig and a loud neighbour two seconds earlier puts it
+#: at -62.8, so -80 admits rig noise and rejects a tail *here*.
+#:
+#: It is an absolute number standing in for a rig property, which is the same
+#: error as gating on ``peak - 40``: on a machine whose output sits 35 dB
+#: lower, a fixed threshold falls below the noise floor and every silent gap
+#: reads as contaminated. Prefer :func:`contaminated_takes`, which measures
+#: the floor from the run itself. (Found by the sibling mpc2emu session, whose
+#: ``peak - 40`` rule flagged 100% of K2000 takes that had audited clean.)
 PREROLL_FLOOR_MAX_DBFS = -80.0
+
+#: How far above a run's OWN median floor counts as the previous note's decay.
+#: The floor belongs to the rig; the tail is what rises above it.
+PREROLL_FLOOR_MARGIN_DB = 8.0
 
 
 def lift_over_preroll(wav: str, t_on: float, *, window: float = 1.0) -> float:
@@ -920,6 +930,34 @@ def preroll_floor_dbfs(wav: str, t_on: float) -> float:
         return float("-inf")
     return 20 * _np.log10(
         max(float(_np.sqrt(_np.mean(pre ** 2))), 1e-9) / 32768)
+
+
+def contaminated_takes(floors, *, margin: float = None):
+    """Which takes' pre-rolls hold the previous note's decay, rig-relative.
+
+    ``floors`` is the pre-roll level of every take in one run, in dBFS. The
+    quiet ones establish what silence costs on *this* rig, and a take is
+    contaminated when it sits ``margin`` dB above that median.
+
+    This exists because :data:`PREROLL_FLOOR_MAX_DBFS` is an absolute number
+    describing one bench. A rig running 35 dB quieter has a floor below any
+    fixed threshold, so every silent gap is flagged and the check becomes
+    noise -- which is exactly how a ``peak - 40`` rule flagged 100% of takes
+    on a machine whose pre-rolls had audited clean at -88 dBFS.
+
+    The median is the right centre rather than the mean: contamination is
+    one-sided and a few loud tails would drag a mean up toward them, raising
+    the threshold and hiding the very takes being looked for.
+
+    Returns the indices of the contaminated takes.
+    """
+    import numpy as _np
+
+    if not len(floors):
+        return []
+    limit = PREROLL_FLOOR_MARGIN_DB if margin is None else margin
+    baseline = float(_np.median(_np.asarray(floors, dtype=float)))
+    return [i for i, f in enumerate(floors) if f > baseline + limit]
 
 
 def preroll_is_clean(wav: str, t_on: float,

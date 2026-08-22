@@ -14041,3 +14041,56 @@ uncontaminated run within 0.5 dB. The 52.6 dB outlier survived the check and
 was separately confirmed real: captured unsummed it reads L 52.0 / R 51.7,
 so it is a level difference in the source and not a hard-panned pair
 cancelling in a mono sum (the artefact `jcap.stop_channels` exists for).
+
+### The threshold was the same mistake it was meant to catch
+
+`PREROLL_FLOOR_MAX_DBFS = -80.0` was written as a constant. It is not one:
+-80 is right for *this* bench, whose clean floor sits at -88.
+
+The sibling mpc2emu session found the error from the other side. Their first
+contamination rule gated the pre-roll against `peak - 40 dB`, and it flagged
+**100% of K2000 takes whose pre-rolls had audited clean at -88 dBFS** — that
+machine's output ran about 35 dB below the other two, so `peak - 40` fell
+*beneath* its own noise floor and every silent gap read as contaminated.
+
+An absolute threshold and a peak-relative one fail identically here, because
+both describe a rig rather than the thing being detected. The floor is a
+property of the rig; the previous note's decay is what rises above it. So the
+test is **how far a take sits above the run's own median floor**:
+
+    quiet rig, six clean takes            flagged: none
+    same rig, two decaying tails          flagged: exactly those two
+    rig 35 dB louder, one real tail       flagged: the tail
+      -- the absolute rule flags all four
+
+`contaminated_takes()` implements it, and the median is deliberate rather
+than a mean: contamination is one-sided, so a few loud tails would drag a
+mean up toward themselves, raise the threshold, and hide the takes being
+looked for. `PREROLL_FLOOR_MAX_DBFS` survives as a documented default for
+this bench only, with the limitation written beside it.
+
+Their audit of data already captured found 14 of 136 E4XT pre-rolls and 18
+of 88 AKAI pre-rolls above -60 dBFS, worst -31 dB — concentrated in the
+long-release pads and organs, as predicted.
+
+### A level read at one note is a keygroup's level, not a program's
+
+Loading the S1000 originals produced an apparent 16 dB outlier: five bass
+programs reading 43-53 dB and one at 36.1, every floor clean at -88, so not
+contamination. It is not a quiet program. One note inside each of its five
+keygroups, with a neighbouring program as the control in the same run:
+
+    note:                  46      59      64      71      86     spread
+    PRGNUM 2 (outlier)   49.4    45.9    37.1    42.0    48.8    12.3 dB
+    PRGNUM 0 (control)   56.8    53.1    52.8    49.3    52.0     7.5 dB
+
+The dip is one keygroup, 62..66, about 10 dB below its own neighbours, and
+the single-note reading had landed near its floor. Reported as a program
+property it would have scored a faithful conversion as a fault.
+
+**Rule.** A per-program level is a median over notes spread across the
+keygroups, never a single note — and comparisons between programs need notes
+landing in the same *ordinal* keygroup, because the boundaries move between
+programs. In this volume programs 0-3 share one layout (36..56 57..61 62..66
+67..76 77..96) while 4 and 5 each have their own, so one note list does not
+sample all six alike.

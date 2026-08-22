@@ -1198,3 +1198,39 @@ def test_a_decaying_neighbour_in_the_preroll_depresses_the_lift(tmp_path):
     # comparison is damaged. Both are far clear of the 20 dB gate.
     assert cal.sounded(str(clean), t_on)
     assert cal.sounded(str(dirty), t_on)
+
+
+def test_contamination_is_measured_against_the_rigs_own_floor():
+    """§153. An absolute threshold encodes one bench and breaks on the next.
+
+    The sibling mpc2emu session hit this from the other direction: a rule
+    gating on ``peak - 40`` flagged 100% of K2000 takes whose pre-rolls had
+    audited clean at -88 dBFS, because that machine's output sat ~35 dB below
+    the others and the threshold fell beneath its noise floor.
+
+    PREROLL_FLOOR_MAX_DBFS has the same shape of error -- it is this rig's
+    floor written as a constant. The floor belongs to the rig; the previous
+    note's decay is what rises above it.
+    """
+    # a quiet rig where every take is clean: nothing may be flagged
+    quiet_rig = [-88.2, -88.3, -88.1, -87.9, -88.4, -88.0]
+    assert cal.contaminated_takes(quiet_rig) == []
+
+    # the same rig with two decaying tails: exactly those two
+    assert cal.contaminated_takes(
+        [-88.2, -62.8, -88.1, -40.0, -88.4, -87.5]) == [1, 3]
+
+    # a rig running ~35 dB louder in noise, with ONE real tail. This is the
+    # case the absolute constant gets wrong.
+    loud_rig = [-53.0, -53.2, -52.8, -31.0]
+    assert cal.contaminated_takes(loud_rig) == [3]
+    absolute = [i for i, f in enumerate(loud_rig)
+                if f > cal.PREROLL_FLOOR_MAX_DBFS]
+    assert absolute == [0, 1, 2, 3]        # the wrong answer, for the record
+
+    # median not mean: contamination is one-sided, and a mean would be dragged
+    # toward the tails, raising the threshold and hiding them
+    lopsided = [-88.0, -88.0, -88.0, -20.0, -20.0]
+    assert cal.contaminated_takes(lopsided) == [3, 4]
+
+    assert cal.contaminated_takes([]) == []
