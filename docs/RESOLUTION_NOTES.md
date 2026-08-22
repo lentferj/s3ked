@@ -13599,6 +13599,36 @@ one — a −3 dB corner measured against a flat source with the crossing well
 inside the band — but the old one is not explained away, and saying which is
 right is not the same as knowing why the other is wrong.
 
+### Three metrics, three answers, same captures
+
+Filter work on these programs was read three ways in one afternoon and each
+said something different:
+
+* **spectral correlation** — unusable. On the same program, take against take,
+  it runs 0.96 on the bright programs and **0.66 to 0.87 on the dark ones**, so
+  a fixed threshold anywhere in the set is meaningless. Both projects nearly
+  failed a byte-identical control against a hard-coded bar (`r >= 0.99` on one
+  side, an eyeballed 0.9617 on the other) before measuring the take-to-take
+  floor and finding the cross-comparison sitting inside it.
+* **band-energy ratio on normalised spectra** — actively misleading. On a bass
+  fundamental near 110 Hz the 1–4 kHz band holds almost nothing, so a small
+  absolute difference between two near-empty bands reads as tens of decibels.
+  It produced a "−35 dB deficit" that was almost-nothing against
+  almost-nothing, and sent this measurement out as urgent on the strength of it.
+* **spectral centroid** — stable to **0–2 Hz** across takes of the same
+  program, against differences of 43–252 Hz between builds. As a contour in
+  100 ms steps it tracks what a filter envelope actually does, and it is what
+  finally showed the fix working (contour error down 59–65%, shape correlation
+  0.78 → 0.97).
+
+**Use the centroid contour for filter work.** The general form is worth more
+than the specific choice: a metric has to be validated against the *material*,
+not only against the hypothesis. Correlation and band ratios are both perfectly
+sound statistics that happen to have no resolution on a dark, low-fundamental
+sound — and neither announces that. The check is the same one that saved the
+control: measure the metric's spread on repeat takes of one program before
+comparing two.
+
 ### What it means for a converter
 
 At the converter's own settings — `SUSTN2` 25, depth 43 — the filter sweeps
