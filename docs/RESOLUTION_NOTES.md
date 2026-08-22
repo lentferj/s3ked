@@ -13498,7 +13498,22 @@ link.
 
 Do not read `PMCHAN` and believe it. **Play a note and confirm sound**, which
 is one capture, and which `probes/calibrate.sounded()` now answers directly
-as a library call. If nothing sounds, sweep the channels before suspecting anything else:
-sixteen notes is cheaper than one wrong conclusion about the audio path, and it
-distinguishes "the machine is not listening where I am sending" from every
-other cause of silence in one pass.
+as a library call. If nothing sounds, sweep the channels before suspecting
+anything else: sixteen notes is cheaper than one wrong conclusion about the
+audio path, and it distinguishes "the machine is not listening where I am
+sending" from every other cause of silence in one pass.
+
+If the sweep comes back silent on all sixteen, the question moves to the audio
+path, and there is a second check that costs nothing:
+
+> **When you cannot make an instrument sound, look at what its input hears from
+> other instruments. A truly dead input hears nothing from anything.**
+
+The converter project got this for free while another machine happened to be
+playing: the K2000's capture pair read −87.8 dBFS during the K2000's own notes
+and **−79.7 during an unrelated burst from this sampler** on a different pair.
+An input carrying 8 dB of somebody else's crosstalk is connected, powered and
+converting, so its silence on its own source cannot be a dead port. That
+retires the whole "the input is broken" branch without a second run and without
+coordinating anything — and a control obtained from a signal you did not have
+to arrange is one nobody has to remember to run.
