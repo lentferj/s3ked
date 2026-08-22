@@ -933,7 +933,16 @@ class SaveOptionsScreen(ModalScreen[Optional[Tuple[int, bool, Optional[str]]]]):
         self.resident_samples = resident_samples
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="loadopts-box"):
+        with Vertical(id="saveopts-box"):
+            # Said on the screen itself and not only in the README, following
+            # k2kremote's macro editor: the person about to press enter is the
+            # one who needs it. The second line is the specific hazard rather
+            # than a general caution -- every other operation in this app
+            # touches RAM, and this one is the first that does not.
+            yield Static("⚠  EXPERIMENTAL — writes to the DISC, and there is "
+                         "no undo\n   the registers are measured (§127); this "
+                         "screen has never fired one at real media",
+                         id="savewarn")
             yield Label("[b]Save[/b]")
             yield Label("")
             yield Label("", id="saveopts-what")
@@ -1056,6 +1065,13 @@ class S3kedApp(App):
        muted style as "5 program(s), 9 sample(s)", so pressing a key and
        having nothing happen read as a broken feature rather than a closed
        gate -- which is exactly how it was reported. */
+    /* $warning, and the box border with it: this is the only screen in the
+       app that writes to the medium rather than to RAM. Same treatment as
+       k2kremote gives its online macro editor, for the same reason. */
+    #savewarn { color: $warning; text-style: bold; }
+    #saveopts-box { border: round $warning; padding: 1 2; width: 78;
+                    max-width: 96%; }
+    #saveopts-warn { color: $warning; }
     #status.-refused { background: $error; color: $text; text-style: bold; }
     /* Red, not the accent colour. The armed gate is the one state where a
        keypress reaches the hardware, and $accent is also used for ordinary

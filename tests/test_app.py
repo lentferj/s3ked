@@ -4425,3 +4425,35 @@ async def test_the_save_does_not_poll_the_machine_while_it_works():
     where = br.save_to_new_volume(0)
     assert where, "a successful save must not raise"
     assert br.fired
+
+
+async def test_the_save_screen_says_it_is_experimental_where_the_finger_is():
+    """Following k2kremote's online macro editor, and for its reason.
+
+    A warning in the README is read once, by someone deciding whether to try
+    the program. The person about to press enter on a disc write is a
+    different person in a different moment, and the screen is the only place
+    that reaches them.
+
+    The second line names the specific hazard rather than cautioning in
+    general: every other operation in this app writes to RAM, and a reload
+    undoes it. This one does not.
+    """
+    from textual.widgets import Static
+    from s3ked.app import S3kedApp, SaveOptionsScreen
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("S")
+        for _ in range(20):
+            await pilot.pause()
+        assert isinstance(app.screen_stack[-1], SaveOptionsScreen)
+
+        warn = str(app.screen_stack[-1].query_one("#savewarn", Static).render())
+        assert "EXPERIMENTAL" in warn
+        assert "DISC" in warn and "no undo" in warn
+        # and it must not overclaim in the other direction: the registers ARE
+        # measured, so the warning says which part is untested
+        assert "measured" in warn

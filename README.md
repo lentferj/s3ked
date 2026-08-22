@@ -209,6 +209,13 @@ explicit flag.
 
 #### Saving, and the paragraph that used to sit here
 
+> ⚠️ **Experimental.** Newer than the rest of this project and much less
+> exercised. The registers behind it are measured on hardware
+> (`RESOLUTION_NOTES` §127); the screen that drives them has been run against
+> the demo and **not yet against real media**. It is the only operation here
+> that writes to a disc rather than to RAM, so it is the only one a reload
+> does not undo. The screen says so itself.
+
 `S` saves what is in memory to the disc — behind the write gate, then a
 screen mirroring the Load one, then a confirmation naming what it will write
 and over what.
