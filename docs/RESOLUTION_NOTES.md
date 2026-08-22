@@ -13667,6 +13667,26 @@ nothing measures the noise, and how much it measures depends on how quiet the
 program is — so it manufactures differences between programs that differ only
 in level.
 
+**And gating the band is only a guard rail**, which the converter project
+measured rather than assumed. With their comparison tool band-limited to 8 kHz
+and bins 60 dB below peak zeroed, against a synthetic single 539 Hz component
+plus a flat floor:
+
+    floor/peak     raw centroid    gated
+        1e-5             749 Hz    564 Hz
+        1e-4            2321 Hz    778 Hz
+        1e-3            7585 Hz   2013 Hz
+
+**A floor 30 dB down still drags the gated centroid to 2 kHz**, because it sits
+far above a 60 dB gate — and tightening the gate enough to catch it starts
+discarding real signal.
+
+So the fix was never a better centroid. **A centroid is inherently
+level-sensitive whenever the floor is a material fraction of the band**, and no
+threshold makes it otherwise. The 0.5 s blocks gave +3 Hz with no gating at all,
+because a contour compared for *shape* never integrates the floor into a single
+number. Choose the statistic, then gate it; gating cannot rescue the wrong one.
+
 **Use the centroid contour for filter work.** The general form is worth more
 than the specific choice: a metric has to be validated against the *material*,
 not only against the hypothesis. Correlation and band ratios are both perfectly
