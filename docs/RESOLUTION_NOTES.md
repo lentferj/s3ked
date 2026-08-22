@@ -13589,6 +13589,34 @@ Consistent to ±1%, so:
 
     octaves = 0.00283 * SUSTN2 * depth
 
+**And the product itself was exercised eight-fold, not only where it is
+linear.** Taking every measured point and sorting by the product rather than by
+either factor:
+
+    SUSTN2  depth  product  octaves   k = oct/product
+        25     10      250    0.715          0.002862
+        99      5      495    1.404          0.002836
+        50     10      500    1.401          0.002802
+        75     10      750    2.114          0.002819
+        99     10      990    2.806          0.002834
+        99     15     1485    4.128          0.002780
+        99     20     1980    5.798          0.002929
+
+    0.72 to 5.80 octaves: k mean 0.002837, sd 0.000042, spread 5.2%
+    correlation of k with product: +0.370 -- no systematic trend
+
+That matters because the sibling E4B law, measured the same week, is a product
+that **compresses**: its constant falls 5.95 → 4.89 → 4.34 across its range, a
+32% monotonic drift, with the machine clamping above about 3 octaves. This one
+does not — the largest k here sits at the *top* of the range and the smallest in
+the middle, which is noise rather than a knee.
+
+**The limit that does exist is the instrument, not the machine.** Above depth
+~20 at base `FILFRQ` 40 the corner leaves the measurable band, so beyond 5.8
+octaves this law is **unmeasured rather than known-nonlinear** — and after §146
+that distinction is worth stating: extrapolating a flat constant into an
+unmeasured region is the same mistake as extrapolating a knee into one.
+
 ### Slots 1 and 3 are the same law
 
 Measured in one session, identical configuration, env2 routed to each slot in
