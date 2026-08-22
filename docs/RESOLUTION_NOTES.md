@@ -194,6 +194,7 @@ silently wrong one.
 - [§151](#151--the-answering-channel-reversed-back-and-the-check-that-caught-it-costs-20-seconds-2026-08-22) — The answering channel reversed back, and the check that caught it costs 20 seconds (2026-08-22)
 - [§152](#152--clr-leaves-one-program-behind-and-it-stacks-with-whatever-loads-next-2026-08-22) — CLR leaves one program behind, and it stacks with whatever loads next (2026-08-22)
 - [§153](#153--a-lift-is-only-as-good-as-its-pre-roll-and-a-decaying-neighbour-subtracts-from-it-2026-08-22) — A lift is only as good as its pre-roll, and a decaying neighbour subtracts from it (2026-08-22)
+- [§154](#154--library-names-reached-three-commits-because-they-arrived-as-measurement-labels-2026-08-23) — Library names reached three commits because they arrived as measurement labels (2026-08-23)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -14094,3 +14095,51 @@ landing in the same *ordinal* keygroup, because the boundaries move between
 programs. In this volume programs 0-3 share one layout (36..56 57..61 62..66
 67..76 77..96) while 4 and 5 each have their own, so one note list does not
 sample all six alike.
+
+## §154 — Library names reached three commits because they arrived as measurement labels (2026-08-23)
+
+CLAUDE.md forbids committing the name of a program, sample or bank from a
+commercial library, in docs as much as in code, and says to **describe
+instead of naming**. Three commits made this evening carried program names
+from converted commercial banks into §151, §152 and §153 — several of them
+trademarks on top of that.
+
+Caught at shutdown, while writing up state. Unpushed, so the three commits
+were rewritten and the names never existed in published history; the working
+tree, every reachable commit, and the filter-branch backup ref were swept.
+
+### Why the rule did not fire
+
+Not ignorance of it — it is in CLAUDE.md and was read at session start. The
+names did not arrive as *names*. They arrived as **row labels in a
+measurement table**, handed over from a peer session and pasted into a
+finding as the identifier of the thing measured:
+
+    PRGNUM 2 (outlier)   49.4  45.9  37.1  42.0  48.8    12.3 dB
+
+The rule guards against writing down *whose work it was*. What felt like
+happening was writing down *which row this is*. Same characters, and the
+second framing never triggers the first rule.
+
+**The tell that was available and missed:** the names were being exchanged
+freely in cross-session messages all evening, which is fine — messages are
+not the repository. Copying a table out of a message and into a document
+crosses a boundary that the table's own formatting does not mark.
+
+### What the finding actually needed
+
+Nothing was lost by scrubbing, which is the point of the rule. Every one of
+these findings identifies a *slot* and a *shape*, both explicitly permitted:
+
+    PRGNUM 73 (bass program)          instead of the preset's title
+    PRGNUM 2 (outlier) / 0 (control)  instead of two bank entries
+    a 5-keygroup program, dip at 62..66
+
+The keygroup layout, the dB spread and the slot number are the entire
+content. The titles carried nothing and cost a history rewrite.
+
+**Rule.** A peer's table is data, not a citation. Before a program name
+enters a file, replace it with its slot number and its shape — and treat
+*any* name arriving from a converted commercial volume as covered, including
+ones that look like generic instrument descriptions, because they are the
+bank's titles rather than descriptions this project wrote.
