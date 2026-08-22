@@ -1813,3 +1813,31 @@ fix is a source with harmonics far enough above the corner to bracket it at
 sample if the Sample Dump Standard is ever implemented.
 
 Worth more than any refinement inside 40..84.
+
+
+## `ATTAK2` below byte 40 is still unmeasured (OPEN 2026-08-22)
+
+**Status:** nine attempts, no measurement. §150 records each failure and the
+control that was missing from all of them.
+
+The law is fitted 40..85, so a converter clamping to the fit cannot ask for a
+filter attack faster than about 66 ms. Whether the machine floors there or
+attacks faster is unknown.
+
+What survives: `ATTAK2` 70 rises monotonically over 540 ms, so the field is live
+and slow values are slow. "Byte 0 is faster than byte 40" was reported and then
+withdrawn — it was read off oscillating data on a source that cannot resolve
+time (§149).
+
+**What a fresh attempt needs**, learned the expensive way:
+
+* a **stationary** source. `TC10 NOISE` is on the card and verified good through
+  the sampler's own D/A at 0.92–0.99 dB HF stability;
+* a detector that cannot read a floor as a plateau, and whose gate threshold is
+  derived through the same path as the measurement (§150);
+* **a positive control in the same session, immediately before the sweep.** Nine
+  attempts assumed a configuration that worked an hour earlier still worked. It
+  did not.
+
+**Blocked on:** nothing but a fresh start. The hardware, the source and the
+question are all in place.

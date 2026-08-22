@@ -190,6 +190,7 @@ silently wrong one.
 - [§147](#147--pmchan-did-not-predict-the-channel-the-machine-answered-on-2026-08-21) — `PMCHAN` did not predict the channel the machine answered on (2026-08-21)
 - [§148](#148--envelope-2s-depth-into-the-filter-measured-2026-08-22) — Envelope 2's depth into the filter, measured (2026-08-22)
 - [§149](#149--a-flat-spectrum-is-not-a-stationary-one-2026-08-22) — A flat spectrum is not a stationary one (2026-08-22)
+- [§150](#150--nine-attempts-no-measurement-and-the-control-that-was-missing-2026-08-22) — Nine attempts, no measurement, and the control that was missing (2026-08-22)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -13704,3 +13705,78 @@ The check is one line and neither project ran it before building: **measure the
 centroid spread across short windows of the source itself, at the window length
 the measurement will use.** 7.5% is usable. 63% is a source that will produce
 four plausible detectors and four wrong answers.
+
+## §150 — Nine attempts, no measurement, and the control that was missing (2026-08-22)
+
+`ATTAK2` below byte 40 is unmeasured: the law is fitted 40..85 and a converter
+clamps there, so no source can ask for a filter attack faster than the fit
+allows. The question was narrow — does the machine attack faster below 40, or
+does it floor? — and nine attempts failed to answer it.
+
+Recorded because the failures were each a different mistake, and because the
+one check that would have caught all of them was never run.
+
+### What went wrong, in order
+
+1. **A 5 ms window on the Schroeder complex.** The centroid oscillated
+   300–5000 Hz at the source's own period. §149: it is a chirp inside every
+   period, and the property that makes it flat in steady state makes it useless
+   in time.
+2. **A 25 ms window.** Suppressed the oscillation and destroyed the resolution
+   the question needs.
+3. **A plateau detector**, defeated by the onset transient sitting *above* the
+   sustain, so `plateau − base` was negative and every take returned NaN.
+4. **A median-smoothed version**, which failed identically.
+5. **A verification gate on the wrong statistic.** The new noise disc was failed
+   at 35% centroid spread against a stated 7.5% — but ideal synthetic white
+   noise scores **11.4%** through the same code, and the detector reads HF-band
+   energy, not the centroid. On the right statistic the source measures 0.92–
+   0.99 dB against ideal white's 0.88. **The disc was good and nearly rebuilt.**
+6. **`ENV2L1` set alone.** §67's envelope 2 is four rate/level stages; the disc
+   ships `ENV2R2` 0 and `ENV2L2` 0, rate *instant* to level *zero*, so the
+   envelope attacked to full and was slammed shut before anything could be
+   measured. A real bug, fixed, and not the cause.
+7. **Setting `ENV2L4` to 99**, on the theory that the final level is also the
+   resting level and the envelope was starting already open. Refuted: with it
+   back to 0, still nothing.
+
+### The control that was missing
+
+Attempts 1–4 were run against FILTERTOP's PRGNUM 70 and produced a clean 20 dB
+rise at `ATTAK2` 70. That result was then treated as proof the rig worked, and
+every later failure was attributed to the new disc.
+
+Loading both volumes together and configuring both programs identically settled
+it: **neither swept — including the program that had swept an hour earlier.**
+
+So the disc was exonerated in one test, and the real fault was never in the
+material at all. **A configuration that worked an hour ago is not evidence that
+it works now**, and the missing step in every one of the nine attempts was a
+positive control *in the same session, immediately before the measurement*.
+This project has that rule (§122 cost two days for want of it) and it was not
+applied, because the earlier success felt like the control.
+
+### One finding survived, and half of one was withdrawn
+
+`ATTAK2` 70 rising **monotonically** 44.7 → 64.4 dB over 540 ms stands: a chirp
+artefact oscillates, it does not rise monotonically, so that result survives its
+own source. **The field is live and slow values are slow.**
+
+"Byte 0 is faster than byte 40" was reported as actionable and then **withdrawn**
+— it was read off data visibly oscillating 28–44 dB, on the source §149 says
+cannot resolve time. Telling the other project which of two numbers from one run
+is the weaker one is not something they could have derived; it only exists if
+the person who took the measurement volunteers it.
+
+### The portable part
+
+Three separate gates failed the same way today across three projects — a
+per-segment perturbation threshold, a control threshold, and this verification
+gate. Every one was **a number borrowed from somewhere the data had not been**:
+
+> **Derive a gate's threshold through the same path as the measurement.**
+> Compare against a known-good input processed identically, never against a
+> figure from another pipeline, another window, or another statistic.
+
+7.5% and 35% were never the same number. Neither was `r >= 0.99` against
+programs that self-correlate at 0.66.
