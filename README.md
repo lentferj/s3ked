@@ -7,6 +7,9 @@ SPDX-FileCopyrightText: Copyright (C) 2026  s3ked contributors
 
 A terminal editor for the **Akai S1000/S3000 sampler family** — S2000,
 S2800, S3000, S3000XL, S3200, S3200XL — over MIDI System Exclusive.
+Driven and verified against an **S3000XL**; see
+[Hardware compatibility](#hardware-compatibility) for what that means
+for the other five.
 
 Browse programs, keygroups and samples; read and edit any documented header
 parameter; all from a Textual TUI or a small CLI.
@@ -116,6 +119,70 @@ is what s3ked implements. (Akai did ship a k2kremote-style panel protocol one
 generation later, on the Z4/Z8/S5000/S6000/MPC4000 — but its screen read is a
 USB bulk transfer, not SysEx, so it needs a port this family lacks. §1 has the
 details.)
+
+## Hardware compatibility
+
+**Verified on exactly one machine: an Akai S3000XL.** Everything below is what
+the documents guarantee, not what anyone has run — no S2800, S3000, S3200,
+S2000 or S3200XL has ever been on the bench.
+
+That matters less than it sounds for header editing and more than it sounds
+for the disk, because the two halves came from different places:
+
+| layer | where it came from | on an S2800/S3000/S3200 |
+|---|---|---|
+| Frame, opcodes `27`–`38` | *S2800/S3000/S3200 SysEx Extensions* | **native** — it is their own document |
+| the 269 header parameters | the same document | **native**; 233 carry no model qualifier at all |
+| Multi mode (`41`/`42`) | *S2000/S3000XL/S3200XL* | **absent** — requests time out |
+| miscellaneous registers (disk, mode, CLR) | **undocumented; found by probing an S3000XL** | **unknown** |
+
+The parameter table is not an XL table adapted to the S3000. It **is** the
+S2800/S3000/S3200 table; the XL is merely the machine it was validated against.
+
+**s3ked cannot tell which model it is talking to.** Byte 4 is `0x48` for the
+whole line — "The S3000 shares the same model as the S1000" — and `STAT`'s
+version pair does not decode as documented even on the XL, where a panel
+reporting OS 2.00 yields 17.00 (`docs/RESOLUTION_NOTES.md` §10). Anything
+model-specific has to be a setting, not a probe.
+
+### What is known to differ
+
+1. **The disk and mode pages rest on reverse-engineered registers.** The
+   miscellaneous data-index table appears in none of the three documents
+   (§5), so drive select, partition, volume select, the load trigger, CLR and
+   the program-number register were all found by probing an S3000XL. Nothing
+   says the earlier generation numbers them the same — and this is most of
+   what makes s3ked more than a header editor.
+2. **The mode table describes the XL's front panel.** The S2000/S3000XL
+   document opens by saying the modes "have been redefined", and s3ked's
+   eleven pages come from that redefinition. Writing a page the machine does
+   not have is not refused: on the XL, page 11 floods the LCD and needs a
+   power cycle (§85).
+3. **`VZOUT1`–`VZOUT4` are declared `0..10`; an S2800 accepts `0..4`.** It has
+   two individual outputs rather than eight, and program `OUTPUT` differs the
+   same way. Writing a register out of range is what crashed this project's
+   S3000XL, twice.
+4. **Keygroup offsets 161/162 read one value low.** s3ked uses the XL's
+   six-value `KFXCHAN`/`KFXSLEV` enumeration; the plain S2800/S3000/S3200
+   enumeration has five values and no `PRG` (§3).
+5. **Multi mode does not exist there.** Nineteen of the twenty-one XL-only
+   parameters are the `multi` and `multipart` regions, and those requests
+   simply go unanswered.
+
+An **S3200** gains rather than loses: its second LSI is fitted as standard, so
+the fifteen fields s3ked gates behind the `ib304f_fitted` declaration are real
+hardware on that machine.
+
+### If you have one of these
+
+Reads should work and carry little risk — that half is defined by the
+machine's own document. Header writes should be correct for the same reason.
+**Stay off the LOAD/SAVE and mode pages** until someone confirms the
+miscellaneous register numbers on that generation: that is the
+reverse-engineered part, and its failure mode so far has been a reboot rather
+than an error message.
+
+Reports welcome, negative ones most of all.
 
 ## Install
 
