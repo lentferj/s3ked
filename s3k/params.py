@@ -2295,7 +2295,7 @@ _PARAMS: List[Parameter] = [
         255,
         values={255: "off"},
         desc="Keygroup mute group",
-        notes="range as written: \"0ffh = off, mute groups 0 to 31\"",
+        notes="range as written: \"0ffh = off, mute groups 0 to 31\" -- so 0 is GROUP 0, a real mute group, and 255 is the only 'off'. A keygroup header that is zero-filled rather than written therefore lands in an active mute group. MEASURED on hardware 2026-08-23: two keygroups spanning the same notes at the same velocity, both at KGMUTE 0, and only one sounds -- the other plays for about 10 ms and is cut. Setting both to 255 lifted the note by 19.1 dB and both layers sounded. The muted layer's 10 ms burst leaves the mix with the PEAK of the loud layer and the RMS of the quiet one, which reads as a bad capture rather than a mute group. Inert on contiguous key-splits and on layers stacked as velocity zones inside one keygroup; it acts only BETWEEN keygroups. Write 255 here unless a mute group is wanted. RESOLUTION_NOTES §155.",
     ),
     _p(
         "keygroup",

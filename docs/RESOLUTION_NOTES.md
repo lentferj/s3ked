@@ -195,6 +195,7 @@ silently wrong one.
 - [§152](#152--clr-leaves-one-program-behind-and-it-stacks-with-whatever-loads-next-2026-08-22) — CLR leaves one program behind, and it stacks with whatever loads next (2026-08-22)
 - [§153](#153--a-lift-is-only-as-good-as-its-pre-roll-and-a-decaying-neighbour-subtracts-from-it-2026-08-22) — A lift is only as good as its pre-roll, and a decaying neighbour subtracts from it (2026-08-22)
 - [§154](#154--library-names-reached-three-commits-because-they-arrived-as-measurement-labels-2026-08-23) — Library names reached three commits because they arrived as measurement labels (2026-08-23)
+- [§155](#155--kgmute-0-is-an-active-mute-group-and-a-zero-filled-keygroup-lands-in-it-2026-08-23) — `KGMUTE` 0 is an active mute group, and a zero-filled keygroup lands in it (2026-08-23)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -14143,3 +14144,73 @@ enters a file, replace it with its slot number and its shape — and treat
 *any* name arriving from a converted commercial volume as covered, including
 ones that look like generic instrument descriptions, because they are the
 bank's titles rather than descriptions this project wrote.
+
+---
+
+## §155 — `KGMUTE` 0 is an active mute group, and a zero-filled keygroup lands in it (2026-08-23)
+
+Two overlapping keygroups in one mute group cut each other. The field's "off"
+value is `0FFh`, so **a keygroup buffer that is never written to offset 160
+does not default to "no group" — it defaults to group 0**, which is a real
+group. The spec says this plainly (`"0ffh = off, mute groups 0 to 31"`); what
+was missing was that anyone zero-filling a header inherits an active one.
+
+### Measured
+
+A 6-keygroup program on a factory volume, built as three key ranges by two
+layers — each range covered by two keygroups spanning the same notes at the
+same velocity, the second tuned +12 semitones (`VTUNO1` 3072). All six carry
+`KGMUTE` 0. One note, 52, velocity 100, level over 1.10–1.20 s:
+
+```
+  isolated by key range     unison layer alone      -11.4 dBFS
+                            octave layer alone      -31.0 dBFS
+  both keygroups live       KGMUTE 0 (as found)     -30.6 dBFS
+                            KGMUTE 255 (off)        -11.5 dBFS   +19.1 dB
+```
+
+With the mute group off, both layers sound and the mix sits on the louder
+layer's own figure. With it on, only one sounds. Restored to 0 afterwards,
+both keygroups read back.
+
+### What it looks like when you are not expecting it
+
+The muted layer is **not** silent from the start. It sounds for one 10 ms
+window and is then cut, which produces a signature easy to misread:
+
+```
+  t=1.01   unison -14.8   octave -36.0   both -15.4    <- tracks the UNISON
+  t=1.02   unison -12.3   octave -25.2   both -24.3    <- switches to OCTAVE
+  t=1.03+  both tracks the octave layer within +-0.5 dB for three seconds
+```
+
+So the mix has the **peak** of the loud layer (-4.1 dBFS) and the **RMS** of
+the quiet one (-36.4). A band analysis of the sustain says "this file contains
+only the quiet layer"; a peak reading says "both are here". Both are right.
+That contradiction is the tell, and chasing it is what found the field —
+a mix that is quieter than one of its own components is not a bad capture.
+
+### Where it bites, and where it cannot
+
+Only between **keygroups**, and only where two of them are triggered by the
+same note at the same velocity. It is inert on a contiguous key-split
+multisample however many keygroups it has, and inert on layers stacked as
+velocity zones *inside* one keygroup, since those are not separate keygroups.
+A survey of 22 authored programs across two source formats found no
+overlapping keygroups at all — layering built the velocity-zone way does not
+meet this trap.
+
+### Provenance, checked
+
+Not something this bench introduced: the field reads 0 on the original
+CD-ROM image as well as on every copy of it, byte for byte across all six
+programs of that volume. A plausible explanation, offered as a guess rather
+than a finding — these are S1000-era programs, the S1000 keygroup is 150
+bytes and has no offset 160, so a program promoted to the S3000's 192-byte
+layout inherits zero fill there. If so the artefact is Akai's and every
+S1000-derived program on those discs carries it.
+
+**For anyone writing headers:** write `255` to offset 160 unless a mute group
+is actually wanted. Leaving the buffer's zero fill is a silent decision to put
+every keygroup in group 0, and it costs nothing until the day two of them
+overlap.
