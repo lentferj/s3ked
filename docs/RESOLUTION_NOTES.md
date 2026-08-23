@@ -197,6 +197,7 @@ silently wrong one.
 - [§154](#154--library-names-reached-three-commits-because-they-arrived-as-measurement-labels-2026-08-23) — Library names reached three commits because they arrived as measurement labels (2026-08-23)
 - [§155](#155--kgmute-0-is-an-active-mute-group-and-a-zero-filled-keygroup-lands-in-it-2026-08-23) — `KGMUTE` 0 is an active mute group, and a zero-filled keygroup lands in it (2026-08-23)
 - [§156](#156--envelope-2s-depth-is-linear-to-the-top-of-its-range-and-the-corner-ceiling-is-786-khz-2026-08-24) — Envelope 2's depth is linear to the top of its range, and the corner ceiling is 7.86 kHz (2026-08-24)
+- [§157](#157--a-name-byte-in-ram-changed-by-one-bit-once-and-did-not-reproduce-2026-08-24) — A name byte in RAM changed by one bit, once, and did not reproduce (2026-08-24)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -14302,3 +14303,64 @@ peak/corner ratio drifts with frequency; its base of 134 Hz is also below the
 tracker's stated 500 Hz floor for harmonic sources, a floor white noise does
 not have since it has no comb. Not settled. This figure is offered on the
 strength of being internally consistent across two sustain settings at 0.7%.
+
+---
+
+## §157 — A name byte in RAM changed by one bit, once, and did not reproduce (2026-08-24)
+
+Recorded because it is unexplained and because the failure mode is quiet: a
+name read from the machine is not authoritative, and this project matches
+samples to keygroups **by name**.
+
+### What was seen
+
+A synthetic white-noise sample, loaded 00:27:57, read back 00:40:22 after a
+sweep that wrote several hundred header bytes to a program in the same memory:
+
+```
+  from the machine   'NOHSE WHT A'   name bytes [24, 25, 18, 29, 15, ...]
+  from the disk      'NOISE WHT A'   name bytes [24, 25, 19, 29, 15, ...]
+                                                        ^^
+  its partner sample, same volume, same load, byte 2 = 19 and correct
+```
+
+`19` is `I`, `18` is `H`, and `0b10011` against `0b10010` is **one bit**. The
+character set is not in question: both decoders map 18 and 19 the same way,
+and the second sample carries 19 in the same position and reads correctly.
+
+### It was in RAM, not in one transfer
+
+Two *different* operations reported the corrupted byte: the name list
+(`RSLIST`) and a header byte read (`RSHEADER`) at the sample's name offset.
+Two independent reads of the same location agreeing rules out a single garbled
+reply.
+
+### It did not reproduce
+
+The volume was deleted from memory and reloaded twice. Both loads, both
+samples, byte 2 = `19`. So the card is not the source and the loader is not
+deterministically at fault — whatever happened, happened once.
+
+### Not diagnosed
+
+Candidates, none tested, none favoured:
+
+* a bit error in the sampler's own RAM, which had held the sample for about
+  twelve minutes of continuous header traffic;
+* a stray write during that traffic. The sweep wrote only to `keygroup` and
+  `program` regions of a different item, but headers share one 1022-entry
+  pool, so a wrong block address would land in a neighbour;
+* something in the load that is rare rather than absent.
+
+### Why it is worth knowing
+
+`analysis.collect` resolves a keygroup's sample **by name**. A single flipped
+bit in a name does not corrupt audio and does not fail a checksum — it makes a
+sample stop matching, so a healthy program reports a dangling zone and
+"plays silence" for a reason that is not true. That is a false finding wearing
+the costume of a real one, and this project has spent enough sessions on those
+to want it written down.
+
+**Practical rule:** when a name-based match fails against a machine that has
+been under sustained write traffic, re-read the name before believing it, and
+compare against the disk rather than against memory.
