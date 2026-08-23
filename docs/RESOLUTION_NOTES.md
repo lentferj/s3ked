@@ -196,6 +196,7 @@ silently wrong one.
 - [§153](#153--a-lift-is-only-as-good-as-its-pre-roll-and-a-decaying-neighbour-subtracts-from-it-2026-08-22) — A lift is only as good as its pre-roll, and a decaying neighbour subtracts from it (2026-08-22)
 - [§154](#154--library-names-reached-three-commits-because-they-arrived-as-measurement-labels-2026-08-23) — Library names reached three commits because they arrived as measurement labels (2026-08-23)
 - [§155](#155--kgmute-0-is-an-active-mute-group-and-a-zero-filled-keygroup-lands-in-it-2026-08-23) — `KGMUTE` 0 is an active mute group, and a zero-filled keygroup lands in it (2026-08-23)
+- [§156](#156--envelope-2s-depth-is-linear-to-the-top-of-its-range-and-the-corner-ceiling-is-786-khz-2026-08-24) — Envelope 2's depth is linear to the top of its range, and the corner ceiling is 7.86 kHz (2026-08-24)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -14214,3 +14215,90 @@ S1000-derived program on those discs carries it.
 is actually wanted. Leaving the buffer's zero fill is a silent decision to put
 every keygroup in group 0, and it costs nothing until the day two of them
 overlap.
+
+---
+
+## §156 — Envelope 2's depth is linear to the top of its range, and the corner ceiling is 7.86 kHz (2026-08-24)
+
+§148 measured `MODVFILT3` 0–20 at `SUSTN2` 99 and stopped, because the corner
+left the measurable band. That left the top of the range unmeasured, and a
+sibling converter filled the gap by equating two laws measured on two machines
+— which over-delivered by 2.5x to 6.7x and swept the corner past 19 kHz. This
+measures the whole range directly.
+
+### Fitting the depth range inside the band, using §148's own product form
+
+The corner has to travel **up**, so the base must sit **low** — parking
+`FILFRQ` at a few kHz leaves no room and the sweep reads flat. Better, hold
+`SUSTN2` low instead: `octaves = k · SUSTN2 · depth`, so `SUSTN2` 25 puts the
+full depth range 0–50 inside about 3.3 octaves.
+
+White noise (one keygroup, 44100 Hz, content to 22 kHz), base `FILFRQ` 55 =
+325 Hz measured, `ATTAK2`/`DECAY2`/`RELSE2` 0 so the envelope is parked at
+sustain, slots 1 and 2 at depth 0. Corner from `corner_from_difference`, two
+captures per point, `FILQ` 12 against `FILQ` 0, median over 96 sustain frames.
+
+```
+  SUSTN2 25                              SUSTN2 99
+  depth  corner Hz  octaves       k      depth  corner Hz  octaves       k
+      5      400.0    0.300  0.002396        5      800.0    1.300  0.002625
+     10      525.0    0.692  0.002768       10     1975.0    2.603  0.002630
+     15      625.0    0.943  0.002516       15     4725.0    3.862  0.002601
+     20      800.0    1.300  0.002599       20     7812.5    4.587  0.002317 *
+     25     1000.0    1.621  0.002594
+     30     1250.0    1.943  0.002591     * at the ceiling, below
+     35     1575.0    2.277  0.002602
+     40     2000.0    2.621  0.002621     The three lowest SUSTN2-25 points sit
+     45     2550.0    2.972  0.002642     at 400-625 Hz, where a 25 Hz bin is
+     50     3125.0    3.265  0.002612     0.07 octaves: bin-limited, not law.
+```
+
+**`octaves = 0.002612 × SUSTN2 × depth`** — 10 points, two sustain settings,
+depth 5–50, sd 0.000017, spread 0.7%.
+
+**Depth is linear to the top of its range.** No knee: the depth-50 point sits
+inside the spread rather than below it. The cross-check is the convincing part
+— `SUSTN2` 99 depth 15 has product 1485 and measures 3.862 octaves, where the
+`SUSTN2` 25 fit predicts 3.874. Opposite ends of the range, 0.3% apart.
+
+### The corner stops at 7.86 kHz, and then depth does nothing
+
+```
+  from base  325 Hz:  depth 25 -> 7787   30 -> 7912   40 -> 7862   50 -> 7887 Hz
+  from base 1325 Hz:  depth 10 -> 7850   20 -> 7850   30 -> 7837 Hz
+  (§148's depth-20 point, from base 142 Hz, landed at 7913 Hz)
+```
+
+Eight points, two bases, 1.6% spread. The law predicts 28 kHz at depth 25 and
+2.5 MHz at depth 50; the machine sits at **7858 Hz** and stops.
+
+Controlled: the sample is 44100 Hz with content to 22 kHz, so the limit is not
+the material, and the analysis band ran to 20 kHz, so it is not the window.
+
+**So there is no single maximum shift.** The ceiling is absolute in hertz, so
+what is reachable depends entirely on the base:
+
+```
+  FILFRQ 40 = 134 Hz  ->  5.87 octaves       FILFRQ 70 = 1230 Hz -> 2.68
+  FILFRQ 55 = 406 Hz  ->  4.27 octaves       FILFRQ 85 = 3722 Hz -> 1.08
+```
+
+Anything converting a source envelope amount must map depth to octaves and
+then **clamp the target corner to 7858 Hz** — not clamp the depth, because the
+same depth buys a different shift at every base.
+
+This is also why a filter test can measure ~1 dB repeatedly and mean nothing:
+ask for a corner past the ceiling and the machine parks wide open, leaving
+nothing for the envelope to reveal. A saturated instrument reports nothing,
+and here the saturation is in the sampler rather than the detector.
+
+### It disagrees with §148 by 8%, unresolved
+
+§148 gives 0.00283 against this 0.002612. Excluding §148's depth-20 point —
+now known to have been at the ceiling, which inflated it — its own mean is
+still 0.002822, so that point is not the whole gap. §148 used a harmonic
+Schroeder complex and read the resonance peak, and §145 showed the
+peak/corner ratio drifts with frequency; its base of 134 Hz is also below the
+tracker's stated 500 Hz floor for harmonic sources, a floor white noise does
+not have since it has no comb. Not settled. This figure is offered on the
+strength of being internally consistent across two sustain settings at 0.7%.
