@@ -205,6 +205,7 @@ silently wrong one.
 - [§162](#162--envelope-1s-release-scales-with-key-exactly-as-its-decay-does-and-a-small-kdar1-is-inert-above-the-pivot-2026-08-24) — Envelope 1's release scales with key exactly as its decay does, and a small `K_DAR1` is inert above the pivot (2026-08-24)
 - [§163](#163--relse2-is-a-rate-measured-by-varying-the-distance-rather-than-the-value-2026-08-24) — `RELSE2` is a rate, measured by varying the distance rather than the value (2026-08-24)
 - [§164](#164--attak2-byte-0-is-instant-and-most-of-the-range-below-the-fit-is-inaudible-anyway-2026-08-24) — `ATTAK2` byte 0 is instant, and most of the range below the fit is inaudible anyway (2026-08-24)
+- [§165](#165--the-filter-does-not-bottom-out-and-a-passband-reference-on-the-slope-invents-a-floor-2026-08-24) — The filter does not bottom out, and a passband reference on the slope invents a floor (2026-08-24)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -14841,3 +14842,78 @@ the rise is long — but it is why these points are not fitted.
 decides is whether the quantity is audible there, not what fraction of the
 corpus sits in it — and here the commonest value in the entire corpus turned out
 to be the one that needed the law least.
+
+---
+
+## §165 — The filter does not bottom out, and a passband reference on the slope invents a floor (2026-08-24)
+
+`FILFRQ`'s law is fitted 44..92 and §20 recorded the corner tracker returning
+`NaN` at 30, so what the filter does below 40 was open here as well as in the
+sibling converter — which clamped every `FILFRQ` under 40 to one frequency and
+carried a constant called `AKAI_FILTER_FLOOR_HZ = 100.0`, described as "below
+the lowest measured corner".
+
+### It does not floor
+
+Steady white noise, `FILQ` 0, **no filter modulation at all**, each setting
+differenced against `FILFRQ` 99 wide open — §54's own 0 dB reference. Absolute
+attenuation at 80 Hz, with no passband normalisation:
+
+```
+  FILFRQ   corner (law)   @80 Hz measured   2-pole prediction   diff
+       0        6.5 Hz          -41.2            -43.6          +2.3
+       5        9.2            -35.5            -37.4          +1.9
+      10       13.1            -30.5            -31.3          +0.8
+      15       18.7            -24.2            -25.1          +0.9
+      20       26.7            -17.7            -19.0          +1.2
+      25       38.1            -11.3            -12.8          +1.5
+      30       54.4             -5.4             -6.7          +1.3
+      35       77.5             -0.8             -0.5          -0.3
+      40      110.6             +1.0              0.0          +1.0
+```
+
+**Monotonic across 41 dB, no plateau.** The exponential, fitted 44..92 and
+never before measured below it, predicts a 12 dB/octave rolloff to within about
+2 dB down to `FILFRQ` 0. The extrapolation is sound and there is no endpoint
+fact to record — the law simply keeps working.
+
+### The first pass said it floored at 111 Hz, and that was the instrument
+
+Normalising each curve to its own 60–120 Hz level before finding the −3 dB
+point returned:
+
+```
+  FILFRQ 0, 5, 10, 20, 30   ->   -3 dB at 111.3 Hz, identically
+  FILFRQ 35, 40, 45, 50     ->   117, 141, 199, 287 Hz
+```
+
+Flat below, rising above: a clean and entirely artefactual floor. **Once the
+corner drops below the normalisation band the 0 dB reference is itself on the
+slope**, so the whole curve slides down with it and every setting reads the
+same −3 dB point. The normalisation hid exactly the quantity being measured.
+
+**A passband reference is only a passband reference while the corner is above
+it.**
+
+What exposed it was not suspicion but an impossible ordering: the same run had
+`FILFRQ` 0 showing *less* relative attenuation at 2 kHz than `FILFRQ` 30, and
+no lowpass does that. That is the same tell as an out-of-range byte in a
+misaligned read — a value that cannot legally occur is worth more than a
+plausible distribution.
+
+Worth noting the sibling's 100 Hz constant sits within 11% of this artefact's
+111 Hz, which is the most likely account of where it came from.
+
+### The general shape, now seen five times in one law family
+
+A range where a law was never measured gets a clamp "for safety", the clamp
+maps everything outside onto one value, and ordering is destroyed inside the
+clamped region. The read path gets repaired and the write path does not, or
+the reverse. **Caution made the output worse** every time: darker filters, a
+60 ms floor on every fast attack, half a corpus on two numbers, and here 40% of
+a field on one frequency.
+
+The fix is never a bolder guess. It is either an `endpoints` fact that is
+independently known, or a measurement — and here the measurement said the
+existing law had been right all along, four bytes below where anyone had
+checked.

@@ -189,7 +189,17 @@ SCALES: Dict[Tuple[str, str], Scale] = {
     ("keygroup", "FILFRQ"): Scale(
         "keygroup", "FILFRQ", "Hz", "exp", 6.4597, 0.07100, (44, 92), 0.99984,
         bounds="every corner from 44 to 92 was measured. Below 44 the corner drops\nunder the lowest note's fundamental, so no harmonic sits beneath it\nand the fit becomes one-sided; above 92 the source runs out of\nharmonics above the corner and it becomes one-sided the other way.\nThe limit is where the SOURCE has energy either side of the corner,\nnot where the machine stops -- and it is a limit of this sawtooth,\nnot of the method.",
-        note="One octave per 9.76 units; 7.36% per step, so a step is about\n"
+        note="EXTRAPOLATES CORRECTLY TO 0, measured 2026-08-24 (RESOLUTION_NOTES\n"
+             "\u00a7165). The fit stops at 44 because that is where the resonance\n"
+             "tracker stops, not where the filter does. Read instead as absolute\n"
+             "attenuation against FILFRQ 99, the corner descends monotonically\n"
+             "over 41 dB to FILFRQ 0 and this law predicts a 12 dB/octave rolloff\n"
+             "to within ~2 dB the whole way. There is no floor and no endpoint\n"
+             "fact to record -- the law simply keeps working. A sibling project\n"
+             "clamped everything under 40 to one frequency on the strength of a\n"
+             "floor that was an artefact of normalising to a passband which had\n"
+             "itself dropped onto the slope.\n"
+             "One octave per 9.76 units; 7.36% per step, so a step is about\n"
              "0.81 semitones.\n"
              "MEASURED FROM THE RESONANCE PEAK, not from a spectral centroid.\n"
              "Turning FILQ up grows a peak AT the corner; differencing the\n"
