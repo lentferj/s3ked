@@ -203,6 +203,7 @@ silently wrong one.
 - [§160](#160--lfodep-and-lptch-compose-as-a-product-and-35s-unrecorded-routing-was-maximum-2026-08-24) — `LFODEP` and `L_PTCH` compose as a product, and §35's unrecorded routing was maximum (2026-08-24)
 - [§161](#161--the-release-composes-end-to-end-and-matching-times-across-two-spans-is-a-rate-error-2026-08-24) — The release composes end to end, and matching times across two spans is a rate error (2026-08-24)
 - [§162](#162--envelope-1s-release-scales-with-key-exactly-as-its-decay-does-and-a-small-kdar1-is-inert-above-the-pivot-2026-08-24) — Envelope 1's release scales with key exactly as its decay does, and a small `K_DAR1` is inert above the pivot (2026-08-24)
+- [§163](#163--relse2-is-a-rate-measured-by-varying-the-distance-rather-than-the-value-2026-08-24) — `RELSE2` is a rate, measured by varying the distance rather than the value (2026-08-24)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -14709,3 +14710,58 @@ increasingly wrong toward the top of the keyboard. **It does not.** At the −2
 the program carries, the field is inert above note 64, and the reported
 difference grows with pitch. Recorded because a refuted candidate is worth as
 much as a confirmed one when the next person reaches for the same field.
+
+---
+
+## §163 — `RELSE2` is a rate, measured by varying the distance rather than the value (2026-08-24)
+
+§67 established that `ATTAK2` is a rate by varying the DISTANCE its phase
+travels, and closed with one sentence generalising to "every stage of both
+envelopes". `RELSE2`'s entry inherited that. Its own measurement (§59) varied
+the value and never the distance, so the release stage was scaled by analogy.
+
+The generalisation is not safe in general: §63 found envelope 3's release
+scales at 0.762 of its own decay where envelope 1's is 1.004 (§162). Stages of
+one envelope need not agree, so this had to be run rather than reasoned.
+
+### The test
+
+Per §67 the levels must move together or phase 2 overrides the target:
+`ENV2L1` = `ENV2L2` = `SUSTN2` = L, with `ATTAK2`, `ENV2R2` and `DECAY2` all 0
+so the envelope jumps to L and holds, and `ENV2L4` 0 so the release returns to
+base. `RELSE1` 99 so the amplitude outlasts the filter release — `RELSE2`'s own
+bounds note records why. Envelope 2 into filter slot 3 at depth 12, base
+`FILFRQ` 55, corner tracked frame by frame from a `FILQ` on/off pair so that a
+*moving* corner is what gets measured.
+
+```
+  RELSE2 65:  distance 2.02x   TIME 1.93x   RATE 1.11x
+              s/octave 0.194, 0.205, 0.185     spread 10.6%
+  RELSE2 75:  distance 2.02x   TIME 1.87x   RATE 1.15x
+              s/octave 0.543, 0.473, 0.501     spread 14.7%
+```
+
+**Time tracks distance and the rate does not move: `RELSE2` is a rate.** Two
+independent settings give the same answer, which is what §67 noted its own
+failed attempts could not do.
+
+A cross-check falls out for nothing: the two settings' full-distance times are
+in ratio 2.707, against 2.636 from §59's law — **2.7%**, from a run that was
+not fitted to it.
+
+### A distance too small to resolve looks like a violated law
+
+L 25 is excluded from both rows. There the corner travels only 550–575 Hz down
+to 325–375, comparable to the tracker's own resolution, and at `RELSE2` 65 it
+never reached base at all (375 against 325). Those two points read 0.995 and
+2.372 oct/s where their neighbours read ~5.1 and ~2.0 — an apparent four-fold
+violation of the law that is entirely the instrument.
+
+Worth stating because the failure is silent in the direction that matters: a
+short traverse produces a *number*, and the number is wrong in the same
+direction every time. §156 caught a saturated filter and §158 a saturated
+detector; this is the third shape — **an excursion smaller than the ruler.**
+
+The absolute times here are to **90%** of the distance rather than 100%, so
+they are not comparable to §59's full-traverse constant. Only the ratios are,
+and the ratios are what the question needed.
