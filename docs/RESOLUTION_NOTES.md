@@ -207,6 +207,7 @@ silently wrong one.
 - [§164](#164--attak2-byte-0-is-instant-and-most-of-the-range-below-the-fit-is-inaudible-anyway-2026-08-24) — `ATTAK2` byte 0 is instant, and most of the range below the fit is inaudible anyway (2026-08-24)
 - [§165](#165--the-filter-does-not-bottom-out-and-a-passband-reference-on-the-slope-invents-a-floor-2026-08-24) — The filter does not bottom out, and a passband reference on the slope invents a floor (2026-08-24)
 - [§166](#166--kfreq-is-signed-and-does-not-clamp-at-12-108-closes-with-its-prediction-refuted-2026-08-24) — `K_FREQ` is signed and does not clamp at 12; §108 closes with its prediction refuted (2026-08-24)
+- [§167](#167--kfreq-has-no-wall-at-24-either-and-both-documents-give-display-ranges-2026-08-24) — `K_FREQ` has no wall at ±24 either, and both documents give display ranges (2026-08-24)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -14984,3 +14985,119 @@ conversion that drifts wrong toward the ends of the keyboard, which is exactly
 the symptom that had been blamed on envelopes the previous evening. `K_FREQ`
 0 against 12 is the difference between a filter that stays put and one that
 follows the key one-for-one.
+
+---
+
+## §167 — `K_FREQ` has no wall at ±24 either, and both documents give display ranges (2026-08-24)
+
+§166 measured −5..+22 and deliberately declined to declare a range it had not
+visited. A sibling then clamped its writer to exactly that and found **32.6% of
+real zones flattened onto the floor** — the library uses values like −18.
+
+### A second document, and a bound the first one does not give
+
+```
+  S2800/S3000/S3200   Range: 0 to 12 semitones
+  S1000               K_FREQ  DB ?  ;Key>Filter freq (+/-24 semitones/octave)
+```
+
+The S1000 line carries the **sign, the unit and a bound**, none of which the
+S2800 sheet has. It independently confirms §166's measured sign and its
+"semitones per octave" reading.
+
+**Prediction recorded before the run:** the field acts linearly to ±24 and stops
+there, because ±24 sits in a header definition rather than a panel display and
+§166 had already shown the S2800 sheet's 0..12 to be the display.
+
+### Refuted. It is linear from −30 to +40
+
+Two bases so the corner stays measurable at both extremes; octaves of corner per
+octave of key against `K_FREQ/12`:
+
+```
+  negatives, base FILFRQ 80 (~1892 Hz)     positives, base FILFRQ 55 (~321 Hz)
+  K_FREQ   measured     law                K_FREQ   measured     law
+    -10      -0.822   -0.833                   22      1.791   1.833
+    -18      -1.547   -1.500                   24      1.943   2.000
+    -24      -1.926   -2.000                   25      1.921   2.083
+    -25      -2.078   -2.083                   30      2.449   2.500
+    -30      -2.441   -2.500                   40      3.288   3.333
+```
+
+Every point within 96–103% of the law, every value reading back as written, and
+**no knee at ±24 or anywhere else**. So the S1000's ±24 is a display range too,
+and **no document states this field's real limit.** `params.py` widens to
+−30..+40 — what has been visited, nothing beyond. No wall was found and none is
+claimed.
+
+**Two predictions on one field, both wrong, both for the same reason.** §166
+predicted a clamp at 12 because "one octave per octave" is round; this one
+predicted a clamp at 24 because ±24 appears in a header definition. A number
+being round, or being written in a spec, says nothing about whether firmware
+enforces it. **A limit is a measurement.**
+
+### The pivot is measured and specified nowhere
+
+Neither document states a reference note — the S2800 sheet gives range and
+description, the S1000 line gives sign, unit and bound. §43 fitted it to note
+**63.8** at r² 0.99890, and the same pivot appears on `V_LOUD` and `V_ATT1`:
+three fields, two source types, all referencing the middle of the controller's
+range rather than middle C or the sample root.
+
+That is a machine-wide convention as far as anything measured can tell, and it
+is still **inferred from three measurements and stated in no document**. Nobody
+converting to another manufacturer's machine should assume it carries: 60
+against 64 is four semitones of error that grows with distance from the pivot.
+
+### Rig note: the MIDI bus is the one shared resource with no hand-off
+
+The card, the samplers and the corpus all had explicit hand-offs today. The bus
+did not, and it fails *quietly* — as an autodetect that simply does not answer,
+which reads as a broken device rather than a busy bus. Tonight that produced a
+leak report against a process that had already exited, a blocked session, and
+an audit of code for a bug it did not have.
+
+Two things that would have prevented it:
+
+* **Announce a sweep, not only a hold.** The disruption was not exclusive use
+  of one port — it was forty seconds of touching every port on the bus, which
+  is invisible to any "who holds the sampler" convention.
+* **Name the process after the script.** `kfreq2.py` told the other session
+  instantly whose it was, which is why it flagged the right session even though
+  its diagnosis was wrong.
+
+**And the sweep itself was avoidable:** `DEFAULT_CONFIG_PATH` is the relative
+`"config.toml"`, so the cached port pair resolves only when the process runs
+from the repo root. Probe scripts run from their own directories and missed it
+every time — **40.0 s against 1.0 s cached, measured, 38.8×**. A default that
+silently degrades to the slow path when the working directory changes is worth
+knowing about for the CLI too.
+
+### And the §166 annotation landed on the wrong parameter
+
+Recorded because it is the same animal as everything else this week, and this
+time it was mine.
+
+§166's `params.py` edit was a string replacement anchored on the note text
+`range as written: "0 to 12 semitones"`. **Two parameters carry that string
+byte for byte** — `K_FREQ` at keygroup 8, and `B_PTCHD` at program 73, "range
+of decrease of Pitch by bendwheel". The replacement took the first occurrence,
+which is `B_PTCHD`.
+
+So a pitch-bend field spent an evening documented as a signed filter key-follow
+that had been measured on hardware, and `K_FREQ` — the field actually measured
+— carried no note at all. The range change was unaffected: it was anchored on
+the parameter's own name and offset, and landed correctly.
+
+**The anchor was the problem, not the tool.** A note's text is not an
+identifier; a parameter's name and offset are. Nothing about the edit looked
+wrong afterwards, the tests all passed, and it would have survived indefinitely
+because no test asserts that a note describes its own field.
+
+Two coincidences made it possible and both are ordinary: two fields with the
+same documented range, and a house style that renders every range the same way.
+**The more units a table describes consistently, the more of its rows look
+alike to a search.**
+
+Found by reading back what had been written, one section later, while widening
+the same field again — which is the only reason it was found at all.

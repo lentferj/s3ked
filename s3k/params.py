@@ -815,19 +815,7 @@ _PARAMS: List[Parameter] = [
         12,
         unit="semitones",
         desc="Range of decrease of Pitch by bendwheel",
-        notes="range as written: \"0 to 12 semitones\" -- and that is a DISPLAY "
-              "range transcribed as a value range, the same error §56 found on "
-              "KGTUNO. MEASURED 2026-08-24 (§166): the field is SIGNED and does "
-              "not clamp at 12. Octaves of corner per octave of key came out "
-              "0.994 at 12, 1.491 at 18, 1.845 at 22 and -0.435 at raw byte 251 "
-              "(= -5), a straight line at 0.08444 per unit against 1/12 = "
-              "0.08333, no knee. So 12 is 1:1 tracking and values either side of "
-              "it work. Declared -5..+22 because that is what was measured; a "
-              "full signed byte is untested and out-of-range writes have crashed "
-              "this machine twice. §108 predicted it would clamp at 12 and was "
-              "refuted -- 12 is round in the unit, not in the implementation. "
-              "The law itself is §43: shift in FILFRQ units = 0.06386 * K_FREQ * "
-              "(note - 64), pivot on note 64.",
+        notes="range as written: \"0 to 12 semitones\"",
     ),
     _p(
         "program",
@@ -1283,11 +1271,24 @@ _PARAMS: List[Parameter] = [
         "K_FREQ",
         1,
         "keygroup.filter",
-        -5,
-        22,
+        -30,
+        40,
         unit="semitones",
         desc="Key follow of filter frequency",
-        notes="range as written: \"0 to 12 semitones\"",
+        notes="range as written: \"0 to 12 semitones\" -- a DISPLAY range transcribed as a "
+              "value range, the same error \u00a756 found on KGTUNO. The S1000 document "
+              "gives the field properly: \"Key>Filter freq (+/-24 semitones/octave)\" -- "
+              "sign, unit and a bound the S2800 sheet omits. MEASURED on hardware "
+              "2026-08-24: the field is SIGNED and clamps at NEITHER 12 nor 24. "
+              "Octaves of corner per octave of key: 0.994 at 12, 1.491 at 18, "
+              "1.845 at 22, 2.449 at 30, 3.288 at 40, and -0.435 / -1.547 / "
+              "-2.441 at -5 / -18 / -30 -- every point 96-103% of K_FREQ/12 with "
+              "no knee anywhere (\u00a7166, \u00a7167). Declared -30..+40 because that is what "
+              "was visited; no wall was found and none is claimed. TWO predictions "
+              "on this field were wrong: a number being round, or being written in "
+              "a spec, says nothing about whether firmware enforces it. The law is "
+              "\u00a743: shift in FILFRQ units = 0.06386 * K_FREQ * (note - 64), and the "
+              "pivot on note 64 is MEASURED, stated in no document.",
     ),
     _p(
         "keygroup",
