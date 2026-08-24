@@ -202,6 +202,7 @@ silently wrong one.
 - [§159](#159--lptch-gates-the-vibrato-entirely-and-lfodeps-law-was-measured-under-an-unrecorded-one-2026-08-24) — `L_PTCH` gates the vibrato entirely, and `LFODEP`'s law was measured under an unrecorded one (2026-08-24)
 - [§160](#160--lfodep-and-lptch-compose-as-a-product-and-35s-unrecorded-routing-was-maximum-2026-08-24) — `LFODEP` and `L_PTCH` compose as a product, and §35's unrecorded routing was maximum (2026-08-24)
 - [§161](#161--the-release-composes-end-to-end-and-matching-times-across-two-spans-is-a-rate-error-2026-08-24) — The release composes end to end, and matching times across two spans is a rate error (2026-08-24)
+- [§162](#162--envelope-1s-release-scales-with-key-exactly-as-its-decay-does-and-a-small-kdar1-is-inert-above-the-pivot-2026-08-24) — Envelope 1's release scales with key exactly as its decay does, and a small `K_DAR1` is inert above the pivot (2026-08-24)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -14646,3 +14647,65 @@ as a RATE, convert the rate. A time is a rate times a distance, and the
 distances belong to the machines rather than to the sound. Matching the product
 while the factors differ is an error that leaves both sides self-consistent and
 audible only to someone listening to them side by side.
+
+---
+
+## §162 — Envelope 1's release scales with key exactly as its decay does, and a small `K_DAR1` is inert above the pivot (2026-08-24)
+
+§48 measured `K_DAR1` against the amplitude **decay**. The field's description
+claims "decay **and release** rates", and §63 had already shown those need not
+match — envelope 3's release scales at 0.762 of its decay. So envelope 1's
+release coefficient did not follow from §48 and is measured here.
+
+Looped white noise, one keygroup, **no decay phase at all** (`ATTAK1` 0,
+`DECAY1` 0, `SUSTN1` 99) so note-off starts the release directly, `RELSE1` 75 —
+inside §158's validated 45..99 — and every other modulation zeroed.
+
+```
+  release rate, dB/s          note 40   note 52   note 64   note 76   note 88
+  K_DAR1 -50                     2.18      5.80     15.24     36.87     88.11
+  K_DAR1 -20                     7.25     10.15     15.24     20.33     30.45
+  K_DAR1  -2                    13.79     13.78     15.24     15.22     15.22
+  K_DAR1   0                    15.23     15.22     15.24     15.23     15.21
+  K_DAR1  20                    30.41     20.29     15.24     10.14      7.25
+  K_DAR1  50                    88.90     36.88     15.24      5.80      2.18
+```
+
+    rate = base × exp(−0.001535 × K_DAR1 × (note − 64))     r2 0.9969
+
+**Ratio to §48's decay coefficient: 1.004.** One coefficient covers both
+phases, which is what the description says and what envelope 3 does *not* do.
+
+Two controls fall out of the table itself rather than needing a separate run:
+the `K_DAR1` 0 row is flat at 15.224 dB/s across four octaves (**0.21%**
+spread), so the base carries no key dependence of its own; and every depth
+reads 15.24 at note 64, confirming the pivot there for a third field after
+`K_FREQ` and §48's own decay measurement.
+
+### A small depth is not a small version of a large one
+
+`K_DAR1` −2 is **9.5% slower below the pivot and does nothing at all above it**
+— 15.24, 15.22, 15.22 at notes 64, 76, 88 against a 15.224 base. It is also
+stepped rather than smooth: 13.79 and 13.78 at two different notes, then a
+jump. The law predicts a smooth 14.15 rising to 16.4 across that span; the
+machine gives two discrete values.
+
+So the law must not be used to convert small depths. **The interesting failure
+is asymmetric: the field acts on one side of the pivot and is inert on the
+other**, which no smooth law can express and which a sweep taken only at large
+depths would never have shown.
+
+### The exponential compresses, symmetrically
+
+Every off-pivot residual is negative — measured slower than predicted — in all
+four quadrants of (sign of `K_DAR1`) × (side of the pivot), reaching −9.8% at
+full depth four octaves out. Symmetry in all four quadrants is what separates
+real curvature from fit noise. Inside ±20 depth the error is under 8%.
+
+### What it does not explain
+
+This was measured to test whether `K_DAR1` explains a converted program sounding
+increasingly wrong toward the top of the keyboard. **It does not.** At the −2
+the program carries, the field is inert above note 64, and the reported
+difference grows with pitch. Recorded because a refuted candidate is worth as
+much as a confirmed one when the next person reaches for the same field.

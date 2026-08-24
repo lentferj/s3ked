@@ -485,7 +485,22 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "At full depth the decay rate changes by a factor of 0.40 per\n"
              "octave -- positive depth makes high notes decay slower.\n"
              "It is the ONLY responder among six envelope scaling fields:\n"
-             "V_REL1, O_REL1, V_ATT2, V_REL2 and V_ENV2 are all inert (§47).",
+             "V_REL1, O_REL1, V_ATT2, V_REL2 and V_ENV2 are all inert (§47).\n"
+             "THE RELEASE SCALES THE SAME WAY, measured separately (§162):\n"
+             "-0.001535 against this -0.0015286, a ratio of 1.004, so one\n"
+             "coefficient covers both phases. That is NOT true of envelope 3,\n"
+             "whose release scales at 0.762 of its decay (§63), so it had to\n"
+             "be measured rather than assumed.\n"
+             "DO NOT USE THIS LAW FOR SMALL DEPTHS. At K_DAR1 -2 the machine\n"
+             "quantises: 9.5% slower below the pivot and NOTHING above it\n"
+             "(15.24/15.22/15.22 dB/s at notes 64/76/88 against a 15.224\n"
+             "base), where the law predicts a smooth rise. The field acts on\n"
+             "one side of the pivot and is inert on the other, which no\n"
+             "smooth law expresses.\n"
+             "The exponential also COMPRESSES: every off-pivot residual is\n"
+             "negative, symmetrically in all four quadrants of (sign of\n"
+             "K_DAR1) x (side of the pivot), reaching -9.8% at full depth\n"
+             "four octaves out. Under +-20 depth the error is below 8%.",
     ),
     ("keygroup", "K_DAR3"): Scale(
         "keygroup", "K_DAR3", "x per semitone", "exp", 1.0, 0.0015617,
