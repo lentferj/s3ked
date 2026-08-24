@@ -206,6 +206,7 @@ silently wrong one.
 - [§163](#163--relse2-is-a-rate-measured-by-varying-the-distance-rather-than-the-value-2026-08-24) — `RELSE2` is a rate, measured by varying the distance rather than the value (2026-08-24)
 - [§164](#164--attak2-byte-0-is-instant-and-most-of-the-range-below-the-fit-is-inaudible-anyway-2026-08-24) — `ATTAK2` byte 0 is instant, and most of the range below the fit is inaudible anyway (2026-08-24)
 - [§165](#165--the-filter-does-not-bottom-out-and-a-passband-reference-on-the-slope-invents-a-floor-2026-08-24) — The filter does not bottom out, and a passband reference on the slope invents a floor (2026-08-24)
+- [§166](#166--kfreq-is-signed-and-does-not-clamp-at-12-108-closes-with-its-prediction-refuted-2026-08-24) — `K_FREQ` is signed and does not clamp at 12; §108 closes with its prediction refuted (2026-08-24)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -14917,3 +14918,69 @@ The fix is never a bolder guess. It is either an `endpoints` fact that is
 independently known, or a measurement — and here the measurement said the
 existing law had been right all along, four bytes below where anyone had
 checked.
+
+---
+
+## §166 — `K_FREQ` is signed and does not clamp at 12; §108 closes with its prediction refuted (2026-08-24)
+
+§108 stayed open from 2026-08-16 on one question: the sibling wrote 22 to
+keygroup offset 8 where the table says 0..12, and *accepted is not effective* —
+a field that stores a value without acting on it is indistinguishable from one
+whose documented bound is too narrow. It named the discriminator and **recorded
+a prediction: flattens.**
+
+A corpus scan of 8568 keygroups then put 54.0% of the field at 0 and 27.1% at
+exactly 12, with a small signed spread including −5, −2, −1 and −4 — which
+raised the second question, whether the field is signed at all.
+
+### Measured
+
+Corner in Hz at four notes, base `FILFRQ` 62 (~527 Hz), `FILQ` pair for the
+tracker, no other filter modulation, `KGTUNO` 0:
+
+```
+  K_FREQ      n64     n70     n76     n82    octaves of corner / octave of key
+       0    550.0   550.0   525.0   525.0        -0.045     flat
+      12    525.0   750.0  1050.0  1475.0         0.994     1:1
+      18    525.0   900.0  1475.0  2475.0         1.491
+      22    525.0   975.0  1875.0  3575.0         1.845
+      -5    550.0   450.0   400.0   350.0        -0.435
+```
+
+**It extrapolates.** 12/12 = 1.000 against 0.994 measured, 18/12 = 1.500
+against 1.491, 22/12 = 1.833 against 1.845. Fitting all five points including
+the negative gives **0.08444 octaves per unit against 1/12 = 0.08333, 1.3%**,
+with no knee anywhere.
+
+**And it is signed.** Raw byte 251 gives −0.435 octaves per octave against
+−5/12 = −0.417 predicted: the corner descends as the key rises. Real negative
+key-follow, not a decoding artefact.
+
+So the documented `0..12` is a **display range transcribed as a value range** —
+the same error §56 found on `KGTUNO`, where "0 to 50" was really ±50 at 1/256
+of a semitone. `params.py` is widened to the measured −5..+22 and no further:
+beyond that is untested and this machine has been crashed twice by out-of-range
+writes.
+
+### The prediction was wrong, and that is why it was written down
+
+§108 predicted flattening, reasoning that "one octave per octave" is a round
+number and round numbers are designed limits. It is a good argument and it is
+false here. The value of recording it in advance is that it could be refuted by
+the run rather than quietly reshaped by it — the same discipline that made §144
+and §151 worth having.
+
+**What the argument missed:** 12 is round in the *unit*, not in the
+*implementation*. A field storing semitones-per-octave has no reason to clamp
+at 12 unless someone wrote a clamp, and nothing about the number being musically
+natural makes that likely. A designed limit shows up as a plateau in the
+hardware, not as a tidy figure in a document.
+
+### Why it mattered to someone else
+
+The sibling reader ignored offset 8 entirely and its writer never emitted it,
+so every converted program lost the filter's keyboard tracking — audible as a
+conversion that drifts wrong toward the ends of the keyboard, which is exactly
+the symptom that had been blamed on envelopes the previous evening. `K_FREQ`
+0 against 12 is the difference between a filter that stays put and one that
+follows the key one-for-one.

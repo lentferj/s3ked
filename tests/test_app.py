@@ -4114,19 +4114,24 @@ async def test_nudging_an_out_of_range_value_moves_it_towards_the_range():
         table.move_cursor(row=row)
         await _pane_settle(pilot, 30)
 
-        # the machine reports 22 -- outside the table's 0..12
-        app._param_values["K_FREQ"] = 22
+        # A value the machine reports that the table does not allow. Derived
+        # from the parameter rather than hard-coded: this test used to say 22,
+        # which WAS out of range until §166 measured K_FREQ and widened the
+        # bound to -5..22. The constant went stale silently and only the
+        # assertion caught it, so the fixture now follows the table.
+        over = param.maximum + 10
+        app._param_values["K_FREQ"] = over
         await pilot.press("minus")
         await _pane_settle(pilot)
         assert "further" not in (app.last_status or ""), app.last_status
         assert "minimum" not in (app.last_status or ""), (
-            f"stepping down from 22 was refused: {app.last_status}")
+            f"stepping down from {over} was refused: {app.last_status}")
 
-        app._param_values["K_FREQ"] = 22
+        app._param_values["K_FREQ"] = over
         await pilot.press("plus")
         await _pane_settle(pilot)
         assert "further" in (app.last_status or ""), (
-            f"stepping up from 22 should be refused: {app.last_status}")
+            f"stepping up from {over} should be refused: {app.last_status}")
 
 
 def test_the_demo_interleaves_a_load_the_way_the_machine_does():

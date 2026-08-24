@@ -815,7 +815,19 @@ _PARAMS: List[Parameter] = [
         12,
         unit="semitones",
         desc="Range of decrease of Pitch by bendwheel",
-        notes="range as written: \"0 to 12 semitones\"",
+        notes="range as written: \"0 to 12 semitones\" -- and that is a DISPLAY "
+              "range transcribed as a value range, the same error §56 found on "
+              "KGTUNO. MEASURED 2026-08-24 (§166): the field is SIGNED and does "
+              "not clamp at 12. Octaves of corner per octave of key came out "
+              "0.994 at 12, 1.491 at 18, 1.845 at 22 and -0.435 at raw byte 251 "
+              "(= -5), a straight line at 0.08444 per unit against 1/12 = "
+              "0.08333, no knee. So 12 is 1:1 tracking and values either side of "
+              "it work. Declared -5..+22 because that is what was measured; a "
+              "full signed byte is untested and out-of-range writes have crashed "
+              "this machine twice. §108 predicted it would clamp at 12 and was "
+              "refuted -- 12 is round in the unit, not in the implementation. "
+              "The law itself is §43: shift in FILFRQ units = 0.06386 * K_FREQ * "
+              "(note - 64), pivot on note 64.",
     ),
     _p(
         "program",
@@ -1271,8 +1283,8 @@ _PARAMS: List[Parameter] = [
         "K_FREQ",
         1,
         "keygroup.filter",
-        0,
-        12,
+        -5,
+        22,
         unit="semitones",
         desc="Key follow of filter frequency",
         notes="range as written: \"0 to 12 semitones\"",
