@@ -361,13 +361,22 @@ SCALES: Dict[Tuple[str, str], Scale] = {
         endpoints={0: "fastest"},
     ),
     ("keygroup", "RELSE1"): Scale(
-        "keygroup", "RELSE1", "dB/s", "exp", 22055.3, -0.09683, (55, 70),
-        0.99956,
-        bounds="fitted from 55 up. At 45 and 50 the fall crosses the whole\n"
-               "range in 30-42 analysis windows and the rate is quantised;\n"
-               "including those two dropped the fit from r2 0.9996 to 0.9916,\n"
-               "so they are measured but excluded. Above 70 the fall outlasts\n"
-               "the 2 s capture tail.",
+        "keygroup", "RELSE1", "dB/s", "exp", 23042.3, -0.09754, (45, 99),
+        0.99996,
+        bounds="45..99, re-measured 2026-08-24 (RESOLUTION_NOTES §158). The\n"
+               "earlier window was 55..70 and both of its limits were the\n"
+               "RIG: a 2 s capture tail at the slow end, and a fall crossing\n"
+               "the range in 30-42 analysis windows at the fast end. Fitting\n"
+               "the SLOPE in dB/s over whatever span sits above the run's own\n"
+               "floor, with a 30 s tail where needed, removed both. Eleven\n"
+               "points, spans of ~37 dB, every per-point r2 above 0.9995.\n"
+               "BELOW 45 IS STILL UNMEASURED and this law is unvalidated\n"
+               "there. At 35 and below the fitted rate stops depending on the\n"
+               "setting -- 194, 192, 209, 155, 256, 305 dB/s for 0, 5, 10, 15,\n"
+               "20, 25 -- and the per-point r2 collapses to 0.51-0.73. That is\n"
+               "the rig's own tail being measured, not the envelope: the\n"
+               "release is over in a millisecond or two and nothing of it\n"
+               "survives above the floor.",
         note="A RATE, not a duration: decibels per second, so the time taken\n"
              "is span/rate. The span is the level the note had reached when\n"
              "the key was let go, so a release 'time' is not a property of\n"
@@ -380,7 +389,13 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "sustain, span = 0.60832 * SUSTN1 dB.\n"
              "That run is the calibration's first real cross-validation: it\n"
              "predicts data from two laws fitted on separate sweeps, neither\n"
-             "of them fitted to it.",
+             "of them fitted to it.\n"
+             "THE OLD 55..70 FIT EXTRAPOLATED CORRECTLY, which is worth\n"
+             "recording because the opposite was assumed. Re-measured across\n"
+             "45..99 it was wrong by at most 4.1%, and that worst case sits\n"
+             "at RELSE1 99 -- twenty-nine units above the top of its own\n"
+             "window. The constants here barely move; what changed is that\n"
+             "the range is now measured rather than trusted.",
         endpoints={0: "fastest"},
     ),
     # --- the filter envelope ------------------------------------------------

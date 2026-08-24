@@ -198,6 +198,7 @@ silently wrong one.
 - [§155](#155--kgmute-0-is-an-active-mute-group-and-a-zero-filled-keygroup-lands-in-it-2026-08-23) — `KGMUTE` 0 is an active mute group, and a zero-filled keygroup lands in it (2026-08-23)
 - [§156](#156--envelope-2s-depth-is-linear-to-the-top-of-its-range-and-the-corner-ceiling-is-786-khz-2026-08-24) — Envelope 2's depth is linear to the top of its range, and the corner ceiling is 7.86 kHz (2026-08-24)
 - [§157](#157--a-name-byte-in-ram-changed-by-one-bit-once-and-did-not-reproduce-2026-08-24) — A name byte in RAM changed by one bit, once, and did not reproduce (2026-08-24)
+- [§158](#158--relse1-re-measured-across-4599-and-the-old-extrapolation-was-right-2026-08-24) — `RELSE1` re-measured across 45..99, and the old extrapolation was right (2026-08-24)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -14364,3 +14365,78 @@ to want it written down.
 **Practical rule:** when a name-based match fails against a machine that has
 been under sustained write traffic, re-read the name before believing it, and
 compare against the disk rather than against memory.
+
+---
+
+## §158 — `RELSE1` re-measured across 45..99, and the old extrapolation was right (2026-08-24)
+
+`RELSE1`'s law was fitted 55..70 and used well outside it. A sibling
+converter, hearing a release too short against real hardware, proposed that
+the curve flattens above the fit and the true release is several seconds
+longer. **It does not flatten.** The extrapolation was accurate to 4.1% at
+`RELSE1` 99, twenty-nine units above its own window.
+
+That is a negative result and the useful kind: it says where the difference
+*is not*, and stops a search.
+
+### Why the old window was narrow, and what removed both limits
+
+Neither limit was the machine. The old measurement timed a fall to −40 dB
+inside a 2 s tail, which fails at both ends — a slow release outlasts the
+window, a fast one finishes in a handful of analysis frames.
+
+Fitting the **slope in dB/s** — the law's own unit — over whatever span sits
+above the run's own noise floor removes both. Slow points get a 30 s tail;
+fast points get a 0.5 ms hop. White noise, looped, one keygroup, `ATTAK1` and
+`DECAY1` 0, `SUSTN1` 99, `V_REL1`/`O_REL1`/`K_DAR1` 0.
+
+```
+  RELSE1   measured dB/s   old law    error     per-point r2   span used
+      50         176.977   174.131    +1.6%          0.9995      36.5 dB
+      55         108.077   107.303    +0.7%          0.9996      36.5 dB
+      60          65.883    66.122    -0.4%          0.9996      36.5 dB
+      65          40.379    40.746    -0.9%          0.9995      36.7 dB
+      70          24.667    25.109    -1.8%          0.9995      36.9 dB
+      75          15.250    15.472    -1.4%          0.9995      36.8 dB
+      80           9.449     9.534    -0.9%          0.9996      36.9 dB
+      85           5.803     5.875    -1.2%          0.9995      37.0 dB
+      90           3.632     3.620    +0.3%          0.9995      37.0 dB
+      95           2.179     2.231    -2.3%          0.9995      37.0 dB
+      99           1.453     1.515    -4.1%          0.9995      37.0 dB
+```
+
+    dB/s = 23042.3 × exp(−0.09754 × RELSE1)     11 points, log-space r2 0.99996
+
+The constants barely move. **The result is the range, not the numbers.**
+
+### Below 45 is still unmeasured, and the tell is that the reading stops moving
+
+A second pass at 0.5 ms hop reached 45 (r2 0.993) and 50 (0.996) cleanly and
+40 marginally (0.974, −10%). At 35 and below the fit collapses **and the value
+stops depending on the setting**:
+
+```
+  RELSE1     0     5    10    15    20    25
+   dB/s    194   192   209   155   256   305        per-point r2 0.51-0.73
+```
+
+Non-monotonic, roughly constant, and a poor fit. That is the signature of
+measuring something that is not the envelope: at those settings the release is
+over in a millisecond or two and what survives above the floor is the rig's
+own tail. The law may well hold down there — its shape is clean and there is
+no hint of a knee — but this rig cannot say so.
+
+**An identical number across settings is a floor**, and here it is the floor of
+the measurement rather than of the machine. The same rule that caught a
+saturated filter in §156 catches a saturated detector in the opposite
+direction.
+
+### For anyone chasing a release that sounds wrong
+
+The fit range was the obvious suspect and it is now excluded. What remains,
+none of it tested here: the threshold a model calls "release complete" (30 dB
+and 40 dB differ by a third in the time they imply), whether the release is
+taken to start from the sustain level or the peak — §34 measured that span as
+`0.60832 × SUSTN1` dB, so it is not a property of `RELSE1` alone — and
+`V_REL1`/`O_REL1`, which were pinned to 0 here and are rarely 0 in real
+material.
