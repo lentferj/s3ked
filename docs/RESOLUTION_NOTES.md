@@ -200,6 +200,7 @@ silently wrong one.
 - [§157](#157--a-name-byte-in-ram-changed-by-one-bit-once-and-did-not-reproduce-2026-08-24) — A name byte in RAM changed by one bit, once, and did not reproduce (2026-08-24)
 - [§158](#158--relse1-re-measured-across-4599-and-the-old-extrapolation-was-right-2026-08-24) — `RELSE1` re-measured across 45..99, and the old extrapolation was right (2026-08-24)
 - [§159](#159--lptch-gates-the-vibrato-entirely-and-lfodeps-law-was-measured-under-an-unrecorded-one-2026-08-24) — `L_PTCH` gates the vibrato entirely, and `LFODEP`'s law was measured under an unrecorded one (2026-08-24)
+- [§160](#160--lfodep-and-lptch-compose-as-a-product-and-35s-unrecorded-routing-was-maximum-2026-08-24) — `LFODEP` and `L_PTCH` compose as a product, and §35's unrecorded routing was maximum (2026-08-24)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -14510,3 +14511,77 @@ known-linear axis before being trusted on `L_PTCH`.
 **Until then: `L_PTCH` 0 means no vibrato — that much is proven and safe to
 act on. Any non-zero `L_PTCH` should be treated as an unknown depth rather than
 scaled by a guessed factor.**
+
+---
+
+## §160 — `LFODEP` and `L_PTCH` compose as a product, and §35's unrecorded routing was maximum (2026-08-24)
+
+§159 proved `L_PTCH` gates the vibrato and left the composition unmeasured
+because a frame-wise pitch tracker could not survive the deviations. Measured
+here with a **sideband second-moment estimator** built by the sibling eosed
+project, which never estimates a fundamental and so cannot make the octave
+error that defeated the tracker.
+
+    rms_cents = 0.13127 × LFODEP × L_PTCH
+
+### The control, which is not the spread
+
+```
+  sweep  LFODEP  L_PTCH  product     rms         k
+      A       8      30      240   32.95   0.13728
+      B      30      10      300   39.61   0.13202
+      C       6      50      300   36.48   0.12159
+      A       8      40      320   41.80   0.13062
+      A       8      50      400   52.83   0.13207
+      C       8      50      400   53.08   0.13270
+      B      30      15      450   56.57   0.12572
+      C      10      50      500   69.07   0.13813
+
+  k mean 0.13127, sd 0.00550, spread 4.2%
+```
+
+The 4.2% is the wrong number to quote. The real test is **one product reached
+from different settings**: 30×10 against 6×50 agree to **8.6%**, while the same
+setting measured twice in different sweeps agrees to **0.5%**. So repeatability
+is far better than the product form, and 8.6% is a limit on the model rather
+than scatter. **Call it a product to within about 9%.**
+
+### What §35 was calibrated at
+
+§35 gives 19.4932 cents peak-to-peak per `LFODEP` unit and never set
+`L_PTCH`; neither it nor §44 recorded the value. Inverting the product law:
+
+```
+  reading the LFO as a sine    : 6.892 rms/unit  ->  L_PTCH = 52.5
+  reading it as a triangle     : 5.627 rms/unit  ->  L_PTCH = 42.9
+```
+
+`L_PTCH`'s maximum is **50**. So that calibration ran at or near maximum
+routing — 52.5 is 5% past the top and inside the k spread, consistent with
+exactly 50. **19.4932 is therefore close to the full-routing case, and scaling
+it by `L_PTCH/50` is approximately right after all.** §159 refused to assume
+that, which was correct at the time; it is now measured.
+
+The RMS form is waveform-independent — the estimator's whole point. Only the
+conversion back to peak-to-peak needs a shape, and that is where the 50-vs-43
+ambiguity lives.
+
+### Two instrument findings, both worth more than the law
+
+**The rate search fails long before the estimator does.** A first pass refused
+21 of 26 points, and not for depth: the open 1–20 Hz modulation search returned
+3.17, −3.86, 62.03 and 0.77 Hz and then refused on its own answer.
+Re-analysing the *identical* captures with the search pinned to 3.3–4.3 Hz
+recovered 18 of them, including every point below 40 cents rms. The LFO rate is
+always known independently — it is a field we set — so pinning it costs
+nothing and roughly tripled the usable range.
+
+**The estimator over-reads below about 30 cents rms**, because noise inflates a
+second moment. Those points carry sd of 8–15 cents against 4 for the good ones,
+so they announce themselves; the rule is to trust the reported sd, not the
+value.
+
+Confirmed and not disputed: the ceiling sits near 200 peak cents whatever the
+carrier — checked synthetically at 220, 330, 440, 660 and 880 Hz, and it does
+not move. A higher note does not buy range, because the deviation in hertz
+scales with the carrier exactly as the harmonic spacing does.
