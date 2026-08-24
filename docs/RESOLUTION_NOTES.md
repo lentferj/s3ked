@@ -204,6 +204,7 @@ silently wrong one.
 - [§161](#161--the-release-composes-end-to-end-and-matching-times-across-two-spans-is-a-rate-error-2026-08-24) — The release composes end to end, and matching times across two spans is a rate error (2026-08-24)
 - [§162](#162--envelope-1s-release-scales-with-key-exactly-as-its-decay-does-and-a-small-kdar1-is-inert-above-the-pivot-2026-08-24) — Envelope 1's release scales with key exactly as its decay does, and a small `K_DAR1` is inert above the pivot (2026-08-24)
 - [§163](#163--relse2-is-a-rate-measured-by-varying-the-distance-rather-than-the-value-2026-08-24) — `RELSE2` is a rate, measured by varying the distance rather than the value (2026-08-24)
+- [§164](#164--attak2-byte-0-is-instant-and-most-of-the-range-below-the-fit-is-inaudible-anyway-2026-08-24) — `ATTAK2` byte 0 is instant, and most of the range below the fit is inaudible anyway (2026-08-24)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -14765,3 +14766,78 @@ detector; this is the third shape — **an excursion smaller than the ruler.**
 The absolute times here are to **90%** of the distance rather than 100%, so
 they are not comparable to §59's full-traverse constant. Only the ratios are,
 and the ratios are what the question needed.
+
+---
+
+## §164 — `ATTAK2` byte 0 is instant, and most of the range below the fit is inaudible anyway (2026-08-24)
+
+`ATTAK2`'s law is fitted 40..85. A corpus scan of 26979 keygroups across 21
+library discs put **58.0% of all keygroups on byte 0** and roughly a quarter
+more in bytes 1..39 — so on paper the fit covers a sixth of real material.
+Both this project and the sibling converter render byte 0 as *exactly zero*, a
+semantic reading nobody had measured.
+
+### The control, run before the sweep
+
+The same note with **no envelope at all** and `FILFRQ` parked at the
+excursion's top, so the corner is already there when the note starts. The rig
+still reports a 10 ms rise. **Nothing below 10 ms here is a measurement.**
+
+### The sweep
+
+Base `FILFRQ` 70 (~1230 Hz) rather than 55, so a 20 ms frame's 50 Hz bins are
+4% of the corner rather than 15%; depth 8, about 1.85 octaves, well under
+§156's 7858 Hz ceiling.
+
+```
+  ATTAK2   measured   law says    ratio   status
+       0        5 ms     1.4 ms        -   BOUND (<= floor)
+       5        5          2.2          -   BOUND
+      12        5          4.4          -   BOUND
+      20       10          9.5          -   BOUND
+      25       15         15.4          -   BOUND
+      30       30         25.0       1.20   measured
+      35       30         40.7       0.74   measured
+      40       60         66.1       0.91   measured
+      45       95        107.3       0.89   measured
+```
+
+### Byte 0 is instant, and the law agrees it does not matter
+
+Measured: instant to within 10 ms. Predicted by the law: **1.4 ms**. Whichever
+is right, nothing hears the difference, so the special case is safe and no
+invented transient is being added.
+
+Better, the law reaches the rig's 10 ms floor at `ATTAK2` **21**. So everything
+from 0 to about 20 is indistinguishable from instant *by the law's own account
+as well as by measurement* — two independent routes agreeing that a whole
+region cannot matter.
+
+**That splits the apparent exposure and shrinks it:**
+
+```
+  bytes  1..20   law predicts 1.5-9.5 ms   below audibility either way
+  bytes 21..39   law predicts 10-60 ms     the real gap
+```
+
+Byte 30 alone is 15.7% of the corpus and measured 30 ms against the law's 25,
+so the extrapolation is roughly right where it matters most.
+
+### Why the fit is not widened here
+
+The two points inside the fit's own range agree to ~10%; the two below it read
+1.20 and 0.74, and 35 measuring *faster* than 30 is plainly the instrument.
+**The law's floor at 40 and this rig's floor at ~21 are close enough that there
+is little room to work in** — extending it needs a faster instrument, not more
+points.
+
+Honest weakness: the corner tracker's estimate of where the excursion *starts*
+is unreliable in the first frames, reading anywhere from 675 to 2350 Hz for the
+same base across the sweep. That feeds the 90% threshold. It cannot affect the
+bounds, which are floor-limited regardless, and matters little at 40..45 where
+the rise is long — but it is why these points are not fitted.
+
+**A range can be "outside the fit" and still not worth measuring.** What
+decides is whether the quantity is audible there, not what fraction of the
+corpus sits in it — and here the commonest value in the entire corpus turned out
+to be the one that needed the law least.

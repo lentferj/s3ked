@@ -407,7 +407,18 @@ SCALES: Dict[Tuple[str, str], Scale] = {
         "keygroup", "ATTAK2", "s", "exp", 0.001363, 0.09703, (40, 85), 0.999807,
         bounds="40..85 at two drive levels. Below 40 the rise completes inside\n"
                "the 0.14 s detector latency; above 85 it outlasts an 8 s\n"
-               "capture -- 99 would need about 30 s.",
+               "capture -- 99 would need about 30 s.\n"
+               "RE-EXAMINED at the bottom 2026-08-24 (§164) with a corner\n"
+               "tracker whose floor is 10 ms rather than 140. Byte 0 is\n"
+               "instant to within that, and the law\'s own prediction for it\n"
+               "is 1.4 ms, so rendering 0 as exactly zero is safe. The law\n"
+               "reaches 10 ms at byte 21, so 0..20 is indistinguishable from\n"
+               "instant by measurement AND by the law. 30 measured 30 ms\n"
+               "against 25 predicted. The fit is NOT widened: this rig\'s\n"
+               "floor and the fit\'s floor are too close to leave room, and\n"
+               "the points below 40 scatter (1.20 and 0.74) rather than\n"
+               "trend. 58% of corpus keygroups carry byte 0 and 15.7% carry\n"
+               "byte 30, so what is outside the fit is mostly inaudible.",
         note="Seconds for the filter envelope to traverse its FULL 0..99 range.\n"
              "Re-measured 2026-08-12 with the resonance tracker (§58). §28 read\n"
              "this through a spectral centroid and left it provisional over a\n"
