@@ -199,6 +199,7 @@ silently wrong one.
 - [§156](#156--envelope-2s-depth-is-linear-to-the-top-of-its-range-and-the-corner-ceiling-is-786-khz-2026-08-24) — Envelope 2's depth is linear to the top of its range, and the corner ceiling is 7.86 kHz (2026-08-24)
 - [§157](#157--a-name-byte-in-ram-changed-by-one-bit-once-and-did-not-reproduce-2026-08-24) — A name byte in RAM changed by one bit, once, and did not reproduce (2026-08-24)
 - [§158](#158--relse1-re-measured-across-4599-and-the-old-extrapolation-was-right-2026-08-24) — `RELSE1` re-measured across 45..99, and the old extrapolation was right (2026-08-24)
+- [§159](#159--lptch-gates-the-vibrato-entirely-and-lfodeps-law-was-measured-under-an-unrecorded-one-2026-08-24) — `L_PTCH` gates the vibrato entirely, and `LFODEP`'s law was measured under an unrecorded one (2026-08-24)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -14440,3 +14441,72 @@ taken to start from the sustain level or the peak — §34 measured that span as
 `0.60832 × SUSTN1` dB, so it is not a property of `RELSE1` alone — and
 `V_REL1`/`O_REL1`, which were pinned to 0 here and are rarely 0 in real
 material.
+
+---
+
+## §159 — `L_PTCH` gates the vibrato entirely, and `LFODEP`'s law was measured under an unrecorded one (2026-08-24)
+
+A converter applying `LFODEP` to every voice was told by ear that the hardware
+vibratos only some of them. The gate is **`L_PTCH`, keygroup offset 150**,
+"amount of control of pitch by LFO1", −50..+50 — not `MODVPITCH` at 154, which
+is the assignable route and a different field.
+
+### The gate, measured against its own floor
+
+`LFORAT` 32, `LFODEL` 0, every other LFO1 depth source zeroed,
+`MODVPITCH`/`MODSPITCH` 0, one keygroup, looped pitched sample. The floor is
+the detector's own jitter with no vibrato at all, measured in the same run:
+
+```
+  LFODEP   L_PTCH    cents pp     verdict
+       0        0        74.1     floor
+      99        0        62.5     AT THE FLOOR -- no vibrato
+       0       50        76.5     AT THE FLOOR -- no vibrato
+      99       50    364..509     strong vibrato
+```
+
+**Both fields must be non-zero.** `LFODEP` 99 at `L_PTCH` 0 is silent. This is
+a qualitative difference against a measured floor, so it stands even though the
+absolute figures in the same run do not (below).
+
+### What that does to §35's constant
+
+`LFODEP cents = 19.4932 × x` was fitted without ever setting `L_PTCH`. It
+appears nowhere in `probes/calibrate.py`, and neither §35 nor §44 records the
+value the calibration program carried. So the constant is the law at **some
+unknown non-zero `L_PTCH`** — non-zero by inference, since zero would have
+measured silence.
+
+That is a published law with an unrecorded dependency, which is worse than a
+missing law: it invites a converter to treat it as a full-scale reference and
+scale it by `L_PTCH/50`. Nothing here justifies that. `scales.py` now carries
+the caveat on the entry itself.
+
+### The composition law is UNMEASURED, and the detector is why
+
+Frame-wise `fundamental_hz` cannot do this. Sweeping `L_PTCH` 0..50 at `LFODEP`
+99 gave 649, 577, 558, 547, 543, 524, 570, 305, 516 cents — non-monotonic and
+saturated — with the tracked f0 collapsing from 221 Hz to 150.5 Hz and sticking
+there. Sweeping `LFODEP` 0..99 at `L_PTCH` 50 read 576 at depth 10 against 514
+at depth 99.
+
+**A control that reads the same at 10 as at 99 is not measuring the field.**
+§35 named this hazard — pitch-tracker octave errors — and a ±600 cent guard was
+too loose to exclude them. The small-signal attempt was worse: `LFODEP` 8 across
+all of `L_PTCH` gave 72–98 cents against a 74 cent floor, entirely inside the
+noise.
+
+Recorded as a failure rather than fitted, because a curve drawn through those
+points would have looked like a law.
+
+### What would settle it: a different instrument, not a better tracker
+
+Vibrato at a known rate puts sidebands around every harmonic, spaced at the LFO
+rate, and the sideband-to-carrier ratio gives the modulation index through the
+Bessel ratio. Deviation is index × rate. No fundamental is ever estimated, so
+octave errors cannot arise. It wants validating against `LFODEP`'s own
+known-linear axis before being trusted on `L_PTCH`.
+
+**Until then: `L_PTCH` 0 means no vibrato — that much is proven and safe to
+act on. Any non-zero `L_PTCH` should be treated as an unknown depth rather than
+scaled by a guessed factor.**
