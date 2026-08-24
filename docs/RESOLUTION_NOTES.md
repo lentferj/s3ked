@@ -201,6 +201,7 @@ silently wrong one.
 - [§158](#158--relse1-re-measured-across-4599-and-the-old-extrapolation-was-right-2026-08-24) — `RELSE1` re-measured across 45..99, and the old extrapolation was right (2026-08-24)
 - [§159](#159--lptch-gates-the-vibrato-entirely-and-lfodeps-law-was-measured-under-an-unrecorded-one-2026-08-24) — `L_PTCH` gates the vibrato entirely, and `LFODEP`'s law was measured under an unrecorded one (2026-08-24)
 - [§160](#160--lfodep-and-lptch-compose-as-a-product-and-35s-unrecorded-routing-was-maximum-2026-08-24) — `LFODEP` and `L_PTCH` compose as a product, and §35's unrecorded routing was maximum (2026-08-24)
+- [§161](#161--the-release-composes-end-to-end-and-matching-times-across-two-spans-is-a-rate-error-2026-08-24) — The release composes end to end, and matching times across two spans is a rate error (2026-08-24)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -14585,3 +14586,63 @@ Confirmed and not disputed: the ceiling sits near 200 peak cents whatever the
 carrier — checked synthetically at 220, 330, 440, 660 and 880 Hz, and it does
 not move. A higher note does not buy range, because the deviation in hertz
 scales with the carrier exactly as the harmonic spacing does.
+
+---
+
+## §161 — The release composes end to end, and matching times across two spans is a rate error (2026-08-24)
+
+§158 measured the release RATE, §34 established it is a speed rather than a
+time, and `SUSTN1`'s dB law was measured separately. Nobody had put the three
+together against a clock at one setting, which is where a composition error
+would hide.
+
+### The rate is a speed, measured directly
+
+`RELSE1` 75, looped white noise, one keygroup, release/filter/LFO modulation
+all zeroed:
+
+```
+  SUSTN1  50    14.761 dB/s   span 15.0 dB   r2 0.9968
+  SUSTN1  70    15.116 dB/s   span 26.9 dB   r2 0.9991
+  SUSTN1  99    15.229 dB/s   span 36.5 dB   r2 0.9995
+                spread 3.2%
+```
+
+The same dB/s at every sustain level; only the distance travelled changes.
+Best-determined mean **15.172 dB/s** against §158's predicted 15.327 — **1.0%**.
+The law holds composed, not only on its own sweep.
+
+### The comparable number
+
+Time from note-off to a fall of 40 dB below the sustain level, `RELSE1` 75:
+
+    2.620 s measured (SUSTN1 99)     2.665 s measured (SUSTN1 70)
+    2.627 s from the rate            direct and derived agree to 0.7%
+
+So **2.64 s**, and the derived route is trustworthy where headroom will not
+show a 40 dB fall directly.
+
+### Matching a time across two machines is matching the wrong quantity
+
+A sibling converter targeting an E-mu E4XT was choosing its release by matching
+a release **time**, computed over the AKAI's 30.3 dB distance, against one over
+the E4XT's 47 dB distance. Both machines are dB/s devices. Matching times over
+unequal distances forces a rate error equal to their ratio, and it hides,
+because both times are individually correct.
+
+```
+  AKAI full span  0.60676 × 99 = 60.1 dB      E4XT full span ~90 dB
+  ratio 1.50 × 1.18 (their residual error) = 1.77x predicted
+  measured: AKAI 2.64 s against E4XT 1.42 s  = 1.85x
+```
+
+Two independent routes agreeing to 5%. **The fix is to match dB/s and never
+compute a time on either side** — which is also immune to both machines' span
+constants, the very things that were wrong on one side and unverified on the
+other until this measurement.
+
+**The general form, worth keeping:** when two devices express the same control
+as a RATE, convert the rate. A time is a rate times a distance, and the
+distances belong to the machines rather than to the sound. Matching the product
+while the factors differ is an error that leaves both sides self-consistent and
+audible only to someone listening to them side by side.
