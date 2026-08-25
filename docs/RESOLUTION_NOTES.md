@@ -14384,6 +14384,48 @@ to want it written down.
 been under sustained write traffic, re-read the name before believing it, and
 compare against the disk rather than against memory.
 
+### It happened again, 2026-08-25, and the rate is now measured
+
+A second event, on a different item, after MX3 had sat resident for about
+thirty hours of header traffic aimed at *other* programs loaded alongside it:
+
+```
+  program 1, PRNAME byte 0    card 13 ('C')    RAM 21 ('K')
+  an 11-character program name: first letter C on the card, K in RAM
+```
+
+Stable across three independent reads, so not a garbled reply. **The other 191
+bytes of that program header are byte-identical to the card**, including the
+fields the machine recomputes.
+
+**The detectability bias was the obvious worry, and it is refuted.** Names are
+12 bytes of a 192-byte header, so if corruption were uniform, spotting two
+events by eye would imply roughly sixteen times as many hiding in the numeric
+fields. Every resident header was therefore compared against the card image —
+6 programs, all their keygroups, all 16 samples, **8928 comparable bytes** with
+the machine's recomputed internals excluded.
+
+**One differing byte, and it is the one already found by eye.** No hidden
+corruption anywhere else.
+
+So the two events are not the visible tip of a rate; they are two events. That
+matters for how much weight to give them: rare enough not to distrust a
+measurement by default, frequent enough that a name-keyed match failing twice
+in thirty hours is worth checking against the disk before theorising.
+
+**Still not diagnosed.** Both landed in name fields, which after this
+measurement is a coincidence rather than a clue — a 12-in-192 target hit twice
+is unremarkable at two events. The deltas differ (−1 then +8), so a stuck bit
+is out; a stray write from the header pool remains the best candidate and is
+still untested.
+
+One systematic difference turned up in the same sweep and is **not**
+corruption: seven of sixteen samples read 0 where the card holds 96 at sample
+offset 141, an undocumented byte no entry in `params.py` names. Same value
+across all seven, absent from the other nine, so a load-time normalisation of a
+field this project does not know the meaning of. Recorded because it is
+unexplained, not because it is alarming.
+
 ---
 
 ## §158 — `RELSE1` re-measured across 45..99, and the old extrapolation was right (2026-08-24)
