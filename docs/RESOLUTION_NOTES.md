@@ -9062,7 +9062,16 @@ times in this project.
 
 ## §108 — `K_FREQ` accepted 22, and the table says 0..12 (2026-08-16)
 
-**Status: open, one measurement away.** Reported by the sibling mpc2emu
+**Status: RESOLVED 2026-08-17 — and this line said "open" until 2026-08-25,
+which cost two re-measurements.** The sweep was run the day after this was
+written and recorded in `s3k/scales.py`'s `K_FREQ` note — *"swept to the top
+of the byte… the corner rises linearly to K_FREQ 99… No saturation anywhere
+in range"* — but this section was never updated, so §166 and §167 both
+re-measured ground already covered. **The fact lived in two places and the
+index of open work was the stale one.** Everything below is the original
+framing, kept because its discriminator was right.
+
+Reported by the sibling mpc2emu
 from its own hardware run: writing 22 to keygroup offset 8 was accepted and
 read back, where `s3k/params.py` gives the range as **0..12** — transcribed
 from Akai's document, like every other bound in that table.

@@ -2781,18 +2781,19 @@ class S3kedApp(App):
             return
 
         value = current + delta
+        outside = _distance_to_range(param, current) > 0
         if not param.minimum <= value <= param.maximum:
             # A value already OUTSIDE the declared range is not hypothetical.
-            # The machine does not validate every field -- `K_FREQ` acts on
-            # 22 against a documented 0..12 (§108) -- and the panel can put
-            # one there. Refusing every step then traps the value: the user
-            # cannot walk it back, and the message claims it is "at its
+            # The machine does not validate every field -- `V_LOUD` stores
+            # +50 while saturating at +20 (scales.py) -- and the panel can
+            # put one there. Refusing every step then traps the value: the
+            # user cannot walk it back, and the message claims it is "at its
             # minimum" when it is far past the maximum.
             #
             # So a step is judged by whether it moves TOWARDS the range.
             if _distance_to_range(param, value) >= _distance_to_range(
                     param, current):
-                if _distance_to_range(param, current) > 0:
+                if outside:
                     why = "outside its range, and this moves it further"
                 else:
                     why = "at its maximum" if delta > 0 else "at its minimum"
@@ -2800,6 +2801,18 @@ class S3kedApp(App):
                     f"{param.name} is {why} "
                     f"({p.describe_value(param, current)})", refused=True)
                 return
+            # ...and a step that DOES move towards the range must land inside
+            # it, because `encode_field` refuses anything outside on the way
+            # to the wire. Stepping by one from 60 towards a 40 maximum only
+            # produces 59, which is refused exactly like 60 was, so the
+            # escape hatch above existed for two months without ever firing.
+            # Snap to the boundary instead: one press rescues the value,
+            # which is what "walk it back" was for.
+            value = min(max(value, param.minimum), param.maximum)
+            self.notify_status(
+                f"{param.name} was {p.describe_value(param, current)}, "
+                f"outside {param.minimum}..{param.maximum} -- "
+                f"moved to {p.describe_value(param, value)}")
 
         region, index, keygroup = self._param_context
         self._nudging = (region, index, keygroup, param.name)

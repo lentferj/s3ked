@@ -4116,8 +4116,9 @@ async def test_nudging_an_out_of_range_value_moves_it_towards_the_range():
 
         # A value the machine reports that the table does not allow. Derived
         # from the parameter rather than hard-coded: this test used to say 22,
-        # which WAS out of range until §166 measured K_FREQ and widened the
-        # bound to -5..22. The constant went stale silently and only the
+        # which WAS out of range until K_FREQ was measured and widened --
+        # to -5..22 by §166, then -30..99 once §167 and §108 were
+        # reconciled. The constant went stale silently and only the
         # assertion caught it, so the fixture now follows the table.
         over = param.maximum + 10
         app._param_values["K_FREQ"] = over

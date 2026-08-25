@@ -379,7 +379,11 @@ SCALES: Dict[Tuple[str, str], Scale] = {
                "the range in 30-42 analysis windows at the fast end. Fitting\n"
                "the SLOPE in dB/s over whatever span sits above the run's own\n"
                "floor, with a 30 s tail where needed, removed both. Eleven\n"
-               "points, spans of ~37 dB, every per-point r2 above 0.9995.\n"
+               "points from 50 to 99, spans of ~37 dB, every per-point r2\n"
+               "above 0.9995. The 45 at the bottom comes from a SECOND pass\n"
+               "at 0.5 ms hop and is weaker -- r2 0.993 at 45 and 0.996 at\n"
+               "50 -- so 45..49 is measured but not to the standard of the\n"
+               "rest, and 40 was rejected outright at 0.974 and -10%.\n"
                "BELOW 45 IS STILL UNMEASURED and this law is unvalidated\n"
                "there. At 35 and below the fitted rate stops depending on the\n"
                "setting -- 194, 192, 209, 155, 256, 305 dB/s for 0, 5, 10, 15,\n"
@@ -451,6 +455,7 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "cannot tell the two apart.\n"
              "So a phase takes  full_time * (distance / 99), as for every\n"
              "other stage in both envelopes.",
+        endpoints={0: "instant"},
     ),
     ("keygroup", "DECAY2"): Scale(
         "keygroup", "DECAY2", "s", "exp", 0.002464, 0.09844, (40, 80), 0.999972,
@@ -653,10 +658,17 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "depth 0.",
     ),
     ("keygroup", "K_FREQ"): Scale(
-        "keygroup", "K_FREQ", "semitones/octave", "linear", 1.0, 0.0, (0, 12),
+        "keygroup", "K_FREQ", "semitones/octave", "linear", 1.0, 0.0, (-30, 99),
         0.99890,
-        bounds="the full 0..12 was swept, at three notes, each with its own\n"
-               "ruler rebuilt in the same session.",
+        bounds="-30..99, in three passes. 0..12 at three notes with its own\n"
+               "ruler rebuilt in the same session; then to the top of the\n"
+               "byte on 2026-08-17 (\u00a7108), linear all the way to 99; then\n"
+               "-5..-30 on 2026-08-24 (\u00a7167), 96-103% of the law with no\n"
+               "knee. WAS (0, 12) until 2026-08-25, which rendered every\n"
+               "measured value outside the DOCUMENTED range as an\n"
+               "extrapolation -- including the -18 the library actually\n"
+               "uses. A fit range is what was measured, not what the\n"
+               "source document prints.",
         note="Keyboard tracking of the filter, and the value IS semitones of\n"
              "corner shift per octave of key -- exactly as the document says,\n"
              "with 12 being 1:1. Measured 9.2 FILFRQ units per octave at\n"
@@ -689,10 +701,13 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "K_FREQ 99, at 0.508-0.602 FILFRQ units per step against the\n"
              "0.511 this law predicts. No saturation anywhere in range. So\n"
              "12 is where tracking reaches 1:1 -- a musically meaningful\n"
-             "point, not a limit -- and params.py's 0..12 is the DOCUMENTED\n"
-             "range rather than the effective one. The table is left as\n"
-             "transcribed; widening it is a decision about the source\n"
-             "document, not about the measurement.",
+             "point, not a limit -- and params.py's 0..12 was the DOCUMENTED\n"
+             "range rather than the effective one. WIDENED 2026-08-25 to\n"
+             "-30..99, the measured span: leaving it transcribed meant a\n"
+             "converter clamped 32.6% of real keygroups onto its floor, and\n"
+             "encode_field refused every value this note calls effective.\n"
+             "The negative half is \u00a7167; the S1000 document's '+/-24' is a\n"
+             "display range like the S2800 sheet's 0..12.",
     ),
     ("keygroup", "VLOUD1"): Scale(
         "keygroup", "VLOUD1", "dB", "linear", 0.60576, -20.1778, (-50, 20),
@@ -919,7 +934,7 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "that is where the 50-versus-43 ambiguity sits.\n"
              "Peak-to-peak vibrato depth on LFO1, which drives pitch (§25).\n"
 
-             "Peak-to-peak vibrato depth on LFO1, which drives pitch (§25).\n"
+
              "LINEAR in cents at r2 0.9997 against 0.8663 for exponential --\n"
              "not close. Full depth is ~1930 cents peak to peak, so +/-9.6\n"
              "semitones, a wider range than the panel suggests.\n"

@@ -1272,7 +1272,7 @@ _PARAMS: List[Parameter] = [
         1,
         "keygroup.filter",
         -30,
-        40,
+        99,
         unit="semitones",
         desc="Key follow of filter frequency",
         notes="range as written: \"0 to 12 semitones\" -- a DISPLAY range transcribed as a "
@@ -1284,7 +1284,9 @@ _PARAMS: List[Parameter] = [
               "1.845 at 22, 2.449 at 30, 3.288 at 40, and -0.435 / -1.547 / "
               "-2.441 at -5 / -18 / -30 -- every point 96-103% of K_FREQ/12 with "
               "no knee anywhere (\u00a7166, \u00a7167). Declared -30..+40 because that is what "
-              "was visited; no wall was found and none is claimed. TWO predictions "
+              "was visited: the POSITIVE side was already swept to 99 and found "
+              "linear on 2026-08-17 (\u00a7108, recorded in scales.py), and \u00a7167 added "
+              "-30 on the negative side. No wall exists in -30..99. TWO predictions "
               "on this field were wrong: a number being round, or being written in "
               "a spec, says nothing about whether firmware enforces it. The law is "
               "\u00a743: shift in FILFRQ units = 0.06386 * K_FREQ * (note - 64), and the "
