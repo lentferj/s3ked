@@ -14282,6 +14282,58 @@ have two keygroups overlapping in key and velocity**. Recorded because the
 same shape will recur: a corpus statistic measured over the wrong population
 looks like strong evidence and cannot be argued with, only re-scoped.
 
+### The cut is a fade after a delay, not a mute — and "10 ms" was this section's own trace window
+
+The table further up reads the mix tracking one layer for a single 10 ms window
+and the other thereafter. That **bounds** the cut at ≤10 ms. It does not measure
+it, and `0.010` should never have been carried anywhere as a cut time: it is
+the resolution of the instrument that observed it. A sibling project spotted
+that before this section did.
+
+Measured at 2 ms windows and 0.5 ms hop — twenty times finer:
+
+```
+  t+ms     uncut      cut    difference
+     1    -26.94   -26.25       +0.69
+     2    -23.95   -23.84       +0.11
+     4    -19.10   -19.14       -0.05     still FULL level
+     5    -19.73   -21.28       -1.55     the cut begins
+     6    -21.34   -25.36       -4.02
+     8    -23.30   -36.43      -13.13
+    12    -19.39   -40.11      -20.72
+    30    -20.40   -41.96      -21.56
+```
+
+**The first 4–5 ms play at full level; the cut then ramps, reaching −13 dB by
+8 ms and −20 dB by 12 ms.** The whole attack transient survives. Anything
+modelling this as a gate at 10 ms removes energy the machine keeps — which is
+precisely the 7.6 dB deficit the sibling measured over the first 30 ms against
+this machine's own choked output.
+
+### How, and the attempt that failed first
+
+The cut layer cannot be recorded alone: it is only cut when both are live.
+
+**First attempt — subtract the survivor out of the mix in the power domain.
+Failed, and its own control said so.** The check that *both-unmuted* should
+equal *A alone plus B alone* disagreed by 3.94 dB, with the early rows at the
+noise floor. Four separate captures do not share a time origin, and 0.5 ms hop
+cannot survive a millisecond of MIDI and JACK jitter. **A control that compares
+two routes to the same number is what makes a subtraction safe to trust; here
+it is what stopped a wrong one being published.**
+
+**What worked — leave the survivor TRIGGERING but inaudible.** `VLOUD1` −50 on
+the octave keygroup, about 30 dB down on a layer already 12.5 dB below the
+unison. Checked before relying on it: a quiet partner still chokes, the cut
+layer still sitting 31.9 dB below its uncut self at t+300 ms.
+
+**Bound, stated rather than glossed:** below about −20 dB relative, this
+technique measures the quiet partner rather than the cut layer — the partner
+lands near −61 dBFS alone and the cut trace reaches −58 dBFS by t+300 ms. The
+ramp to −20 dB is measured; the tail beyond it is not, and no shape is claimed
+for it. `VLOUD1` bottoms at −50, so a deeper measurement needs a different way
+of silencing the partner and a fresh check that it still chokes.
+
 
 ---
 
