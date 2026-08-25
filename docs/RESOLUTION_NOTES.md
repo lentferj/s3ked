@@ -14398,15 +14398,28 @@ Stable across three independent reads, so not a garbled reply. **The other 191
 bytes of that program header are byte-identical to the card**, including the
 fields the machine recomputes.
 
-**The detectability bias was the obvious worry, and it is refuted.** Names are
-12 bytes of a 192-byte header, so if corruption were uniform, spotting two
-events by eye would imply roughly sixteen times as many hiding in the numeric
-fields. Every resident header was therefore compared against the card image —
-6 programs, all their keygroups, all 16 samples, **8928 comparable bytes** with
-the machine's recomputed internals excluded.
+### The hidden-corruption hypothesis was TESTED, and did not survive
 
-**One differing byte, and it is the one already found by eye.** No hidden
-corruption anywhere else.
+Stated as its own finding because anyone who reads the two events above will
+re-derive the worry, and it is answerable rather than arguable.
+
+**The worry:** names are 12 bytes of a 192-byte header. If corruption were
+uniform across the header, then spotting two events *by eye in the name field*
+would imply roughly **sixteen times as many** sitting in the numeric fields —
+a filter cutoff or an envelope rate quietly wrong, where nothing prints it and
+nobody would ever look. That would make every measurement on resident material
+suspect.
+
+**The test:** compare every resident header byte against the card image — 6
+programs, all their keygroups, all 16 samples, **8928 comparable bytes**, with
+the fields the machine legitimately recomputes on load excluded.
+
+**The result: one differing byte, and it is the one already found by eye.**
+
+So the two events are two events, not the visible tip of a rate. No numeric
+field in resident memory differs from the card. The hypothesis is dead, and it
+should not be re-raised without new evidence — it cost one read-only sweep to
+kill and would otherwise be re-derived by every reader of this section.
 
 So the two events are not the visible tip of a rate; they are two events. That
 matters for how much weight to give them: rare enough not to distrust a
@@ -14423,8 +14436,14 @@ One systematic difference turned up in the same sweep and is **not**
 corruption: seven of sixteen samples read 0 where the card holds 96 at sample
 offset 141, an undocumented byte no entry in `params.py` names. Same value
 across all seven, absent from the other nine, so a load-time normalisation of a
-field this project does not know the meaning of. Recorded because it is
-unexplained, not because it is alarming.
+field this project does not know the meaning of. **Corruption that hits seven
+items with the same value is not corruption.**
+
+The discriminator is known and is deliberately **not** run: resave the volume
+and see whether 96 is written back or 0 is. That is a disc write, which is
+outside what this project is permitted to do to the owner's material, so the
+question stays open by choice rather than for want of a method. Recorded that
+way so nobody spends time devising a test that already exists.
 
 ---
 
