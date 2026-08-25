@@ -14236,6 +14236,53 @@ is actually wanted. Leaving the buffer's zero fill is a silent decision to put
 every keygroup in group 0, and it costs nothing until the day two of them
 overlap.
 
+### What this run did NOT test, and a later one that closes it (2026-08-25)
+
+The measurement above compared **(0,0) against (255,255)** and never tried a
+non-zero group. So it proved 0 differs from 255 and said nothing about whether
+0 is an ordinary group or chokes for some reason peculiar to itself. A sibling
+project, whose corpus reading needed 0 to be a second off-value, asked the
+question directly — and it was a fair one that this section could not answer.
+
+Same program, same note, same overlapping pair, one field changed:
+
+```
+  kg0   kg1     early dBFS   sustain dBFS   reading
+    0     0        -33.9         -48.0      as found on the disc
+    3     3        -34.7         -48.0      both in a REAL group
+  255   255        -20.2         -32.9      both OFF
+    0   255        -20.3         -32.9      one opts out
+    3   255        -20.3         -32.9      one opts out, real group
+    0     0        -34.4         -48.0      repeat of the first
+```
+
+**`(3,3)` chokes exactly as `(0,0)` does — sustains identical to 0.0 dB.** So 0
+is group zero and nothing more; 255 is the only off value, and the conclusion
+above stands unchanged.
+
+Two facts come free with the discriminator. The choke **reproduces**: first and
+last rows agree within 0.5 dB after four intervening writes. And it is
+**pairwise** — `(0,255)` and `(3,255)` both give the full two-layer level, so
+one keygroup opting out saves both, which is not what "everything in group N is
+mutually exclusive" would predict for a group with other members.
+
+### A statistic cannot refute this, and the reason is the scope
+
+The sibling's argument was that 32.2% of corpus programs carry 0 on every
+keygroup, so if 0 chokes then a third of every commercial disc is effectively
+monophonic — and the discs do not sound like that.
+
+The premise is true and the conclusion does not follow. **A mute group only
+bites between keygroups triggered by the same note at the same velocity**, and
+a multisampled piano is a contiguous key split whose keygroups never sound
+together. All of them can sit in group 0 and nothing ever chokes.
+
+So the figure that matters is not how many programs carry 0 — it is **how many
+have two keygroups overlapping in key and velocity**. Recorded because the
+same shape will recur: a corpus statistic measured over the wrong population
+looks like strong evidence and cannot be argued with, only re-scoped.
+
+
 ---
 
 ## §156 — Envelope 2's depth is linear to the top of its range, and the corner ceiling is 7.86 kHz (2026-08-24)
