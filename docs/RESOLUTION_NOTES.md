@@ -209,6 +209,7 @@ silently wrong one.
 - [§166](#166--kfreq-is-signed-and-does-not-clamp-at-12-108-closes-with-its-prediction-refuted-2026-08-24) — `K_FREQ` is signed and does not clamp at 12; §108 closes with its prediction refuted (2026-08-24)
 - [§167](#167--kfreq-has-no-wall-at-24-either-and-both-documents-give-display-ranges-2026-08-24) — `K_FREQ` has no wall at ±24 either, and both documents give display ranges (2026-08-24)
 - [§168](#168--a-kgmute-0-pair-is-won-by-the-higher-index-keygroup-and-it-unmasks-the-filter-key-follow-2026-08-28) — A `KGMUTE` 0 pair is won by the higher-index keygroup, and it unmasks the filter key-follow (2026-08-28)
+- [§169](#169--four-routes-to-the-kfreq-cross-rig-disagreement-all-refuted-and-why-a-difference-beats-a-threshold-2026-08-28) — Four routes to the `K_FREQ` cross-rig disagreement, all refuted, and why a difference beats a threshold (2026-08-28)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -15388,3 +15389,103 @@ wide enough to be worth a proper sweep rather than a shrug.
 Snapshot to disk before any write, one-shot signal handler plus `atexit`,
 restore verified by re-reading the fields afterwards — 6 written back, `LONOTE`
 72 / `HINOTE` 127 / `KGMUTE` 0 on both, blocks unchanged at 49/1006.
+
+## §169 — Four routes to the `K_FREQ` cross-rig disagreement, all refuted, and why a difference beats a threshold (2026-08-28)
+
+§167 measured `K_FREQ`'s key-follow as **octaves of filter corner per octave of
+key**, ten points from −30 to +40, every one within 96–103% of `K_FREQ/12`. A
+sibling session's independent sweep **on this same physical S3000XL** fits
+**0.622×** that law, flat across a 4.5× range of magnitude:
+
+```
+  K_FREQ   K_FREQ/12   sibling measured   ratio
+     -4      -0.333          -0.186       0.559
+     -8      -0.667          -0.385       0.577
+    -12      -1.000          -0.585       0.585
+    -18      -1.500          -0.977       0.651      (their worst fit)
+```
+
+**Neither number is withdrawn and the disagreement is not explained.** What
+this section records is the four routes that were proposed and closed, so the
+next attempt starts from five rather than one.
+
+### The four, and what killed each
+
+1. **A masking second layer.** §168 found that a `KGMUTE` 0 pair chokes, and
+   that a key-follow coefficient measured on a stacked pair reads as a fraction
+   of the true one — the right shape for a 0.622. **Refuted by design:** their
+   sweep used a purpose-built bank, one keygroup per program, full range, no
+   pairing. There is nothing to blend.
+
+2. **Band-limited compression** — the corner running out of the tracker's
+   measurable range at large `|K_FREQ|`, which is §165's failure mode.
+   **Refuted by their data:** compression of that kind worsens with magnitude,
+   and their ratio is flat across 4.5×, if anything drifting *toward* 1.0.
+
+3. **A pivot error.** §43 fits the reference note to **63.8** and §167 warns in
+   writing that 60-against-64 is four semitones of error. Measuring at one note
+   and dividing by `(N − P)/12` with an assumed `P` gives a ratio of
+   `(N − 63.8)/(N − P)` — constant in `K_FREQ`, invisible to every r² check,
+   and note 70 against an assumed 60 yields **0.620** against their 0.622.
+   **Refuted by their method:** they fit `polyfit(note, log2(corner), 1)` over
+   6–7 notes per point, and an ordinary least-squares slope is invariant under
+   any shift of the note axis. No assumed origin enters it. *A numerical
+   coincidence to three digits is not evidence when the mechanism cannot act.*
+
+4. **Threshold bias from a fixed reference band.** Their estimator normalises
+   to a fixed 50–150 Hz band and finds a −3 dB crossing, so a source-spectrum
+   term genuinely exists. With a source falling at `k` dB/oct and a filter
+   rolling off at `Rf`, the crossing satisfies `S(f) + H(f) = R0 − 3` with `R0`
+   constant, giving
+
+       u(k + Rf) = Rf·c + const      u = log2(crossing), c = log2(corner)
+       du/dc = Rf / (k + Rf)
+
+   — multiplicative, flat in `K_FREQ`, no curvature, and `24/(k+24) = 0.622`
+   at a plausible k = 14.6 dB/oct. **Refuted by simulation against a real
+   4-pole Butterworth rather than the asymptote the algebra assumes:**
+
+```
+  source k dB/oct   crossing/corner   measured slope   Rf/(k+Rf)
+        0.0              1.000            0.9998        1.0000
+        0.5              0.892            0.9225        0.9796
+        1.0              0.708            0.3925        0.9600
+        2.0              0.301            0.0169        0.9231
+        5.0              0.168            0.0000        0.8276
+       14.6              0.168            0.0000        0.6218
+```
+
+**The algebra's own precondition defeats it.** It requires the crossing to sit
+*above* the corner where both rolloffs act; for that, the source can only have
+fallen ~3 dB by the corner, which at 900 Hz is k ≈ 0.95 dB/oct and a
+compression of 0.96. Any source steep enough to reach 0.622 has dropped below
+the threshold *before* the corner, so the crossing tracks the source's own
+rolloff and the slope collapses to zero. **The estimator has two stable states,
+~1.0 and ~0, with a cliff at k ≈ 1 and no plateau between them.**
+
+That negative narrows the search: their slopes are well-fit, stable, and sit at
+0.62 — **neither state a threshold crossing can occupy**. Whatever compresses
+them is proportional and continuous, which a threshold is not.
+
+### The durable result: a difference cancels the source, a threshold does not
+
+The row that matters above is `k = 0 → 1.0000`. `calibrate.corner_from_difference`
+takes `ref_db − run_db`, and **that subtraction removes `S(f)` exactly**, so the
+source-spectrum term is identically zero and the compression factor is 1.0 at
+every corner, for any sample.
+
+This is not a lucky property of §167's rig. It is the reason to prefer a
+difference over an absolute threshold whenever a corner has to be tracked, and
+it is the second time the same lesson has been paid for: §165 invented a 111 Hz
+filter floor by normalising each curve to its own 60–120 Hz band, putting the
+0 dB reference on the slope. **A fixed frequency anywhere in a corner estimator
+is a liability; a reference that moves with the corner is not.**
+
+### Design constraint for the eventual re-run
+
+Their sweep forces `FILQ` to minimum and finds a threshold crossing; §167 uses
+the `FILQ`-on minus `FILQ`-off difference and takes the peak. **Those are two
+instruments pointed at two different features of the same curve.** Before
+either number is quoted at the other, the two rigs have to agree on what "the
+corner" means — that is worth settling on paper before it is worth settling on
+hardware, and it is the first thing a method-against-method run should fix.

@@ -1862,3 +1862,30 @@ and a session that forgets pays §147's thirty captures instead.
 **Do not** attempt this by writing `PMCHAN` and watching what happens until
 the multi state is *read* first — with two unknowns live, a write that
 appears to work proves nothing.
+
+## `K_FREQ`'s key-follow disagrees between two rigs on one machine (OPEN 2026-08-28)
+
+**Status:** open and unexplained. Both measurements stand; neither is
+withdrawn. Four candidate mechanisms have been proposed and refuted — see
+RESOLUTION_NOTES §169 for each and for what killed it.
+
+§167 measured octaves of filter corner per octave of key at 96–103% of
+`K_FREQ/12` across ten points from −30 to +40. A sibling session's independent
+sweep **on the same physical S3000XL** fits **0.622×** that law, flat across a
+4.5× range of `|K_FREQ|`, with per-point r² 0.95–1.00.
+
+Same instrument, same field, same quantity — so unit-to-unit tolerance is not
+available as an explanation, and one of the two instruments is measuring
+something other than what it reports.
+
+**Blocked on:** nothing external, but not worth bench time on its own. The two
+rigs locate "the corner" by different means — a `FILQ`-difference peak here, a
+−3 dB threshold against a fixed 50–150 Hz band there — and until they agree on
+what the corner *is*, a re-run compares two definitions rather than two
+measurements. Settle that on paper first; §169 has the argument.
+
+**Do not** adopt `K_FREQ × 0.622/12` as a conversion constant on the strength
+of it working. It is an unexplained empirical factor from one of two
+disagreeing instruments, and if the cause turns out to be note-dependent rather
+than a constant scale, a converter built on it is wrong by an amount that grows
+with distance from wherever the sweep was taken.
