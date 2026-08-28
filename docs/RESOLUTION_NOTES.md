@@ -208,6 +208,7 @@ silently wrong one.
 - [§165](#165--the-filter-does-not-bottom-out-and-a-passband-reference-on-the-slope-invents-a-floor-2026-08-24) — The filter does not bottom out, and a passband reference on the slope invents a floor (2026-08-24)
 - [§166](#166--kfreq-is-signed-and-does-not-clamp-at-12-108-closes-with-its-prediction-refuted-2026-08-24) — `K_FREQ` is signed and does not clamp at 12; §108 closes with its prediction refuted (2026-08-24)
 - [§167](#167--kfreq-has-no-wall-at-24-either-and-both-documents-give-display-ranges-2026-08-24) — `K_FREQ` has no wall at ±24 either, and both documents give display ranges (2026-08-24)
+- [§168](#168--a-kgmute-0-pair-is-won-by-the-higher-index-keygroup-and-it-unmasks-the-filter-key-follow-2026-08-28) — A `KGMUTE` 0 pair is won by the higher-index keygroup, and it unmasks the filter key-follow (2026-08-28)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -15270,3 +15271,120 @@ alike to a search.**
 
 Found by reading back what had been written, one section later, while widening
 the same field again — which is the only reason it was found at all.
+
+## §168 — A `KGMUTE` 0 pair is won by the higher-index keygroup, and it unmasks the filter key-follow (2026-08-28)
+
+§155 established that `KGMUTE` **0 is a real mute group** and that the choke is
+pairwise between keygroups triggered by the same note at the same velocity, and
+§155's 2026-08-25 amendment measured the cut's envelope. Neither recorded
+**which member of the pair survives**, which is the one thing a converter has to
+know: emulating a choke and picking the wrong survivor is worse than not
+emulating it at all.
+
+### The structure that forces the question
+
+A 6-keygroup program at index 5 covers three note ranges with **two keygroups
+each, of identical span and identical full velocity zones**, every one of them
+at `KGMUTE` 0:
+
+```
+  kg  notes     K_FREQ  RELSE1  SUSTN1  ATTAK1  VLOUD1  FILFRQ
+   0   24- 59      0      45       6       5       0      35
+   1   24- 59      0      75      50      40     -20      65
+   2   60- 71      0      45       6       5       0      35
+   3   60- 71     -1      75      50      40      -8      70
+   4   72-127      0      45       6       5       0      35
+   5   72-127     -4      75      50      40     -20      62
+```
+
+Two layers, one short and bright, one long and soft, paired over every range.
+`LOVEL1`/`HIVEL1` are 0/127 on all six, so both members of a pair are triggered
+by any note-on in range — §155's choke condition exactly.
+
+**This is worth stating because a reader that merges same-parameter keygroups
+sees four voices here, not six**, and the merge hides the pairing that makes
+the choke happen at all. The machine's own `GROUPS` field says 6.
+
+### The discriminator
+
+The two candidates are **18.7× apart in release rate** — `RELSE1` 45 → 285.8
+dB/s against `RELSE1` 75 → 15.31 dB/s through §158 — so the post-note-off slope
+names the survivor with no subtraction and no shared time origin needed, which
+is what defeated the first attempt in §155's amendment.
+
+Notes 96 and 80, velocity 100, **hold time 1.500 s** — stated, because with
+`DECAY1` 85 (5.79 dB/s) the level at note-off is a function of how long the key
+was held, and a release capture without a declared hold time is not a baseline
+anything can be compared against. The unwanted keygroup is excluded by setting
+its `HINOTE` to 72 so it covers exactly note 72 and neither test note, and
+cannot bleed into the 60–71 pair below.
+
+```
+  note 96          peak dBFS    release dB/s    r2       points
+    kg4 alone        -46.97        330.12     0.9684       17
+    kg5 alone        -43.81         15.10     0.9869      452
+    BOTH             -43.81         15.06     0.9872      459
+
+  note 80
+    kg4 alone        -45.73        240.38     0.9962       24
+    kg5 alone        -47.44         14.72     0.9991      424
+    BOTH             -47.33         14.67     0.9987      431
+```
+
+**The higher-index keygroup wins.** The mix matches kg5-alone to within 0.05
+dB/s at both notes, against a partner twenty times faster. It agrees with the
+only other datum we have: §155's cut-time run used this same program's kg0/kg1
+pair at note 48, with kg1 left triggering while kg0 was measured being cut.
+Two ranges, same direction.
+
+### A confirmation that was not designed in
+
+**The mix's peak level equals kg5 alone** — −43.81 against −43.81 at note 96,
+−47.33 against −47.44 at note 80. If both layers sounded, the mix would be
+louder than either. It is not. The choke is visible in **level** as well as in
+slope, and that half of the evidence owes nothing to the envelope fit.
+
+### What it explains, and what it does not
+
+**It explains a masked key-follow.** kg4 is `K_FREQ` 0 and kg5 is `K_FREQ` −4,
+and only kg5 sounds. So on the machine the filter key-follow acts at full
+strength. Stack both — which is what reading `KGMUTE` 0 as "no group" produces
+— and the untracked layer sits underneath and dilutes it, so a bench
+measurement of the coefficient comes back as a **fraction** of the true value.
+A key-follow coefficient measured on a stacked pair is measuring the blend, not
+the field.
+
+**It does not explain a release that is too long, and the run was proposed on
+the theory that it would.** The hypothesis was that the machine chokes the long
+layer and a converter keeps it. **Backwards**: the machine keeps the long layer.
+Its own release here is already the slow one, so a converter that wrongly
+stacks both still has the long layer dominating the tail — fuller at the
+attack, not longer. Recorded because the measurement refuted the reason it was
+run, and the next person reaching for the choke to explain a long tail should
+find that written down.
+
+The number to match instead is **15.1 dB/s from a sustain of −29.7 dB**
+(`SUSTN1` 50), about **3.3 s from sustain to −80 dB**. A rate, so compare dB/s
+over a fixed span rather than seconds to silence — §161.
+
+### Two numbers in the table that must not be quoted
+
+**330 and 240 dB/s are not measurements of `RELSE1` 45.** The law predicts
+285.8, and 45 sits at the edge of §158's validated window for exactly this
+reason: a fall that fast crosses too few analysis windows to time, and 17 and
+24 points is that limit showing. The discriminator survives it — the two
+candidates are 18.7× apart, far outside any plausible fit error — but the
+absolute value is rig-limited and belongs to the rig.
+
+**kg5 reads 15.10 dB/s at note 96 against 14.72 at note 80.** `K_DAR1` is −2,
+which §162 records as **inert above note 64**, so the expectation was identical
+and the 2.6% spread is flagged rather than explained. Two notes on two
+different samples is not evidence of key dependence and none is claimed here;
+but §162's own control was flat to **0.21%** across four octaves, so the gap is
+wide enough to be worth a proper sweep rather than a shrug.
+
+### Method
+
+Snapshot to disk before any write, one-shot signal handler plus `atexit`,
+restore verified by re-reading the fields afterwards — 6 written back, `LONOTE`
+72 / `HINOTE` 127 / `KGMUTE` 0 on both, blocks unchanged at 49/1006.
