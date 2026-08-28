@@ -15368,6 +15368,28 @@ The number to match instead is **15.1 dB/s from a sustain of −29.7 dB**
 (`SUSTN1` 50), about **3.3 s from sustain to −80 dB**. A rate, so compare dB/s
 over a fixed span rather than seconds to silence — §161.
 
+### And the symptom itself was not real (added 2026-08-28)
+
+The long release was reported from playing the two machines side by side.
+Afterwards the comparison turned out to have been made against **a different
+preset on the sampler** than the one being converted. So nothing explains the
+long release, because there was no long release: the release rates measured
+here were never in conflict with anything.
+
+That does not retract a number above — every one of them was measured against
+the machine, not against the complaint — but it changes what the refutation in
+the previous paragraph means. It reads as "the choke is not the cause, so find
+the real one". **There was no effect to find a cause for.**
+
+Worth stating plainly because of how much work ran downstream of it: a
+hypothesis was proposed, a discriminator designed, a prediction written down,
+a run executed and a result recorded, all to explain an observation that did
+not survive checking. The measurements stand on their own and §168's finding
+came out of it, but the sequence is the wrong way round. **Confirm the
+discrepancy before explaining the discrepancy** — a listening comparison
+between two instruments is a measurement like any other, and this one had an
+unverified assumption in it about which program was sounding.
+
 ### Two numbers in the table that must not be quoted
 
 **330 and 240 dB/s are not measurements of `RELSE1` 45.** The law predicts
