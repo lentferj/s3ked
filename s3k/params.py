@@ -1086,7 +1086,7 @@ _PARAMS: List[Parameter] = [
         0,
         255,
         desc="LFO1 waveform",
-        notes="range as written: \"0 represents Triangle, 1 represents Sawtooth, 2 represents Square\". MEASURED and confirmed on hardware (RESOLUTION_NOTES §46) by reading the pitch track, which IS the waveform since LFO1 drives pitch. Value 3 is an undocumented FOURTH shape: symmetric like a triangle but spending half as long near its centre, so neither triangle nor square. Not identified.",
+        notes="range as written: \"0 represents Triangle, 1 represents Sawtooth, 2 represents Square\". MEASURED and confirmed on hardware (RESOLUTION_NOTES §46) by reading the pitch track, which IS the waveform since LFO1 drives pitch. Value 3 is a FOURTH shape absent from the SysEx documents: symmetric like a triangle but spending half as long near its centre, so neither triangle nor square. Identified 2026-08-31 as RANDOM, from the S3000XL manual p.80. The measured 0.16 middle-third occupancy rules out a UNIFORM distribution, which would read 0.33 like the triangle -- so its RMS-to-peak factor is NOT 1/sqrt(3), and is not yet measured.",
     ),
     _p(
         "program",

@@ -3707,13 +3707,48 @@ LFO1 drives pitch, so the pitch track *is* the waveform. Measured:
 | 0 | 0.34 | 1.01 | **triangle** |
 | 1 | 0.29 | 16.61 | **sawtooth** |
 | 2 | 0.00 | 1.04 | **square** |
-| 3 | 0.16 | 1.04 | a fourth shape, not identified |
+| 3 | 0.16 | 1.04 | **random** (identified 2026-08-31, below) |
 
 The three documented values are confirmed exactly as written. **Value 3 is
-undocumented and real**: symmetric like a triangle (asymmetry 1.04) but
-spending half as long near its centre (0.16 against 0.34), so neither a
-triangle nor a square. Consistent with a sine or a trapezoid; not resolved,
-and recorded as such.
+undocumented in the SysEx spec and real**: symmetric like a triangle
+(asymmetry 1.04) but spending half as long near its centre (0.16 against
+0.34), so neither a triangle nor a square.
+
+### Value 3 is `random`, and the measurement constrains it (2026-08-31)
+
+The S3000XL **operator's manual**, page 80, names it: value 3 is **random**.
+Found by Jan while a sibling converter was deciding what to do with it; the
+SysEx documents this project transcribes list only the first three, which is
+why §46 could measure the shape and not name it.
+
+**The shape statistic then says something the name alone does not.** It is
+self-calibrating — a linear ramp must spend equal time at every amplitude, so
+triangle and sawtooth have to read 1/3, and a square has to read 0:
+
+```
+  distribution                            predicts    measured
+    uniform (triangle, sawtooth)            0.333     0.34 / 0.29
+    all at the extremes (square)            0.000     0.00
+    arcsine (a sine)                        0.216     --
+    value 3                                  --       0.16
+```
+
+Three shapes whose answers are known in advance all land where they must, so
+the 0.16 is trustworthy. **A uniformly-distributed sample-and-hold would read
+0.33, like the triangle. It reads half that.** So the AKAI's random generator
+is **not uniform**: its amplitude sits toward the extremes, between a sine's
+arcsine distribution and a square's.
+
+**That matters wherever RMS is converted to peak.** RMS/peak is 0.577 for a
+uniform distribution and 0.707 for an arcsine, so assuming uniform on a
+distribution weighted to the extremes **over-delivers the peak**. A sibling
+converter derived `1/sqrt(3)` for this waveform on a uniform assumption; the
+premise is what this measurement contradicts.
+
+**The factor itself is NOT measured here and should not be guessed.** It is a
+cheap measurement — one program-byte write and one capture, taking RMS and
+peak straight off the pitch trajectory — and is recorded as open rather than
+filled in with the nearest plausible constant.
 
 ### Four attempts, and the third one is the instructive failure
 
