@@ -1889,3 +1889,26 @@ of it working. It is an unexplained empirical factor from one of two
 disagreeing instruments, and if the cause turns out to be note-dependent rather
 than a constant scale, a converter built on it is wrong by an amount that grows
 with distance from wherever the sweep was taken.
+
+## A stale volume directory cannot be distinguished from a live one, except by probe (OPEN 2026-08-30)
+
+**Status:** the behaviour is measured and a working gate exists
+(RESOLUTION_NOTES §170). What is open is *where* the staleness lives.
+
+With the medium absent the machine returns a complete, plausible, previous
+volume directory — no error, no empty list — and `refresh_media` does not
+clear it. The tell is that two SCSI IDs holding different media return
+identical contents; they disagree the moment the medium is back.
+
+**Blocked on:** nothing external, but it needs a bench session with
+deliberate card removal. This one was discovered around a card swap someone
+else was doing, so the two states were an hour apart and not under control.
+
+**Worth closing because** the load sequence is CLR and *then* load, so a
+directory that lies costs the contents of RAM before it reports anything, and
+§94's quiet out-of-memory failure leaves programs resident, selectable and
+silent rather than raising. The gate prevents the loss; it does not explain it.
+
+**Do not** assume the sampler is the culprit. The disc arrives through an
+SD-card device, so the cache could be the sampler's, the emulator's or the
+reader's, and the probe in §170 is behavioural and cannot tell them apart.

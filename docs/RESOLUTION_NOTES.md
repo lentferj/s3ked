@@ -210,6 +210,7 @@ silently wrong one.
 - [§167](#167--kfreq-has-no-wall-at-24-either-and-both-documents-give-display-ranges-2026-08-24) — `K_FREQ` has no wall at ±24 either, and both documents give display ranges (2026-08-24)
 - [§168](#168--a-kgmute-0-pair-is-won-by-the-higher-index-keygroup-and-it-unmasks-the-filter-key-follow-2026-08-28) — A `KGMUTE` 0 pair is won by the higher-index keygroup, and it unmasks the filter key-follow (2026-08-28)
 - [§169](#169--four-routes-to-the-kfreq-cross-rig-disagreement-all-refuted-and-why-a-difference-beats-a-threshold-2026-08-28) — Four routes to the `K_FREQ` cross-rig disagreement, all refuted, and why a difference beats a threshold (2026-08-28)
+- [§170](#170--the-machine-serves-a-stale-volume-directory-when-the-medium-is-absent-and-refreshmedia-does-not-clear-it-2026-08-30) — The machine serves a stale volume directory when the medium is absent, and `refresh_media` does not clear it (2026-08-30)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -15511,3 +15512,72 @@ instruments pointed at two different features of the same curve.** Before
 either number is quoted at the other, the two rigs have to agree on what "the
 corner" means — that is worth settling on paper before it is worth settling on
 hardware, and it is the first thing a method-against-method run should fix.
+
+## §170 — The machine serves a stale volume directory when the medium is absent, and `refresh_media` does not clear it (2026-08-30)
+
+Reading a volume list is the first step of every load, and it is safe to
+assume it describes the disc that is in the machine. **It does not.** With the
+medium removed, the S3000XL returns a **complete, plausible, previous
+directory** — correct names, correct count, no error, no empty list, nothing
+in the reply that says the disc is gone.
+
+### The control, one minute apart
+
+The card was pulled to have a volume appended on the host and put back. Both
+states were read the same way, and `select_drive` is known to work because it
+is the same call in both:
+
+```
+  medium ABSENT    (14:10)   SCSI 7 -> the SAME 17 volumes as SCSI 4
+                             SCSI 4 -> 17 volumes
+  medium PRESENT   (14:11)   SCSI 7 -> ['FILTERTOP']        (1 volume)
+                             SCSI 4 -> 18 volumes, the new one at index 17
+```
+
+**Two SCSI IDs known to hold different media returned byte-identical contents
+while the medium was out, and disagreed as soon as it was back.** That is the
+tell, and it is cheap: one extra `select_drive` and a list comparison.
+
+An earlier instance the day before pointed the same way — SCSI 4, 5 and 6 all
+returning identical 16-volume lists — but that one had no control and was left
+unrecorded rather than written up on a suspicion.
+
+`refresh_media` is **not** the way out. It returned normally
+(`{'scsi_drive_id': 4, ..., 'mode': 2}`) and changed nothing: the same 17
+volumes, still missing the volume that had just been written.
+
+### Why this is worse than an ordinary stale cache
+
+**The load sequence is CLR and *then* load.** Memory is cleared before the
+machine ever tries to read the volume. So a directory that lies costs the
+contents of RAM *first* and reports the problem afterwards — and §94's quiet
+out-of-memory failure means the aftermath is programs that are resident,
+selectable and silent rather than an error anyone would notice.
+
+A directory read is evidence about a *disc*. It is not evidence that the disc
+is *there*.
+
+### The gate, which belongs in any code that loads
+
+```python
+patient(br.select_device, 1);      time.sleep(1.5)
+patient(br.select_drive, PROBE);   time.sleep(2.5); vp = vols(br)
+patient(br.select_drive, MAIN);    time.sleep(2.5); vm = vols(br)
+if vp == vm:
+    raise SystemExit("stale directory -- medium not present. Nothing cleared.")
+```
+
+`PROBE` is any SCSI ID whose contents are known to differ from `MAIN`; on this
+bench 7 holds a single volume against 4's eighteen. It ran before the
+`MX2 KRZ V2` load on 2026-08-30 and passed, and the load that followed was
+clean.
+
+### What this does NOT establish
+
+Where the staleness lives. This bench reaches its disc through an SD-card
+device, so the cached directory could be the sampler's own, the emulator's, or
+the card reader's, and **nothing here distinguishes them** — the probe is
+purely behavioural. Nor was a power cycle tested as a way to clear it; the
+gate makes that unnecessary rather than answering it. Whether SCSI 5 and 6 are
+genuinely distinct drives or aliases of 4 is also still open, and the earlier
+identical-lists observation is consistent with either.
