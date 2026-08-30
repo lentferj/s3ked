@@ -1912,3 +1912,39 @@ silent rather than raising. The gate prevents the loss; it does not explain it.
 **Do not** assume the sampler is the culprit. The disc arrives through an
 SD-card device, so the cache could be the sampler's, the emulator's or the
 reader's, and the probe in §170 is behavioural and cannot tell them apart.
+
+## Every load costs a fixed 70 s wait that may be 60 s of nothing (OPEN 2026-08-31)
+
+**Status:** open, and the cost is measured. The 18-volume rate sweep on
+2026-08-30 spent **21 minutes** (18 x 70 s) purely waiting for loads to finish.
+Every probe script that loads a volume pays it.
+
+The wait exists because there is no known safe way to ask "is the load done".
+`trigger_load`'s docstring is explicit that the machine stops acknowledging
+while it works, so silence is indistinguishable from a slow load.
+
+**What the evidence actually says, and it is weaker than the practice:**
+
+- §71's wedge was a **train** of `RSTAT` probes every 8 seconds throughout a
+  **58.7 MB** load, which ran in 30-50 s bursts and finally sat at BUSY until
+  power-cycled.
+- The same docstring records that the identical trigger **"on a quiet bus
+  finished in seconds"**.
+- And it says outright: *"Whether the probing caused it or merely coincided
+  with it is NOT established."*
+
+So a 70 s blanket wait for volumes of half a megaword rests on an attribution
+the project itself marks unproven, taken from a load 60x larger.
+
+**Blocked on:** a decision about risk, not on information. The test is one
+load followed by a **single** cheap read after a short wait — qualitatively
+different from a probe train during a multi-minute load — walking the wait
+down until the read no longer succeeds. That bounds the real load time.
+
+**The risk is a wedge needing a power cycle**, which on this bench cuts power
+to three devices, so it should be run deliberately and not as a side effect of
+something else. Use the smallest volume (`TC11 ATKCAL`, one sample) so any load
+is as short as it can be.
+
+**Do not** poll during a load to find this out. The question is what the
+minimum *post-load* wait is, not whether polling is survivable.

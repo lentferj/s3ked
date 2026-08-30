@@ -3745,10 +3745,57 @@ distribution weighted to the extremes **over-delivers the peak**. A sibling
 converter derived `1/sqrt(3)` for this waveform on a uniform assumption; the
 premise is what this measurement contradicts.
 
-**The factor itself is NOT measured here and should not be guessed.** It is a
-cheap measurement — one program-byte write and one capture, taking RMS and
-peak straight off the pitch trajectory — and is recorded as open rather than
-filled in with the nearest plausible constant.
+**The factor itself is NOT measured here and should not be guessed.** It was
+attempted the same night and **failed its own controls**; see below. It stays
+open rather than filled in with the nearest plausible constant.
+
+### `random` confirmed from the audio, independently of the manual
+
+The centroid of a pitch-modulated white-noise program tracks the LFO directly,
+so its spectrum settles the question without reference to any document:
+
+```
+  waveform   line at the LFO rate (8.27 Hz predicted)   prominence
+  triangle   8.25 Hz                                    51.4x local median
+  square     8.25 Hz                                    14.4x
+  value 3    none -- strongest feature 2.83 Hz           3.1x
+```
+
+**Triangle and square put a sharp line exactly at the LFO rate. Value 3 puts
+none**, its energy scattered across low frequencies with no periodicity. That
+is what a random process does and no periodic waveform does.
+
+### The RMS-to-peak attempt, and why its controls saved it
+
+Measured on the same captures, with triangle and square as controls because a
+ratio is only worth having if it returns values known in advance:
+
+```
+  value  shape      RMS ct    max ct   RMS/max   must be
+      0  triangle   108.88    324.91     0.335     0.577
+      2  square     150.14    469.92     0.319     1.000
+      3  random      64.32    415.91     0.155      --
+```
+
+**Both controls wrong, so the unknown was worthless and was not reported.**
+
+The cause is the estimator, not the capture: **the spectral centroid of a
+20 ms window of white noise is itself a noisy statistic.** That noise adds
+variance to the RMS and, far worse, *sets the maximum*. Triangle's true peak
+should be 188.6 cents against an observed 324.91 -- inflated 1.7x by outliers;
+square 3x. The LFO signal was plainly present throughout (the 51x line above).
+
+**Noise fixed one bias and introduced another.** It removed the beating-partial
+contamination that put a spurious +0.35 Hz into an LFO *rate* measurement on
+electric-piano material the same night, then wrecked the *amplitude*
+measurement by a completely different mechanism. Both were caught only because
+a value known in advance was measured alongside the unknown.
+
+A correct version needs the maximum replaced: a noise floor subtracted in
+quadrature, the known waveform fitted and amplitude taken from the fit, or the
+amplitude distribution used as this section's own middle-third statistic does.
+**Band-limiting is not a free fix** -- truncating a square to its first few
+harmonics adds Gibbs overshoot and moves the very ratio being measured.
 
 ### Four attempts, and the third one is the instructive failure
 
@@ -9661,6 +9708,11 @@ select_drive(0) first, then select_volume(0)
 serving the previous card's directory, and every consumer downstream
 describes a disc that is no longer in the drive.
 
+**This fix is necessary and not sufficient — see §170.** It re-reads a drive
+that is present. With the medium *absent* the machine still serves a complete,
+plausible, previous directory, `select_drive` does not clear it, and neither
+does `refresh_media`.
+
 ### Why it is dangerous rather than merely wrong
 
 **The stale reading is not detectable from its content.** It is a
@@ -15572,6 +15624,23 @@ is the same call in both:
 **Two SCSI IDs known to hold different media returned byte-identical contents
 while the medium was out, and disagreed as soon as it was back.** That is the
 tell, and it is cheap: one extra `select_drive` and a list comparison.
+
+### This is NOT §112, and §112's fix does not cover it
+
+§112 (2026-08-16) found the machine serving the **previous card's** directory
+after a swap, and gave the remedy: `select_drive` performs a re-read
+(`_force_reread`) where `select_volume` does not. **That is a different
+failure and a different medium state.**
+
+Here the medium is **absent**, not replaced — and the loader that hit this
+already calls `select_drive` before every `volume_list`, exactly as §112
+prescribes. It still got a stale list, and `refresh_media` did not clear it
+either. So §112's fix is necessary and not sufficient: it re-reads a drive
+that is *there*, and says nothing about one that is not.
+
+Recorded explicitly because this section was written without noticing §112
+existed — the same "one lesson, two places, neither citing the other" failure
+this project keeps meeting in sibling repos.
 
 An earlier instance the day before pointed the same way — SCSI 4, 5 and 6 all
 returning identical 16-volume lists — but that one had no control and was left
