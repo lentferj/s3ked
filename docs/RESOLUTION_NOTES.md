@@ -14701,6 +14701,50 @@ number of segments — sets the floor on fit quality. A two-segment fit improves
 mean error over a one-segment fit by about 1 dB, which is not worth structural
 change in a converter.
 
+### How much of this curve is worth chasing depends on the consumer (2026-08-31)
+
+The front above was refined twice in one evening, ending at 0.07 dB
+reproducibility between independent sessions. That precision is real and the
+AKAI-side finding stands on its own. But it was refined **because a converter
+asked to implement it**, and that turned out to be the wrong reason: a sibling
+project reports (relayed, not measured here) that the K2000's envelope time
+grid is **20 ms per step at the bottom of its range**, so 12 ms and 30 ms
+encode to the same byte, and a 5 ms hold rounds to either 0 ms or 20 ms.
+
+**The whole interesting region of this curve — the ~5 ms full-level hold, the
+12 ms knee, the change of slope near 40 ms — spans about two steps on that
+target.** Distinguishing 453 dB/s from 366 from 193 produces byte-identical
+output there. It would matter on a target with finer envelope resolution; on
+that one it cannot.
+
+Two things worth taking from it.
+
+**The measurement is not wasted, but its precision has a consumer-dependent
+value.** Before refining a measurement past the point of comfort, it is worth
+asking what resolution the thing that will *use* it has. A curve known to
+0.07 dB feeding a 20 ms time grid is precision that cannot survive the
+journey, and the effort belongs either earlier (getting the shape right) or
+elsewhere entirely.
+
+**And a quantised consumer makes the choice checkable rather than a matter of
+judgement.** With only two encodable decays, both can simply be evaluated
+against the measured front:
+
+```
+   t+ms   measured   0 ms step   20 ms step
+      4       0.94      -23.40        -4.68
+      6      -3.38      -23.40        -7.02
+      8     -13.20      -23.40        -9.36
+     12     -23.12      -23.40       -14.04
+          mean |error|   12.7 dB       5.0 dB
+```
+
+The 20 ms step is better by a wide margin, and in the first 6 ms — the part
+that governs how sharp the cut sounds — it is **17.6 dB closer** than the
+alternative. So on that target the envelope is already at the best of the two
+things it can say, and no further envelope work will improve it. **A limit
+worth establishing by arithmetic before concluding it by ear.**
+
 ## §156 — Envelope 2's depth is linear to the top of its range, and the corner ceiling is 7.86 kHz (2026-08-24)
 
 §148 measured `MODVFILT3` 0–20 at `SUSTN2` 99 and stopped, because the corner
