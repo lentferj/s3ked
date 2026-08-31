@@ -14313,6 +14313,56 @@ does not default to "no group" — it defaults to group 0**, which is a real
 group. The spec says this plainly (`"0ffh = off, mute groups 0 to 31"`); what
 was missing was that anyone zero-filling a header inherits an active one.
 
+### Why 0 is a real group: the panel counts from one (2026-08-31)
+
+The finding above is empirical — 0 behaves like a group because it *is* one.
+The reason turns out to be a display convention, and it is worth writing down
+because it is a trap wherever a panel reading meets a raw byte.
+
+**The panel numbers from 1 where the byte counts from 0, and it does so for
+both the keygroup and the mute group:**
+
+```
+  panel "KG1"        ->  keygroup index 0
+  panel "Group 1"    ->  KGMUTE byte 0
+  panel "Off"        ->  KGMUTE byte 255
+```
+
+So `KGMUTE` 0 was never a "none" sentinel that the machine mishandles. **It is
+group 1, displayed the way the panel displays every group.** The zero-fill
+hazard above is unchanged — a header never written to offset 160 still lands
+in a real group — but the cause is ordinary, not a quirk.
+
+**Confirmed by a round trip through the panel, which is what settles it.**
+A six-keygroup electric-piano program read 0 on all six. Setting the mute group of the keygroup
+the panel calls **KG1** to Off moved the byte at **index 0**:
+
+```
+   kg    before   after
+    0         0     255      <- the panel's "KG1"
+    1         0       0
+    2..5      0       0
+```
+
+Two things follow. **255 = off, 0..31 = real groups is now confirmed from both
+directions** — read from the machine, and written from the panel — rather than
+transcribed from the spec table at line 944.
+
+And **anywhere a panel-reported number is compared against a byte, subtract
+one.** An off-by-one in keygroup identity does not crash; it silently answers
+a question about the wrong keygroup, which is the expensive kind of wrong.
+Everything in these notes uses **0-based indices read over SysEx** and never
+panel numbers, so nothing here needs revisiting — but the two schemes meet
+whenever a finding is checked against the machine's own display, which is
+often how this project verifies things.
+
+**Provenance, since the two halves differ.** The keygroup half is measured
+here: the byte at index 0 changed after a panel edit to "KG1". The mute-group
+half — that the panel shows "1" for stored 0 — is Jan's reading of the display,
+relayed via the sibling session, and has not been round-tripped independently.
+It is consistent with the keygroup half and with 255 meaning off, but it rests
+on a report rather than a measurement.
+
 ### Measured
 
 A 6-keygroup program on a factory volume, built as three key ranges by two
