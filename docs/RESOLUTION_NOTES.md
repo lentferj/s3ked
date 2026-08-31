@@ -14424,6 +14424,52 @@ ramp to −20 dB is measured; the tail beyond it is not, and no shape is claimed
 for it. `VLOUD1` bottoms at −50, so a deeper measurement needs a different way
 of silencing the partner and a fresh check that it still chokes.
 
+### The floor lifted, and the cut turns out to be TWO stages (2026-08-31)
+
+That different way: silence the survivor with its **own amplitude envelope**
+rather than with level — `ATTAK1` 0, `DECAY1` 0, `SUSTN1` 0. It still receives
+the note-on, so it should still choke; it simply removes itself within
+milliseconds instead of sitting at −30 dB under the measurement.
+
+**The check the previous bound demanded, run first:** with the survivor
+self-silenced the cut still reads **−23.18 dB against the uncut reference at
+t+12 ms**. A real cut, so the choke fires regardless of what the survivor's
+envelope does afterwards. Noise floor −86 dBFS.
+
+```
+   t+ms     uncut       cut    difference     §155 above
+      8    -22.87    -35.97        -13.09        -13.13
+     12    -19.68    -42.85        -23.18        -20.72
+     30    -24.27    -47.90        -23.63        -21.56   <- was the floor
+     50    -19.10    -61.62        -42.51
+     80    -17.57    -65.88        -48.31
+    200    -26.01    -85.81        -59.79
+```
+
+**The cut is not one ramp.** It falls fast to about −23 dB by 12 ms, **holds
+there to roughly 30 ms**, and only then falls again — −42 by 50 ms, −48 by 80,
+−60 by 200. The −21.56 recorded above sat directly on that plateau, which is
+why the plateau read as an endpoint and the tail stayed invisible: **the old
+floor and the real shape happened to coincide**, the most misleading way for a
+limit to fail.
+
+**Three bounds on this measurement, and the first matters most:**
+
+1. **The first 5 ms is contaminated and nothing is claimed for it here.** With
+   `DECAY1` 0 the survivor still fires a brief full-level attack, so the cut
+   trace reads *louder* than uncut at 4–5 ms (+0.77, +2.58 dB). **The
+   hold-then-cliff shape stands on the `VLOUD1` technique above**, which is
+   clean exactly where this one is not. The two are complementary rather than
+   one superseding the other: `VLOUD1` for the first 10 ms, self-silencing for
+   the tail.
+2. **The 12–30 ms plateau is clear; its level is not, to better than ~3 dB.**
+   The uncut reference varies 4+ dB between adjacent 0.5 ms points — it is a
+   real attack transient, not a steady tone.
+3. **The 200 ms point is floor-limited in its turn.** The cut capture sits at
+   −85.8 dBFS against an −86.4 dBFS floor, so −60 dB is a lower bound there and
+   not a reading. Measuring past it needs a quieter capture path, not a better
+   choke technique.
+
 
 ---
 
