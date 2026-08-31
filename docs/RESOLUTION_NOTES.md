@@ -14586,6 +14586,71 @@ fine structure rather than its envelope, and nothing here needs that yet.
 
 ---
 
+### The front is solid to 0.07 dB; the tail above is not usable (2026-08-31)
+
+A converter asked to implement this curve, which is the first time the numbers
+had to carry weight rather than describe a shape. A single-session sweep from
+4 ms to 300 ms, 8 repeats, was run to remove the cross-session join. It
+strengthens the front sharply and **retracts the tail**.
+
+**The front reproduces better than any claim made for it.** Against the
+6-repeat session above, independent captures on a different occasion:
+
+```
+   t+ms     12     14     16     18     20     25     30     35     40
+   diff  +0.24  +0.00  +0.08  +0.02  +0.11  +0.07  -0.13  +0.00  +0.00
+                          mean |difference| 0.07 dB
+```
+
+So −23.1 dB at 12 ms and everything out to 40 ms is settled. Note this also
+locates the earlier ±3 dB worry precisely: the 2.68 dB disagreement at 30 ms
+was against the **older single-capture** run, not the averaged one. Averaging
+removed it, and nothing else needed to change.
+
+**New detail at the front edge.** The fall does not begin at 8 ms; it begins
+between 6 and 8 ms and is violent — **+0.94 dB at 4 ms** (still full level,
+the contamination bound 1 names this), **−3.38 at 6 ms**, **−13.20 at 8 ms**.
+Ten dB in two milliseconds.
+
+**The tail above — "−42 by 50 ms, −48 by 80, −60 by 200" — should not be
+used, and the reason is a flaw in the method rather than in the machine.** To
+reach further below the floor the analysis window was widened from 2 ms to
+10 ms, at exactly 50 ms. The apparent 14 dB step between 40 ms (−31.1) and
+50 ms (−45.6) **sits exactly on that boundary**, and a wider window straddling
+a falling signal reads quieter for purely arithmetic reasons. The step is at
+least partly the window.
+
+Two further reasons not to lean on it, both visible only once the sweep went
+past 80 ms:
+
+1. **It is not monotonic.** Within the 10 ms regime, where points are at least
+   mutually comparable, the choke reads **9.3 dB louder at 80 ms than at
+   60 ms**, and louder again at 100 ms. Repeat sd is 0.24–0.99 dB, so this is
+   reproducible — but reproducible is not accurate, and no envelope explains
+   a choke that gets louder twice.
+2. **Past 200 ms it is floor-limited**, as bound 3 already said.
+
+**What survives.** The two-stage description stands — a fast fall to about
+−23 dB by 12 ms, then something much slower — and the front is now precise
+enough to implement against. What does **not** survive is any specific figure
+for the second stage's rate or endpoint. Measuring it needs a **uniform**
+window throughout and a quieter capture path, not a wider window part-way.
+
+**Practical consequence for anyone modelling this.** A single second-stage
+rate fitted to the front (~366 dB/s from −23.1 dB at 12 ms) errs *quiet* in
+the far tail, which is the harmless direction: too quiet in an inaudible tail
+costs nothing, too loud is the artefact being removed. A rate fitted to the
+retracted tail figures (~209 dB/s) errs **loud** by 8.5 dB at 80 ms. Prefer
+the front-fitted rate until the tail is re-measured.
+
+**And a limit worth stating plainly, since it bounds every model of this
+curve.** Over 12–40 ms the machine is **not monotonic**: −23.1 dB at 12 ms,
+back up to −17.6 at 16 ms, down again after. That is ~5 dB of real structure
+that no monotonic envelope of any segment count can follow, and it — not the
+number of segments — sets the floor on fit quality. A two-segment fit improves
+mean error over a one-segment fit by about 1 dB, which is not worth structural
+change in a converter.
+
 ## §156 — Envelope 2's depth is linear to the top of its range, and the corner ceiling is 7.86 kHz (2026-08-24)
 
 §148 measured `MODVFILT3` 0–20 at `SUSTN2` 99 and stopped, because the corner
