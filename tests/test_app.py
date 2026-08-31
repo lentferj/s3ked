@@ -4463,3 +4463,92 @@ async def test_the_save_screen_says_it_is_experimental_where_the_finger_is():
         # and it must not overclaim in the other direction: the registers ARE
         # measured, so the warning says which part is untested
         assert "measured" in warn
+
+
+async def test_selecting_a_keygroup_scopes_the_samples_pane_to_it():
+    """Reported in live use: "if I select a keygroup the sample pane still
+    shows all samples of that program".
+
+    The pane was program-centric on purpose -- it answers "what does this
+    program need", which the global SLIST did not. But with the cursor
+    parked on one keygroup, answering about the whole program reads as the
+    pane ignoring the selection. It now follows the cursor, and `a` cycles
+    keygroup -> program -> all so nothing became unreachable.
+    """
+    from textual.widgets import DataTable, Static
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge())
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        samples = app.query_one("#samples", DataTable)
+        kgs = app.query_one("#keygroups", DataTable)
+        title = lambda: str(app.query_one("#progsamples-title", Static).render())
+
+        program_rows = samples.row_count
+        assert kgs.row_count >= 2, "need two keygroups to tell the scopes apart"
+        assert app._samples_scope == "program"
+
+        # A deliberate move in the keygroup pane, which is the only thing the
+        # row-highlight handler acts on.
+        kgs.focus()
+        await pilot.pause()
+        kgs.move_cursor(row=1)
+        for _ in range(30):
+            await pilot.pause()
+
+        assert app._samples_scope == "keygroup", "the pane did not follow"
+        assert app._samples_keygroup == 1
+        one = [str(samples.get_row_at(i)[0]) for i in range(samples.row_count)]
+        want = list(app._program_keygroups[1].get("samples", ()))
+        assert one == want, f"keygroup 1 uses {want}, pane shows {one}"
+        assert "keygroup 1" in title(), title()
+
+        # `a` still reaches the other two, and comes back.
+        await pilot.press("a")
+        for _ in range(20):
+            await pilot.pause()
+        assert app._samples_scope == "program"
+        assert samples.row_count == program_rows
+
+        await pilot.press("a")
+        for _ in range(20):
+            await pilot.pause()
+        assert app._samples_scope == "all"
+        assert samples.row_count == len(app._samples)
+
+        await pilot.press("a")
+        for _ in range(20):
+            await pilot.pause()
+        assert app._samples_scope == "keygroup", "the cycle did not come back"
+
+
+async def test_loading_a_program_takes_the_samples_pane_off_a_keygroup():
+    """A keygroup index means nothing across programs -- keygroup 1 of the
+    next program is a different keygroup. Staying scoped would point the pane
+    at something the user never selected."""
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge())
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        kgs = app.query_one("#keygroups", DataTable)
+        kgs.focus()
+        await pilot.pause()
+        kgs.move_cursor(row=1)
+        for _ in range(30):
+            await pilot.pause()
+        assert app._samples_scope == "keygroup"
+
+        programs = app.query_one("#programs", DataTable)
+        programs.focus()
+        await pilot.pause()
+        programs.move_cursor(row=1)
+        for _ in range(40):
+            await pilot.pause()
+
+        assert app._samples_scope == "program", "still scoped to the old keygroup"
+        assert app._samples_keygroup is None

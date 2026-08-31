@@ -1207,11 +1207,15 @@ class S3kedApp(App):
         #: machine it meant tabbing to the keygroup pane and landing on the
         #: sample fields.
         self._param_request = 0
-        #: Whether the samples pane lists everything resident or only what
-        #: the selected program references. The program-centric redesign
-        #: dropped the global list entirely, which lost the view the audit
-        #: work is done from.
-        self._samples_show_all = False
+        #: What the samples pane is scoped to: "keygroup", "program" or
+        #: "all". The program-centric redesign dropped the global list
+        #: entirely, which lost the view the audit work is done from; the
+        #: keygroup scope was added because selecting a keygroup and still
+        #: being shown the whole program's samples reads as the pane
+        #: ignoring the selection. `a` cycles whichever scopes apply.
+        self._samples_scope = "program"
+        #: Which keygroup the pane is scoped to, when it is scoped to one.
+        self._samples_keygroup: Optional[int] = None
         self._words_free: Optional[int] = None
         self._total_words: Optional[int] = None
         self._param_values: Dict[str, object] = {}
@@ -1434,6 +1438,12 @@ class S3kedApp(App):
         """
         self._keygroups = int(header.get("GROUPS", 0) or 0)
         self._program_keygroups = list(keygroups or ())
+        # A new program has no keygroup selected yet, so the pane goes back
+        # to describing the program. Leaving it scoped to the old keygroup
+        # index would point it at an unrelated keygroup of a different one.
+        self._samples_keygroup = None
+        if self._samples_scope == "keygroup":
+            self._samples_scope = "program"
 
         table = self.query_one("#keygroups", DataTable)
         table.clear()
@@ -1476,11 +1486,16 @@ class S3kedApp(App):
         only view of what the machine actually holds. `u` and the audit both
         still read the full list; nothing showed it.
         """
-        self._samples_show_all = not self._samples_show_all
+        order = (["keygroup"] if self._samples_keygroup is not None else []) \
+            + ["program", "all"]
+        at = order.index(self._samples_scope) if self._samples_scope in order else 0
+        self._samples_scope = order[(at + 1) % len(order)]
         self._fill_program_samples()
-        self.notify_status(
-            "samples: everything resident" if self._samples_show_all
-            else "samples: what this program uses")
+        self.notify_status({
+            "keygroup": f"samples: keygroup {self._samples_keygroup} only",
+            "program": "samples: what this program uses",
+            "all": "samples: everything resident",
+        }[self._samples_scope])
 
     def _fill_all_samples(self) -> None:
         """Every resident sample, marking the ones this program references.
@@ -1519,15 +1534,24 @@ class S3kedApp(App):
         and reporting that as a fault is a problem the user cannot act on and
         did not cause.
         """
-        if self._samples_show_all:
+        if self._samples_scope == "all":
             self._fill_all_samples()
             return
         table = self.query_one("#samples", DataTable)
         table.clear()
         resident = {s.strip() for s in self._samples}
 
+        # Scoped to one keygroup, that keygroup's rows are the whole story.
+        # Anything else means the pane answers a question about the program
+        # while the cursor sits on a keygroup, which reads as the pane
+        # ignoring the selection.
+        rows = self._program_keygroups
+        one = self._samples_keygroup
+        if self._samples_scope == "keygroup" and one is not None:
+            rows = rows[one:one + 1] if one < len(rows) else []
+
         used: List[str] = []
-        for row in self._program_keygroups:
+        for row in rows:
             for name in row.get("samples", ()):
                 if name not in used:
                     used.append(name)
@@ -1540,12 +1564,15 @@ class S3kedApp(App):
             table.add_row(name, "ok")
 
         title = self.query_one("#progsamples-title", Static)
-        hint = "  [dim]([b]a[/b] for all resident)[/dim]"
+        hint = "  [dim]([b]a[/b] to change scope)[/dim]"
+        what = (f"Samples used — keygroup {one}"
+                if self._samples_scope == "keygroup" and one is not None
+                else "Samples used")
         if missing:
             title.update(
-                f"Samples used — {len(missing)} MISSING of {len(used)}{hint}")
+                f"{what} — {len(missing)} MISSING of {len(used)}{hint}")
         else:
-            title.update(f"Samples used — {len(used)}{hint}")
+            title.update(f"{what} — {len(used)}{hint}")
 
     def _show_params(self, region: str, values: Dict[str, object],
                      index: int = 0, keygroup: int = 0) -> None:
@@ -3263,6 +3290,14 @@ class S3kedApp(App):
             return          # a later request has already claimed the pane
         self.query_one("#param-title", Static).update(
             f"Parameters — program {program} keygroup {keygroup}")
+        # Follow the selection. Only a deliberate move lands here -- the
+        # row-highlight handler ignores the cursor unless the keygroup table
+        # has focus -- so filling the pane after a program load cannot
+        # narrow it behind the user's back.
+        self._samples_keygroup = keygroup
+        if self._samples_scope != "all":
+            self._samples_scope = "keygroup"
+        self._fill_program_samples()
         self._show_params("keygroup", header, program, keygroup)
 
     def _load_sample_row(self, row: Optional[int]) -> None:
