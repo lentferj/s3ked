@@ -14106,6 +14106,53 @@ new" rather than "there are seven". Once a volume is loaded the residue is
 no longer the last program and `delete_program` removes it — do that before
 handing the machine to anyone measuring, and confirm with `Audit.stacked()`.
 
+### The luck runs out at the next power cycle, and §77's repair is what spends it (2026-08-31)
+
+Above, the residue was inaudible because its sample was gone, and that was
+called luck rather than a rule. The rule can now be stated, because the case
+that ends the luck is not exotic — it is **a power cycle**, and three facts
+already in this document meet to produce it.
+
+```
+  §77    SINE, SQUARE, SAWTOOTH, PULSE are regenerated at boot
+  §77    TEST PROGRAM is also created at start-up
+  logs   TEST PROGRAM's keygroup references SINE
+```
+
+So after a cold boot the residue and the sample it points at are **both**
+present. The reference is no longer dangling, and §152's stacking hazard is
+armed rather than defused: the residue sits at PRGNUM 0 with a real sample
+under it, ready to layer beneath the first program of the next volume loaded.
+
+**The sharp part is that §77 recommends the power cycle as a repair.** When
+`clear_memory` has deleted the built-ins out from under a calibration probe
+that addresses its source by name, §77's fix is to reboot and let the machine
+regenerate them. That fix is correct and should stay. But it restores
+`TEST PROGRAM` and `SINE` in the same stroke, so **the documented repair for
+the missing-waveform problem is exactly the operation that arms the
+silent-layering one.** Two sections, each right, whose interaction is in
+neither.
+
+**Why this bites a measurement session specifically.** A residue that is
+audible does not announce itself. It layers under PRGNUM 0 at whatever level
+its own envelope gives it, and every reading taken on the first program of a
+freshly loaded volume is then a reading of two programs. §152 already names
+the consequence — it "would read as a conversion fault rather than as
+contamination" — and a boot is the common way to get there.
+
+**Stated as a boundary rather than a measurement.** The audibility here is
+*derived*, not observed: what the logs show is the reference (`TEST PROGRAM`
+→ `SINE`) recorded as **dangling**, i.e. captured after a CLR, with the
+sample absent. A stacked, audible residue following a cold boot has not been
+measured. It follows from §77 and §152 and it is worth acting on, but it is
+an inference from two measurements and not a third.
+
+**The operational rule is unchanged and already correct** — after CLR read
+the program list, expect one and not zero, delete the residue once a volume
+makes it deletable, confirm with `Audit.stacked()`. What changes is *when* to
+apply it: **not only after a CLR, but after every power cycle**, which is
+precisely the moment the list looks freshly clean.
+
 ## §153 — A lift is only as good as its pre-roll, and a decaying neighbour subtracts from it (2026-08-22)
 
 §144 introduced `lift_over_preroll` to gate on whether a note sounded,
