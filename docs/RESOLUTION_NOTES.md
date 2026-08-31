@@ -14462,13 +14462,79 @@ limit to fail.
    clean exactly where this one is not. The two are complementary rather than
    one superseding the other: `VLOUD1` for the first 10 ms, self-silencing for
    the tail.
-2. **The 12–30 ms plateau is clear; its level is not, to better than ~3 dB.**
-   The uncut reference varies 4+ dB between adjacent 0.5 ms points — it is a
-   real attack transient, not a steady tone.
+2. **The 12–30 ms level was bounded at ~3 dB here; that bound was the
+   reference rippling, not the measurement.** Superseded below — averaging
+   repeats puts the precision at 0.33 dB and shows the band is not flat.
 3. **The 200 ms point is floor-limited in its turn.** The cut capture sits at
    −85.8 dBFS against an −86.4 dBFS floor, so −60 dB is a lower bound there and
    not a reading. Measuring past it needs a quieter capture path, not a better
    choke technique.
+
+### It is a knee, not a plateau, and the spread was never noise (2026-08-31)
+
+The ±3 dB above is the one number a converter is likely to read off this
+section — it is the level a model would hold during the cut — so it was worth
+knowing whether 3 dB was the machine or the method. It was neither: it is the
+**reference**.
+
+Lengthening the analysis window is the wrong instrument. The feature is 18 ms
+wide, and a window long enough to average the ripple away smears across it.
+The scatter is capture-to-capture, so the fix is to **repeat and average
+envelope-wise**, which leaves the 0.5 ms resolution untouched. Six repeats of
+each condition, same program, note and velocity as above, survivor
+self-silenced by the same technique.
+
+```
+   t+ms    uncut       cut    depth    sd of depth across the 6 repeats
+      8   -23.10    -36.57   -13.47    0.19
+     10   -23.49    -37.69   -14.20    0.71
+     12   -19.48    -42.84   -23.36    0.36
+     14   -20.65    -39.11   -18.46    0.17
+     16   -23.69    -41.32   -17.63    0.29
+     18   -22.39    -42.07   -19.69    0.99
+     20   -20.18    -43.25   -23.07    0.60
+     22   -20.43    -43.76   -23.33    0.38
+     25   -22.89    -45.43   -22.54    0.16
+     30   -21.76    -48.07   -26.31    1.47
+     35   -19.66    -50.99   -31.33    0.23
+     40   -23.10    -54.21   -31.12    0.31
+```
+
+**Repeat-to-repeat spread is 0.33 dB median, 1.47 dB worst.** So every wiggle
+in that table is real structure, and two things follow.
+
+**First, the ±3 dB decomposes and none of it is error.** Over 12–25 ms the
+uncut reference has sd 1.59 dB entirely of its own — that is the sample's
+attack, deterministic and identical run to run. The remainder is a genuine
+**slope**, and from 16 ms on the cut is close to a straight line in dB:
+**−0.453 dB/ms** over 16–25 ms with residual sd 0.16 dB, against
+**−0.614 dB/ms** over 30–40 ms.
+
+**No slope is quoted for 12–25 ms, because that fit is not stable.** Including
+the 12→14 ms recovery it reads −0.327 dB/ms; excluding it, −0.232; and
+leaving out any single one of the seven points moves it between −0.232 and
+−0.532. Seven points spanning 13 ms cannot carry a gradient when one of them
+is a 3 dB step, so the honest window starts at 16 ms.
+
+**Second, “plateau” overstates it.** The cut is not fall–hold–fall but a
+**knee**: a fast fall to −23 dB by 12 ms, then a shallow, steepening decline
+— about −0.45 dB/ms early and −0.61 dB/ms by 30–40 ms. It reads as a hold
+above only because a 1.6 dB reference ripple sits on top of a decline of well
+under half a dB per ms, and across 13 ms those are comparable.
+
+**The level, corrected.** The 12 ms point reproduces exactly — −23.36 dB here
+against −23.18 dB above, on separate captures. But the **band mean is
+−21.2 dB over 12–25 ms** and −21.8 dB over 12–30 ms, because the level recovers
+about 3 dB between 12 and 14 ms before resuming its fall. **A model holding a
+single level through the cut should hold −21 dB, not −23 dB** — the −23 dB
+figure is the knee, not the band.
+
+**What is still not claimed.** The 12→14 ms recovery is well outside the error
+bars (0.36 and 0.17 dB) and so is real, but this measurement does not say what
+it is; a beat between the two layers' partials and a feature of the gain ramp
+itself both fit. It matters only to a model that tries to reproduce the cut's
+fine structure rather than its envelope, and nothing here needs that yet.
+
 
 
 ---
