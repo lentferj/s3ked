@@ -211,6 +211,7 @@ silently wrong one.
 - [§168](#168--a-kgmute-0-pair-is-won-by-the-higher-index-keygroup-and-it-unmasks-the-filter-key-follow-2026-08-28) — A `KGMUTE` 0 pair is won by the higher-index keygroup, and it unmasks the filter key-follow (2026-08-28)
 - [§169](#169--four-routes-to-the-kfreq-cross-rig-disagreement-all-refuted-and-why-a-difference-beats-a-threshold-2026-08-28) — Four routes to the `K_FREQ` cross-rig disagreement, all refuted, and why a difference beats a threshold (2026-08-28)
 - [§170](#170--the-machine-serves-a-stale-volume-directory-when-the-medium-is-absent-and-refreshmedia-does-not-clear-it-2026-08-30) — The machine serves a stale volume directory when the medium is absent, and `refresh_media` does not clear it (2026-08-30)
+- [§171](#171--vloud-pivots-the-velocity-response-about-note-on-velocity-64-and-what-looks-like-saturation-is-headroom-2026-09-01) — `V_LOUD` pivots the velocity response about note-on velocity 64, and what looks like saturation is headroom (2026-09-01)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -16003,3 +16004,108 @@ purely behavioural. Nor was a power cycle tested as a way to clear it; the
 gate makes that unnecessary rather than answering it. Whether SCSI 5 and 6 are
 genuinely distinct drives or aliases of 4 is also still open, and the earlier
 identical-lists observation is consistent with either.
+
+
+---
+
+## §171 — `V_LOUD` pivots the velocity response about note-on velocity 64, and what looks like saturation is headroom (2026-09-01)
+
+Program byte `0x1a` (offset 26), signed −50..+50, "note-on velocity dependence
+of loudness". A sibling converter hardcodes it to 20 on write and never reads
+it, so AKAI→AKAI round trips flatten it; the six source programs measured
+20/20/25/25/30/36, so it is real content. Measuring it first was the condition
+for touching either writer.
+
+### Subject, and why not a musical program
+
+White noise, one keygroup, `ATTAK1`/`DECAY1` 0 and `SUSTN1` 99 for a flat
+sustain. `VLOUD1`, `VFREQ1` and `V_ATT1` all zeroed: the first would sum with
+the field under test, the second would let velocity change the timbre so that
+RMS moved for a reason that is not loudness, and the third would change the
+contour under the measurement window.
+
+That mattered. The obvious subject was the program every earlier finding used,
+and it has a live velocity→filter route and a sharp attack over a long decay —
+so a level read there would have been measuring brightness and window
+placement as much as loudness.
+
+### The pivot
+
+**Velocity 64 is a fixed point.** The level there does not move at all:
+
+```
+  V_LOUD   0  ->  v64 = -37.9 dBFS
+  V_LOUD  25  ->  v64 = -37.9 dBFS
+  V_LOUD  50  ->  v64 = -37.9 dBFS
+```
+
+`V_LOUD` rotates the velocity response about that point rather than scaling it
+— the same shape as `K_FREQ`'s key-follow pivoting on note 64 (§167).
+
+### Linear in velocity, and the slope is linear in the byte
+
+```
+  V_LOUD    dB per velocity unit      r²
+       0            0.00001        0.029    <- no velocity dependence at all
+      25            0.23630        1.00000
+      50            0.47095        0.99997
+```
+
+So `0` is genuinely neutral, not merely small — that answers what the field's
+"off" position does. And the slope is proportional to the byte: 0.23630/25 and
+0.47095/50 both give **0.009460 dB per velocity unit per `V_LOUD` unit**.
+
+As a full-scale swing, fitted only where nothing clips:
+
+```
+  swing_dB (v1 -> v127) = 1.19557 * V_LOUD      r² = 0.9999816
+  residuals  +0.049  -0.102  +0.002  +0.104  -0.053
+```
+
+Per end about the pivot that is **0.598 dB per unit** — against the keygroup
+`VLOUD1` law's 0.60576 and `PRLOUD`'s 0.603 measured here. **The AKAI's three
+loudness fields all step about 0.6 dB per unit**, which is worth knowing on its
+own.
+
+### What looks like saturation is headroom, and it was tested rather than assumed
+
+Swept over the whole range the law appears to collapse at both ends — a
+straight fit gives r² 0.987 with residuals up to ±5.5 dB in a clear W. It is
+not the field saturating. The loud end runs into an **absolute output ceiling
+of −25.6 dBFS**, and everything past that is clipped against it.
+
+The distinguishing prediction: the ceiling is fixed, so *lowering* `PRLOUD`
+buys headroom and should move the clamp point while leaving the slope alone.
+
+```
+  PRLOUD 80   v64 level -37.9   headroom 12.3 dB   clamp predicted at |V_LOUD| 20.5
+              measured: 20 clean, 30 clipped
+  PRLOUD 60   v64 level -50.0   headroom 24.3 dB   clamp predicted at |V_LOUD| 40.7
+              measured: 40 within 0.4 dB of the law, only 50 clipped
+```
+
+Confirmed, and the ceiling read **−25.62 dBFS at both settings** — fixed in
+absolute terms rather than scaling with `PRLOUD`. `PRLOUD` moves the pivot
+level at 0.603 dB/unit; it does not move the ceiling.
+
+**So the law has no ends to it.** The collapse is the operating point, not the
+parameter, and a program with more headroom uses more of the range. Anyone
+fitting `V_LOUD` from a sweep taken at one `PRLOUD` would have recorded a
+compressive curve that does not exist.
+
+### The usable statement
+
+```
+  dB(vel) = L64 + 0.009460 * V_LOUD * (vel - 64),   clipped at -25.6 dBFS
+```
+
+where `L64` is the program's level at velocity 64, independent of `V_LOUD` and
+moved by `PRLOUD` at 0.603 dB/unit.
+
+**What is not established.** The −25.6 dBFS ceiling was measured on one
+program through one signal path, so treat it as "this rig's ceiling" until
+seen elsewhere; the law above it is the part that transfers. Whether the
+ceiling is the voice's own limit or something downstream of it was not
+separated. And everything here is one keygroup of white noise at note 60 —
+the pivot at 64 is measured, but that it holds across notes is assumed rather
+than shown.
