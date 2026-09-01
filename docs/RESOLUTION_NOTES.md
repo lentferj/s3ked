@@ -16102,6 +16102,27 @@ compressive curve that does not exist.
 where `L64` is the program's level at velocity 64, independent of `V_LOUD` and
 moved by `PRLOUD` at 0.603 dB/unit.
 
+### The swing is nominal, and the source only partly realises it
+
+Worth stating separately because it is a property of the *field*, not of this
+measurement, and it is easy to lose once the number is in a variable called
+something like "velocity to volume in dB".
+
+**The law describes what `V_LOUD` asks for. What the machine produces is that
+swing clipped against the ceiling.** The six source programs measured
+20/20/25/25/30/36, which the law turns into 23.9 to 43.0 dB of swing — but
+43.0 dB needs about 21.5 dB of headroom above that program's own v64 level,
+and the noise program here had 12.3 dB at `PRLOUD` 80. **So some stated values
+are partly unrealised on the AKAI itself.**
+
+For AKAI→AKAI that is harmless, and carrying the byte unchanged is right: the
+destination clips it exactly as the source did. **It bites on any target whose
+headroom differs** — the same nominal number then produces a *larger* actual
+swing than the original ever made, and every figure in the chain still looks
+correct. The comparison that survives a change of machine is not nominal dB
+against nominal dB but **what each machine actually produces at velocity 1 and
+velocity 127**, which needs the target's own ceiling and pivot measured too.
+
 **What is not established.** The −25.6 dBFS ceiling was measured on one
 program through one signal path, so treat it as "this rig's ceiling" until
 seen elsewhere; the law above it is the part that transfers. Whether the
