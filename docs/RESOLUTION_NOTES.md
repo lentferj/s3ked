@@ -16279,6 +16279,41 @@ response must hold its shape; anything that changes crest with velocity is
 changing timbre or contour, and no amount of curve-fitting to the level will
 reveal which. Checking it costs nothing and it fails loudly.
 
+### The rule this produced, and the same artefact on another machine (2026-09-01)
+
+**A neutralisation that does not move the measurement is not a null result. It
+is a non-result.** If switching a route off changes nothing, the likeliest
+explanation is that the route was never switched off — and reporting that as
+"this route is inert here" writes a rig failure into the findings.
+
+The first attempt above moved the slope from 0.14270 to 0.17074 and the crest
+movement from 7.35 dB to 4.55: wrong, but unmistakably *something*. That is
+what a real-but-insufficient neutralisation looks like. A change of a few
+thousandths would have meant the write never reached the audio.
+
+**Worth stating because it caught a live error elsewhere.** A sibling session
+ran the equivalent test on a K2000, saw the slope move by 0.010 dB/unit, and
+reported the route as inert. Its editor helper answered the save prompt with
+"No", so the edit was applied, read back correctly, and discarded before any
+audio was captured — both conditions were the same condition. **An immediate
+read-back cannot catch this**; the rule above can, and did.
+
+**The AKAI path was checked against the same class of failure rather than
+assumed safe.** There is no editor mode here, but the capture loop sends a
+program change before every note and "a program change does not reload the
+program" had never been tested. Written zeros survive five program changes,
+note-ons and an all-notes-off, verified by re-reading at the *end* of the
+cycle rather than immediately after the write.
+
+**And the artefact is not peculiar to this machine — which is the reason to
+care.** Re-run properly, the same velocity→filter route on the K2000 produced
+a flat plateau below velocity 4 that had been recorded as a **hardware floor**.
+Zeroing the route removed it entirely: monotonic to v1, and the amplitude
+swing went from 30.01 dB to 34.59 dB of a 35 dB setting. **A velocity route
+into the filter can look exactly like an amplitude limit at the bottom of the
+range**, and on two different architectures it did. Relayed, not verified
+here.
+
 **The neutralisation list**, for anyone measuring a level law here:
 `V_LOUD`, `VLOUD1`, `V_ATT1`, `V_REL1`, `V_ATT2`, `V_REL2`, `V_ENV2`,
 `VFREQ1`, `VPANO1` — **and `MODVFILT1/2/3`, checked against `MODSFILT1/2/3`
