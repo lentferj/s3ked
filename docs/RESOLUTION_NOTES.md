@@ -212,6 +212,7 @@ silently wrong one.
 - [§169](#169--four-routes-to-the-kfreq-cross-rig-disagreement-all-refuted-and-why-a-difference-beats-a-threshold-2026-08-28) — Four routes to the `K_FREQ` cross-rig disagreement, all refuted, and why a difference beats a threshold (2026-08-28)
 - [§170](#170--the-machine-serves-a-stale-volume-directory-when-the-medium-is-absent-and-refreshmedia-does-not-clear-it-2026-08-30) — The machine serves a stale volume directory when the medium is absent, and `refresh_media` does not clear it (2026-08-30)
 - [§171](#171--vloud-pivots-the-velocity-response-about-note-on-velocity-64-and-what-looks-like-saturation-is-headroom-2026-09-01) — `V_LOUD` pivots the velocity response about note-on velocity 64, and what looks like saturation is headroom (2026-09-01)
+- [§172](#172--neutralising-velocity-needs-the-mod-matrix-not-just-the-fields-named-after-velocity-2026-09-01) — Neutralising velocity needs the mod matrix, not just the fields named after velocity (2026-09-01)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -16130,3 +16131,92 @@ ceiling is the voice's own limit or something downstream of it was not
 separated. And everything here is one keygroup of white noise at note 60 —
 the pivot at 64 is measured, but that it holds across notes is assumed rather
 than shown.
+
+
+---
+
+## §172 — Neutralising velocity needs the mod matrix, not just the fields named after velocity (2026-09-01)
+
+Measuring a level law on a real program means switching velocity off
+everywhere first. The fields named after velocity are not everywhere: the
+**assignable modulation matrix** can route velocity to the filter, and a
+filter that moves with velocity makes an RMS-versus-velocity reading a
+measurement of brightness as much as of level.
+
+This cost a run before it was noticed, and the sequence is worth recording
+because the first attempt looked like it had worked.
+
+### The symptom
+
+A six-keygroup electric-piano program, note 48, whole patch, RMS over 0.10–0.60 s. §171 predicts
+`0.009460 × V_LOUD` = **0.1892 dB per velocity unit** at this patch's
+`V_LOUD` +20. Measured instead:
+
+```
+  routes as programmed   slope 0.14270   r² 0.94854   local slopes 0.0438 .. 0.1952
+                         local-slope spread 4.46x
+                         crest factor 8.85 dB at v32 -> 15.9 dB from v64 up
+```
+
+A curved response, and a **crest factor that moves** — which no level law can
+produce, since a gain change cannot alter a waveform's shape.
+
+### The first neutralisation, which failed
+
+`V_ENV2` (velocity scaling of envelope 2) and `V_ATT1` (velocity to envelope 1
+attack) were the obvious suspects, both non-zero at +25 and −6:
+
+```
+  V_ENV2 0, V_ATT1 0     slope 0.17074   r² 0.99431   spread 1.52x
+```
+
+Better, and still wrong — 9.8% from the predicted slope. **It would have
+passed a less specific check.** Having §171's number to predict against is
+what made the failure visible; "looks fairly linear now" would have shipped.
+
+### What was still live
+
+Velocity reaches the filter through the mod matrix, whose amount lives in the
+keygroup and whose **source lives in the program**:
+
+```
+  program   MODSFILT1 = 5 (VELOCITY)   MODSFILT2 = 8   MODSFILT3 = 10
+  kg0       MODVFILT1 35   MODVFILT2 0   MODVFILT3 25   FILFRQ 35
+  kg1       MODVFILT1 35   MODVFILT2 0   MODVFILT3 25   FILFRQ 65
+```
+
+Slot 1 names velocity, with an amount of 35 on both keygroups. §156 already
+warned that byte 151 is only "velocity to filter" when `MODSFILT1` says so —
+the corollary, not stated there, is that **checking the named velocity fields
+does not tell you whether velocity is routed.**
+
+### Neutralised properly
+
+```
+  V_ENV2 0, V_ATT1 0, MODVFILT1/2/3 0
+     vel   RMS dBFS   crest
+      32     -48.89    8.74
+      64     -42.76    8.79
+      96     -36.81    8.69
+     110     -34.24    8.69
+     127     -30.92    8.66
+
+  slope 0.18830 dB/vel   r² 0.99993   max|resid| 0.08 dB   spread 1.06x
+```
+
+**0.5% from §171's prediction** — a third independent confirmation of that
+law, on a different program and a different measurement from the two that
+established it.
+
+### The diagnostic worth keeping
+
+**The crest factor, not the slope, is what identifies this.** It was 8.85 →
+15.9 dB across velocity and is now constant at **8.7 ± 0.06**. A level-only
+response must hold its shape; anything that changes crest with velocity is
+changing timbre or contour, and no amount of curve-fitting to the level will
+reveal which. Checking it costs nothing and it fails loudly.
+
+**The neutralisation list**, for anyone measuring a level law here:
+`V_LOUD`, `VLOUD1`, `V_ATT1`, `V_REL1`, `V_ATT2`, `V_REL2`, `V_ENV2`,
+`VFREQ1`, `VPANO1` — **and `MODVFILT1/2/3`, checked against `MODSFILT1/2/3`
+for which sources are actually named.**
