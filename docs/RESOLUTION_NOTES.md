@@ -1428,6 +1428,69 @@ timeout and reap it, rather than trusting `-d` to terminate the process. An
 orphaned JACK client is not merely a leaked process; it can take the server
 with it.
 
+### Amendment: a restart does NOT recover it, and the mechanism (2026-09-01)
+
+The paragraph above says recovering a wedged server "needs a JACK restart".
+**That advice is wrong, and it cost two sessions several hours today.** A
+restart was performed with every client gone and `jack_lsp` still timed out
+afterwards.
+
+**What is actually exhausted survives the restart.** From the restart's own
+output:
+
+```
+  BDB2034 unable to allocate memory for mutex; resize mutex region
+  Cannot open metadata DB at /dev/shm/jack_db-1002/metadata.db
+```
+
+JACK keeps a Berkeley DB metadata store under `/dev/shm/jack_db-1002/`. Its
+mutex region is **sized once, at creation**; client registrations draw from
+it; a client that dies without deregistering never returns its share; the
+region never shrinks. The directory on this bench was dated **27 August — five
+days before the wedge** — and `jackd` restarts do not touch it. `/dev/shm` is
+tmpfs, so in practice it clears only at reboot, which is why this needs a long
+uptime to appear at all. Space was never the issue: 163 MB used of 12 GB.
+
+**That explains why the obvious theory looked refuted.** Three wedges were
+attributed to client create/destroy churn and the theory was withdrawn,
+because the third arrived with a **single client on a server restarted 84
+minutes earlier**. With the mechanism known, that observation stops being a
+counterexample and becomes the strongest evidence for it: the *server* was
+fresh, the *region* was five days old and already full, so client one failed
+exactly as client forty-two would have. **Churn is an accelerant, not the
+cause.**
+
+**What actually leaks is a client killed with its registration open.** Which
+makes §16's own section 2 a contributor rather than merely a neighbour: a
+handler that turns SIGTERM into `os._exit` unwinds nothing, so the JACK client
+never deregisters. Every probe here did exactly that for a whole night's
+measurements before it was noticed.
+
+**Two rules, both cheap:**
+
+1. **One long-lived JACK client per session**, reused across every capture —
+   not one per point, and not one per note. §16's section 3 already flags the
+   cost in time; the cost in mutexes is worse because it is permanent.
+2. **A signal handler must close the client, not `os._exit` past it.** Restore
+   the machine, close MIDI, close the JACK client, *then* exit.
+
+**The predicted repair, untested here: delete `/dev/shm/jack_db-1002` while
+`jackd` is stopped.** It is a runtime cache — port pretty-names and similar —
+recreated on next start, and JACK runs without it (the audio graph is
+unaffected; only metadata is lost). It was not done, because a delete belongs
+to the user rather than to a probe.
+
+**Falsifiable, and worth testing before believing:** if this is right, the next
+wedge should arrive after roughly the same number of client registrations
+however they are spread over time, and clearing that directory should reset the
+budget. A wedge soon after a clean-DB restart refutes it.
+
+**Provenance.** The mechanism was found by the sibling k2kremote session in the
+restart output and is recorded here as relayed, not independently verified.
+What is first-hand here is the counterexample that ruled out churn, the
+`os._exit` leak in this project's own probes, and that a restart alone did not
+recover the server.
+
 ### 2. `finally` does not survive SIGTERM — the restore did not run
 
 The snapshot/restore added earlier the same day (§ commit `e8614c3`) was
