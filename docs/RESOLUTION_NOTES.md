@@ -213,6 +213,8 @@ silently wrong one.
 - [§170](#170--the-machine-serves-a-stale-volume-directory-when-the-medium-is-absent-and-refreshmedia-does-not-clear-it-2026-08-30) — The machine serves a stale volume directory when the medium is absent, and `refresh_media` does not clear it (2026-08-30)
 - [§171](#171--vloud-pivots-the-velocity-response-about-note-on-velocity-64-and-what-looks-like-saturation-is-headroom-2026-09-01) — `V_LOUD` pivots the velocity response about note-on velocity 64, and what looks like saturation is headroom (2026-09-01)
 - [§172](#172--neutralising-velocity-needs-the-mod-matrix-not-just-the-fields-named-after-velocity-2026-09-01) — Neutralising velocity needs the mod matrix, not just the fields named after velocity (2026-09-01)
+- [§173](#173--lfo1-reaches-loudness-and-its-depth-is-a-product-of-two-fields-2026-09-01) — LFO1 reaches loudness, and its depth is a product of two fields (2026-09-01)
+- [§174](#174--venv2-pivots-at-velocity-64-too-and-its-reach-is-octaves-not-fractions-2026-09-01) — `V_ENV2` pivots at velocity 64 too, and its reach is octaves not fractions (2026-09-01)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -16318,3 +16320,163 @@ here.
 `V_LOUD`, `VLOUD1`, `V_ATT1`, `V_REL1`, `V_ATT2`, `V_REL2`, `V_ENV2`,
 `VFREQ1`, `VPANO1` — **and `MODVFILT1/2/3`, checked against `MODSFILT1/2/3`
 for which sources are actually named.**
+
+
+---
+
+## §173 — LFO1 reaches loudness, and its depth is a product of two fields (2026-09-01)
+
+A sibling converter had no hardware path for LFO→amplitude at all: the field
+was set by two software readers and emitted by no writer. The question was
+whether the AKAI even has the destination.
+
+**It does.** Loudness is an assignable modulation destination with three slots:
+
+```
+  program   MODSAMP1 (79)  MODSAMP2 (80)  MODSAMP3 (88)     source
+  program   MODVAMP1 (92)  MODVAMP2 (93)                    amount, slots 1-2
+  keygroup  MODVAMP3 (155)                                  amount, slot 3
+  LFO1 is source value 7
+```
+
+### The law is a product, and that is the part worth having
+
+`LFODEP` and the slot amount **multiply**, exactly as §160 found for LFO→pitch:
+
+```
+  one-sided swing_dB = 0.010068 * LFODEP * MODVAMP1
+  12 points from three runs, fitted through the origin
+  max residual 0.74 dB, mean 0.36 dB, worst 3.6% of value
+```
+
+**Linearity in each variable separately does not establish a product; equal-
+product equivalence does.** Three pairs spanning a 2.5× range of each:
+
+```
+  LFODEP 99 x amount 20 = 1980  ->  39.98 dB
+  LFODEP 50 x amount 40 = 2000  ->  39.80 dB
+  LFODEP 40 x amount 50 = 2000  ->  39.90 dB
+                      spread 0.17 dB
+```
+
+**Why this mattered more than the coefficient.** The first measurement was
+taken at `LFODEP` 99 and gives 0.9968 dB per amount unit there. Applied as a
+flat constant it over-reads by `99/LFODEP` — **9.9× at `LFODEP` 10** — and
+arrives looking like a measurement. The sibling session made the caveat
+blocking rather than a footnote, and then found real material at those depths.
+
+### It swings symmetrically, and the median is what proves it
+
+```
+  amount   peak above   trough below   MEDIAN shift
+       5       4.98         5.30          -0.07
+      10      10.07        10.61          -0.08
+      20      20.25        19.92          +0.34
+      25      25.19        23.93          +0.25
+```
+
+A downward-only tremolo must drag the median down as depth rises. **It moves
+0.42 dB while the swing grows from 0 to 49 dB.** So an amount of A costs the
+full `0.010068 · LFODEP · A` dB of headroom *above* nominal and will clip
+against the §171 gain ceiling — which is how the first run of this measurement
+failed, see below.
+
+**Tracking the median beats tracking max and min.** A sibling session measured
+the equivalent K2000 field by peak and trough, attributed a real asymmetry to
+its own noise floor, and had to retract; the median is insensitive to exactly
+those endpoint effects.
+
+### Rails: the container is the rail
+
+Unlike three K2000 fields measured the same week, all of which were *narrower*
+than their containers, **this device clamps nothing over SysEx**:
+
+```
+  MODVAMP1  written -128..+127  ->  every value reads back verbatim
+  MODSAMP1  written 0,7,14,15,20,255 -> all verbatim, including non-sources
+```
+
+So the documented ±50 is a panel or spec limit the machine does not enforce,
+and a writer must clamp because nothing downstream will. Whether the machine
+*acts* sensibly on an invalid source byte is a separate question, not asked
+here. The panel rail itself is unmeasured — it cannot be reached from SysEx.
+
+### The first run of this was ceiling-limited, and it looked fine
+
+Amounts 10 and above pinned the peak at −25.50 dBFS — the §171 gain ceiling —
+and fitted to `0.65245 dB/unit, r² 0.896`. A plausible law from a clipped
+curve. **"Gate on headroom, not only on the noise floor" had been written into
+the sibling's constants file that same morning, by the author of this
+section.** What caught it was not remembering the rule; it was that the
+residuals looked wrong at ±3.9 dB. Print them.
+
+---
+
+## §174 — `V_ENV2` pivots at velocity 64 too, and its reach is octaves not fractions (2026-09-01)
+
+`V_ENV2` scales envelope 2 — the filter envelope — by note-on velocity. It is
+read by no converter here, so it is dropped from every AKAI-sourced
+conversion.
+
+### Structure: exact, and it confirms a machine-wide convention
+
+Env2 routed to the filter (`MODSFILT3` = 10, depth 30) and parked at sustain,
+so the reading is a steady corner rather than a contour:
+
+```
+  V_ENV2    v1     v32    v64    v96    v127     corner Hz
+    -50    9555   9552   3732    472    123
+    -25    9554   9551   3732   1272    493
+      0    3733   3732   3732   3732   3732
+    +25     495   1273   3732   9552   9552
+    +50     123    482   3733   9551   9551
+```
+
+- **Pivot at velocity 64, exact to 1 cent** across the whole range. That is a
+  third independent field pivoting there, with `V_LOUD` (§171) and `K_FREQ`
+  (§167). Treat 64 as this machine's convention rather than a coincidence.
+- **Negative control flat**: `V_ENV2` 0 spans −1 cent, so nothing else reaches
+  the filter and the manipulation is the only live route.
+- **Antisymmetric**: −7531 ct against +7530 at ∓50. Positive opens the filter
+  with velocity, negative closes it.
+
+### The coefficient is NOT established, and the reason is the estimator
+
+```
+  |V_ENV2 x (vel-64)|     cents per unit-pair
+              800           2.3287, 2.3275
+             1575           2.2248, 2.2203
+             1600           2.2375, 2.2144
+             3150           1.8756, 1.8756
+```
+
+The ± pairs agree to four figures at every excursion — the machine is
+repeatable — but the coefficient **falls 17% at the extremes**. That is almost
+certainly the proxy: the corner was read as the spectrum's **median**, and
+both 3150-point readings sit at 123 Hz against a 30 Hz band edge, where a
+percentile stops tracking a lowpass corner. The four `9551` readings are the
+same failure at the other end, with the filter wide open, and are lower bounds
+rather than values.
+
+**So: 2.26 ± 0.05 cents per unit-pair over moderate excursions, and
+unestablished beyond.** Settling it wants §156's corner-from-difference
+(`FILQ` 12 against `FILQ` 0), which tracks a corner rather than summarising a
+spectrum.
+
+### A correction to an earlier figure, because it was out by an order of magnitude
+
+`V_ENV2` was previously reported as worth **0.21 octaves, confined below
+v64**, and priced accordingly against other work. That number was the *whole
+patch's centroid* on a two-layer program with one layer choked — not the
+filter corner. **The field's actual reach is multiple octaves**: about 3500
+cents at `V_ENV2` 25, velocity 1. The two quantities are not comparable and
+the first understated the field by roughly ten times.
+
+The priority call that followed from it may still be right; the reason given
+for it was not.
+
+### Not started
+
+`V_ATT1` — velocity to envelope 1 attack rate. It needs `ATTAK1` set slow
+enough to have a rise to scale; a sibling session measured a rate law as
+0.000 s everywhere because the stage under test had been configured away.
