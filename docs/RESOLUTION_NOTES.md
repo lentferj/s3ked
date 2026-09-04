@@ -16137,8 +16137,11 @@ own.
 
 Swept over the whole range the law appears to collapse at both ends — a
 straight fit gives r² 0.987 with residuals up to ±5.5 dB in a clear W. It is
-not the field saturating. The loud end runs into an **absolute output ceiling
-of −25.6 dBFS**, and everything past that is clipped against it.
+not the field saturating. The loud end runs into a **gain ceiling** — the
+gain coefficient stops rising and the output freezes. On the program measured
+here that freeze sits at −25.6 dBFS. **It is not an absolute ceiling and
+nothing is being clipped**; see the correction below, which was measured after
+this section was first written.
 
 The distinguishing prediction: the ceiling is fixed, so *lowering* `PRLOUD`
 buys headroom and should move the clamp point while leaving the slope alone.
@@ -16162,7 +16165,8 @@ compressive curve that does not exist.
 ### The usable statement
 
 ```
-  dB(vel) = L64 + 0.009460 * V_LOUD * (vel - 64),   clipped at -25.6 dBFS
+  dB(vel) = L64 + 0.009460 * V_LOUD * (vel - 64)
+      limited above by a SAMPLE-DEPENDENT gain ceiling, not a fixed level
 ```
 
 where `L64` is the program's level at velocity 64, independent of `V_LOUD` and
@@ -16175,27 +16179,63 @@ measurement, and it is easy to lose once the number is in a variable called
 something like "velocity to volume in dB".
 
 **The law describes what `V_LOUD` asks for. What the machine produces is that
-swing clipped against the ceiling.** The six source programs measured
-20/20/25/25/30/36, which the law turns into 23.9 to 43.0 dB of swing — but
-43.0 dB needs about 21.5 dB of headroom above that program's own v64 level,
-and the noise program here had 12.3 dB at `PRLOUD` 80. **So some stated values
-are partly unrealised on the AKAI itself.**
+swing limited by the gain ceiling.** The six source programs measured
+20/20/25/25/30/36, which the law turns into 23.9 to 43.0 dB of swing — and the
+larger of those will not be reached in full, because the gain runs out first.
+
+**How much is lost cannot be stated as one number.** An earlier version of
+this section subtracted a fixed −25.6 dBFS from a level to get "about 21.5 dB
+of headroom". **That subtraction is void**: it presumes an absolute ceiling,
+and against a gain ceiling the freeze point moves with the sample. The honest
+answer is that the shortfall depends on what is loaded.
 
 For AKAI→AKAI that is harmless, and carrying the byte unchanged is right: the
-destination clips it exactly as the source did. **It bites on any target whose
+destination limits it exactly as the source did, the sample being the same. **It bites on any target whose
 headroom differs** — the same nominal number then produces a *larger* actual
 swing than the original ever made, and every figure in the chain still looks
 correct. The comparison that survives a change of machine is not nominal dB
 against nominal dB but **what each machine actually produces at velocity 1 and
 velocity 127**, which needs the target's own ceiling and pivot measured too.
 
-**What is not established.** The −25.6 dBFS ceiling was measured on one
-program through one signal path, so treat it as "this rig's ceiling" until
-seen elsewhere; the law above it is the part that transfers. Whether the
-ceiling is the voice's own limit or something downstream of it was not
-separated. And everything here is one keygroup of white noise at note 60 —
-the pivot at 64 is measured, but that it holds across notes is assumed rather
-than shown.
+### Correction: the ceiling is a GAIN ceiling, and it is sample-dependent (2026-09-02)
+
+The paragraphs above originally called −25.6 dBFS an **absolute output
+ceiling** and described the loud end as **clipped**. Both are wrong, and the
+disproof came from this project's own bench two days later while checking
+whether that ceiling could serve as a cross-machine reference.
+
+**Two different samples, both driven to their freeze point with envelopes
+flattened and every velocity route zeroed, froze 5.47 dB apart:**
+
+```
+  white noise      peak -17.18 dBFS      crest 7.40 / 7.43 / 7.45
+  a musical sample peak -11.71 dBFS      crest 8.91 / 8.91 / 8.91
+                   (V_LOUD 30 / 40 / 50 -- peak spread 0.05 and 0.00 dB)
+```
+
+**The crest factor is the discriminator, not the level.** Real clipping
+flattens peaks while energy keeps arriving, so crest *falls*. Here peak and
+RMS freeze together with the shape untouched: **the gain stopped rising and
+nothing is being clipped.** A shared output clamp would put both samples at
+the same peak; a gain ceiling puts each at `sample amplitude × max gain`,
+which differs per sample.
+
+**What survives unchanged.** The law itself, the pivot, and the `PRLOUD`
+prediction test above — lowering `PRLOUD` did move the clamp point while the
+freeze level stayed put, which is exactly what a gain cap predicts, since the
+cap is on the gain rather than on the output. Only the *characterisation* was
+wrong, and one derived figure with it.
+
+**What this costs.** There is no fixed number to subtract, so "how much
+headroom does this program have" has no per-machine answer — it is a property
+of the material. A sibling project had copied the 21.5 dB figure into a
+comment where it was arithmetically load-bearing; it has been corrected there
+too.
+
+**What is still not established.** Whether the gain cap is the voice's own
+limit or something downstream of it was not separated. And everything here is
+one keygroup of white noise at note 60 — the pivot at 64 is measured, but that
+it holds across notes is assumed rather than shown.
 
 
 ---
