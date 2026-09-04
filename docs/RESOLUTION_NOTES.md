@@ -215,6 +215,7 @@ silently wrong one.
 - [§172](#172--neutralising-velocity-needs-the-mod-matrix-not-just-the-fields-named-after-velocity-2026-09-01) — Neutralising velocity needs the mod matrix, not just the fields named after velocity (2026-09-01)
 - [§173](#173--lfo1-reaches-loudness-and-its-depth-is-a-product-of-two-fields-2026-09-01) — LFO1 reaches loudness, and its depth is a product of two fields (2026-09-01)
 - [§174](#174--venv2-pivots-at-velocity-64-too-and-its-reach-is-octaves-not-fractions-2026-09-01) — `V_ENV2` pivots at velocity 64 too, and its reach is octaves not fractions (2026-09-01)
+- [§175](#175--vloud-confirmed-on-hardware-and-two-ways-a-velocity-ladder-lies-2026-09-04) — `V_LOUD` confirmed on hardware, and two ways a velocity ladder lies (2026-09-04)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -16520,3 +16521,105 @@ for it was not.
 `V_ATT1` — velocity to envelope 1 attack rate. It needs `ATTAK1` set slow
 enough to have a rise to scale; a sibling session measured a rate law as
 0.000 s everywhere because the stage under test had been configured away.
+
+
+---
+
+## §175 — `V_LOUD` confirmed on hardware, and two ways a velocity ladder lies (2026-09-04)
+
+§171 gave `V_LOUD` a law from a synthetic sweep. A sibling converter then used
+it to fit a real source curve, wrote the resulting byte into three programs,
+and those were loaded here and measured — so the law was tested against
+material it had never seen, through a writer that had no knowledge of how it
+was derived.
+
+### It holds to 0.8%
+
+Key 60, nine velocities, peak level, three repeats, windows anchored on the
+note-on sent rather than on a detected onset:
+
+```
+  program   V_LOUD   predicted span   measured   error    r²
+     96       13       15.54 dB       15.43 dB   -0.8%   0.999809
+     95        4        4.78 dB         (see below)
+     94        0        0.00 dB         flat ±0.06 dB
+```
+
+Peak and RMS spans agreed to 0.09 dB on program 96, so the statistic is not
+doing the work. The full-swing convention was also settled empirically: the
+one-sided reading would have predicted 7.77 dB and the measurement is
+**2.0×** that.
+
+### The 95 excess was a velocity→filter route, and neutralising it proved so
+
+Program 95 measured **19.02 dB against 4.78 predicted** — nearly 300% out, and
+curved rather than straight, the steps running +4.08, +5.58, +4.77 and then
+collapsing to +2.45, +0.99, +0.25 as the filter ran out of travel.
+
+It carried `MODVFILT1` 11 against `MODSFILT1` = 5 (velocity). Zeroing that on
+all sixteen keygroups:
+
+```
+  live                  19.02 dB
+  route zeroed           4.60 dB    against 4.78 predicted, -3.8%
+                                    r² 0.997825, and straight again
+  the route was worth   14.42 dB
+```
+
+**A velocity route into the filter moves PEAK LEVEL**, because brightness and
+peak are not independent. Any level law measured on a program with one live
+will read high, and will read *curved* — which is the tell, since a level law
+is straight.
+
+### Trap 1: read the keygroup that SOUNDS, not keygroup 0
+
+The route table for this was first read from keygroups 0–3, which on these
+programs are **not the keygroups that sound at the note being played**:
+
+```
+  96  key 60 -> kg12 alone         FILFRQ 99  MODVFILT1  0
+  95  key 60 -> kg5  alone         FILFRQ 70  MODVFILT1 11
+  94  key 60 -> kg5 (keys 56-60)   FILFRQ 46  MODVFILT1 14
+             + kg16, kg17, kg18, each spanning 24-127, MODVFILT1 0
+```
+
+On a 19-keygroup program the first four rows are close to arbitrary. Reading
+them produced a confident puzzle — "94 has a *larger* filter route than 95 and
+is flat" — that existed only in the wrong rows. **Enumerate `LONOTE`/`HINOTE`
+and take the keygroups that contain the note**; there may be several.
+
+### Trap 2: one flat ladder, two different meanings
+
+Program 94's ladder is flat to ±0.06 dB. What that is evidence *for* depends
+on which field is being asked about, and the two answers are opposite:
+
+- **For the keygroup-level filter route: confounded.** Three of the four
+  keygroups sounding at key 60 span the whole keyboard with no velocity
+  routing at all. They dominate the sum and are velocity-inert, so kg5's
+  `MODVFILT1` 14 is masked beneath them. The flatness says nothing about it.
+- **For the program-level `V_LOUD`: clean.** `V_LOUD` is a *program* field, so
+  a non-zero value moves every keygroup including the inert ones. Flat
+  therefore does establish that `V_LOUD` 0 produces no velocity response.
+
+**Scope decides whether masking applies.** A layer that masks a per-keygroup
+effect cannot mask a per-program one, because it is subject to it too. This
+was nearly reported as a confounded null, which would have thrown away a clean
+result.
+
+### And it puts a number on the per-program limitation
+
+`V_LOUD` is per program, so a source whose voices ask for different velocity
+depths keeps one and loses the rest. Program 94's source asks for 0.0, 17.2
+and 19.0 dB across four voices; the 0.0 survived. The other two produce
+**zero** velocity response — measured, not estimated.
+
+### Relayed, not verified here
+
+The same source preset converted to an E4XT showed the same filter-route
+excess: **14.43 dB there against 14.42 dB here**, on a different converter and
+a different filter design. Two points, so no constant is claimed — and the
+agreement is equally consistent with the peak effect being set by the source's
+own spectrum and the depth in cents rather than by either filter's slope,
+which would make it expected rather than surprising. What it does support is
+that the velocity→filter depth converted faithfully to both targets, shown by
+an effect neither writer was aimed at.
