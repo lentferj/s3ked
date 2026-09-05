@@ -216,6 +216,7 @@ silently wrong one.
 - [§173](#173--lfo1-reaches-loudness-and-its-depth-is-a-product-of-two-fields-2026-09-01) — LFO1 reaches loudness, and its depth is a product of two fields (2026-09-01)
 - [§174](#174--venv2-pivots-at-velocity-64-too-and-its-reach-is-octaves-not-fractions-2026-09-01) — `V_ENV2` pivots at velocity 64 too, and its reach is octaves not fractions (2026-09-01)
 - [§175](#175--vloud-confirmed-on-hardware-and-two-ways-a-velocity-ladder-lies-2026-09-04) — `V_LOUD` confirmed on hardware, and two ways a velocity ladder lies (2026-09-04)
+- [§176](#176--the-filfrq-corner-curve-below-byte-44-and-why-17-measured-nothing-2026-09-05) — The `FILFRQ` corner curve below byte 44, and why §17 measured nothing (2026-09-05)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -1639,6 +1640,13 @@ ground it cannot see is the same failure as a guard that cannot fail.
 ---
 
 ## §17 — `FILFRQ` does not audibly move the filter (measured 2026-08-10)
+
+> **REFUTED 2026-09-05. This section's central claim is wrong.** `FILFRQ` moves
+> the filter corner from about 182 Hz at byte 44 to about 52 Hz at byte 28, and
+> changes the 50–80 Hz band by 27.6 dB across the same span. See §176, which
+> also joins the writer's independent 40..84 table to within 2% at byte 40.
+> The measurement below is left in place because **how it failed matters more
+> than the numbers it produced** — see the post-mortem at the end of §176.
 
 **The question the whole calibration existed to answer, answered — negatively.**
 Before fitting any curve, two spot checks across the parameter's full range.
@@ -16357,6 +16365,53 @@ into the filter can look exactly like an amplitude limit at the bottom of the
 range**, and on two different architectures it did. Relayed, not verified
 here.
 
+### And check the neutralisation left something to measure (2026-09-05)
+
+The rule above says a neutralisation that does not move the measurement is a
+non-result. Its mirror image is worse, because it produces a number:
+
+**A neutralisation that SILENCES the subject yields floor arithmetic that
+looks like a finding.**
+
+Measured while testing whether a nearly-shut filter plus a deep
+velocity→filter sweep explains key-dependent level variance. Zeroing the
+sweep on a program whose corner rests near 58 Hz left key 84 — fundamental
+about 1046 Hz — with nothing above the noise:
+
+```
+  condition            key 84 peak at v127   margin over floor   cells clearing floor+15
+  baseline                     -41.03 dB           32.5                 3 of 9
+  sweep zeroed                 -61.27             11.8                 0 of 9
+  cutoff opened to 99          -24.69             48.8                 9 of 9
+```
+
+The ablated condition still produced a tidy per-key number, and the difference
+between keys came out at 5.56 dB — **entirely arithmetic on a key that made no
+usable sound.** It was read as a residual effect surviving the ablation, and a
+second modulation path was proposed to explain it. There was nothing to
+explain.
+
+**The instrumentation already had what was needed and did not use it.** The
+capture recorded the noise floor per condition; it simply never compared the
+peaks against it. A run the day before had computed exactly that gate per key
+and reported it. **The discipline was dropped between one script and the next,
+which is how it usually goes — not by disagreeing with the rule but by writing
+the next script without it.**
+
+So the gate belongs in the harness rather than in the operator: **report the
+per-cell margin over the floor alongside every level, and treat any cell under
+about 15 dB as absent rather than as a value.** A summary statistic computed
+across silenced cells is indistinguishable from a real one.
+
+**And the substantive finding, which the same experiment established.** At a
+resting corner near 58 Hz the velocity→filter sweep is *the only reason the
+upper keys are audible at all* — which is precisely why it produces
+key-dependent level differences: the sweep does the work of making each note
+sound, and does a different amount of it at every pitch. Closing an otherwise
+healthy program's cutoff from 99 to 49, changing nothing else, drove its
+across-key spread from 0.47 dB to 9.47 dB. **A deep sweep through a low corner
+is enough on its own**; no defect in the material is required.
+
 **The neutralisation list**, for anyone measuring a level law here:
 `V_LOUD`, `VLOUD1`, `V_ATT1`, `V_REL1`, `V_ATT2`, `V_REL2`, `V_ENV2`,
 `VFREQ1`, `VPANO1` — **and `MODVFILT1/2/3`, checked against `MODSFILT1/2/3`
@@ -16623,3 +16678,111 @@ own spectrum and the depth in cents rather than by either filter's slope,
 which would make it expected rather than surprising. What it does support is
 that the velocity→filter depth converted faithfully to both targets, shown by
 an effect neither writer was aimed at.
+
+
+---
+
+## §176 — The `FILFRQ` corner curve below byte 44, and why §17 measured nothing (2026-09-05)
+
+A converter's filter table was measured over `FILFRQ` 40..84 and extrapolated
+below it. Every program it converted badly swept into that unmeasured region;
+every program it converted well strayed only above the top. So the band was
+worth measuring.
+
+### Method
+
+One keygroup pointed at a resident white-noise sample, `FILQ` 0, `K_FREQ` 0,
+`MODVFILT1/2/3` 0, `V_ENV2` 0, flat amplitude envelope, one key and one
+velocity throughout. **Any of those left live puts a moving target under the
+curve and it comes out wrong in a way that looks smooth.**
+
+Corner by the difference method: transfer = spectrum(byte) − spectrum(byte 99),
+so the source's own shape cancels. Bytes 40..44 were re-measured deliberately
+to overlap the existing table.
+
+### The curve, and where it stops being one
+
+```
+  byte 44  182 Hz      byte 38  115      byte 34   92
+  byte 43  171         byte 37  108      byte 33   86
+  byte 42  155         byte 36   94      byte 32   86
+  byte 41  149         byte 35   94
+  byte 40  135   <- the existing table says 138 Hz, a 2% join
+  byte 39  124
+```
+
+**Below about byte 28 this is no longer a measurement.** The skirt slope
+degrades as the corner descends out of the source's band:
+
+```
+  byte 44  -12.2 dB/oct   <- a proper 2-pole lowpass
+  byte 36  -11.9
+  byte 28   -9.3
+  byte 20   -5.5
+  byte  8   -2.8          <- not a filter skirt at all
+```
+
+Above byte 28 the −3 dB point is directly visible. Below it the corner has to
+be extrapolated from a skirt that is no longer the filter's, so **treat bytes
+44→28 as measured (182 → 52 Hz) and anything below byte 24 as "under about
+38 Hz, value not established"**. Bytes 0..7 were refused outright for having
+under 15 dB of margin over the noise floor. Whether the softening slope is the
+filter genuinely becoming gentler or the measurement running out of signal
+cannot be separated from this data; they look identical here.
+
+### Fitting across points of unequal quality flattens the slope
+
+Worth recording as a method note, because the first fit was reported before it
+was checked and it was wrong:
+
+```
+  fit over bytes  8..44   7.03 bytes/octave     <- reported first
+                 16..44   8.16
+                 20..44   8.49
+                 24..44   8.93
+                 28..44   9.38
+                 32..44  10.29
+```
+
+**Monotone.** Every degraded low point drags the slope flatter, and the first
+number included all of them — the same points the same message had described as
+untrustworthy. A sibling session diagnosed this from the numbers alone before
+the refit confirmed it. Over the reliable band the three independent estimates
+cluster: **10.29 here, 9.20 from a second pipeline on the same captures, and
+about 9.71 implied by the pre-existing 40..84 table.**
+
+The residual spread between the first two is 12% **from analysis method alone,
+on identical audio**, which bounds how precisely this is knowable without
+agreeing a corner definition first.
+
+### Consequence: the writer was already right
+
+Mapped through the new curve, the affected programs move by **under one byte**
+(58.4 Hz → 28.8 against 28 today; 41.0 Hz → 24.1 against 23). **The corner was
+never mis-mapped, so this does not fix the programs that convert badly** — it
+eliminates the last mechanism that would have been a converter bug and leaves
+the divergence where the ablation experiment put it: two different filters
+rendering the same deep sweep differently.
+
+### Post-mortem: why §17 measured nothing
+
+§17 recorded `FILFRQ` as having no effect whatever — "ratio 1.00 over the whole
+range", corner steady at 14.1 kHz from byte 0 to 85, 1.30 dB of level change
+across the span. Against that, this section measures a corner walking 182 → 52
+Hz and 27.6 dB in one band.
+
+**The tell is the reported corner: 14.1 kHz at `FILFRQ` 0.** A working filter
+at byte 0 puts its corner in single-digit Hz and passes almost nothing. §17
+saw full-bandwidth signal at the parameter's minimum, so **the filter was not
+in the path** — the measurement was of a machine whose corner was pinned wide
+open by something other than `FILFRQ`, most plausibly a modulation route with a
+large positive amount from a source sitting near full scale. §17 then correctly
+reported that the parameter it varied made no difference, which was true of the
+configuration and false of the machine.
+
+**That is the third instance in a week of a check that ran cleanly and measured
+nothing** — with slot 1 hidden under a program-level read (§172), and with an
+ablation that silenced the key it was scored on (§172's floor-gate amendment).
+The shared shape is a measurement whose subject was absent, returning a
+confident number about it. **A negative result needs its positive control
+stated: §17 never showed that its filter could move at all.**
