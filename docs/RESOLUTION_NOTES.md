@@ -217,6 +217,7 @@ silently wrong one.
 - [§174](#174--venv2-pivots-at-velocity-64-too-and-its-reach-is-octaves-not-fractions-2026-09-01) — `V_ENV2` pivots at velocity 64 too, and its reach is octaves not fractions (2026-09-01)
 - [§175](#175--vloud-confirmed-on-hardware-and-two-ways-a-velocity-ladder-lies-2026-09-04) — `V_LOUD` confirmed on hardware, and two ways a velocity ladder lies (2026-09-04)
 - [§176](#176--the-filfrq-corner-curve-below-byte-44-and-why-17-measured-nothing-2026-09-05) — The `FILFRQ` corner curve below byte 44, and why §17 measured nothing (2026-09-05)
+- [§177](#177--envelope-2s-decay-runs-the-opposite-way-to-envelope-1s-and-sustn2-0-mutes-its-filter-route-entirely-2026-09-05) — Envelope 2's decay runs the opposite way to envelope 1's, and `SUSTN2` 0 mutes its filter route entirely (2026-09-05)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -16786,3 +16787,79 @@ ablation that silenced the key it was scored on (§172's floor-gate amendment).
 The shared shape is a measurement whose subject was absent, returning a
 confident number about it. **A negative result needs its positive control
 stated: §17 never showed that its filter could move at all.**
+
+
+---
+
+## §177 — Envelope 2's decay runs the opposite way to envelope 1's, and `SUSTN2` 0 mutes its filter route entirely (2026-09-05)
+
+Two facts about envelope 2's route to the filter, both found while testing a
+converter's proposed fix, and both the kind of assumption that looks safe.
+
+### `SUSTN2` = 0 mutes the route completely
+
+`MODVFILT3` is the depth of envelope 2 → filter. At `SUSTN2` 0 **no depth
+produces any sweep at all**, at any decay setting:
+
+```
+  depth  SUSTN2  DECAY2    key 84 peak dBFS
+      0       0      57         -40.99      as found
+     19       0      25         -40.99
+     19       0      40         -41.01
+     19       0      57         -41.05
+     19      50      25         -24.13      +16.86   <- control, same DECAY2
+     19      50      57         -22.17      +18.82   <- control
+```
+
+The controls fire at the same decay values as the nulls, so this is not a
+silenced measurement. §156's law is `octaves = 0.002612 × SUSTN2 × depth` — a
+**product** — and the machine takes it literally: zero sustain, zero sweep.
+
+**Consequence for anything converting to this machine: a source whose filter
+envelope decays to zero sustain cannot be represented.** Writing the depth
+alone changes nothing, and faithfulness to the sustain and carrying the sweep
+are mutually exclusive.
+
+**Peak level is a poor proxy for this** and saturates early — `SUSTN2` 50 and
+99 differ by **0.01 dB** at the peak (−22.17 against −22.18) where the law says
+the octaves should roughly double. Once the corner clears the fundamental the
+peak stops responding. Measure the spectrum, not the level.
+
+### `DECAY2` runs the opposite way to `DECAY1`
+
+```
+  DECAY2      0     10     25     40     57     70     85     99
+  key 84  -24.13 -24.13 -24.13 -24.13 -22.17 -26.33 -38.78 -40.63
+```
+
+§158's family has **higher `DECAY1` meaning slower** — `dB/s = 23525.6 ×
+exp(−0.09776 × DECAY1)`. Envelope 2 is the other way round: by 85 the filter
+sweep is nearly gone and at 99 it is absent. **The convention does not carry
+across the two envelopes.**
+
+**The peak near 57 is left unexplained rather than smoothed.** The response is
+not monotone — flat from 0 to 40, a maximum at 57, then collapsing — and
+nothing here accounts for that.
+
+**What this measures is when the sweep's effect on level disappears, not
+envelope 2's decay time.** No timing was measured. It is possible the envelope
+is doing something other than decaying faster; all that is established is the
+direction of the effect on the filter.
+
+### How this was nearly recorded backwards
+
+The first attempt set `DECAY2` 99 believing it the slowest, so **both arms of
+the experiment had the sweep disabled**, and the script printed the conclusion
+that later turned out to be correct: "`SUSTN2` 0 is an absolute mute". A right
+answer from an experiment that could not have produced it.
+
+**What caught it was the positive control failing to reproduce a number
+already trusted** — +0.44 dB where +18.86 had been measured an hour before, on
+what should have been the same configuration. Re-running the original settings
+reproduced −22.17 exactly, twice, spread 0.00.
+
+**So the rule that saved it is worth stating alongside §172's:** a positive
+control must reproduce a *known* value, not merely differ from the null. A
+control that only shows "something changed" cannot distinguish a live route
+from a coincidence, and a conclusion that happens to be true is the hardest
+possible failure to notice.
