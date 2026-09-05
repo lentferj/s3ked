@@ -218,6 +218,7 @@ silently wrong one.
 - [§175](#175--vloud-confirmed-on-hardware-and-two-ways-a-velocity-ladder-lies-2026-09-04) — `V_LOUD` confirmed on hardware, and two ways a velocity ladder lies (2026-09-04)
 - [§176](#176--the-filfrq-corner-curve-below-byte-44-and-why-17-measured-nothing-2026-09-05) — The `FILFRQ` corner curve below byte 44, and why §17 measured nothing (2026-09-05)
 - [§177](#177--envelope-2s-decay-runs-the-opposite-way-to-envelope-1s-and-sustn2-0-mutes-its-filter-route-entirely-2026-09-05) — Envelope 2's decay runs the opposite way to envelope 1's, and `SUSTN2` 0 mutes its filter route entirely (2026-09-05)
+- [§178](#178--a-filter-corner-below-the-content-fakes-a-velocity-response-and-raising-it-costs-only-resonance-2026-09-05) — A filter corner below the content fakes a velocity response, and raising it costs only resonance (2026-09-05)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -16863,3 +16864,191 @@ control must reproduce a *known* value, not merely differ from the null. A
 control that only shows "something changed" cannot distinguish a live route
 from a coincidence, and a conclusion that happens to be true is the hardest
 possible failure to notice.
+
+## §178 — A filter corner below the content fakes a velocity response, and raising it costs only resonance (2026-09-05)
+
+**Status: resolved on hardware, four programs, 2026-09-05.**
+
+The sibling mpc2emu session derives a corner-placement floor when converting
+its programs to this family, and asked for it to be checked against the
+machine rather than against its own writer. The rule, raise-only:
+
+```
+filfrq >= akai_filter_byte(f0(hi_key) * 2 ** (depth * 4.368 * 64.56 / 1200))
+```
+
+Its score is the **across-key match of the velocity response** — the same
+program played at two keys should answer velocity the same way — so `|diff|`
+below is `|span(k84) − span(k36)|` in dB, smaller being better. Nine
+velocities 1..127, `PRLOUD` raised identically in both conditions so the quiet
+cells clear the noise floor, restored after.
+
+| program | keygroups | corner | `|diff|` | k84 @ v127 |
+|---|---|---|---|---|
+| 105 | 1 (keys 24–127) | 49 as found | **16.99** | −26.00 |
+| 105 | 1 | 99 by rule | **0.31** | −18.82 |
+| 103 | 16 | 78 as found | 3.89 | −35.94 |
+| 103 | 16 | 99 by rule | 0.45 | −36.26 |
+| 104 | 11 | 65 as found | 2.57 | −24.21 |
+| 104 | 11 | 89 by rule | 0.36 | −26.15 |
+
+Program 106 (5 keygroups, corner 42 → 86) was confirmed separately, matching
+the rule's value to 0.2 dB. **The rule holds across 1, 5, 11 and 16
+keygroups, on raises from 42, 49, 65 and 78.**
+
+**Program 105 settles it, because nothing else can explain it.** It has a
+*single* keygroup spanning keys 24–127, so both test keys read the same
+parameters, and `K_FREQ` is 0, so the corner sits at one absolute frequency
+for every note. By §176's curve byte 49 is about 255 Hz: key 36's fundamental
+(65 Hz) passes, key 84's (1047 Hz) arrives two octaves into the stopband.
+Raising to 99 collapses the mismatch **16.99 → 0.31, a factor of 55**, lifting
+key 84 by 7.18 dB while key 36 moves 1.06. No layout, no per-keygroup
+difference and no key scaling is available as an alternative account.
+
+> **Rule.** A parameter that is "the same" at two keys is only the same if the
+> keys read the same parameter. Programs 100/101/103/105 share a 78–127
+> keygroup shape and were treated as one case on that basis; 105's single
+> 104-key group is what made it worth measuring separately, and it produced
+> the largest effect in the set. **Shared parameters are not a shared layout.**
+
+### Raising the corner costs level only where there is resonance to lose
+
+Program 104 got about 2 dB quieter at both keys when raised (1.46 at k36,
+1.94 at k84), which looks like the rule over-raising. It is not: 104 carries
+`FILQ` 12, the highest in the set. With resonance zeroed and nothing else
+changed, the same corner move is worth 0.21 dB:
+
+```
+104, FILQ 0, corner 65    k84 @ v127  -29.25    |diff| 0.12
+104, FILQ 0, corner 89    k84 @ v127  -29.04    |diff| 0.25
+```
+
+The loss is the resonant peak moving off the content. It is predictable from
+`FILQ` without measuring, and mpc2emu confirmed from its source files that
+104's resonance is genuine there too — 0.510 against 0.220 and 0.000 for the
+rest — so what is lost is real rather than invented.
+
+**The limit, recorded because the numbers above do not show it.** On program
+104 the source's effective corner is about 977 Hz and the rule places this
+machine's at roughly 5 kHz. The across-key match improves, but it is bought by
+making the program brighter than the source: there the source filters key 84
+and we no longer do. **The rule optimises across-key consistency, not spectral
+fidelity, and on a program whose filter is doing audible work those two come
+apart.** A converter needing the second thing needs a different rule, not a
+tuned constant in this one.
+
+### How to read a velocity ladder, which took four attempts to get right
+
+Program 105's shipped corner showed a **36.64 dB span** at key 84 — which
+reads as enormous velocity range and is nothing of the sort. **6 of 9 cells
+were under the noise floor**; the span measured the floor. At the raised
+corner the same key reads 15.47 dB on 9 of 9, matching key 36's 15.15. This is
+§175's trap with the sign flipped — there a *flat* ladder had two possible
+meanings, here a *steep* one did, and the cell count is again what separates
+them. **A span measured across cells that are under the floor is a
+measurement of the floor.**
+
+Distinguishing a lost cell from a filtered one took three wrong tests before a
+right one, across both sessions. What survives:
+
+**Rejected — "over-filtering loses cells at one key while a quieter cell at
+another survives".** Applied to 105's actual capture it returns *gain-limited*,
+excusing the program this section proves broken:
+
+```
+k36  floor -72.3   -38.4 -34.2 -31.6 -28.7 -26.0 -23.8 -21.8 -20.2 -18.7   9/9
+k84  floor -72.6   -62.6* -60.3* -58.9* -56.3 -53.8 -49.5 -41.8 -33.7 -26.0  6/9
+                    loudest lost -58.9      quietest kept -56.3
+```
+
+Every lost cell is quieter than every kept cell, so one threshold at about
+−57.5 dB explains all three losses. The failure is structural: over-filtering
+drags a key's *surviving* cells toward the floor with the lost ones, so the
+losses stay globally quietest, while the unfiltered key sits 20 dB above and
+contributes nothing near the floor. **The signature needs the two keys to
+overlap in the danger zone, so it fades out exactly as the fault worsens.**
+
+**Rejected — the raw across-key difference at the loudest cell.** Capture gain
+is common-mode across keys, so a per-key difference cannot be capture gain —
+but *not capture gain* is not *fault*. Over all 32 stored conditions this
+flags program 106 at 4.14–8.58 dB with zero cells lost, a program confirmed
+correct. mpc2emu supplied the reason, being the measurement this side cannot
+make — the source's own loud-end level per key:
+
+```
+program 106   k36 -16.65   k84  -8.86   source spread  +7.79 dB
+program 105   k36 -25.30   k84 -25.07   source spread  +0.23 dB
+program 100   k36 -18.71   k84 -18.85   source spread  -0.14 dB
+```
+
+**106's material is genuinely 7.8 dB louder at key 84**, so the whole
+ambiguous band is that one program. Source-normalised the measure is sound and
+bimodal; un-normalised it convicts an intact program. **s3ked has no source**,
+so this is a converter's diagnostic and not one available here.
+
+**Adopted — the same key, two conditions, at the loudest cell.** The
+comparison every experiment in §171–§178 was already making:
+
+| program | k36 Δ | k84 Δ | verdict |
+|---|---|---|---|
+| 100 (`MODVFILT1` 9→0) | −0.04 | **+16.66** | corner was throttling k84 |
+| 105 (49→99) | −1.07 | **+7.17** | corner was throttling k84 |
+| 103 (78→99) | −0.01 | −0.32 | loud end already correct |
+| 104 (65→89, `FILQ` 0) | −0.37 | +0.38 | loud end already correct |
+
+**Separation from 0.38 to 7.17 dB with no source, no normalisation and no
+per-key reference** — wider than the across-key form achieves after it. Same
+key means same material; hold capture gain fixed across the two conditions and
+gain is common-mode again. The only thing differing is the byte written.
+
+> **Rule.** Prefer a comparison whose two sides differ *only* in the thing
+> under test. Across two keys the material differs and needs a reference term;
+> across two conditions at one key nothing differs but the write. **When a
+> measure needs a correction term, check first whether a different pairing
+> removes the need for one.**
+
+> **Rule.** A measure that separates the cases in front of you has not thereby
+> been validated. Ask which *other* cases it also separates, and whether any
+> real row sits in the gap where a threshold must go.
+
+> **Rule.** A test is finished when it has met the data. Writing it down first
+> makes it feel finished when it is not. All four wrong turns here were caught
+> by running a proposed test against captures that already existed on disk —
+> none by reasoning harder about the fault — and two of them had been recorded
+> as sound before being run. The corner-placement result never moved through
+> any of it, because it rests on the measurements rather than on the statistic
+> used to summarise them.
+
+### What none of this tested, and the pending card rebuild
+
+**Every condition in §171–§178 patched values into RAM over the wire.** None
+exercised the path that *generates* them. **A test that never runs the code
+under test measures the machine, not the converter** — which is exactly the
+gap a stale guard zeroing `env2_depth` fell through, correct in RAM and wrong
+on the writer's path.
+
+The rebuild closes it, and is the pairing above rather than a re-score: the
+existing volume against the newly written one gives a **second converted
+state** of the same programs at the same keys, same material, same rig,
+nothing differing but the bytes the writer emits. Same-key deltas between the
+patched-RAM condition and the rebuilt volume should be ≈0 on every program;
+any program where they are not has a value right in RAM and wrong in the
+writer. Two preconditions, or the two sides differ in more than the writer's
+bytes:
+
+- **A volume load happens in between.** §94 shows loads append rather than
+  replace and §152 shows CLR leaves a program behind, so re-read the programs
+  **by index** afterwards and confirm they are the ones measured.
+- **Hold capture gain fixed across both sides** — the one term the pairing
+  still relies on.
+
+**Not to be run from this side.** The rebuild writes a disk image, which is
+outside what this session may do on any peer's request — see the hardware rule
+in `CLAUDE.md`. Recorded so the comparison is designed before someone is at
+the machine rather than improvised there.
+
+Scripts: `~/temp/s3ked-logs/ch8run.py`, `ch5gain.py`, `ch7q.py`,
+`audit_cells.py`; captures and per-cell peaks under `~/temp/s3ked-logs/testj/`.
+Source-side figures and the corner rule are mpc2emu's; the resonance
+confirmation, the source spreads and the RAM-versus-writer limitation came
+from that session.
