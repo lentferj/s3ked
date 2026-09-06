@@ -219,6 +219,7 @@ silently wrong one.
 - [§176](#176--the-filfrq-corner-curve-below-byte-44-and-why-17-measured-nothing-2026-09-05) — The `FILFRQ` corner curve below byte 44, and why §17 measured nothing (2026-09-05)
 - [§177](#177--envelope-2s-decay-runs-the-opposite-way-to-envelope-1s-and-sustn2-0-mutes-its-filter-route-entirely-2026-09-05) — Envelope 2's decay runs the opposite way to envelope 1's, and `SUSTN2` 0 mutes its filter route entirely (2026-09-05)
 - [§178](#178--a-filter-corner-below-the-content-fakes-a-velocity-response-and-raising-it-costs-only-resonance-2026-09-05) — A filter corner below the content fakes a velocity response, and raising it costs only resonance (2026-09-05)
+- [§179](#179--a-sample-whose-name-begins-with-a-space-is-silently-not-loaded-and-four-other-things-a-load-will-not-tell-you-2026-09-06) — A sample whose name begins with a space is silently not loaded, and four other things a load will not tell you (2026-09-06)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -17052,3 +17053,91 @@ Scripts: `~/temp/s3ked-logs/ch8run.py`, `ch5gain.py`, `ch7q.py`,
 Source-side figures and the corner rule are mpc2emu's; the resonance
 confirmation, the source spreads and the RAM-versus-writer limitation came
 from that session.
+
+## §179 — A sample whose name begins with a space is silently not loaded, and four other things a load will not tell you (2026-09-06)
+
+**Status: resolved on hardware, 2026-09-06.** Found while executing §178's
+rebuild procedure against a converter-written volume; the findings below are
+machine behaviour and hold regardless of what wrote the volume.
+
+**A program sounded on no key.** Five keys, nine velocities, all 45 cells at
+the noise floor — while two programs with identical keygroup spans, identical
+corner ladders and identical `PMCHAN` / `PRLOUD` / `V_LOUD` played normally at
+−22 and −25 dBFS. Nothing in the program header distinguished it.
+
+**The load was five samples short and did not say so.** 171 samples resident
+where the volume held 176 — and **memory was not the constraint**: 14,744,064
+words of 16,777,216, four fifths full. §94 established that an *over-budget*
+load fails quietly; this is worse. **A load can drop individual samples for
+reasons unrelated to space, report success, and leave a program that looks
+correct in every readable field and produces nothing.** The only signal is the
+count, and nothing prints it.
+
+> **Rule.** After every load, compare the resident sample count against the
+> volume's. It is one number, it is the only evidence that a load was
+> complete, and no error accompanies its absence.
+
+**The cause: a leading space in the sample name.** The five absent samples
+each carried one. The machine accepts the name into the volume, references it
+from the keygroup, and then will not load it. The converter's own reader had
+truncated a long name mid-word and left the space at the front; both sides
+carried it identically, so the volume was internally consistent and every
+file-side check passed.
+
+**Confirmed by prediction rather than by inference.** With the names repaired,
+one load: **176 samples resident against 171, all five names present, zero
+resident names carrying a leading space, and the silent program sounding at
+−21.87 dBFS against a −73.81 floor** — 52 dB clear, from 45 of 45 cells at the
+floor. The leading-space check was run as a *separate* test from the count, so
+a pass could not be inferred from the count alone.
+
+**Sample names are 12 bytes, and a longer name arrives as its TAIL.** Every
+resident name is exactly 12 characters and the *front* is discarded, so
+`...ellotape-000-07` presents as `LOTAPE-000-07`. Two consequences:
+
+- **A prefix search over resident names is invalid.** Searching for a name's
+  first characters returns a confident zero for a sample that is present. This
+  was caught only because two entries in one listing were visibly the same
+  word at different offsets; the same search had already returned a clean
+  negative that was believed.
+- **Name uniqueness must be tested on the last 12 characters**, not the first.
+  A collision check on the wrong end reports no collision where the machine
+  sees several.
+
+**A CLR leftover with a colliding program number stacks, and the result looks
+right.** §152 records that CLR leaves one program behind. What it does not say
+is that if the leftover's `PRGNUM` matches a loaded program's, **a program
+change on that number sounds both**. In a 12-row grid this produced two rows
+that were the sum of two programs, ~28 dB apart — **so the reading was not
+visibly broken, merely generous**, and the only tell was two rows agreeing too
+closely. Renaming the leftover into a free program number is a one-byte RAM
+write and reversible, where deleting it is not.
+
+**And the rename does not survive a load.** The leftover returns at its
+original number after the next CLR-and-load, so unstacking is per-load, not
+once.
+
+> **Rule.** Enumerate program numbers and refuse to measure while any collide.
+> A gate that blocks is worth more than a warning that informs — the warning
+> for this one arrived by message, correctly, one run too late.
+
+**§178's rebuild procedure, executed.** The corner-placement rule was verified
+through the writer rather than through a patch: nine of nine corner values
+emitted exactly as measured by hand, including a per-keygroup ladder
+(`54, 63, 73, 82, 99`) that no SysEx condition had ever produced, since a
+patch naturally writes one value across all keygroups. Same-key deltas at the
+loudest cell confirmed the audio follows the bytes — key 84 gaining 16.31,
+8.52 and 7.43 dB where the corner was raised, key 36 moving at most 1.09 dB.
+**The one prediction that could have failed did not: key 36 does not degrade
+at corner 54**, where every SysEx condition had held it at 99.
+
+> **Rule.** The fault was invisible from either side alone. The file side saw
+> a correct volume — sample present, loud, correctly referenced, program
+> byte-identical to one that sounds. The machine side saw a correct program
+> with no sound. **The number that resolved it was a count neither side was
+> looking at.** When two correct-looking views disagree, look for the quantity
+> that neither view reports.
+
+Scripts: `~/temp/s3ked-logs/loadvolp.py` (partition-aware load; the older
+`loadvol.py` omits `select_partition` from its load phase and can only load
+from partition 0), `unstack.py`, `verify_mx9.py`, `samplenames.py`.
