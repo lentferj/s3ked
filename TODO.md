@@ -1949,43 +1949,36 @@ is as short as it can be.
 **Do not** poll during a load to find this out. The question is what the
 minimum *post-load* wait is, not whether polling is survivable.
 
-## §141's attack law is about 2x low against captured audio
+## §141's attack law: t90 is sound, the shape is not, and the shape may not be measurable here
 
-**Status:** open. Two calibration points, no correction applied.
+**Status:** open, and narrowed. Swept, not blocked on more of the same.
 
 `t90 = 0.9 * 0.000201173 * exp(0.10844 * ATTAK1)` was fitted on `t90` read off
-the machine's own display and was never checked against captured level. Two
-audio points now exist, both from the same rig and session (§184):
+the machine's display. Swept against audio on a single-keygroup program at
+`ATTAK1` 75/85/94/99, **it holds to within 12%** (§186). Keep it.
 
-    ATTAK1 94   hold-2 -> hold-12 gain   measured +11.00 dB   model +4.21 dB
-    ATTAK1 99   hold-2 -> hold-12 gain   measured +14.90 dB   model +7.29 dB
+What does not hold is using it to predict captured *level* at a hold shorter
+than the attack: measured gains of +11.00 and +14.90 dB against a predicted
++4.21 and +7.29. **No fixed correction exists**, because the observed shape is
+not one curve — the origin-free statistic `R` runs 1.6–1.8 at `ATTAK1` 75,
+3.0–3.1 at 85 with the same sample, and 0.18–0.42 on another program,
+straddling both the linear (1.000) and exponential (2.738) references.
 
-Both measurements are roughly twice the model, which says systematic error
-rather than noise. **Do not fit a fudge factor.**
+**Blocked on a flat-contour sample, not on hardware time.** A capture shows the
+envelope multiplied by the sample's own amplitude contour, and nothing in the
+sweep can separate them. Measuring the envelope generator's shape needs a
+sample of known contour, which needs the MIDI Sample Dump Standard — the same
+missing capability that blocks the white-noise tracker work. **Until then the
+envelope's true shape is not measurable on this bench**, and further sweeps
+will produce more numbers of the same kind.
 
-**Resolved by §186: it is the functional form, not the constant.** The
-statistic `R = (t90-t50)/(t50-t10)` depends on neither the time constant nor
-the choice of origin, and is 2.738 for any exponential approach. Measured on
-eight notes across both programs it runs 0.175–1.495 — every value below the
-exponential, six of eight below the linear reference of 1.000. The attack
-accelerates into its peak where an exponential decelerates. `t90` itself is
-sound (8.600 s measured against 8.322 s predicted), so the law is right about
-when the attack ends and wrong about how it gets there — sufficient to explain
-the whole factor of two.
+Two measurement limits worth keeping, both found by hitting them:
 
-§186 does **not** supply a replacement form: `R` spans a factor of 8.5 across
-eight notes, so this is not one shape with one exponent, and one of the two
-programs has 5 keygroups so its notes need not share an envelope.
-
-**The sweep needs a hold long enough that the notes SEPARATE**, not merely long
-enough to reach the plateau — a long attack under a short hold defeats the
-onset check by construction (§186).
-
-**Blocked on:** a sweep of `ATTAK1` across its range on one program, capturing
-each setting at two holds. That distinguishes the two cases and costs no
-hardware risk — RAM parameter writes with snapshot and verified restore, plus
-audio capture. It should be done on a program whose keygroup count is 1, to
-keep the envelope under test the only one sounding.
+- Below `ATTAK1` 75 the 10–90% span is ~0.2 s and `R` is quantisation noise.
+- Above `ATTAK1` 85 the attack outlasts a ~7.3 s one-shot sample: the peak
+  arrives with 1.33 s left at 94 and 0.53 s at 99, so the envelope never
+  completes and the measured "peak" is the sample ending. **Any future sweep
+  needs a sample that outlasts the slowest attack under test.**
 
 ## §185's re-articulation: read the keygroup map
 

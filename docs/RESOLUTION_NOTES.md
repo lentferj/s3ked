@@ -226,7 +226,7 @@ silently wrong one.
 - [§183](#183--lfo1-and-lfo2-share-one-rate-law-and-52s-factor-of-two-was-its-detector-2026-09-07) — LFO1 and LFO2 share one rate law, and §52's factor of two was its detector (2026-09-07)
 - [§184](#184--a-slow-attack-is-worth-390-db-of-artefact-between-two-builds-and-a-decaying-release-is-a-third-way-to-fake-an-onset-2026-09-07) — A slow attack is worth 3.90 dB of artefact between two builds, and a decaying release is a third way to fake an onset (2026-09-07)
 - [§185](#185--a-real-post-note-off-re-articulation-095-s-late-on-the-upper-half-of-one-programs-range-2026-09-07) — A real post-note-off re-articulation, 0.95 s late, on the upper half of one program's range (2026-09-07)
-- [§186](#186--the-attack-is-not-an-exponential-approach-which-is-the-whole-of-141s-factor-of-two-2026-09-07) — The attack is not an exponential approach, which is the whole of §141's factor of two (2026-09-07)
+- [§186](#186--141-predicts-t90-well-and-captured-level-badly-and-the-attacks-shape-is-not-one-curve-2026-09-07) — §141 predicts t90 well and captured level badly, and the attack's shape is not one curve (2026-09-07)
 - [§187](#187--amplitude-alone-cannot-tell-a-re-articulation-from-a-mid-note-swell-only-position-relative-to-note-off-can-2026-09-07) — Amplitude alone cannot tell a re-articulation from a mid-note swell; only position relative to note-off can (2026-09-07)
 
 ---
@@ -17748,98 +17748,107 @@ Note the detection geometry: at a guard of `HOLD + 0.6` the check sees events
 from 0.6 s after note-off onwards, so 0.95 s is caught with 0.35 s to spare and
 1.15 s comfortably. An event at 0.4 s would be silently merged (§184).
 
-## §186 — The attack is not an exponential approach, which is the whole of §141's factor of two (2026-09-07)
+## §186 — §141 predicts t90 well and captured level badly, and the attack's shape is not one curve (2026-09-07)
 
-§184 left the attack law about 2x low against captured audio at two `ATTAK1`
-values and declined to fit a correction, because two points cannot separate a
-wrong constant from a wrong functional form. **They can be separated with no
-third point and no hardware, by a statistic that contains neither the time
-constant nor the origin.**
+§184 found the attack law about 2x low against captured audio: hold-2 to
+hold-12 gains of +11.00 and +14.90 dB where a single exponential from `t90`
+predicts +4.21 and +7.29. **That measurement stands.** What this section
+originally concluded from it -- that the attack is never an exponential
+approach -- **is withdrawn.** It was true of the two programs it was measured
+on and is not true in general.
 
 ### The statistic
 
-Take the times at which the attack passes 10%, 50% and 90% of its own peak:
-
     R = (t90 - t50) / (t50 - t10)
 
-`R` is built from differences only, so it is unchanged by scaling time (no
-dependence on the envelope's time constant) **and unchanged by shifting the
-origin** (no dependence on knowing the note-on instant). Reference values:
+built from differences alone, so invariant under both scaling and translation
+of time: it needs neither the time constant nor the note-on instant.
 
     single exponential approach    R = 2.738
     linear ramp                    R = 1.000
     accelerating, level ~ t^2      R = 0.618
 
-An exponential starts fast and decelerates, so it spends most of its time
-crawling from 50% to 90%: `R` is large. A curve that starts slow and
-accelerates gives `R` below 1.
+### The sweep that overturned the general claim
 
-### Measured
+One program, **one keygroup**, so the envelope under test is the only one
+sounding; one note per capture, so nothing can be merged; `ATTAK1` written and
+read back at each setting, snapshot restored and verified afterwards.
 
-Eight notes, two programs, existing hold-12 captures, each attack normalised to
-its own peak, 200 ms RMS to ride over modulation ripple:
+    ATTAK1   t_peak    span    R(200ms)  R(50ms)  R(20ms)   headroom   usable
+       20     0.37     0.23      0.997    --       --         6.9 s    no: unresolvable
+       40     0.36     0.23      0.998    --       --         6.9 s    no: unresolvable
+       60     0.33     0.20      1.221    --       --         6.9 s    no: unresolvable
+       75     0.71     0.51      1.461    1.739    1.840      6.13 s   YES
+       85     2.10     1.87      2.969    3.138    3.126      4.69 s   YES
+       94     5.79     5.08      0.867    0.881    0.895      1.33 s   marginal
+       99     6.61     5.83      0.875    0.884    0.882      0.53 s   no: truncated
 
-    ATTAK1 94    0.310   0.423   0.194   0.175
-    ATTAK1 99    1.495   0.658   1.402   0.677
+**`ATTAK1` 85 gives R = 3.0-3.1, above the exponential's 2.738.** On clean data,
+with 4.69 s of headroom after the peak, stable across a tenfold change of
+analysis window. At that setting the attack is *more* decelerating than an
+exponential, not less. The general claim is false as it was written.
 
-**Every one is below 2.738, the largest by a factor of 1.8 and the smallest by
-a factor of 16.** Six of the eight are below the linear reference. The attack
-does not decelerate toward its peak; it accelerates into it.
+### Two limits that disqualify five of the seven settings
 
-**That is the wrong functional form, and it is sufficient on its own to explain
-the factor of two**: a model assuming a fast early rise will always overestimate
-how much level a short capture window catches.
+**Below `ATTAK1` 75 the attack is too fast to resolve**: the 10%-to-90% span is
+0.20-0.23 s, and `R` computed over a handful of frames is quantisation noise.
+This guard was stated before the run.
 
-`t90` itself is not impeached -- §141 predicts 8.322 s for `ATTAK1` 99 against
-8.600 s measured, 3.3%. **The law is right about when the attack ends and wrong
-about how it gets there.**
+**Above `ATTAK1` 85 the attack outlasts the sample.** The program's sample is
+one-shot and runs about 7.3 s; at `ATTAK1` 94 the peak arrives with 1.33 s left
+and at 99 with 0.53 s. **The envelope never completes -- what gets measured as
+"the peak" is the sample ending.** The low R values at those settings are
+truncation, and the collapsing headroom is the tell.
 
-### The first statistic tried was unsound, and why
+Re-checked against this section's earlier captures: the `ATTAK1` 94 program had
+6.27 s of headroom and is sound; the `ATTAK1` 99 program had 1.74 s and is
+marginal. **The earlier data was not truncated, but it was thinner than it
+looked.**
 
-The first pass used `t50/t90`, which is 0.301 for any exponential regardless of
-`tau`. It gave 0.46-0.87 across five notes -- the right conclusion, by an
-argument that does not hold: **a ratio of times measured from an assumed t=0
-changes when the origin moves**, and none of the window starts were note-ons.
+### What R actually measures, and why it is not the envelope
 
-The error runs the same way throughout, which is the only reason the first
-answer survived. With an attack this slow, the envelope's minimum between two
-notes falls *after* the second note-on -- the new note contributes so little at
-first that the previous note's release still dominates -- so every origin was
-late, every `t50` and `t90` was too small, and the ratio was biased **down**,
-against the conclusion. `R` removes the question rather than bounding it.
+Clean points, across everything measured:
 
-### Sample size, and whose instrument set it
+    same sample, ATTAK1 75    R = 1.6 - 1.8
+    same sample, ATTAK1 85    R = 3.0 - 3.1
+    other program, ATTAK1 94  R = 0.18 - 0.42
 
-The `ATTAK1` 99 file yields one onset for four notes under the harness check,
-which is §184's one-sided under-count. The notes are all present: the file runs
-63.6 s and the level never falls below **-66.5 dB against a -75.3 dB detection
-threshold**, so the hysteresis never re-arms and three note-ons are merged
-away. Segmenting instead on the envelope's own minima recovers all four and
-takes the sample from five notes to eight.
+With **the sample held constant** R still moves by a factor of two across
+`ATTAK1`, so the shape is rate-dependent. Across programs it spans 0.18 to 3.1,
+**straddling both the linear and the exponential reference**. A single number
+cannot be the envelope generator's shape.
 
-**A long attack under a short hold defeats the onset check by construction.**
-Any future sweep of this shape needs a hold long enough that the notes
-*separate*, which is a stronger condition than long enough to reach the plateau.
+The reason is structural: the sampler's envelope multiplies a sample that has
+its own amplitude contour, and **what a capture shows is the product.** The two
+cannot be separated without a sample of known flat contour -- which needs the
+MIDI Sample Dump Standard, which this editor does not implement. That is the
+same missing capability that blocks the white-noise tracker work in `TODO.md`,
+and it now blocks this too.
 
-### What this does NOT establish
+### What stands
 
-- **No replacement curve.** `R` spans 0.175 to 1.495 across eight notes; that
-  is not one shape with one exponent, and nothing here justifies fitting.
-- **The spread may be artefact.** The `ATTAK1` 94 program has 5 keygroups, so
-  its four probe notes need not share an envelope, and the two programs are
-  different material.
-- **Do not scale anything by 2.** The finding is that the form is wrong, not
-  that a correct model is a fixed multiple of the current one.
+- **`t90` is sound across the range.** Measured against §141's law at the four
+  resolvable settings: ratios 0.99, 1.10, 1.09, 0.88 -- within 12%, on a law
+  fitted from the machine's own display.
+- **Using that law to predict captured LEVEL at a hold shorter than the attack
+  is unsound**, by up to 2x, and **no fixed correction is available**, because
+  the discrepancy comes from a shape that is not one curve.
+- The practical form: **capture on the plateau, or not at all.** That is what
+  took two builds from 4.95 dB apart to 1.05 (§184).
 
-The prediction was filed before the measurement (bench file
-`PREDICTION_141.md`, 21:58), with its falsifier stated: the curve rising more
-slowly at early times than an exponential of the same `t90`, to be abandoned if
-it sat on or above the exponential at t = 2.0 s. It sat below at every probe
-time on every note.
+### The predictions, filed before the run
 
-The remaining work is smaller in scope than §184 supposed: a single-keygroup
-program, `ATTAK1` swept, each setting captured once at a hold long enough to
-separate the notes.
+Written to `PREDICTION_186_sweep.md` at 23:23, before any capture:
+
+1. *R below 2.738 at every setting* -- **FALSIFIED** at `ATTAK1` 85.
+2. *R roughly constant across `ATTAK1`* -- **FALSIFIED**; it moves 1.6 to 3.1
+   with the sample held constant.
+3. *`t90` within ~15% of §141* -- **CONFIRMED**, within 12%.
+
+Two of three wrong is the useful outcome here: the prediction that the shape
+was a fixed property of the envelope generator was the one worth killing, and
+it would have survived another night if the parameter had not been swept.
+
 ## §187 — Amplitude alone cannot tell a re-articulation from a mid-note swell; only position relative to note-off can (2026-09-07)
 
 The shared onset check was rebuilt on relative edges -- trigger on a rise above
