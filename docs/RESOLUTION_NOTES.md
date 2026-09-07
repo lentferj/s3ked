@@ -227,6 +227,7 @@ silently wrong one.
 - [§184](#184--a-slow-attack-is-worth-390-db-of-artefact-between-two-builds-and-a-decaying-release-is-a-third-way-to-fake-an-onset-2026-09-07) — A slow attack is worth 3.90 dB of artefact between two builds, and a decaying release is a third way to fake an onset (2026-09-07)
 - [§185](#185--a-real-post-note-off-re-articulation-095-s-late-on-the-upper-half-of-one-programs-range-2026-09-07) — A real post-note-off re-articulation, 0.95 s late, on the upper half of one program's range (2026-09-07)
 - [§186](#186--the-attack-is-not-an-exponential-approach-which-is-the-whole-of-141s-factor-of-two-2026-09-07) — The attack is not an exponential approach, which is the whole of §141's factor of two (2026-09-07)
+- [§187](#187--amplitude-alone-cannot-tell-a-re-articulation-from-a-mid-note-swell-only-position-relative-to-note-off-can-2026-09-07) — Amplitude alone cannot tell a re-articulation from a mid-note swell; only position relative to note-off can (2026-09-07)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -17839,3 +17840,56 @@ time on every note.
 The remaining work is smaller in scope than §184 supposed: a single-keygroup
 program, `ATTAK1` swept, each setting captured once at a hold long enough to
 separate the notes.
+## §187 — Amplitude alone cannot tell a re-articulation from a mid-note swell; only position relative to note-off can (2026-09-07)
+
+The shared onset check was rebuilt on relative edges -- trigger on a rise above
+the running minimum, re-arm on a fall below the running maximum -- with the
+rise threshold set to 8 dB, chosen to sit below §185's re-articulations at
++9.6 and +9.1 dB. On that threshold one of this bench's captures went from 4
+events to 6, at 92% blind, having read clean under the absolute rule.
+
+**The two new events are not §185's phenomenon.** They sit 11.57 s and 9.12 s
+into a 12.0 s hold -- inside the note, not after it:
+
+    note at  1.39 s   envelope per second through the hold
+      -83 -54 -48 -44 -44 -39 -37 -44 -47 -44 -45 -46
+    note at 32.59 s
+      -82 -56 -51 -47 -42 -39 -37 -40 -44 -48 -40 -46
+
+Each rises to about -37 dB some 6 s in, falls 10-11 dB, and swells back by 8.
+**The swing is the same order as §185's re-articulation**, so a threshold set
+from one catches the other. The classes are not separable by amplitude.
+
+They are separable by position. §185's events are locked to note-off, one per
+note, at 0.94 and 0.96 s after it. These are mid-hold and recur within a single
+note. **Note-relative timing is the discriminator; rise height is not.**
+
+### The cause is not the LFO, and an FFT nearly said it was
+
+The obvious reading is tremolo. The sustained portion's dominant modulation
+sits at 0.25 Hz by FFT, and the temptation is to report an LFO at that rate.
+**Read off the machine instead, the program says otherwise:**
+
+    LFORAT    50      §24: rate = 0.11867*50 - 0.04 = 5.89 Hz
+    LFODEP     0      LFO1 reaches loudness as a PRODUCT (§173), so zero mutes it
+    MODVPAN1   0      and LFO2 does not reach pan either (§181)
+
+The program's LFO runs 24x faster than the observed swell **and is at zero
+depth**, so it modulates nothing. The FFT peak came from two to three cycles in
+a 12 s window, which is not enough to establish a rate at all -- §182's list of
+detectors that moved plausibly and measured the wrong thing gains another
+entry, caught this time before it was recorded.
+
+**Cause undetermined.** With 5 keygroups the candidates are the sampled
+material's own content or beating between overlapping keygroups; neither is
+tested here. What is established is what it is *not*: not the LFO, and not
+§185's re-articulation.
+
+### For the check
+
+A rise threshold chosen from measured signal levels is sound, and 8 dB
+correctly reports §185's events. **It will also report material like this**, and
+that is not a regression -- both are real amplitude events. The call site
+should classify by position relative to note-off before treating an extra event
+as contamination, because an uncommanded sound is a claim about *another
+program*, and a mid-hold swell is not evidence for it.
