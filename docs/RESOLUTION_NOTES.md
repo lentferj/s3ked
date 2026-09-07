@@ -17667,8 +17667,28 @@ releases never dipping far enough to re-arm. They do not:
 The lower two decay to the floor and **stay** within 1.0 dB of it through the
 window where the upper two rise by 9. The event is not there to be masked. The
 split falls between MIDI 43 and 48, which is where a keygroup boundary would
-sit -- **that is the obvious candidate and it is untested**; the program's
-keygroup ranges have not been read back and no second capture exists.
+sit -- and it does. The keygroup map was read back from the source file by a
+sibling session (`PRGNUM` 9, 8 keygroups), with key ranges taken from the
+writer's own field offsets rather than guessed ones:
+
+    kg0   keys  24- 43      MIDI 36 and 43 are BOTH here
+    kg1   keys  44- 51      MIDI 48
+    kg2   keys  52- 59      MIDI 55
+    kg3+  keys  60-127
+
+**The two notes that re-articulate are in kg1 and kg2; the two that do not are
+the only two probe notes sharing a keygroup.** The boundary is at 43/44, one
+step from where the audio put it. With four probe notes, that alignment is not
+something chance offers cheaply.
+
+**So this is a keygroup-level property, not a program-level one**, and it will
+not be found in the program common fields.
+
+Still untested: *which* keygroup field carries it. The same session attempted a
+per-keygroup envelope comparison and withdrew it -- adjacent keygroups read as
+each other shifted by one position, which is the signature of guessed offsets.
+The key ranges were confirmed against the writer source; the envelope fields
+were not. **Take no envelope byte from that attempt.**
 
 ### Why it matters beyond this file
 
