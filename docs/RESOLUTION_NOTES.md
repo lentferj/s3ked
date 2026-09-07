@@ -17843,6 +17843,33 @@ is a **mis-location, not a lag** -- the same distinction a sibling session drew
 when a 2.448 s "lag" turned out to be its matching rule rather than its
 detector.
 
+### The evidence here is the audio, not the detector -- which is why it survived
+
+The shared onset check was rebuilt three times in one night, and the current
+build **cannot reproduce this finding**. `MPC_to_AKAI_009` held six onsets when
+§185 was written; it now reports four, and reads clean.
+
+The events are unchanged in the audio. The cause is an **absolute floor
+surviving inside the relative rule**: samples below `peak - 40 dB` are skipped,
+so the running minimum is clamped to that floor, and an event whose true local
+minimum sits *below* it has its rise measured from the wrong baseline.
+
+    capture peak                -37.9 dB      absolute floor  -77.9 dB
+    event at 15.44 s  -77.5 dB   true min -87.1  real rise +9.6  seen +0.4  MISSED
+    event at 21.06 s  -77.8 dB   true min -86.9  real rise +9.1  seen +0.1  MISSED
+
+**The rise threshold was chosen from these two measurements and the detector
+cannot see them.** It is the same failure the relative rule replaced, arriving
+from the opposite side: the old rule broke on an envelope that never fell far
+enough, this one breaks on an envelope that falls too far.
+
+**Every number in this section was measured directly from the waveform** --
+levels, local minima, delays after note-off, spacings -- and none of it came
+from the detector's count. That is the only reason the finding is unaffected by
+a detector regression that would otherwise have erased it. **A conclusion that
+rests on an instrument's output dies when the instrument changes; one that
+rests on the recording does not.**
+
 **The practical consequence is stronger than a negative margin.** A capture
 whose onsets do not track the commanded spacing cannot support *any*
 onset-derived quantity -- not a count, not a position, not a lag. **The
