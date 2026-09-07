@@ -17740,19 +17740,25 @@ The program was re-captured from the MX10 build -- same source, same `PRGNUM`
 notes 36/43/48/55, so note-off falls at on+2.0 with a 3.0 s gap after it, ample
 room for an event ~0.95 s later.
 
-**No re-articulation, on any of the four notes.** Two independent checks:
+**No re-articulation, on any of the four notes.**
 
-- An 8 dB two-sided relative detector run here found **exactly four events**,
-  at 1.29, 6.89, 12.49 and 18.09 s. Four notes were commanded. **There is no
-  room for a fifth event wherever the grid actually sits**, which makes this
-  verdict independent of any reconstruction of the schedule.
-- The harness classifier, run against the real `marks` from the take rather
-  than a reconstructed grid, returns (4 expected, 0 mid-hold, 0 post-note-off,
-  0 unassigned).
+**The argument that needs no classifier and no schedule, first**, because the
+onset check has been wrong in three different ways in one night and should be
+corroboration rather than evidence: an 8 dB two-sided relative detector finds
+**exactly four events for four commanded notes**, at 1.29, 6.89, 12.49 and
+18.09 s. **There is no room for a fifth event wherever the grid actually
+sits.** This survives any error in reconstructing the schedule, on either side
+of the bench.
 
-The route was live: **4/4 sounded, peak -34.9 dB, 8% blind** -- so this is a
-measured absence and not a dead signal path. Reproduced on two takes with
-identical peak level.
+Corroborated by the harness classifier run against the **real** `marks` from
+the take rather than a reconstructed grid, returning (4 expected, 0 mid-hold,
+0 post-note-off, 0 unassigned).
+
+The route was live: **4/4 sounded, peak -34.9 dB, 8% blind** -- a measured
+absence, not a dead signal path. **Reproduced on three takes with identical
+peak level, across two different detector builds** -- the centred-envelope
+build with a 0.10 s lead tolerance, and the causal-envelope build with zero
+tolerance that replaced it. The verdict does not depend on which.
 
 **What it does not say.** The two builds are known to differ in the envelope:
 that is precisely what `ATTAK1` 94 against 99 was (§184). So the phenomenon is
