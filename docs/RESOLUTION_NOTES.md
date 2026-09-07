@@ -17615,3 +17615,14 @@ explanation every time so far.
 - A volume name is not a program name. Matching the partition listing's
   entry against `program_list()` matches nothing, because they are different
   namespaces that both read as "the name".
+
+### The check is one-sided: it catches extra events and misses missing ones
+
+On heavily overlapping material the onset count runs *low*. The source capture
+of the long-attack program returns **1 onset for 4 notes**: an 8.6 s attack
+under a 2.0 s hold at 5.6 s spacing never returns to the floor between notes,
+so there is only ever one upward crossing. **A low count is therefore not
+evidence of anything** -- not of missing notes, not of a silent program, not of
+a clean capture. Only a count *above* the commanded number carries information.
+The `n/n sounded` figure and the onset count answer different questions and a
+disagreement between them is expected on slow material, not a fault.
