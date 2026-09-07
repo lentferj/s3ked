@@ -1964,16 +1964,22 @@ Both measurements are roughly twice the model, which says systematic error
 rather than noise. **Do not fit a fudge factor.**
 
 **Resolved by §186: it is the functional form, not the constant.** The
-tau-free ratio `t50/t90` is 0.301 for any exponential approach and measures
-0.46–0.87 on five notes across both programs — the attack starts slow and
-accelerates where an exponential starts fast and decelerates. `t90` itself is
-sound (8.600 s measured against 8.322 s predicted). So the law is right about
-when the attack ends and wrong about how it gets there, which is sufficient to
-explain the whole factor of two.
+statistic `R = (t90-t50)/(t50-t10)` depends on neither the time constant nor
+the choice of origin, and is 2.738 for any exponential approach. Measured on
+eight notes across both programs it runs 0.175–1.495 — every value below the
+exponential, six of eight below the linear reference of 1.000. The attack
+accelerates into its peak where an exponential decelerates. `t90` itself is
+sound (8.600 s measured against 8.322 s predicted), so the law is right about
+when the attack ends and wrong about how it gets there — sufficient to explain
+the whole factor of two.
 
-§186 does **not** supply a replacement form: the ratios are not equal to each
-other, no simple power law fits both `t50/t90` and `t10/t90`, and one of the
-two programs has 5 keygroups so its notes need not share an envelope.
+§186 does **not** supply a replacement form: `R` spans a factor of 8.5 across
+eight notes, so this is not one shape with one exponent, and one of the two
+programs has 5 keygroups so its notes need not share an envelope.
+
+**The sweep needs a hold long enough that the notes SEPARATE**, not merely long
+enough to reach the plateau — a long attack under a short hold defeats the
+onset check by construction (§186).
 
 **Blocked on:** a sweep of `ATTAK1` across its range on one program, capturing
 each setting at two holds. That distinguishes the two cases and costs no

@@ -17710,52 +17710,91 @@ from 0.6 s after note-off onwards, so 0.95 s is caught with 0.35 s to spare and
 
 §184 left the attack law about 2x low against captured audio at two `ATTAK1`
 values and declined to fit a correction, because two points cannot separate a
-wrong constant from a wrong functional form. **They can be separated without a
-third point, and without touching the hardware, by a ratio that does not
-contain the time constant at all.**
+wrong constant from a wrong functional form. **They can be separated with no
+third point and no hardware, by a statistic that contains neither the time
+constant nor the origin.**
 
-For a single exponential approach `1 - exp(-t/tau)`, the times to reach 50% and
-90% of final stand in a fixed ratio whatever `tau` is:
+### The statistic
 
-    t50 / t90 = 0.301      (exact, tau-free)
+Take the times at which the attack passes 10%, 50% and 90% of its own peak:
 
-Measured on existing hold-12 captures, each note's attack normalised to its own
-peak, 200 ms RMS to ride over modulation ripple:
+    R = (t90 - t50) / (t50 - t10)
 
-    ATTAK1 94   note 0   t50/t90  0.798
-                note 1   t50/t90  0.732
-                note 2   t50/t90  0.855
-                note 3   t50/t90  0.873
-    ATTAK1 99   note 0   t50/t90  0.457
+`R` is built from differences only, so it is unchanged by scaling time (no
+dependence on the envelope's time constant) **and unchanged by shifting the
+origin** (no dependence on knowing the note-on instant). Reference values:
 
-**Every value is above 0.301, by between 1.5x and 2.9x.** The attack takes far
-longer to reach half of its final level, relative to its own t90, than an
-exponential does -- it starts slow and accelerates, where an exponential starts
-fast and decelerates. **That is the wrong functional form, and it is sufficient
-to explain the 2x**: a model that assumes a fast early rise will always
-overestimate how much level a short window captures.
+    single exponential approach    R = 2.738
+    linear ramp                    R = 1.000
+    accelerating, level ~ t^2      R = 0.618
 
-The prediction was written down before the measurement (bench file
-`PREDICTION_141.md`, 21:58): *"the real attack rises MORE SLOWLY at early times
-than a single exponential with the same t90"*, with the falsifier stated as the
-curve sitting on or above the exponential at t = 2.0 s. It sits below at every
-probe time on every note.
+An exponential starts fast and decelerates, so it spends most of its time
+crawling from 50% to 90%: `R` is large. A curve that starts slow and
+accelerates gives `R` below 1.
+
+### Measured
+
+Eight notes, two programs, existing hold-12 captures, each attack normalised to
+its own peak, 200 ms RMS to ride over modulation ripple:
+
+    ATTAK1 94    0.310   0.423   0.194   0.175
+    ATTAK1 99    1.495   0.658   1.402   0.677
+
+**Every one is below 2.738, the largest by a factor of 1.8 and the smallest by
+a factor of 16.** Six of the eight are below the linear reference. The attack
+does not decelerate toward its peak; it accelerates into it.
+
+**That is the wrong functional form, and it is sufficient on its own to explain
+the factor of two**: a model assuming a fast early rise will always overestimate
+how much level a short capture window catches.
+
+`t90` itself is not impeached -- §141 predicts 8.322 s for `ATTAK1` 99 against
+8.600 s measured, 3.3%. **The law is right about when the attack ends and wrong
+about how it gets there.**
+
+### The first statistic tried was unsound, and why
+
+The first pass used `t50/t90`, which is 0.301 for any exponential regardless of
+`tau`. It gave 0.46-0.87 across five notes -- the right conclusion, by an
+argument that does not hold: **a ratio of times measured from an assumed t=0
+changes when the origin moves**, and none of the window starts were note-ons.
+
+The error runs the same way throughout, which is the only reason the first
+answer survived. With an attack this slow, the envelope's minimum between two
+notes falls *after* the second note-on -- the new note contributes so little at
+first that the previous note's release still dominates -- so every origin was
+late, every `t50` and `t90` was too small, and the ratio was biased **down**,
+against the conclusion. `R` removes the question rather than bounding it.
+
+### Sample size, and whose instrument set it
+
+The `ATTAK1` 99 file yields one onset for four notes under the harness check,
+which is §184's one-sided under-count. The notes are all present: the file runs
+63.6 s and the level never falls below **-66.5 dB against a -75.3 dB detection
+threshold**, so the hysteresis never re-arms and three note-ons are merged
+away. Segmenting instead on the envelope's own minima recovers all four and
+takes the sample from five notes to eight.
+
+**A long attack under a short hold defeats the onset check by construction.**
+Any future sweep of this shape needs a hold long enough that the notes
+*separate*, which is a stronger condition than long enough to reach the plateau.
 
 ### What this does NOT establish
 
-- **Not a replacement law.** The ratios are not equal to each other (0.46 to
-  0.87), so this is not one universal curve with a single exponent. A power law
-  fitted to `t50/t90` predicts the wrong `t10/t90`, so the true form is not a
-  simple power either.
-- **The spread may not be real.** The `ATTAK1` 94 program has 5 keygroups, so
-  its four probe notes need not share an envelope at all, and the `ATTAK1` 99
-  file yields only one usable note -- §184's one-sided under-count, overlapping
-  material giving 1 onset for 4 notes. **Five notes across two programs is
-  enough to reject exponential and not enough to fit anything.**
-- **`t90` itself is not impeached.** §141's `t90` for `ATTAK1` 99 was measured
-  at 8.600 s against a predicted 8.322 s, agreeing to 3.3%. The law is right
-  about when the attack finishes and wrong about how it gets there.
+- **No replacement curve.** `R` spans 0.175 to 1.495 across eight notes; that
+  is not one shape with one exponent, and nothing here justifies fitting.
+- **The spread may be artefact.** The `ATTAK1` 94 program has 5 keygroups, so
+  its four probe notes need not share an envelope, and the two programs are
+  different material.
+- **Do not scale anything by 2.** The finding is that the form is wrong, not
+  that a correct model is a fixed multiple of the current one.
 
-The remaining work is unchanged in kind but smaller in scope: a single-keygroup
-program, `ATTAK1` swept, each setting captured once at a long hold. That gives
-the shape directly at many settings instead of the endpoint at two.
+The prediction was filed before the measurement (bench file
+`PREDICTION_141.md`, 21:58), with its falsifier stated: the curve rising more
+slowly at early times than an exponential of the same `t90`, to be abandoned if
+it sat on or above the exponential at t = 2.0 s. It sat below at every probe
+time on every note.
+
+The remaining work is smaller in scope than §184 supposed: a single-keygroup
+program, `ATTAK1` swept, each setting captured once at a hold long enough to
+separate the notes.
