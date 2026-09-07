@@ -225,6 +225,7 @@ silently wrong one.
 - [§182](#182--six-detectors-that-moved-plausibly-and-measured-the-wrong-thing-in-one-night-2026-09-06) — Six detectors that moved plausibly and measured the wrong thing, in one night (2026-09-06)
 - [§183](#183--lfo1-and-lfo2-share-one-rate-law-and-52s-factor-of-two-was-its-detector-2026-09-07) — LFO1 and LFO2 share one rate law, and §52's factor of two was its detector (2026-09-07)
 - [§184](#184--a-slow-attack-is-worth-390-db-of-artefact-between-two-builds-and-a-decaying-release-is-a-third-way-to-fake-an-onset-2026-09-07) — A slow attack is worth 3.90 dB of artefact between two builds, and a decaying release is a third way to fake an onset (2026-09-07)
+- [§185](#185--a-real-post-note-off-re-articulation-095-s-late-on-the-upper-half-of-one-programs-range-2026-09-07) — A real post-note-off re-articulation, 0.95 s late, on the upper half of one program's range (2026-09-07)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -17626,3 +17627,60 @@ evidence of anything** -- not of missing notes, not of a silent program, not of
 a clean capture. Only a count *above* the commanded number carries information.
 The `n/n sounded` figure and the onset count answer different questions and a
 disagreement between them is expected on slow material, not a fault.
+
+## §185 — A real post-note-off re-articulation, 0.95 s late, on the upper half of one program's range (2026-09-07)
+
+The retroactive sweep put every AKAI-route capture taken before the onset
+check existed through the final detector (guard from `HOLD`, 6 dB hysteresis):
+
+    E4 route          10 files   exact 10   low  0   HIGH 0
+    KR route          12 files   exact 11   low  1   HIGH 0
+    MPC route         11 files   exact  8   low  2   HIGH 1
+    MX14 KR route     12 files   exact 12   low  0   HIGH 0
+
+44 of 45 carry no more events than notes. Low counts are uninformative (§184).
+**One file is informative**, the MPC-sourced route's capture index 9, at 6
+events for 4 notes:
+
+                        note-off   event   delay   floor between   rise
+    MIDI 48   note-on 12.50  14.50   15.44   0.94 s      -87.1     +9.6 dB
+    MIDI 55   note-on 18.10  20.10   21.06   0.96 s      -86.9     +9.1 dB
+
+**This is not any of the three detector artefacts.** The signal falls 9 dB
+*below* the hysteresis re-arm level -- effectively to the floor -- and then
+rises 9 dB back above the detection threshold. A release grazing a threshold
+cannot do that; the level genuinely goes away and genuinely returns.
+
+The two delays agree to 0.02 s across notes an octave apart, which is the
+signature of something clocked rather than something incidental.
+
+### It is absent on the lower half, not masked there
+
+The obvious worry is that the lower notes do the same thing invisibly, their
+releases never dipping far enough to re-arm. They do not:
+
+    MIDI 36   floor -86.6   level at note-off + 0.95 s  -85.6
+    MIDI 43   floor -86.6   level at note-off + 0.95 s  -86.0
+    MIDI 48   floor -87.1   level at note-off + 0.95 s  -77.4
+    MIDI 55   floor -86.9   level at note-off + 0.95 s  -78.3
+
+The lower two decay to the floor and **stay** within 1.0 dB of it through the
+window where the upper two rise by 9. The event is not there to be masked. The
+split falls between MIDI 43 and 48, which is where a keygroup boundary would
+sit -- **that is the obvious candidate and it is untested**; the program's
+keygroup ranges have not been read back and no second capture exists.
+
+### Why it matters beyond this file
+
+A sibling session had recorded a comparable phenomenon on other hardware as
+"a complete re-articulation about 1.15 s after note-off", investigated four
+mechanisms, refuted all four, and concluded it was a property of a superseded
+bank because it would not reproduce on the current build. **A structurally
+similar event at 0.95 s now appears on a different machine, on material
+sourced from that same family.** That does not identify a cause and the two
+delays are not equal, but "property of one superseded bank" no longer covers
+it, and the next attempt should not start from that assumption.
+
+Note the detection geometry: at a guard of `HOLD + 0.6` the check sees events
+from 0.6 s after note-off onwards, so 0.95 s is caught with 0.35 s to spare and
+1.15 s comfortably. An event at 0.4 s would be silently merged (§184).
