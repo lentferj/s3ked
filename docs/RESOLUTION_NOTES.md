@@ -17746,9 +17746,25 @@ room for an event ~0.95 s later.
 onset check has been wrong in three different ways in one night and should be
 corroboration rather than evidence: an 8 dB two-sided relative detector finds
 **exactly four events for four commanded notes**, at 1.29, 6.89, 12.49 and
-18.09 s. **There is no room for a fifth event wherever the grid actually
-sits.** This survives any error in reconstructing the schedule, on either side
-of the bench.
+18.09 s, and a §185-type event would be a fifth. This survives any error in
+reconstructing the schedule, on either side of the bench.
+
+**The condition that makes that argument valid, which the first draft of this
+section omitted.** A count is only evidence of absence for an event landing
+*outside* the merge guard. An uncommanded event arriving less than `HOLD + 0.6`
+= **2.60 s** after a note-on is merged into that note and **changes no count at
+all** -- a sibling session built exactly that fixture: a deliberate
+contamination that still reports four onsets for four notes, and is caught only
+because position is checked rather than arithmetic.
+
+    merge guard from onset            2.60 s
+    a §185-type event lands at        2.95 s   (note-off + 0.95)
+    margin                           +0.35 s
+
+**So the count argument holds for this phenomenon, by 0.35 s, and only for
+it.** The original claim -- "no room for a fifth event wherever the grid sits"
+-- was stated without the condition that makes it true, and is false for any
+event arriving within 2.60 s of a note-on.
 
 Corroborated by the harness classifier run against the **real** `marks` from
 the take rather than a reconstructed grid, returning (4 expected, 0 mid-hold,
