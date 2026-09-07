@@ -222,6 +222,7 @@ silently wrong one.
 - [§179](#179--a-sample-whose-name-begins-with-a-space-is-silently-not-loaded-and-four-other-things-a-load-will-not-tell-you-2026-09-06) — A sample whose name begins with a space is silently not loaded, and four other things a load will not tell you (2026-09-06)
 - [§180](#180--a-filter-modulation-slot-is-worth-45-db-at-the-top-of-a-range-the-envelope-2-depth-is-inert-and-the-three-slots-are-not-equivalent-2026-09-06) — A filter modulation slot is worth 45 dB at the top of a range, the envelope-2 depth is inert, and the three slots are not equivalent (2026-09-06)
 - [§181](#181--retraction-of-52-lfo2-does-reach-pan-the-matrix-amount-was-never-set-2026-09-06) — RETRACTION of §52. LFO2 does reach pan; the matrix amount was never set (2026-09-06)
+- [§182](#182--six-detectors-that-moved-plausibly-and-measured-the-wrong-thing-in-one-night-2026-09-06) — Six detectors that moved plausibly and measured the wrong thing, in one night (2026-09-06)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -17338,3 +17339,96 @@ was invisible to anyone working from the notes.
 
 Script: `~/temp/s3ked-logs/panmatrix.py`.
 
+## §182 — Six detectors that moved plausibly and measured the wrong thing, in one night (2026-09-06)
+
+**Status: measured, 2026-09-06.** Not a finding about the sampler. A finding
+about the instruments used to measure it, collected because six failed in one
+session and every one of them produced a *confident, reasonable-looking
+number* rather than an error.
+
+### The headline: spectral centroid is a REVERSE indicator on filtered bass
+
+Opening the envelope-2 filter route on a program resting at `FILFRQ` 15
+(about 22 Hz) moves the level up and the centroid **down**:
+
+```
+  condition          k36 centroid    k36 peak level
+  as found               217 Hz          -30.6 dB
+  SUSTN2 60 depth 33     152 Hz          -21.6 dB
+  SUSTN2 60 depth 50     129 Hz          -16.7 dB
+```
+
+**The filter opens by every other measure and the centroid falls 88 Hz while
+the level rises 13.9 dB.** Opening a corner that low first admits the
+*fundamental*, which then dominates the spectrum and drags the centroid
+toward it. Brightness in the ordinary sense is increasing throughout.
+
+**So on this material centroid is close to an inverted brightness measure —
+and it is exactly the detector one reaches for when asked "did the filter
+open".** Use level. Anyone quoting a centroid as brightness on a low-corner
+program will get the sign wrong and the number will look entirely reasonable.
+
+### The same class, five more times
+
+**A bipolar sweep presents two events per cycle to a magnitude detector.**
+§52 measured LFO2's rate through the *filter* and got twice the true value —
+brightness peaks on both the up and down excursion. Measured through pan,
+where balance is signed, the rate is half what §52 recorded (§183).
+
+**Harmonic product spectrum returns sub-octaves on harmonically sparse
+signals.** Validated at 0.8 cents on synthetic tones, then read a pure
+1046 Hz sine as 261 Hz — −2401 cents. The programs it was aimed at run
+`FILFRQ` 14–15, so the filter had stripped their harmonics and made every one
+of them the failure case. **Every "flat across the keyboard" flag it produced
+was an artefact.**
+
+**Autocorrelation octave-errors at the top of its range.** Accurate to a few
+cents from k36 to k84, then −1200 cents at k90, because `r(2T)` can exceed
+`r(T)`. Replaced with YIN's cumulative-mean normalisation, which exists for
+that failure and validated at worst 10.4 cents across pure, harmonic-rich,
+noisy and decaying synthetics.
+
+**Peak-picking is not an independent second method.** Used to cross-check YIN,
+it disagreed on two of three programs — reporting +2400 cents where YIN said
++3 — because it latched onto the 16th harmonic. It agreed exactly on the third,
+and **had that program not been in the set there would have been two estimators
+disagreeing with no principled way to choose.**
+
+**A balance swing can be bounded by the noise floor rather than the
+modulation.** A measured 77.20 dB swing implies a quiet extreme at −99 dBFS
+against a floor of −72: impossible, so the number is the floor, not the depth.
+Established independently by the sibling eosed session on a different chain
+the same night.
+
+**And a detector can contradict itself.** One run reported 102 dB of balance
+swing alongside 0% floor occupancy — a 102 dB ratio requires a channel far
+below the floor, which the occupancy check says never happened. **Neither
+number from that run is usable**; the rate it was measuring is unaffected,
+because frequency does not care about amplitude calibration.
+
+> **Rule.** An estimator validated on synthetics is validated *for synthetics*.
+> Every failure above passed a synthetic check and then met material with a
+> property the synthetics lacked — missing harmonics, a dominant partial, a
+> bipolar excursion, a floor. **Validate on the material the instrument will
+> actually read, and where that is impossible, require two methods to agree on
+> a case where the answer is independently known.**
+
+> **Rule.** Prefer a detector whose failure is *loud*. A pitch estimator that
+> returns a sub-octave, a centroid that moves the wrong way and a swing bounded
+> by the floor all return plausible numbers. The floor-occupancy count and the
+> usable-frame count cost nothing, and they turn a plausible number into a
+> checkable one.
+
+**A note on the restore check this file relies on.** Every A/B/A here is
+quotable because a snapshot is compared byte-for-byte afterwards. On
+2026-09-06 that check reported a failure that could not be reproduced across
+four targeted attempts, while the machine state verified correct field by
+field. **A boolean says something is wrong and nothing about what.** The check
+now reports *which* offsets differ, on every comparison rather than only on
+failure — which also exposes the direction there was no evidence about, since
+a comparison that passes because both sides came from one stale fetch is
+invisible to a boolean but obvious in a diff. Helper at
+`~/temp/s3ked-logs/restorecheck.py`.
+
+Scripts and logs: `ceiling.log`, `pitchpass2.py`, `pitchlib.py`, `kgconst.log`,
+`panmove.log`, `panrate.log` under `~/temp/s3ked-logs/`.
