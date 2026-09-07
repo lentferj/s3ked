@@ -224,6 +224,7 @@ silently wrong one.
 - [§181](#181--retraction-of-52-lfo2-does-reach-pan-the-matrix-amount-was-never-set-2026-09-06) — RETRACTION of §52. LFO2 does reach pan; the matrix amount was never set (2026-09-06)
 - [§182](#182--six-detectors-that-moved-plausibly-and-measured-the-wrong-thing-in-one-night-2026-09-06) — Six detectors that moved plausibly and measured the wrong thing, in one night (2026-09-06)
 - [§183](#183--lfo1-and-lfo2-share-one-rate-law-and-52s-factor-of-two-was-its-detector-2026-09-07) — LFO1 and LFO2 share one rate law, and §52's factor of two was its detector (2026-09-07)
+- [§184](#184--a-slow-attack-is-worth-390-db-of-artefact-between-two-builds-and-a-decaying-release-is-a-third-way-to-fake-an-onset-2026-09-07) — A slow attack is worth 3.90 dB of artefact between two builds, and a decaying release is a third way to fake an onset (2026-09-07)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -17529,3 +17530,88 @@ asks:
 
 Scripts: `~/temp/s3ked-logs/panrate.py`, `lfo1rate.py`, `ratefix.py`,
 `sustain.py`, `panmove.py`; `probes/lomb.py` carries the retrigger warning.
+
+## §184 — A slow attack is worth 3.90 dB of artefact between two builds, and a decaying release is a third way to fake an onset (2026-09-07)
+
+Two builds of the same MPC-sourced route were being compared by captured
+level. Program 0 differs between them in one field:
+
+    build A   ATTAK1 = 94
+    build B   ATTAK1 = 99
+
+so the two arms are not the same envelope, and at the harness default hold of
+2.0 s both are still climbing. Measured on the bench rig, four notes, same
+volume, same session:
+
+    build A   hold  2: -43.30 dB    hold 12: -32.30 dB    gain +11.00 dB
+    build B   hold  2: -48.25 dB    hold 12: -33.35 dB    gain +14.90 dB
+
+    A - B at hold  2:  +4.95 dB
+    A - B at hold 12:  +1.05 dB     both on plateau
+    attack artefact :  +3.90 dB
+
+**Four-fifths of the apparent difference between the builds was the attack.**
+The ordering is consistent -- the slower attack loses more of itself inside a
+2.0 s window -- but the residual difference is 1.05 dB, not 4.95.
+
+### §141 is roughly 2x low against audio, on both points
+
+The attack law was fitted on `t90` read off the machine's own display, never
+against captured level. A single exponential with `tau = t90 / ln 10` predicts
+a hold-2 to hold-12 gain of +4.21 dB for `ATTAK1` 94 and +7.29 dB for 99. The
+measured gains are +11.00 and +14.90. **The discrepancy is a consistent factor
+of about two on both points**, which is suggestive but is not yet a correction:
+the mechanism is unknown, and two points do not distinguish a wrong constant
+from a wrong functional form. Recorded so the next person does not re-derive
+the model and trust it.
+
+### The third false-onset mechanism: a release grazing the threshold
+
+Both captures tripped the harness onset check at 5 events for 4 notes, and
+**this survives a merge guard derived from `HOLD`** -- at hold 12 the guard is
+12.6 s and the extra event is still there. It is not the within-note
+dip-and-recover that a short guard miscounts. It is this:
+
+    hold  2   peak -46.9   threshold -86.9   5th event -86.9   release min -88.3
+    hold 12   peak -35.3   threshold -75.3   5th event -75.3   release min -75.3
+
+The onset detector arms on an upward crossing of `peak - 40 dB`. A long release
+**decays down through that threshold**, dips just below it, and wobbles back
+across -- and the recrossing is reported as an onset. In both files the "event"
+sits at the threshold to 0.1 dB and 40.0 dB below the capture peak. It is the
+tail, after the last note-off, where a guard anchored to the previous *onset*
+has long expired.
+
+**No guard length fixes this**, because the guard is anchored to the wrong
+event. Hysteresis would: re-arm only once the level falls a few dB *below*
+threshold rather than on the first crossing.
+
+The three mechanisms now known, all reporting "something sounded that was not
+commanded":
+
+1. a merge guard shorter than `HOLD`, splitting one note in two;
+2. a detector more sensitive than the harness's, counting modulation cycles;
+3. **this one** -- a release decaying through the detection threshold.
+
+### The envelope shape that produces all of it
+
+A slow attack with a long release, on a program whose peak sits far above the
+noise floor, has now produced **four** distinct false signals across three
+machines: a false silence, a false contamination flag, a 15 dB level error, and
+now a false onset. None of them is a bug in the thing being measured. When a
+program looks anomalous on a level or event statistic, **read `ATTAK1` before
+believing the statistic** -- it costs one parameter read and it has been the
+explanation every time so far.
+
+### Two addressing hazards met on the way
+
+- The §179 CLR leftover sits at index 0 and **carries `PRGNUM 0`, colliding
+  with the loaded program on the very field used to disambiguate**. Reading
+  "program 0" by index returned the leftover's `ATTAK1` of 25; what caught it
+  was `GROUPS` disagreeing with the load listing, a check unrelated to the
+  value being read. Worse, the harness selects by program change, so the
+  collision does not merely confuse a read -- **it silently decides which
+  program was measured**. Unstack before capturing.
+- A volume name is not a program name. Matching the partition listing's
+  entry against `program_list()` matches nothing, because they are different
+  namespaces that both read as "the name".
