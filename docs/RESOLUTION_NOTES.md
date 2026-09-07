@@ -17780,8 +17780,33 @@ harness's own schedule, across the whole `ATTAK1` range:
     L (s)  0.020 0.023 0.051 0.080 0.100 0.146 0.152
     margin 0.330 0.327 0.299 0.270 0.250 0.204 0.198
 
-**Worst case 0.198 s, at the slowest attack available here.** §185's own
-capture measures `L` = 0.010 s, margin 0.340.
+**That table is the `ATTAK1` sweep program only, and it is not a bound.**
+Measured across the whole capture corpus -- first note of each take, where the
+harness schedule carries no accumulated sleep drift -- 398 captures:
+
+    median  +0.017 s     p90 +0.025 s     max +1.101 s
+    L > 0.35 s, where a 0.95 s post-note-off event MERGES:  3 of 398 (0.8%)
+
+    +0.488 s   the ATTAK1 99 program at hold 12      margin -0.138   MERGES
+    +1.042 s   an MPC->E4B conversion                margin -0.692   MERGES
+    +1.101 s   an MPC program 0 recheck              margin -0.751   MERGES
+
+**So "worst case 0.198 s" was a claim from eight captures on two programs and
+is false across the corpus.** One of the two files §186 rests on is over the
+line: at `L` = 0.488 s a §185-type event on *that* capture would merge and
+change no count.
+
+**§185's verdict is unaffected, because the margin was measured on the capture
+the verdict rests on**: `REART_MX10c` has `L` = 0.010 s, margin 0.340. That is
+the rule this produces -- **the margin is a property of the individual capture
+and must be measured there, not asserted from a corpus bound.**
+
+The structural claim survives the correction: `L` is governed by how fast the
+signal clears its *first 8 dB*, not by total attack length. That is why one
+`ATTAK1` 99 program gives 0.152 s and another gives 0.488 s -- same nominal
+attack, different material in the first few dB. **The property is a slow first
+8 dB, which is not the same thing as a slow attack**, and only the second is
+visible in a parameter.
 
 **`L` does not scale with attack length, which is the non-obvious part.** At
 `ATTAK1` 99 the attack takes about 7.3 s to reach 90%, yet the onset is placed
