@@ -17801,6 +17801,27 @@ the verdict rests on**: `REART_MX10c` has `L` = 0.010 s, margin 0.340. That is
 the rule this produces -- **the margin is a property of the individual capture
 and must be measured there, not asserted from a corpus bound.**
 
+**It is one program, not a route.** The three merging captures looked
+MPC-sourced, and a sibling session's own tail was conversions into KRZ, which
+made "the route does something to the first 8 dB" the obvious reading. Grouped
+by route across 398 captures it is false:
+
+    mpc_orig           n=12  median +0.026  max +0.155
+    MX14_MPC_to_AKAI   n=11  median +0.017  max +0.150
+    MPC_to_AKAI        n=11  median +0.016  max +0.146
+    mx11_mpc_to_e4b    n=11  median +0.017  max +1.042   <- 61x its OWN median
+
+Every route median lies between +0.010 and +0.026 s. **The MPC routes are not
+elevated; they contain an outlier.** And the three captures with a negative
+margin are all **program 0** of MPC-sourced volumes -- the same program that
+produced a false silence, a false contamination flag and a 15 dB level error
+(§184). **One program with a very slow first 8 dB, captured under several
+route names**, which is what made it look like a route property.
+
+The falsifier was written before the grouping: *"the high-L captures within the
+MPC group are as far from their own group's median as the groups are from each
+other"*. At 61x its own median, that is met.
+
 The structural claim survives the correction: `L` is governed by how fast the
 signal clears its *first 8 dB*, not by total attack length. That is why one
 `ATTAK1` 99 program gives 0.152 s and another gives 0.488 s -- same nominal
