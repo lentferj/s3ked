@@ -17639,7 +17639,9 @@ check existed through the final detector (guard from `HOLD`, 6 dB hysteresis):
     MPC route         11 files   exact  8   low  2   HIGH 1
     MX14 KR route     12 files   exact 12   low  0   HIGH 0
 
-44 of 45 carry no more events than notes. Low counts are uninformative (§184).
+40 of 45 are informatively clean, and that is a weaker statement than the
+raw count -- see "how blind each verdict was" below. Low counts are
+uninformative (§184).
 **One file is informative**, the MPC-sourced route's capture index 9, at 6
 events for 4 notes:
 
@@ -17690,6 +17692,45 @@ per-keygroup envelope comparison and withdrew it -- adjacent keygroups read as
 each other shifted by one position, which is the signature of guessed offsets.
 The key ranges were confirmed against the writer source; the envelope fields
 were not. **Take no envelope byte from that attempt.**
+
+### How blind each verdict was
+
+The check triggers above `peak - 40 dB` and re-arms only below `peak - 46 dB`.
+**While the envelope stays above the re-arm level the detector cannot report
+anything at all**, so a capture reading exactly the commanded count is only
+clean over the fraction of its length where an event could have been seen.
+Measured across the same 45 captures, as the share of each spent above re-arm:
+
+    E4 route          n=10   blind  min 0.36  median 0.36  max 0.38
+    KR route          n=12   blind  min 0.35  median 0.36  max 1.00
+    MPC route         n=11   blind  min 0.08  median 0.35  max 1.00
+    MX14 KR route     n=12   blind  min 0.34  median 0.36  max 0.36
+
+**The median capture is blind for 36% of its length**, which is inherent -- a
+note is sounding for much of the take. Three captures are far worse, and the
+correspondence matters:
+
+    MPC route index 0    100% blind   1 onset  -> already set aside as low
+    KR route index 11    100% blind   1 onset  -> already set aside as low
+    MPC route index 10    86% blind   4 onsets -> READ AS CLEAN
+
+**The third one is the problem.** It returned exactly the commanded count while
+the detector was blind for 86% of the capture, so its clean verdict carries
+almost no information and this section's first draft counted it as clean. The
+two 100%-blind captures happen to be self-consistent -- total blindness leaves
+one onset, which reads as low and was discarded -- but that is luck, not
+design: **blindness that is nearly total, rather than total, produces a
+confident clean reading instead of an obviously broken one.**
+
+Corrected tally: **40 informatively clean, 1 clean-but-blind, 3 uninformative
+low, 1 informative high.**
+
+The general form is worth stating because it applies to every use of this
+check: **the check fails open.** Its purpose is to catch a capture holding more
+events than were commanded, and an extra sound whose envelope never dips below
+the re-arm level is merged into its neighbour and reported as the commanded
+count. A "clean" result is evidence only over the non-blind fraction, and that
+fraction has to be quoted with it.
 
 ### Why it matters beyond this file
 
