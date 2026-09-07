@@ -92,7 +92,7 @@ silently wrong one.
 - [§49](#49--measured-findings-cross-checked-against-the-written-specification-2026-08-12) — Measured findings cross-checked against the written specification (2026-08-12)
 - [§50](#50--the-ib304f-is-not-fitted-and-it-was-never-the-explanation-2026-08-12) — The IB304F is not fitted, and it was never the explanation (2026-08-12)
 - [§51](#51--retraction-the-per-zone-fields-are-not-inert-45-tested-the-wrong-thing-2026-08-12) — RETRACTION. The per-zone fields are not inert; §45 tested the wrong thing (2026-08-12)
-- [§52](#52--retraction-lfo2-works-only-its-route-to-pan-is-dead-2026-08-12) — RETRACTION. LFO2 works; only its route to pan is dead (2026-08-12)
+- [§52](#52--partly-retracted-by-181-lfo2-works-only-its-route-to-pan-is-dead-2026-08-12) — PARTLY RETRACTED by §181. LFO2 works; only its route to pan is dead (2026-08-12)
 - [§53](#53--filq-sets-damping-and-damping-is-linear-2026-08-12) — `FILQ` sets damping, and damping is linear (2026-08-12)
 - [§54](#54--filfrq-re-derived-from-the-resonance-peak-2026-08-12) — `FILFRQ` re-derived from the resonance peak (2026-08-12)
 - [§55](#55--lfodel-is-a-pure-delay-and-there-is-no-fade-in-2026-08-12) — `LFODEL` is a pure delay, and there is no fade-in (2026-08-12)
@@ -221,6 +221,7 @@ silently wrong one.
 - [§178](#178--a-filter-corner-below-the-content-fakes-a-velocity-response-and-raising-it-costs-only-resonance-2026-09-05) — A filter corner below the content fakes a velocity response, and raising it costs only resonance (2026-09-05)
 - [§179](#179--a-sample-whose-name-begins-with-a-space-is-silently-not-loaded-and-four-other-things-a-load-will-not-tell-you-2026-09-06) — A sample whose name begins with a space is silently not loaded, and four other things a load will not tell you (2026-09-06)
 - [§180](#180--a-filter-modulation-slot-is-worth-45-db-at-the-top-of-a-range-the-envelope-2-depth-is-inert-and-the-three-slots-are-not-equivalent-2026-09-06) — A filter modulation slot is worth 45 dB at the top of a range, the envelope-2 depth is inert, and the three slots are not equivalent (2026-09-06)
+- [§181](#181--retraction-of-52-lfo2-does-reach-pan-the-matrix-amount-was-never-set-2026-09-06) — RETRACTION of §52. LFO2 does reach pan; the matrix amount was never set (2026-09-06)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -4298,7 +4299,13 @@ withdrawn from that list entirely.
 
 ---
 
-## §52 — RETRACTION. LFO2 works; only its route to pan is dead (2026-08-12)
+## §52 — PARTLY RETRACTED by §181. LFO2 works; only its route to pan is dead (2026-08-12)
+
+> **The pan half of this section is wrong and is superseded by §181.**
+> LFO2 *does* reach pan. Every field on the route was driven except the
+> matrix amount `MODVPAN1` (offset 89), which was zero throughout; with it
+> set, the balance swings 29.75 dB where it swung 0.47 dB with everything
+> else identical. The LFO2-to-filter findings below all stand.
 
 §39 recorded five fields as inert — `PANRAT`, `PANDEP`, `PANDEL`, `LFO2WAVE`,
 `LFO2TRIG` — and called the finding "the pan LFO does nothing". **All five
@@ -17265,4 +17272,69 @@ Scripts: `~/temp/s3ked-logs/aba_depth.py` (A/B/A with peak-time
 instrumentation and whole-block restore verification), `aba_depth3.py`,
 `grid_any.py`, `run_matrix.sh`. Captures under `~/temp/s3ked-logs/aba/`,
 `aba3/`, `grid_E4AK*/`, `grid_KRAK*/`.
+## §181 — RETRACTION of §52. LFO2 does reach pan; the matrix amount was never set (2026-09-06)
+
+**Status: resolved on hardware, 2026-09-06.** §39 said the pan LFO does
+nothing. §52 retracted half of that — LFO2 works, "only its route to pan is
+dead". **That remaining half is also wrong**, and this is the third verdict on
+the same question, so the reasoning is given in full rather than the result.
+
+**Pan has a modulation matrix, and neither earlier section touched it:**
+
+```
+  program  MODSPAN1/2/3   offsets 76/77/78   pan modulation SOURCES
+  program  MODVPAN1/2/3   offsets 89/90/91   pan modulation AMOUNTS
+```
+
+§39 swept `PANDEP` (offset 30), which is **LFO2's own output depth**, not the
+amount that connects it to the pan destination. The two are different fields.
+§173 had already established that the analogous amplitude route is a
+**product** — `swing = 0.010068 × LFODEP × MODVAMP1` — so an amount of zero
+silences any depth. The same shape applies here and nobody checked.
+
+**Measured, one program, everything held but the amount:**
+
+| condition | `MODVPAN1` | balance |
+|---|---|---|
+| A, as found | 0 | swing **0.18 dB** |
+| control `PANPOS` −50 | — | median **+31.64 dB** |
+| control `PANPOS` +50 | — | median **−29.48 dB** |
+| B, source 8, `PANDEP` 99, `PANRAT` 30 | **50** | swing **29.75 dB** |
+| B′, identical to B | 0 | swing **0.47 dB** |
+
+**B and B′ differ in one byte**, and the swing moves from 0.47 to 29.75 dB.
+The `PANPOS` controls put 61 dB through the same detector **in the same run**,
+so the result cannot be attributed to a detector that cannot see pan — which
+is precisely what §39 established for its own negative and what made that
+negative believable for four weeks. Restore verified byte-identical over the
+whole 192-byte program header.
+
+**Two facts the notes did not record.**
+
+- **`MODVPAN1` clamps at 50, not 99.** Writing 99 reads back 50. Caught by a
+  read-back assert; the range is ±50.
+- **The measurement above is a LOWER BOUND on the swing.** `PANRAT` 30 is
+  7.11 Hz by §52's law, one cycle every 141 ms, and the balance was sampled in
+  50 ms windows — 2.8 per cycle, 3.2 cycles observed. That is above Nyquist
+  but too coarse to catch the extremes. **A rate near the top of the range
+  needs ~10 ms windows**; at `PANRAT` 93 (11.7 Hz, the ceiling) a 50 ms window
+  spans 0.57 of a cycle and aliases outright. The sibling mpc2emu session
+  measured an 11.47 Hz source panner and hit exactly this.
+
+> **Rule.** The same fault appeared three times in one day across three
+> sessions: a modulation route driven at every field except its matrix
+> **amount**, measuring inert each time. Here it was `MODVPAN1`; in §180's
+> amendment it was `MODVFILT3` against `SUSTN2` 0; in the sibling writer it
+> was an envelope depth multiplied by a zero sustain. **Before reporting a
+> route dead, read every field on the path and confirm none of them is a zero
+> multiplier** — and prefer a program where the route is known to work as the
+> positive control, rather than a different field on the same destination.
+
+**How it was found is worth recording too, because no amount of re-reading
+would have produced it.** The pan modulation page (`F6 PAN` from program edit)
+names all three routes and their depths on the machine's own display; the user
+photographed it. Neither §39 nor §52 mentions a per-route depth, so the field
+was invisible to anyone working from the notes.
+
+Script: `~/temp/s3ked-logs/panmatrix.py`.
 
