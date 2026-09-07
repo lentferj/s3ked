@@ -17822,6 +17822,35 @@ The falsifier was written before the grouping: *"the high-L captures within the
 MPC group are as far from their own group's median as the groups are from each
 other"*. At 61x its own median, that is met.
 
+**And for the merging captures, `L` is not a lag at all.** The obvious reading
+of a 1.1 s figure is that the program starts late -- a delay, from an envelope
+field or leading silence in the sample. **The onset spacings refuse it.** The
+commanded spacing is a constant 5.60 s, and a uniform delay preserves spacing
+exactly:
+
+    typical capture     spacings 5.60  5.60  5.60   offsets +0.02 +0.02 +0.02 +0.02
+    merging capture A   spacings 5.49  5.45  5.92   offsets +1.04 +0.93 +0.78 +1.10
+    merging capture B   spacings 5.46  5.82  3.77   offsets +1.10 +0.96 +1.18 -0.65
+
+**One of those onsets arrives 0.65 s EARLY, and a delay cannot make a note
+early.** The spacings vary by up to 2.05 s where the commanded figure is
+constant to 0.00.
+
+**So on this material the detector is not locating the notes.** It triggers
+wherever the signal happens to swell 8 dB above its running minimum, and on a
+program this quiet and this erratic that is not the note-on. `L` measured there
+is a **mis-location, not a lag** -- the same distinction a sibling session drew
+when a 2.448 s "lag" turned out to be its matching rule rather than its
+detector.
+
+**The practical consequence is stronger than a negative margin.** A capture
+whose onsets do not track the commanded spacing cannot support *any*
+onset-derived quantity -- not a count, not a position, not a lag. **The
+spacing check is the cheap test for it**: commanded spacing is known exactly
+and constant, so a capture whose measured spacings vary is announcing that its
+onsets are not the notes. That test costs three subtractions and it was
+available all night.
+
 The structural claim survives the correction: `L` is governed by how fast the
 signal clears its *first 8 dB*, not by total attack length. That is why one
 `ATTAK1` 99 program gives 0.152 s and another gives 0.488 s -- same nominal
