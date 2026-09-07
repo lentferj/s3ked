@@ -220,6 +220,7 @@ silently wrong one.
 - [§177](#177--envelope-2s-decay-runs-the-opposite-way-to-envelope-1s-and-sustn2-0-mutes-its-filter-route-entirely-2026-09-05) — Envelope 2's decay runs the opposite way to envelope 1's, and `SUSTN2` 0 mutes its filter route entirely (2026-09-05)
 - [§178](#178--a-filter-corner-below-the-content-fakes-a-velocity-response-and-raising-it-costs-only-resonance-2026-09-05) — A filter corner below the content fakes a velocity response, and raising it costs only resonance (2026-09-05)
 - [§179](#179--a-sample-whose-name-begins-with-a-space-is-silently-not-loaded-and-four-other-things-a-load-will-not-tell-you-2026-09-06) — A sample whose name begins with a space is silently not loaded, and four other things a load will not tell you (2026-09-06)
+- [§180](#180--a-filter-modulation-slot-is-worth-45-db-at-the-top-of-a-range-the-envelope-2-depth-is-inert-and-the-three-slots-are-not-equivalent-2026-09-06) — A filter modulation slot is worth 45 dB at the top of a range, the envelope-2 depth is inert, and the three slots are not equivalent (2026-09-06)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -17141,3 +17142,127 @@ at corner 54**, where every SysEx condition had held it at 99.
 Scripts: `~/temp/s3ked-logs/loadvolp.py` (partition-aware load; the older
 `loadvol.py` omits `select_partition` from its load phase and can only load
 from partition 0), `unstack.py`, `verify_mx9.py`, `samplenames.py`.
+
+## §180 — A filter modulation slot is worth 45 dB at the top of a range, the envelope-2 depth is inert, and the three slots are not equivalent (2026-09-06)
+
+**Status: resolved on hardware, 2026-09-06.** Machine behaviour; the converter
+bug that prompted it belongs to the sibling session and is not recorded here.
+
+**The three filter modulation amounts do different things and are not
+interchangeable.** Read off the machine on programs resting at `FILFRQ` 15:
+
+```
+  PRG  FILFRQ   MODVFILT1(151)  MODVFILT2(152)  MODVFILT3(153)  SUSTN2
+    0    15     [0,0,0,0]       [0,0,0,0]       [0,0,0,0]       [0,0,0,0]
+    3    14     [0,0,0]         [0,0,0]         [33,33,33]      [60,60,60]
+    9    15     [0,0,0]         [0,0,0]         [0,0,0]         [0,0,0]
+```
+
+### Slot 1 decides whether a program sounds across its range
+
+**Writing 33 into `MODVFILT1` moves a program by 45.85 dB at the top of its
+range.** Two programs, strict A/B/A, seven keys, five velocities:
+
+| | k36 | k48 | k60 | k72 | k78 | k84 | k90 | k36→k84 |
+|---|---|---|---|---|---|---|---|---|
+| A `MODVFILT1` 0 | −18.21 | −27.29 | −34.74 | −40.96 | −46.65 | −55.65 | −59.62 | **−37.45** |
+| B `MODVFILT1` 33 | −8.04 | −7.86 | −10.03 | −10.85 | −11.20 | −12.18 | −13.77 | **−4.15** |
+| A2 restored | −18.20 | −27.36 | −34.71 | −41.14 | −46.67 | −55.63 | −59.15 | −37.43 |
+
+**A2 reproduces A to 0.02 dB, with the restore verified byte-identical over all
+192 bytes of every keygroup** — so the change is attributable to the one byte
+and to nothing else. A second program of different keygroup layout gave
+−20.95 → −0.81 → −20.97, again 0.02 dB. With slot 1 driven, one program is
+**flat to 1.82 dB across four and a half octaves**, the other to 5.91.
+
+### Slot 3, the envelope-2 depth, is inert on these programs
+
+**`MODVFILT3` is the depth of envelope 2 → filter (§177). The same A/B/A on it
+moves nothing:**
+
+```
+  PRG 0   A  k36->k72  -22.87    B (depth 33)  -22.90    A2  -22.91
+  PRG 9   A  k36->k72  -13.65    B (depth 33)  -13.73    A2  -13.59
+```
+
+**0.03 and 0.08 dB, on a rig that reproduces to 0.02.** The reason is recorded
+twice already: §156 gives `octaves = 0.002612 × SUSTN2 × depth`, a **product**,
+and §177 states that `SUSTN2` 0 mutes the route entirely. Every program here
+carries `SUSTN2` 0, so depth at any value is multiplied by nothing.
+
+**A sibling session removed a `sustn2 <= 0` guard from its writer on the
+strength of the first version of this section, which misattributed the 45 dB to
+slot 3.** The measurement above showed the resulting build inert and the guard
+was restored. **Nothing was pushed.**
+
+> **Rule.** Specify a byte by **offset**, not by name. The first version of
+> this section took "the envelope-2 filter depth" from §178's prose while §177,
+> eleven hundred lines above in this same file, gave the correct field. A field
+> name read out of prose is a guess wearing the clothes of a citation. The
+> peer's `0x99` is what exposed it; every name in the exchange, mine and
+> theirs, was ambiguous enough to survive.
+
+> **Rule.** Before writing a byte to test a hypothesis, read that byte's
+> current value on a program where the effect is **known present**. The
+> programs that sound carried `MODVFILT3` 33; the dark ones carried 0. One read
+> of that field across both groups, before any write, would have shown slot 1
+> was zero everywhere and could not be what distinguished them.
+
+**What slot 1's source is on these programs is not established here** — §178
+records one program where `MODSFILT1` was velocity — and it is worth
+establishing before anyone reaches for slot 1 as a route to the same end.
+
+### The cross-program version of the same measurement was worthless
+
+Before the A/B/A, the same effect was chased by comparing *groups* of programs
+— six that received depth 0 against six that received depth 33 — and every
+statistic built that way had to be withdrawn:
+
+- The two groups differ in **keygroup geometry**, and the measured keys fall
+  differently in each: in one group four of five grid keys sit inside a single
+  keygroup playing one stretched sample; in the other every grid step crosses
+  a keygroup boundary near native pitch. **A slope measured across three sample
+  changes is not the same quantity as one measured through four octaves of a
+  single stretched sample.**
+- A step observed at one key interval was read as a filter corner being
+  crossed. It sits **within one keygroup**, so an octave of sample stretch
+  explains it equally well, and an octave-resolution grid cannot separate the
+  two. The reading was one of two, stated as one.
+- A peer's contribution to the same argument was withdrawn as an analysis
+  artefact after it had been relayed onward as strong support.
+
+**The A/B/A settles what none of that could, because the confounds appear in
+both arms and cancel.** Geometry, stretch, layout, sample assignment and root
+spacing are identical between A and B by construction. The between-group
+difference the grouped statistics rested on was **16.50 dB, of which 13.16 dB
+(80%) disappears on the one byte.**
+
+> **Rule.** When groups differ in more than the thing under test, no statistic
+> over those groups is worth building — including the ones that come out the
+> way you expect. Change one byte in one program and measure it against
+> itself. §178 gives the same rule from the other direction; this is what it
+> costs to ignore it.
+
+### Repeatability across a load, and a floor artefact for the third time
+
+Two full passes of both volumes — CLR, reload, re-grid — allow a direct
+repeatability figure:
+
+```
+cells at least 15 dB over their floor    n=97   sd 0.029 and 0.162 dB
+cells under that gate                    n=13   sd 1.254 dB, worst 2.09
+```
+
+**Where there is signal the rig repeats to hundredths of a dB across a full CLR
+and reload.** The aggregate over *all* cells was sd 0.9 with a 6.05 dB outlier,
+and every bad cell belonged to the silent program CLR leaves behind (§179) — a
+program with no audio, whose cells are noise, included in a statistic about
+audio. **That is §178's floor trap for the third time**, one hour after
+committing the section that names it. The gate is not optional and neither is
+excluding programs that do not sound.
+
+Scripts: `~/temp/s3ked-logs/aba_depth.py` (A/B/A with peak-time
+instrumentation and whole-block restore verification), `aba_depth3.py`,
+`grid_any.py`, `run_matrix.sh`. Captures under `~/temp/s3ked-logs/aba/`,
+`aba3/`, `grid_E4AK*/`, `grid_KRAK*/`.
+
