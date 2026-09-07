@@ -17733,6 +17733,41 @@ the re-arm level is merged into its neighbour and reported as the commanded
 count. A "clean" result is evidence only over the non-blind fraction, and that
 fraction has to be quoted with it.
 
+### It is ABSENT on the other build of the same program (2026-09-08)
+
+The program was re-captured from the MX10 build -- same source, same `PRGNUM`
+9, same 8 keygroups -- under §185's original conditions: default 2.0 s hold,
+notes 36/43/48/55, so note-off falls at on+2.0 with a 3.0 s gap after it, ample
+room for an event ~0.95 s later.
+
+**No re-articulation, on any of the four notes.** Two independent checks:
+
+- An 8 dB two-sided relative detector run here found **exactly four events**,
+  at 1.29, 6.89, 12.49 and 18.09 s. Four notes were commanded. **There is no
+  room for a fifth event wherever the grid actually sits**, which makes this
+  verdict independent of any reconstruction of the schedule.
+- The harness classifier, run against the real `marks` from the take rather
+  than a reconstructed grid, returns (4 expected, 0 mid-hold, 0 post-note-off,
+  0 unassigned).
+
+The route was live: **4/4 sounded, peak -34.9 dB, 8% blind** -- so this is a
+measured absence and not a dead signal path. Reproduced on two takes with
+identical peak level.
+
+**What it does not say.** The two builds are known to differ in the envelope:
+that is precisely what `ATTAK1` 94 against 99 was (§184). So the phenomenon is
+build-dependent, and this establishes only that *this* build does not show it.
+It does not identify the field, and it does not distinguish "the envelope
+change removed it" from "the two builds carry different material".
+
+**A note on why this was held for an hour.** The first take of this capture
+raised the harness's strongest warning -- SOMETHING SOUNDED THAT WAS NOT
+COMMANDED, on all four onsets -- from a classifier defect: the RMS smoothing
+window is centred, so onsets are reported up to half a window early, and a
+`t_on <= t` comparison rejected onsets sitting 10 ms *before* their note-on.
+**A negative was not worth recording while the instrument that produced it had
+a known false positive**, even though the defect inflated the opposite column.
+
 ### Why it matters beyond this file
 
 A sibling session had recorded a comparable phenomenon on other hardware as

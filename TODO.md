@@ -1988,10 +1988,18 @@ A re-articulation 0.95 s after note-off appears on MIDI 48 and 55 and is
 absent on 36 and 43, which decay to the floor and stay there. The split sits
 between 43 and 48, where a keygroup boundary would be.
 
-**Blocked on:** nothing but hardware time. Read the program's keygroup ranges
-and per-keygroup envelope fields, and re-capture with notes placed either side
-of whatever boundary the map actually shows. If the boundary is elsewhere than
-43/48, the keygroup explanation is dead and this needs a different one.
+**Narrowed 2026-09-08: the phenomenon is BUILD-dependent.** Re-captured on the
+MX10 build of the same source program — same `PRGNUM` 9, same 8 keygroups —
+under §185's original conditions, it is **absent on all four notes**, with the
+route live at 4/4 sounded and −34.9 dB, confirmed both by a grid-independent
+event count and by the harness classifier against real marks.
+
+**Blocked on:** reloading the build that produced the original capture, which
+may need a card swap. Comparing per-keygroup envelope fields between the two
+builds is then a read-only diff, and the field that differs on kg1/kg2 but not
+kg0 is the candidate. Until that build is resident, this cannot progress —
+reading the MX10 build's fields says nothing, since it is the build that does
+*not* show the effect.
 
 Related: a sibling session filed a comparable event on other hardware at
 ~1.15 s as a property of a superseded bank, four mechanisms refuted. That
