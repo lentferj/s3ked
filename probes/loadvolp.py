@@ -23,8 +23,8 @@ wrong volume silently. select_partition is what forces the directory re-read
 
 Usage: loadvolp.py <partition-int> "VOLUME NAME"
 """
-import sys, time
-sys.path.insert(0,"/home/lentferj/temp/s3ked-logs")
+import sys, time, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from s3kconnect import connect
 PART=int(sys.argv[1]); TARGET=sys.argv[2]
 PROBE_DRIVE, MAIN_DRIVE = 7, 4
@@ -51,6 +51,17 @@ try:
     say("   medium LIVE")
     patient(br.select_partition,PART); time.sleep(2.5); vt=vols(br)
     say("   partition %d (%s): %s"%(PART,chr(65+PART),vt))
+    # AN EMPTY PARTITION ECHOES THE PREVIOUS NON-EMPTY READ (sweepvalid.py's
+    # rule, which this script did not apply to its own target read). Without
+    # this, an empty PART returns partition 0's list, and if TARGET happens to
+    # be on partition 0 the name check passes -- then CLR runs and the WRONG
+    # volume loads. The drive gate below does exactly this comparison for the
+    # drive; the partition never had one.
+    # PART 0 is the partition already selected, so an identical list is
+    # correct there and only suspicious elsewhere.
+    if PART!=0 and vt==vm:
+        say("REFUSING: partition %d echoes partition 0 -- it is empty or was "
+            "not re-read. Nothing cleared."%PART); raise SystemExit(5)
     if TARGET not in vt:
         say("REFUSING: %r not on partition %d. Nothing cleared."%(TARGET,PART)); raise SystemExit(3)
     vi=vt.index(TARGET)
@@ -63,8 +74,18 @@ try:
         say("   directory: %d entries, %d audio words"%(len(entries),need))
     except Exception as e:
         say("   directory read failed (%s); size check skipped"%type(e).__name__)
-    if need and need>16777216:
-        say("REFUSING: needs %d words, machine holds 16777216"%need); raise SystemExit(4)
+    # ASK THE MACHINE ITS SIZE. This was hardcoded to 16777216, which is a
+    # 32 MB machine: on anything smaller the guard is inert, and bridge.py's
+    # trigger_load warns that an overflow fails QUIETLY, "leaving programs
+    # whose samples never arrived resident, selectable, and silent" -- the
+    # hardest failure to notice. free_words is what the load actually has.
+    if need:
+        st=br.status(timeout=12.0)
+        if need>st.free_words:
+            say("REFUSING: needs %d words, %d free of %d"
+                %(need,st.free_words,st.max_words)); raise SystemExit(4)
+        say("   capacity: needs %d words, %d free of %d"
+            %(need,st.free_words,st.max_words))
     say("\n[%s] CLR"%time.strftime('%H:%M:%S'))
     try: br.clear_memory(timeout=25.0)
     except Exception as e: say("   clear_memory raised %s (may be the machine working)"%type(e).__name__)

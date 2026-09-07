@@ -22,8 +22,8 @@ Two failure modes, both mine to have found and neither caught by counting:
 A listing-comparison rule catches the first and passes the second. Validating
 that names are printable ASCII in the 12-char field catches both.
 """
-import sys, time, string
-sys.path.insert(0,"/home/lentferj/temp/s3ked-logs")
+import sys, time, string, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from s3kconnect import connect
 OK=set(string.ascii_letters+string.digits+" -_.#/&'()+")
 def printable(n): return bool(n) and all(c in OK for c in n)
