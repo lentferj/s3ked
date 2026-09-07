@@ -226,6 +226,7 @@ silently wrong one.
 - [§183](#183--lfo1-and-lfo2-share-one-rate-law-and-52s-factor-of-two-was-its-detector-2026-09-07) — LFO1 and LFO2 share one rate law, and §52's factor of two was its detector (2026-09-07)
 - [§184](#184--a-slow-attack-is-worth-390-db-of-artefact-between-two-builds-and-a-decaying-release-is-a-third-way-to-fake-an-onset-2026-09-07) — A slow attack is worth 3.90 dB of artefact between two builds, and a decaying release is a third way to fake an onset (2026-09-07)
 - [§185](#185--a-real-post-note-off-re-articulation-095-s-late-on-the-upper-half-of-one-programs-range-2026-09-07) — A real post-note-off re-articulation, 0.95 s late, on the upper half of one program's range (2026-09-07)
+- [§186](#186--the-attack-is-not-an-exponential-approach-which-is-the-whole-of-141s-factor-of-two-2026-09-07) — The attack is not an exponential approach, which is the whole of §141's factor of two (2026-09-07)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -17704,3 +17705,57 @@ it, and the next attempt should not start from that assumption.
 Note the detection geometry: at a guard of `HOLD + 0.6` the check sees events
 from 0.6 s after note-off onwards, so 0.95 s is caught with 0.35 s to spare and
 1.15 s comfortably. An event at 0.4 s would be silently merged (§184).
+
+## §186 — The attack is not an exponential approach, which is the whole of §141's factor of two (2026-09-07)
+
+§184 left the attack law about 2x low against captured audio at two `ATTAK1`
+values and declined to fit a correction, because two points cannot separate a
+wrong constant from a wrong functional form. **They can be separated without a
+third point, and without touching the hardware, by a ratio that does not
+contain the time constant at all.**
+
+For a single exponential approach `1 - exp(-t/tau)`, the times to reach 50% and
+90% of final stand in a fixed ratio whatever `tau` is:
+
+    t50 / t90 = 0.301      (exact, tau-free)
+
+Measured on existing hold-12 captures, each note's attack normalised to its own
+peak, 200 ms RMS to ride over modulation ripple:
+
+    ATTAK1 94   note 0   t50/t90  0.798
+                note 1   t50/t90  0.732
+                note 2   t50/t90  0.855
+                note 3   t50/t90  0.873
+    ATTAK1 99   note 0   t50/t90  0.457
+
+**Every value is above 0.301, by between 1.5x and 2.9x.** The attack takes far
+longer to reach half of its final level, relative to its own t90, than an
+exponential does -- it starts slow and accelerates, where an exponential starts
+fast and decelerates. **That is the wrong functional form, and it is sufficient
+to explain the 2x**: a model that assumes a fast early rise will always
+overestimate how much level a short window captures.
+
+The prediction was written down before the measurement (bench file
+`PREDICTION_141.md`, 21:58): *"the real attack rises MORE SLOWLY at early times
+than a single exponential with the same t90"*, with the falsifier stated as the
+curve sitting on or above the exponential at t = 2.0 s. It sits below at every
+probe time on every note.
+
+### What this does NOT establish
+
+- **Not a replacement law.** The ratios are not equal to each other (0.46 to
+  0.87), so this is not one universal curve with a single exponent. A power law
+  fitted to `t50/t90` predicts the wrong `t10/t90`, so the true form is not a
+  simple power either.
+- **The spread may not be real.** The `ATTAK1` 94 program has 5 keygroups, so
+  its four probe notes need not share an envelope at all, and the `ATTAK1` 99
+  file yields only one usable note -- §184's one-sided under-count, overlapping
+  material giving 1 onset for 4 notes. **Five notes across two programs is
+  enough to reject exponential and not enough to fit anything.**
+- **`t90` itself is not impeached.** §141's `t90` for `ATTAK1` 99 was measured
+  at 8.600 s against a predicted 8.322 s, agreeing to 3.3%. The law is right
+  about when the attack finishes and wrong about how it gets there.
+
+The remaining work is unchanged in kind but smaller in scope: a single-keygroup
+program, `ATTAK1` swept, each setting captured once at a long hold. That gives
+the shape directly at many settings instead of the endpoint at two.

@@ -1961,10 +1961,19 @@ audio points now exist, both from the same rig and session (§184):
     ATTAK1 99   hold-2 -> hold-12 gain   measured +14.90 dB   model +7.29 dB
 
 Both measurements are roughly twice the model, which says systematic error
-rather than noise. **Do not fit a fudge factor to two points.** Two values do
-not separate a wrong constant from a wrong functional form, and the model
-assumes a single exponential with `tau = t90 / ln 10`, which is itself
-untested — the envelope may not be one exponential at all.
+rather than noise. **Do not fit a fudge factor.**
+
+**Resolved by §186: it is the functional form, not the constant.** The
+tau-free ratio `t50/t90` is 0.301 for any exponential approach and measures
+0.46–0.87 on five notes across both programs — the attack starts slow and
+accelerates where an exponential starts fast and decelerates. `t90` itself is
+sound (8.600 s measured against 8.322 s predicted). So the law is right about
+when the attack ends and wrong about how it gets there, which is sufficient to
+explain the whole factor of two.
+
+§186 does **not** supply a replacement form: the ratios are not equal to each
+other, no simple power law fits both `t50/t90` and `t10/t90`, and one of the
+two programs has 5 keygroups so its notes need not share an envelope.
 
 **Blocked on:** a sweep of `ATTAK1` across its range on one program, capturing
 each setting at two holds. That distinguishes the two cases and costs no
