@@ -223,6 +223,7 @@ silently wrong one.
 - [§180](#180--a-filter-modulation-slot-is-worth-45-db-at-the-top-of-a-range-the-envelope-2-depth-is-inert-and-the-three-slots-are-not-equivalent-2026-09-06) — A filter modulation slot is worth 45 dB at the top of a range, the envelope-2 depth is inert, and the three slots are not equivalent (2026-09-06)
 - [§181](#181--retraction-of-52-lfo2-does-reach-pan-the-matrix-amount-was-never-set-2026-09-06) — RETRACTION of §52. LFO2 does reach pan; the matrix amount was never set (2026-09-06)
 - [§182](#182--six-detectors-that-moved-plausibly-and-measured-the-wrong-thing-in-one-night-2026-09-06) — Six detectors that moved plausibly and measured the wrong thing, in one night (2026-09-06)
+- [§183](#183--lfo1-and-lfo2-share-one-rate-law-and-52s-factor-of-two-was-its-detector-2026-09-07) — LFO1 and LFO2 share one rate law, and §52's factor of two was its detector (2026-09-07)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -17432,3 +17433,99 @@ invisible to a boolean but obvious in a diff. Helper at
 
 Scripts and logs: `ceiling.log`, `pitchpass2.py`, `pitchlib.py`, `kgconst.log`,
 `panmove.log`, `panrate.log` under `~/temp/s3ked-logs/`.
+
+## §183 — LFO1 and LFO2 share one rate law, and §52's factor of two was its detector (2026-09-07)
+
+**Status: resolved on hardware, 2026-09-07.** §52 recorded LFO2 at
+`0.23708 Hz` per `PANRAT` unit and observed that this is "exactly twice LFO1"
+at a ratio of 1.998. **It is not twice. It is the same law, and the doubling
+was in the measurement.**
+
+**Measured through PAN, which is a signed destination**, on the program with
+the longest sustain, nine points across the field:
+
+```
+   PANRAT   freq Hz   frames   resol   floor%
+       10     1.209     1498    0.07      0%
+       20     2.378     1497    0.07      0%
+       30     3.544     1498    0.07      0%
+       40     4.762     1496    0.07      0%
+       50     5.950     1497    0.07      0%
+       60     7.147     1497    0.07      0%
+       75     8.940     1496    0.07      0%
+       90    10.741     1493    0.07      0%
+       99    11.785     1495    0.07      0%
+   three negative controls (amount 0): swings 0.66 / 1.11 dB, no modulation
+
+   through origin : rate = 0.11913 * PANRAT
+   with intercept : rate = 0.11921 * PANRAT - 0.0055    r2 0.999984
+```
+
+```
+  measured        0.11913
+  §52 claimed     0.23708     ratio 1.990   -- exactly double
+  §24's LFO1      0.11867     ratio 1.004   -- the same law
+```
+
+**The intercept is −0.0055 Hz, so the law passes through the origin** and the
+factor of two is not an artefact of a forced or mis-fitted intercept.
+
+**Why §52 doubled: it measured LFO2 through the FILTER.** A bipolar sweep
+presents *two* brightness excursions per cycle to a detector that responds to
+magnitude, so the apparent rate is twice the real one. Measured through pan,
+where balance is signed, the rate halves to its true value. §182 records the
+same confusion in five other detectors.
+
+**§24's LFO1 law confirmed independently, through pan rather than loudness:**
+
+```
+   LFORAT   predicted   measured
+       10       1.147      1.199
+       35       4.113      4.140
+       65       7.674      7.742
+       95      11.234     11.270
+   fitted  Hz = 0.11866 * LFORAT + 0.007   r2 0.999982
+   §24     Hz = 0.11867 * LFORAT - 0.04    r2 0.99948   (via loudness)
+```
+
+**Slope agreement 0.01%.** §24 avoided §52's trap not only by fitting the whole
+field but by choosing a destination whose response has a **sign** — an
+amplitude envelope distinguishes louder from quieter, where filter brightness
+does not. That property is worth more than the fitting method.
+
+### Confirmed in the shipping path
+
+A converter byte chosen with the corrected constant lands where the source
+asks:
+
+```
+  PANRAT 37   predicted 4.41   measured 4.35     (the old, doubled constant)
+  PANRAT 73   predicted 8.70   measured 8.63     (the corrected one)
+  source asks 8.7 Hz
+```
+
+**Two arms of the same program on two builds, a clean doubling at ratio 1.98.**
+
+### Three practical facts the notes did not carry
+
+- **`MODVPAN1` clamps at 50, not 99.** Writing 99 reads back 50.
+- **Resolution is set by SUSTAIN, not capture length.** A 15 s note on a
+  program that decays in 0.35 s yields 35 usable frames and 2.6 Hz resolution;
+  the same note on a sustaining program yields ~1495 frames and 0.07 Hz. **Pick
+  the subject by measured sustain before choosing sweep points** — that is the
+  difference between a quotable constant and another lower bound.
+- **`LFO2TRIG` 0 is free-running**, so the LFO phase is not reset by note-on.
+
+> **Rule.** A retriggered capture cannot measure a modulation rate, even with
+> an estimator built for uneven sampling. Sampling across notes to extend a
+> short sound's baseline produced a Lomb–Scargle peak at 6.66 Hz with a
+> significance of ×21822 — and **every value it returned was an exact multiple
+> of the 2.222 Hz retrigger rate, including one from a program with the
+> modulation amount at zero.** Four for four within 0.01 of an integer. The
+> synthetic that modelled the artefact came back clean at both regular and
+> jittered spacing, so the model said the method was sound. **Validating the
+> estimator does not validate the sampling scheme it is pointed with**, and
+> only a program measurable by both routes exposed it.
+
+Scripts: `~/temp/s3ked-logs/panrate.py`, `lfo1rate.py`, `ratefix.py`,
+`sustain.py`, `panmove.py`; `probes/lomb.py` carries the retrigger warning.
