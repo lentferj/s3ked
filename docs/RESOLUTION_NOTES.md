@@ -17761,6 +17761,35 @@ because position is checked rather than arithmetic.
     a §185-type event lands at        2.95 s   (note-off + 0.95)
     margin                           +0.35 s
 
+**The margin has a term in it, and `HOLD` is not that term.** The guard runs
+from the *detected* onset, not from note-on, so writing `L` for detection lag:
+
+    guard ends at   t_on + L + HOLD + 0.6
+    event lands at  t_on +     HOLD + 0.95
+    margin        = 0.35 - L                  <- HOLD cancels exactly
+
+**`HOLD` cancelling is the useful half**: the 0.35 s figure is the same at a
+2 s hold and a 12 s one, which is a stronger result than "measured at hold 2".
+The exposed half is that every millisecond of detection lag comes off it, and
+the causal envelope trades lead for lag by design.
+
+Measured on this bench with the causal detector, first onset against the
+harness's own schedule, across the whole `ATTAK1` range:
+
+    ATTAK1   20    40    60    75    85    94    99
+    L (s)  0.020 0.023 0.051 0.080 0.100 0.146 0.152
+    margin 0.330 0.327 0.299 0.270 0.250 0.204 0.198
+
+**Worst case 0.198 s, at the slowest attack available here.** §185's own
+capture measures `L` = 0.010 s, margin 0.340.
+
+**`L` does not scale with attack length, which is the non-obvious part.** At
+`ATTAK1` 99 the attack takes about 7.3 s to reach 90%, yet the onset is placed
+within 0.152 s of note-on -- 2% of the rise. A detector triggering on an 8 dB
+rise above a running minimum clears that threshold early in *any* attack,
+because 8 dB above the floor is a small fraction of the total climb. Slow
+attacks do not delay detection nearly as much as they delay the peak.
+
 **So the count argument holds for this phenomenon, by 0.35 s, and only for
 it.** The original claim -- "no room for a fifth event wherever the grid sits"
 -- was stated without the condition that makes it true, and is false for any
