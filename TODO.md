@@ -1948,3 +1948,43 @@ is as short as it can be.
 
 **Do not** poll during a load to find this out. The question is what the
 minimum *post-load* wait is, not whether polling is survivable.
+
+## §141's attack law is about 2x low against captured audio
+
+**Status:** open. Two calibration points, no correction applied.
+
+`t90 = 0.9 * 0.000201173 * exp(0.10844 * ATTAK1)` was fitted on `t90` read off
+the machine's own display and was never checked against captured level. Two
+audio points now exist, both from the same rig and session (§184):
+
+    ATTAK1 94   hold-2 -> hold-12 gain   measured +11.00 dB   model +4.21 dB
+    ATTAK1 99   hold-2 -> hold-12 gain   measured +14.90 dB   model +7.29 dB
+
+Both measurements are roughly twice the model, which says systematic error
+rather than noise. **Do not fit a fudge factor to two points.** Two values do
+not separate a wrong constant from a wrong functional form, and the model
+assumes a single exponential with `tau = t90 / ln 10`, which is itself
+untested — the envelope may not be one exponential at all.
+
+**Blocked on:** a sweep of `ATTAK1` across its range on one program, capturing
+each setting at two holds. That distinguishes the two cases and costs no
+hardware risk — RAM parameter writes with snapshot and verified restore, plus
+audio capture. It should be done on a program whose keygroup count is 1, to
+keep the envelope under test the only one sounding.
+
+## §185's re-articulation: read the keygroup map
+
+**Status:** open. One capture, one program, cause untested.
+
+A re-articulation 0.95 s after note-off appears on MIDI 48 and 55 and is
+absent on 36 and 43, which decay to the floor and stay there. The split sits
+between 43 and 48, where a keygroup boundary would be.
+
+**Blocked on:** nothing but hardware time. Read the program's keygroup ranges
+and per-keygroup envelope fields, and re-capture with notes placed either side
+of whatever boundary the map actually shows. If the boundary is elsewhere than
+43/48, the keygroup explanation is dead and this needs a different one.
+
+Related: a sibling session filed a comparable event on other hardware at
+~1.15 s as a property of a superseded bank, four mechanisms refuted. That
+framing no longer covers a similar event on a different machine.
