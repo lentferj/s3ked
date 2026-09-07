@@ -17981,6 +17981,18 @@ Two of three wrong is the useful outcome here: the prediction that the shape
 was a fixed property of the envelope generator was the one worth killing, and
 it would have survived another night if the parameter had not been swept.
 
+### This finding does not rest on any event count
+
+One of the two captures here -- the `ATTAK1` 99 program at hold 12 -- has a
+detection lag of 0.488 s and therefore a **negative** guard margin (§185): it
+cannot report a post-note-off event at all, and its onset count must not be
+read as clean. **That does not touch this section.** Every number above comes
+from envelope *timings* -- `t10`, `t50`, `t90` on a rise normalised to its own
+peak, with the four notes recovered by segmenting on the envelope's own minima
+rather than by counting onsets. **A merged onset changes no quantity used
+here.** Checked explicitly rather than assumed, because the same capture
+appears in both sections and only one of them is safe with it.
+
 ## §187 — Amplitude alone cannot tell a re-articulation from a mid-note swell; only position relative to note-off can (2026-09-07)
 
 The shared onset check was rebuilt on relative edges -- trigger on a rise above
