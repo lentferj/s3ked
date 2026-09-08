@@ -18148,9 +18148,15 @@ nobody read the two halves of a line against each other.
 
 **This is cheaper than every check in this file.** The onset detector, the
 spacing gate, the guard margin and the blind fraction all cost a corpus run and
-all were themselves wrong at some point tonight. **Reading a number against the
-sentence next to it costs nothing and has no failure mode.** Do it before
-reaching for an instrument.
+all were themselves wrong at some point tonight -- the detector twice.
+**Reading a number against the sentence next to it costs nothing and has no
+failure mode of its own.**
+
+**So it is the FIRST check, not the last, and the ordering is the finding.**
+Everything else recorded here is a technique -- something to reach for when a
+question arises. This one is a sequence: read the report against itself before
+reaching for any instrument, because an instrument can be wrong and this cannot.
+Stated as an ordering it is usable; stated as an observation it is only true.
 
 Related: §182 catalogues detectors that moved plausibly and measured the wrong
 thing. This is the adjacent failure -- a *report* that states a thing its own
