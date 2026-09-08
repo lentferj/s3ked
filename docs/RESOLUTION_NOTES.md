@@ -232,6 +232,7 @@ silently wrong one.
 - [§189](#189--what-the-shared-onset-check-can-and-cannot-see-measured-2026-09-08) — What the shared onset check can and cannot see, measured (2026-09-08)
 - [§190](#190--this-rigs-noise-floor-is-flat-to-11-hz-so-a-filter-corner-near-30-hz-is-measurable-here-2026-09-08) — This rig's noise floor is flat to 11 Hz, so a filter corner near 30 Hz is measurable here (2026-09-08)
 - [§191](#191--stereo-is-linear-in-amplitude-oshift-is-inert-and-playloplayhi-did-not-gate-2026-09-08) — STEREO is linear in amplitude, OSHIFT is inert, and PLAYLO/PLAYHI did not gate (2026-09-08)
+- [§192](#192--an-ib304f-was-fitted-what-that-does-and-does-not-invalidate-2026-09-08) — An IB304F was fitted; what that does and does not invalidate (2026-09-08)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -4171,6 +4172,15 @@ the envelope-3 field names, which it does not.
 ---
 
 ## §50 — The IB304F is not fitted, and it was never the explanation (2026-08-12)
+
+> **HARDWARE CHANGED, 2026-09-08: an IB304F IS now fitted (§192).** There is an
+> enable setting, so this section's measurements are not obsolete -- the board
+> fitted is not the board in circuit.
+> Everything measured below remains correct *for 2026-08-12* and the withdrawal
+> of the IB304F hypothesis for the inert fields stands on its own -- the board
+> does not add auto-pan or the per-zone velocity block whether fitted or not.
+> What has changed is the premise, not the reasoning. The `FIL2FR` null below
+> is now the **before** arm of a controlled A/B.
 
 Jan pointed at the S3000XL owner's manual sitting in
 `~/Dokumente/SYNTHS/Akai S3000XL/Docs/` — the manual, its addendum, all three
@@ -18405,3 +18415,83 @@ Written to `PREDICTION_progscope.md` before the first write:
 
 Two of three falsified and the third void is the outcome that says the
 predictions were doing work rather than decorating the run.
+
+## §192 — An IB304F was fitted; what that does and does not invalidate (2026-09-08)
+
+Jan fitted an IB304F. A sibling session has the lead on measuring it; this
+section records only what changed for findings already here.
+
+### The correction that shapes this section
+
+The first draft claimed the board "retires provenance on every audio
+measurement here". **Jan corrected it before it was committed: there is an
+enable setting, so the board being *fitted* is not the board being *in
+circuit*.** Prior measurements are not obsolete -- what is needed is
+**additional** measurements for the enabled case.
+
+The accurate statement is narrower and more useful: **provenance is now
+conditional on a field, and the field has to be read rather than assumed.**
+
+### The controlled null already exists
+
+§50, 2026-08-12, with the board absent:
+
+    LSI2_ON  factory value 0
+    FIL2FR   swept 20..99 -- NO RESPONSE, with LSI2_ON at 1 AND at 0
+
+That is the **before** arm of an A/B in which only the hardware differs -- same
+rig, same fields, same sweep. It exists because §50 recorded the fields it
+swept and the range it swept them over, rather than "no response".
+
+### The machine state moved as well
+
+Fitting the board required a power cycle, which **cleared RAM**:
+
+    resident programs  12 -> 1        (a converted volume, gone)
+    samples resident        4
+    words used         131072 / 16777216
+
+Any question of the form "what do our converted programs carry in the new
+fields" now needs a **card load** to answer. The one resident program is the
+machine's own, reading `LSI2_ON` 0, `FILFRQ` 99, `FILQ` 0.
+
+### The fields, and which declare the board
+
+    168  LSI2_ON     (none)     settable WITHOUT the board -- §50
+    169  FLT2GAIN    IB304F     the panel's "attenuator"
+    170  FLT2MODE    IB304F     LP / BP / HP / EQ per the panel; enum order unverified
+    171  FLT2Q       IB304F     resonance
+    172  TONEFREQ    IB304F
+    173  TONESLOP    IB304F
+    174-176  MODVFLT2_1..3  (none)
+    177  FIL2FR      IB304F     frequency
+    178  K_FRQ2      IB304F     key follow
+    179-186  ENV3R1/L1..R4/L4  IB304F
+    187-190  V_ATT3 V_REL3 O_REL3 K_DAR3  (none)
+
+**23 fields, and the split explains an old result**: the eight that do not
+declare the board are why §63's envelope-3 scaling work could measure `V_ENV3`
+on a boardless machine.
+
+**`boards` is a constructor argument, not detection.** `FIL2FR` raises
+`BoardNotFitted` until a caller declares it, which is deliberate -- §50 proved
+`LSI2_ON` cannot detect the board -- but it means **nothing on the wire will
+tell a tool whether that declaration is true.**
+
+### What needs re-measuring, and what does not
+
+Not "everything is undated" -- that was the overclaim. With the enable off the
+signal path should be as before, so the honest list is short:
+
+- **Confirm enable-off really bypasses.** That is §50's sweep re-run, and it is
+  the one measurement everything else depends on. Until it is done, "prior
+  results still hold" is an expectation, not a finding.
+- **§190's rig noise floor** only if it does not. Everything else is quoted
+  against that table.
+- **Nothing else**, unless the sweep shows enable-off is not a bypass.
+
+**The general form is still worth keeping**, because it nearly cost a wrong
+section: a hardware change is an instrument change, and the fix is structural
+-- record the hardware state, dated, when it changes. What Jan's correction
+adds is that **the scope of such a change is itself a measurable question**,
+not something to assume at either extreme.
