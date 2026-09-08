@@ -226,9 +226,10 @@ silently wrong one.
 - [§183](#183--lfo1-and-lfo2-share-one-rate-law-and-52s-factor-of-two-was-its-detector-2026-09-07) — LFO1 and LFO2 share one rate law, and §52's factor of two was its detector (2026-09-07)
 - [§184](#184--a-slow-attack-is-worth-390-db-of-artefact-between-two-builds-and-a-decaying-release-is-a-third-way-to-fake-an-onset-2026-09-07) — A slow attack is worth 3.90 dB of artefact between two builds, and a decaying release is a third way to fake an onset (2026-09-07)
 - [§185](#185--a-real-post-note-off-re-articulation-095-s-late-on-the-upper-half-of-one-programs-range-2026-09-07) — A real post-note-off re-articulation, 0.95 s late, on the upper half of one program's range (2026-09-07)
-- [§186](#186--141-predicts-t90-well-and-captured-level-badly-and-the-attacks-shape-is-not-one-curve-2026-09-07) — §141 predicts t90 well and captured level badly, and the attack's shape is not one curve (2026-09-07)
+- [§186](#186--141s-t90-is-sound-and-its-implied-shape-is-not-2026-09-07) — §141's t90 is sound and its implied shape is not (2026-09-07)
 - [§187](#187--amplitude-alone-cannot-tell-a-re-articulation-from-a-mid-note-swell-only-position-relative-to-note-off-can-2026-09-07) — Amplitude alone cannot tell a re-articulation from a mid-note swell; only position relative to note-off can (2026-09-07)
 - [§188](#188--two-artefacts-that-carried-their-own-refutation-produced-independently-within-an-hour-2026-09-08) — Two artefacts that carried their own refutation, produced independently within an hour (2026-09-08)
+- [§189](#189--what-the-shared-onset-check-can-and-cannot-see-measured-2026-09-08) — What the shared onset check can and cannot see, measured (2026-09-08)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -17648,33 +17649,22 @@ and a disagreement is informative rather than a fault.
 
 ## §185 — A real post-note-off re-articulation, 0.95 s late, on the upper half of one program's range (2026-09-07)
 
-The retroactive sweep put every AKAI-route capture taken before the onset
-check existed through the final detector (guard from `HOLD`, 6 dB hysteresis):
-
-    E4 route          10 files   exact 10   low  0   HIGH 0
-    KR route          12 files   exact 11   low  1   HIGH 0
-    MPC route         11 files   exact  8   low  2   HIGH 1
-    MX14 KR route     12 files   exact 12   low  0   HIGH 0
-
-40 of 45 are informatively clean, and that is a weaker statement than the
-raw count -- see "how blind each verdict was" below. Low counts are
-uninformative (§184).
-**One file is informative**, the MPC-sourced route's capture index 9, at 6
-events for 4 notes:
+One capture holds two events that are not commanded notes: the MPC-sourced
+route's capture index 9, at 6 events for 4 notes.
 
                         note-off   event   delay   floor between   rise
     MIDI 48   note-on 12.50  14.50   15.44   0.94 s      -87.1     +9.6 dB
     MIDI 55   note-on 18.10  20.10   21.06   0.96 s      -86.9     +9.1 dB
 
-**This is not any of the three detector artefacts.** The signal falls 9 dB
-*below* the hysteresis re-arm level -- effectively to the floor -- and then
-rises 9 dB back above the detection threshold. A release grazing a threshold
-cannot do that; the level genuinely goes away and genuinely returns.
+**The sound goes away and comes back.** The level falls to the floor -- 9 dB
+below the detector's re-arm point -- and then climbs 9 dB back above it. No
+threshold artefact can do that; a release grazing a threshold cannot fall
+9 dB below it first.
 
-The two delays agree to 0.02 s across notes an octave apart, which is the
-signature of something clocked rather than something incidental.
+**The two delays agree to 0.02 s across notes an octave apart**, which is the
+signature of something clocked rather than incidental.
 
-### It is absent on the lower half, not masked there
+### Absent on the lower half, not masked there
 
 The obvious worry is that the lower notes do the same thing invisibly, their
 releases never dipping far enough to re-arm. They do not:
@@ -17685,11 +17675,13 @@ releases never dipping far enough to re-arm. They do not:
     MIDI 55   floor -86.9   level at note-off + 0.95 s  -78.3
 
 The lower two decay to the floor and **stay** within 1.0 dB of it through the
-window where the upper two rise by 9. The event is not there to be masked. The
-split falls between MIDI 43 and 48, which is where a keygroup boundary would
-sit -- and it does. The keygroup map was read back from the source file by a
-sibling session (`PRGNUM` 9, 8 keygroups), with key ranges taken from the
-writer's own field offsets rather than guessed ones:
+window where the upper two rise by 9. The event is not there to be masked.
+
+### It is a keygroup property, and the boundary is where the audio put it
+
+The split falls between MIDI 43 and 48. The keygroup map, read back from the
+source file by a sibling session (`PRGNUM` 9, 8 keygroups) with key ranges
+taken from the writer's own field offsets rather than guessed ones:
 
     kg0   keys  24- 43      MIDI 36 and 43 are BOTH here
     kg1   keys  44- 51      MIDI 48
@@ -17698,244 +17690,64 @@ writer's own field offsets rather than guessed ones:
 
 **The two notes that re-articulate are in kg1 and kg2; the two that do not are
 the only two probe notes sharing a keygroup.** The boundary is at 43/44, one
-step from where the audio put it. With four probe notes, that alignment is not
-something chance offers cheaply.
+step from where the audio put it -- with four probe notes, an alignment chance
+does not offer cheaply.
 
-**So this is a keygroup-level property, not a program-level one**, and it will
-not be found in the program common fields.
+**So it is a keygroup-level property and will not be found in the program
+common fields.** Which keygroup *field* carries it is untested: an attempted
+per-keygroup envelope comparison was withdrawn when adjacent keygroups read as
+each other shifted by one position, the signature of guessed offsets. The key
+ranges were confirmed against the writer source; the envelope fields were not.
+**Take no envelope byte from that attempt.**
 
-Still untested: *which* keygroup field carries it. The same session attempted a
-per-keygroup envelope comparison and withdrew it -- adjacent keygroups read as
-each other shifted by one position, which is the signature of guessed offsets.
-The key ranges were confirmed against the writer source; the envelope fields
-were not. **Take no envelope byte from that attempt.**
+### Absent on the other build of the same program (2026-09-08)
 
-### How blind each verdict was
+Re-captured from the MX10 build -- same source, same `PRGNUM` 9, same 8
+keygroups -- under this section's original conditions: 2.0 s hold, notes
+36/43/48/55, so note-off falls at on+2.0 with a 3.0 s gap after it, ample room
+for an event ~0.95 s later. **No re-articulation on any of the four notes.**
 
-The check triggers above `peak - 40 dB` and re-arms only below `peak - 46 dB`.
-**While the envelope stays above the re-arm level the detector cannot report
-anything at all**, so a capture reading exactly the commanded count is only
-clean over the fraction of its length where an event could have been seen.
-Measured across the same 45 captures, as the share of each spent above re-arm:
+Two independent checks, the first of which needs no classifier and no schedule:
 
-    E4 route          n=10   blind  min 0.36  median 0.36  max 0.38
-    KR route          n=12   blind  min 0.35  median 0.36  max 1.00
-    MPC route         n=11   blind  min 0.08  median 0.35  max 1.00
-    MX14 KR route     n=12   blind  min 0.34  median 0.36  max 0.36
-
-**The median capture is blind for 36% of its length**, which is inherent -- a
-note is sounding for much of the take. Three captures are far worse, and the
-correspondence matters:
-
-    MPC route index 0    100% blind   1 onset  -> already set aside as low
-    KR route index 11    100% blind   1 onset  -> already set aside as low
-    MPC route index 10    86% blind   4 onsets -> READ AS CLEAN
-
-**The third one is the problem.** It returned exactly the commanded count while
-the detector was blind for 86% of the capture, so its clean verdict carries
-almost no information and this section's first draft counted it as clean. The
-two 100%-blind captures happen to be self-consistent -- total blindness leaves
-one onset, which reads as low and was discarded -- but that is luck, not
-design: **blindness that is nearly total, rather than total, produces a
-confident clean reading instead of an obviously broken one.**
-
-Corrected tally: **40 informatively clean, 1 clean-but-blind, 3 uninformative
-low, 1 informative high.**
-
-The general form is worth stating because it applies to every use of this
-check: **the check fails open.** Its purpose is to catch a capture holding more
-events than were commanded, and an extra sound whose envelope never dips below
-the re-arm level is merged into its neighbour and reported as the commanded
-count. A "clean" result is evidence only over the non-blind fraction, and that
-fraction has to be quoted with it.
-
-### It is ABSENT on the other build of the same program (2026-09-08)
-
-The program was re-captured from the MX10 build -- same source, same `PRGNUM`
-9, same 8 keygroups -- under §185's original conditions: default 2.0 s hold,
-notes 36/43/48/55, so note-off falls at on+2.0 with a 3.0 s gap after it, ample
-room for an event ~0.95 s later.
-
-**No re-articulation, on any of the four notes.**
-
-**The argument that needs no classifier and no schedule, first**, because the
-onset check has been wrong in three different ways in one night and should be
-corroboration rather than evidence: an 8 dB two-sided relative detector finds
-**exactly four events for four commanded notes**, at 1.29, 6.89, 12.49 and
-18.09 s, and a §185-type event would be a fifth. This survives any error in
-reconstructing the schedule, on either side of the bench.
-
-**The condition that makes that argument valid, which the first draft of this
-section omitted.** A count is only evidence of absence for an event landing
-*outside* the merge guard. An uncommanded event arriving less than `HOLD + 0.6`
-= **2.60 s** after a note-on is merged into that note and **changes no count at
-all** -- a sibling session built exactly that fixture: a deliberate
-contamination that still reports four onsets for four notes, and is caught only
-because position is checked rather than arithmetic.
-
-    merge guard from onset            2.60 s
-    a §185-type event lands at        2.95 s   (note-off + 0.95)
-    margin                           +0.35 s
-
-**The margin has a term in it, and `HOLD` is not that term.** The guard runs
-from the *detected* onset, not from note-on, so writing `L` for detection lag:
-
-    guard ends at   t_on + L + HOLD + 0.6
-    event lands at  t_on +     HOLD + 0.95
-    margin        = 0.35 - L                  <- HOLD cancels exactly
-
-**`HOLD` cancelling is the useful half**: the 0.35 s figure is the same at a
-2 s hold and a 12 s one, which is a stronger result than "measured at hold 2".
-The exposed half is that every millisecond of detection lag comes off it, and
-the causal envelope trades lead for lag by design.
-
-Measured on this bench with the causal detector, first onset against the
-harness's own schedule, across the whole `ATTAK1` range:
-
-    ATTAK1   20    40    60    75    85    94    99
-    L (s)  0.020 0.023 0.051 0.080 0.100 0.146 0.152
-    margin 0.330 0.327 0.299 0.270 0.250 0.204 0.198
-
-**That table is the `ATTAK1` sweep program only, and it is not a bound.**
-Measured across the whole capture corpus -- first note of each take, where the
-harness schedule carries no accumulated sleep drift -- 398 captures:
-
-    median  +0.017 s     p90 +0.025 s     max +1.101 s
-    L > 0.35 s, where a 0.95 s post-note-off event MERGES:  3 of 398 (0.8%)
-
-    +0.488 s   the ATTAK1 99 program at hold 12      margin -0.138   MERGES
-    +1.042 s   an MPC->E4B conversion                margin -0.692   MERGES
-    +1.101 s   an MPC program 0 recheck              margin -0.751   MERGES
-
-**So "worst case 0.198 s" was a claim from eight captures on two programs and
-is false across the corpus.** One of the two files §186 rests on is over the
-line: at `L` = 0.488 s a §185-type event on *that* capture would merge and
-change no count.
-
-**§185's verdict is unaffected, because the margin was measured on the capture
-the verdict rests on**: `REART_MX10c` has `L` = 0.010 s, margin 0.340. That is
-the rule this produces -- **the margin is a property of the individual capture
-and must be measured there, not asserted from a corpus bound.**
-
-**It is one program, not a route.** The three merging captures looked
-MPC-sourced, and a sibling session's own tail was conversions into KRZ, which
-made "the route does something to the first 8 dB" the obvious reading. Grouped
-by route across 398 captures it is false:
-
-    mpc_orig           n=12  median +0.026  max +0.155
-    MX14_MPC_to_AKAI   n=11  median +0.017  max +0.150
-    MPC_to_AKAI        n=11  median +0.016  max +0.146
-    mx11_mpc_to_e4b    n=11  median +0.017  max +1.042   <- 61x its OWN median
-
-Every route median lies between +0.010 and +0.026 s. **The MPC routes are not
-elevated; they contain an outlier.** And the three captures with a negative
-margin are all **program 0** of MPC-sourced volumes -- the same program that
-produced a false silence, a false contamination flag and a 15 dB level error
-(§184). **One program with a very slow first 8 dB, captured under several
-route names**, which is what made it look like a route property.
-
-The falsifier was written before the grouping: *"the high-L captures within the
-MPC group are as far from their own group's median as the groups are from each
-other"*. At 61x its own median, that is met.
-
-**And for the merging captures, `L` is not a lag at all.** The obvious reading
-of a 1.1 s figure is that the program starts late -- a delay, from an envelope
-field or leading silence in the sample. **The onset spacings refuse it.** The
-commanded spacing is a constant 5.60 s, and a uniform delay preserves spacing
-exactly:
-
-    typical capture     spacings 5.60  5.60  5.60   offsets +0.02 +0.02 +0.02 +0.02
-    merging capture A   spacings 5.49  5.45  5.92   offsets +1.04 +0.93 +0.78 +1.10
-    merging capture B   spacings 5.46  5.82  3.77   offsets +1.10 +0.96 +1.18 -0.65
-
-**One of those onsets arrives 0.65 s EARLY, and a delay cannot make a note
-early.** The spacings vary by up to 2.05 s where the commanded figure is
-constant to 0.00.
-
-**So on this material the detector is not locating the notes.** It triggers
-wherever the signal happens to swell 8 dB above its running minimum, and on a
-program this quiet and this erratic that is not the note-on. `L` measured there
-is a **mis-location, not a lag** -- the same distinction a sibling session drew
-when a 2.448 s "lag" turned out to be its matching rule rather than its
-detector.
-
-### The evidence here is the audio, not the detector -- which is why it survived
-
-The shared onset check was rebuilt three times in one night, and the current
-build **cannot reproduce this finding**. `MPC_to_AKAI_009` held six onsets when
-§185 was written; it now reports four, and reads clean.
-
-The events are unchanged in the audio. The cause is an **absolute floor
-surviving inside the relative rule**: samples below `peak - 40 dB` are skipped,
-so the running minimum is clamped to that floor, and an event whose true local
-minimum sits *below* it has its rise measured from the wrong baseline.
-
-    capture peak                -37.9 dB      absolute floor  -77.9 dB
-    event at 15.44 s  -77.5 dB   true min -87.1  real rise +9.6  seen +0.4  MISSED
-    event at 21.06 s  -77.8 dB   true min -86.9  real rise +9.1  seen +0.1  MISSED
-
-**The rise threshold was chosen from these two measurements and the detector
-cannot see them.** It is the same failure the relative rule replaced, arriving
-from the opposite side: the old rule broke on an envelope that never fell far
-enough, this one breaks on an envelope that falls too far.
-
-**Every number in this section was measured directly from the waveform** --
-levels, local minima, delays after note-off, spacings -- and none of it came
-from the detector's count. That is the only reason the finding is unaffected by
-a detector regression that would otherwise have erased it. **A conclusion that
-rests on an instrument's output dies when the instrument changes; one that
-rests on the recording does not.**
-
-**The practical consequence is stronger than a negative margin.** A capture
-whose onsets do not track the commanded spacing cannot support *any*
-onset-derived quantity -- not a count, not a position, not a lag. **The
-spacing check is the cheap test for it**: commanded spacing is known exactly
-and constant, so a capture whose measured spacings vary is announcing that its
-onsets are not the notes. That test costs three subtractions and it was
-available all night.
-
-The structural claim survives the correction: `L` is governed by how fast the
-signal clears its *first 8 dB*, not by total attack length. That is why one
-`ATTAK1` 99 program gives 0.152 s and another gives 0.488 s -- same nominal
-attack, different material in the first few dB. **The property is a slow first
-8 dB, which is not the same thing as a slow attack**, and only the second is
-visible in a parameter.
-
-**`L` does not scale with attack length, which is the non-obvious part.** At
-`ATTAK1` 99 the attack takes about 7.3 s to reach 90%, yet the onset is placed
-within 0.152 s of note-on -- 2% of the rise. A detector triggering on an 8 dB
-rise above a running minimum clears that threshold early in *any* attack,
-because 8 dB above the floor is a small fraction of the total climb. Slow
-attacks do not delay detection nearly as much as they delay the peak.
-
-**So the count argument holds for this phenomenon, by 0.35 s, and only for
-it.** The original claim -- "no room for a fifth event wherever the grid sits"
--- was stated without the condition that makes it true, and is false for any
-event arriving within 2.60 s of a note-on.
-
-Corroborated by the harness classifier run against the **real** `marks` from
-the take rather than a reconstructed grid, returning (4 expected, 0 mid-hold,
-0 post-note-off, 0 unassigned).
+- An 8 dB two-sided relative detector finds **exactly four events for four
+  commanded notes**, at 1.29, 6.89, 12.49 and 18.09 s. A §185-type event would
+  be a fifth. This survives any error in reconstructing the schedule.
+- The harness classifier, run against the **real** `marks` from the take rather
+  than a reconstructed grid, returns (4 expected, 0 mid-hold, 0 post-note-off,
+  0 unassigned).
 
 The route was live: **4/4 sounded, peak -34.9 dB, 8% blind** -- a measured
 absence, not a dead signal path. **Reproduced on three takes with identical
-peak level, across two different detector builds** -- the centred-envelope
-build with a 0.10 s lead tolerance, and the causal-envelope build with zero
-tolerance that replaced it. The verdict does not depend on which.
+peak level across two detector builds** (centred envelope with a 0.10 s lead
+tolerance, and the causal envelope with zero tolerance that replaced it), so
+the verdict does not depend on which.
 
-**What it does not say.** The two builds are known to differ in the envelope:
-that is precisely what `ATTAK1` 94 against 99 was (§184). So the phenomenon is
-build-dependent, and this establishes only that *this* build does not show it.
-It does not identify the field, and it does not distinguish "the envelope
-change removed it" from "the two builds carry different material".
+**The count argument is only valid outside the merge guard**, and this event
+clears it by 0.35 s -- see §189, where that margin is derived and its limits
+measured. An uncommanded event arriving within 2.60 s of a note-on changes no
+count at all.
 
-**A note on why this was held for an hour.** The first take of this capture
-raised the harness's strongest warning -- SOMETHING SOUNDED THAT WAS NOT
-COMMANDED, on all four onsets -- from a classifier defect: the RMS smoothing
-window is centred, so onsets are reported up to half a window early, and a
-`t_on <= t` comparison rejected onsets sitting 10 ms *before* their note-on.
-**A negative was not worth recording while the instrument that produced it had
-a known false positive**, even though the defect inflated the opposite column.
+### What this does not establish
+
+- **It does not identify the field.** The two builds differ in the envelope --
+  that is precisely what `ATTAK1` 94 against 99 was (§184) -- so this shows
+  only that *this* build does not exhibit it.
+- **It does not distinguish** "the envelope change removed it" from "the two
+  builds carry different material".
+- **Reading the MX10 build's per-keygroup fields answers nothing**, because it
+  is the build that does not show the effect. The original build has to be
+  resident before a field diff means anything.
+
+### Why the evidence survived four detector rewrites
+
+Every number above -- levels, local minima, delays after note-off -- was
+measured directly from the waveform, not taken from the detector's count.
+**The current detector cannot reproduce this finding**: `MPC_to_AKAI_009` held
+six onsets when this was written and later reported four (§189 records the
+regression and its cause). The events are unchanged in the audio.
+
+**A conclusion resting on an instrument's output dies when the instrument
+changes; one resting on the recording does not.**
 
 ### Why it matters beyond this file
 
@@ -17943,16 +17755,12 @@ A sibling session had recorded a comparable phenomenon on other hardware as
 "a complete re-articulation about 1.15 s after note-off", investigated four
 mechanisms, refuted all four, and concluded it was a property of a superseded
 bank because it would not reproduce on the current build. **A structurally
-similar event at 0.95 s now appears on a different machine, on material
-sourced from that same family.** That does not identify a cause and the two
-delays are not equal, but "property of one superseded bank" no longer covers
-it, and the next attempt should not start from that assumption.
+similar event at 0.95 s appears on a different machine, on material sourced
+from that same family.** That identifies no cause and the two delays are not
+equal, but "property of one superseded bank" no longer covers it, and the next
+attempt should not start from that assumption.
 
-Note the detection geometry: at a guard of `HOLD + 0.6` the check sees events
-from 0.6 s after note-off onwards, so 0.95 s is caught with 0.35 s to spare and
-1.15 s comfortably. An event at 0.4 s would be silently merged (§184).
-
-## §186 — §141 predicts t90 well and captured level badly, and the attack's shape is not one curve (2026-09-07)
+## §186 — §141's t90 is sound and its implied shape is not (2026-09-07)
 
 §184 found the attack law about 2x low against captured audio: hold-2 to
 hold-12 gains of +11.00 and +14.90 dB where a single exponential from `t90`
@@ -17972,7 +17780,7 @@ of time: it needs neither the time constant nor the note-on instant.
     linear ramp                    R = 1.000
     accelerating, level ~ t^2      R = 0.618
 
-### The sweep that overturned the general claim
+### The sweep
 
 One program, **one keygroup**, so the envelope under test is the only one
 sounding; one note per capture, so nothing can be merged; `ATTAK1` written and
@@ -18056,14 +17864,13 @@ it would have survived another night if the parameter had not been swept.
 ### This finding does not rest on any event count
 
 One of the two captures here -- the `ATTAK1` 99 program at hold 12 -- has a
-detection lag of 0.488 s and therefore a **negative** guard margin (§185): it
-cannot report a post-note-off event at all, and its onset count must not be
-read as clean. **That does not touch this section.** Every number above comes
-from envelope *timings* -- `t10`, `t50`, `t90` on a rise normalised to its own
-peak, with the four notes recovered by segmenting on the envelope's own minima
-rather than by counting onsets. **A merged onset changes no quantity used
-here.** Checked explicitly rather than assumed, because the same capture
-appears in both sections and only one of them is safe with it.
+negative guard margin (§189) and cannot report a post-note-off event at all.
+**That does not touch this section.** Every number above comes from envelope
+*timings* -- `t10`, `t50`, `t90` on a rise normalised to its own peak, with the
+four notes recovered by segmenting on the envelope's own minima rather than by
+counting onsets. **A merged onset changes no quantity used here.** Checked
+explicitly rather than assumed, because the same capture appears in §185 and
+here, and only one of the two is safe with it.
 
 ## §187 — Amplitude alone cannot tell a re-articulation from a mid-note swell; only position relative to note-off can (2026-09-07)
 
@@ -18161,3 +17968,152 @@ Stated as an ordering it is usable; stated as an observation it is only true.
 Related: §182 catalogues detectors that moved plausibly and measured the wrong
 thing. This is the adjacent failure -- a *report* that states a thing its own
 numbers deny.
+
+## §189 — What the shared onset check can and cannot see, measured (2026-09-08)
+
+The onset check reports "more events than notes were commanded", which is the
+strong claim that another program's audio is present. It was rebuilt four times
+in one night. **This section records what the instrument can see, so that a
+result stated against it can be judged.** §185 and §186 depend on captures
+analysed with it.
+
+### The retroactive sweep, and what "clean" was worth
+
+Every AKAI-route capture predating the check, run through it:
+
+    E4 route          10 files   exact 10   low  0   HIGH 0
+    KR route          12 files   exact 11   low  1   HIGH 0
+    MPC route         11 files   exact  8   low  2   HIGH 1
+    MX14 KR route     12 files   exact 12   low  0   HIGH 0
+
+**A "clean" verdict is only evidence over the fraction of a capture where an
+event could have been seen.** While the envelope stays above the re-arm level
+the detector cannot report anything, so the blind fraction has to be quoted
+with the count:
+
+    E4 route          n=10   blind  min 0.36  median 0.36  max 0.38
+    KR route          n=12   blind  min 0.35  median 0.36  max 1.00
+    MPC route         n=11   blind  min 0.08  median 0.35  max 1.00
+    MX14 KR route     n=12   blind  min 0.34  median 0.36  max 0.36
+
+The median capture is blind for **36%** of its length, which is inherent -- a
+note is sounding for much of a take. Three are far worse:
+
+    MPC route index 0    100% blind   1 onset  -> discarded as low
+    KR route index 11    100% blind   1 onset  -> discarded as low
+    MPC route index 10    86% blind   4 onsets -> READ AS CLEAN
+
+**The third is the problem.** Exactly the commanded count from a detector blind
+for 86% of the capture. The two 100%-blind captures are self-consistent by
+luck, not design: total blindness leaves one onset, which reads low and is
+discarded. **Near-total blindness answers confidently and wrongly, so the
+failure is worst just short of the point where it becomes visible.**
+
+Corrected tally: **40 informatively clean, 1 clean-but-blind, 3 uninformative
+low, 1 informative high.**
+
+**The check fails open.** An extra sound whose envelope never dips below the
+re-arm level is merged into its neighbour and reported as the commanded count.
+
+### The merge guard, and the margin an event needs to clear it
+
+An uncommanded event arriving less than `HOLD + 0.6` after a *detected* onset
+is merged into it and changes no count. Writing `L` for detection lag:
+
+    guard ends at   t_on + L + HOLD + 0.6
+    event lands at  t_on +     HOLD + 0.95      (a §185-type event)
+    margin        = 0.35 - L                    <- HOLD cancels exactly
+
+**`HOLD` cancelling is the useful half:** the margin is the same at a 2 s hold
+and a 12 s one. The exposed half is that detection lag comes straight off it,
+and a causal envelope trades lead for lag by design.
+
+Measured across the `ATTAK1` range on one program:
+
+    ATTAK1   20    40    60    75    85    94    99
+    L (s)  0.020 0.023 0.051 0.080 0.100 0.146 0.152
+    margin 0.330 0.327 0.299 0.270 0.250 0.204 0.198
+
+**That is one program and it is not a bound.** Across 398 captures, first note
+of each take (where the harness schedule carries no accumulated sleep drift):
+
+    median  +0.017 s     p90 +0.025 s     max +1.101 s
+    L > 0.35 s, where a 0.95 s post-note-off event MERGES:  3 of 398 (0.8%)
+
+**So a margin is a property of the individual capture and must be measured
+there.** §185's verdict is unaffected because its own capture was measured:
+`L` = 0.010 s, margin 0.340.
+
+### `L` is set by the first 8 dB, not by attack length
+
+At `ATTAK1` 99 the attack takes 7.3 s to reach 90%, yet the onset is placed
+within 0.152 s of note-on -- **2% of the climb.** A detector triggering on an
+8 dB rise above a running minimum clears that early in *any* attack, because
+8 dB is a small fraction of the total travel.
+
+This is why one `ATTAK1` 99 program gives 0.152 s and another gives 0.488 s:
+same nominal attack, different material in the first few dB. **A slow first
+8 dB is a different property from a slow attack, and only the second is visible
+in a parameter.**
+
+### The outlier is one program, not a route
+
+The three merging captures looked MPC-sourced, and a sibling session's own tail
+was conversions into KRZ, which made "the route does something to the first
+8 dB" the obvious reading. Grouped by route across 398 captures it is false:
+
+    mpc_orig           n=12  median +0.026  max +0.155
+    MX14_MPC_to_AKAI   n=11  median +0.017  max +0.150
+    MPC_to_AKAI        n=11  median +0.016  max +0.146
+    mx11_mpc_to_e4b    n=11  median +0.017  max +1.042   <- 61x its OWN median
+
+Every route median lies between +0.010 and +0.026 s. **The MPC routes are not
+elevated; they contain an outlier**, and all three negative-margin captures are
+**program 0** of MPC-sourced volumes -- one program under several route names.
+The same program produced a false silence, a false contamination flag and a
+15 dB level error (§184).
+
+**Group by median, not by max.** A sorted list of worst cases structurally
+attributes one file's property to its whole group and cannot be falsified by
+more data of the same kind.
+
+### On the outliers, `L` is a mis-location, not a lag
+
+A 1.1 s figure reads as a delay -- an envelope field, or leading silence in the
+sample. **The onset spacings refuse it.** Commanded spacing is a constant
+5.60 s and a uniform delay preserves spacing exactly:
+
+    typical capture     5.60  5.60  5.60   offsets +0.02 +0.02 +0.02 +0.02
+    merging capture A   5.49  5.45  5.92   offsets +1.04 +0.93 +0.78 +1.10
+    merging capture B   5.46  5.82  3.77   offsets +1.10 +0.96 +1.18 -0.65
+
+**One onset arrives 0.65 s EARLY, and a delay cannot make a note early.** On
+this material the detector is not locating the notes at all -- it triggers
+wherever the signal swells 8 dB above its running minimum.
+
+**A capture whose onsets do not track the commanded spacing supports no
+onset-derived quantity** -- not a count, not a position, not a lag. The spacing
+check is the cheap test: commanded spacing is known exactly and constant, so
+varying measured spacings announce that the onsets are not the notes. It costs
+three subtractions and needs no `t_on`.
+
+### The absolute floor that survived inside the relative rule
+
+The check was rebuilt on relative edges precisely to remove absolute-level
+dependence. One build still skipped samples below `peak - 40 dB`, which
+**clamped the running minimum to that floor**:
+
+    capture peak                -37.9 dB      absolute floor  -77.9 dB
+    event at 15.44 s  -77.5 dB   true min -87.1  real rise +9.6  seen +0.4  MISSED
+    event at 21.06 s  -77.8 dB   true min -86.9  real rise +9.1  seen +0.1  MISSED
+
+**The rise threshold had been chosen from those two measurements, and the
+detector could not see them.** `MPC_to_AKAI_009` returned four onsets for four
+notes and read clean -- fail-open, on the one capture in the corpus with a real
+extra event.
+
+**Same failure class as the defect the relative rule replaced, arriving by the
+opposite door:** the old rule broke on an envelope that never fell far enough,
+this one on an envelope that falls too far. Both are an absolute level
+defeating a check meant to be relative. Fixed by tracking the minimum over
+every sample and using the floor only to withhold a trigger in silence.

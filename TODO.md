@@ -1980,6 +1980,10 @@ Two measurement limits worth keeping, both found by hitting them:
   completes and the measured "peak" is the sample ending. **Any future sweep
   needs a sample that outlasts the slowest attack under test.**
 
+Before trusting any onset-derived figure from such a sweep, see **§189** for
+what the shared onset check can and cannot see — in particular that a merge
+margin is a property of the individual capture and must be measured there.
+
 ## §185's re-articulation: read the keygroup map
 
 **Status:** open. One capture, one program, cause untested.
