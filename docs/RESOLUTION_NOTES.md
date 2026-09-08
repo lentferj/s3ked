@@ -17621,14 +17621,29 @@ explanation every time so far.
 
 ### The check is one-sided: it catches extra events and misses missing ones
 
-On heavily overlapping material the onset count runs *low*. The source capture
-of the long-attack program returns **1 onset for 4 notes**: an 8.6 s attack
-under a 2.0 s hold at 5.6 s spacing never returns to the floor between notes,
-so there is only ever one upward crossing. **A low count is therefore not
-evidence of anything** -- not of missing notes, not of a silent program, not of
-a clean capture. Only a count *above* the commanded number carries information.
-The `n/n sounded` figure and the onset count answer different questions and a
-disagreement between them is expected on slow material, not a fault.
+On heavily overlapping material the onset count ran *low*: the long-attack
+program's source capture returned **1 onset for 4 notes**, because an 8.6 s
+attack under a 2.0 s hold never returned to the absolute re-arm level between
+notes and there was only ever one upward crossing.
+
+**That mechanism has since been fixed and this example no longer holds.** The
+detector was rebuilt on relative edges -- trigger on a rise above the running
+minimum, re-arm on a fall below the running maximum -- and the same capture now
+returns **6** onsets. **Re-tested rather than assumed to carry**, because a
+result stated against an instrument does not survive that instrument being
+replaced.
+
+**The rule survives; its reason has changed.** Under-counts still occur, but
+they now indicate the *material* rather than the detector. `MPC_to_AKAI_002`
+returns 3 onsets for 4 notes, and its fourth note rises **0.7 dB** above the
+preceding level -- there is no articulation there for any detector to find.
+
+So: **a low count is still not evidence of a clean capture** -- a detector that
+cannot resolve the commanded notes cannot report an uncommanded one either --
+but it is no longer merely an artefact, and is now weak evidence that something
+did not sound. Only a count *above* the commanded number carries the strong
+claim. The `n/n sounded` figure and the onset count answer different questions,
+and a disagreement is informative rather than a fault.
 
 ## §185 — A real post-note-off re-articulation, 0.95 s late, on the upper half of one program's range (2026-09-07)
 
