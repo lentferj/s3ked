@@ -2077,3 +2077,21 @@ meanwhile as cut at `Q` ≤ 21 and boost at `Q` ≥ 25, both ends measured.
 shallowing, so the field is not a signed gain and has a minimum near 16. One
 untested explanation is that the panel shows it signed (−16..+15 over an 0..31
 byte). Reading the panel at a known byte value would settle it in one look.
+
+## Filter 2 mode 3: the centre frequency moves with FLT2Q
+
+**Status:** open, observation recorded in §195, mechanism not investigated.
+
+With `FIL2FR` fixed at 80, the measured centre drifts 2411 → 2189 Hz across the
+cut arm and then **steps 368 Hz (19.6%) down** when the action changes sign to
+boost. So `FIL2FR` alone does not determine the centre, and a converter
+calibrated on one arm is ~20% out on the other.
+
+**Two candidates, not distinguished:** cut and boost may use different filter
+topologies; or the measured extremum of an asymmetric response is not the
+design centre and moves with gain.
+
+**The measurement:** `FIL2FR` swept at fixed `Q` on each arm separately — say
+`Q` 10 and `Q` 29, four or five `FIL2FR` values each. That is a different
+experiment from the `Q` sweep, not an extension of it, and needs `TC10 NOISE`
+resident.

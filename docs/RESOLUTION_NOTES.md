@@ -18782,6 +18782,7 @@ resolution (0.62 Hz bins, 15-bin median smoothing):
 
     FLT2Q    depth dB    at Hz   width Hz     Q
        0        -4.3      2411      2616      0.9
+      10       -10.0      2298      1836      1.3
       15       -23.9      2216       638      3.5
       16       -53.9      2201       108     20.5
       18       -16.6      2178       829      2.6
@@ -18815,7 +18816,8 @@ above 10, would have meant a notch *region* rather than a single value.
 
 ### Neither arm interpolates
 
-    Q 15   linear from 0 and 16 predicts  ~-50 dB    measured  -23.9   26 dB error
+    Q 10   linear from 0 and 15 predicts  -17.4 dB   measured  -10.0    7.4 dB error
+    Q 15   linear from 0 and 16 predicts  ~-50 dB    measured  -23.9   26 dB
     Q 27   linear from 25 and 31 predicts  +8.9 dB   measured   +6.5    2.4 dB
     Q 29   linear from 25 and 31 predicts +15.1 dB   measured  +12.0    3.1 dB
 
@@ -18823,9 +18825,35 @@ The boost run **accelerates** -- gradients of 2.1, 2.75 and 5.2 dB/unit across
 25->27->29->31 -- so linear interpolation overshoots throughout it. Predicted
 in advance that both new boost points would fall below their linear values.
 
-**Every populated value is now measured rather than inferred**: 0, 15, 16, 18,
-20, 21, 25, 27, 29, 31. Interpolating between *those* is defensible; between
-the earlier endpoints it was not.
+**Both arms are convex**, so linear interpolation overshoots the magnitude on
+each -- predicted in advance for `Q` 10 on the grounds that the cut arm should
+behave like the boost arm, and confirmed.
+
+**Every populated value is now measured rather than inferred**: 0, 10, 15, 16,
+18, 20, 21, 25, 27, 29, 31. Everything remaining sits inside a two-unit bracket
+on a curve whose local gradients are measured, so interpolating *those* is
+defensible where interpolating the earlier endpoints was not.
+
+### The centre frequency moves with FLT2Q -- mechanism open
+
+`FIL2FR` was fixed at 80 for all eleven captures, so the centre should be
+constant. It is not:
+
+    CUT arm,   Q 0..21:   2411 2298 2216 2201 2178 2180 2189   mean 2239 Hz
+    BOOST arm, Q 25..31:  1836 1870 1896 1884                  mean 1872 Hz
+
+    step across the sign change: 368 Hz, 19.6%
+
+**The centre is not a function of `FIL2FR` alone.** It drifts 222 Hz within the
+cut arm as `Q` rises and then **steps 368 Hz down as the action changes sign**.
+Anything mapping `FIL2FR` to a centre frequency will be ~20% out on one arm or
+the other depending which it was calibrated against.
+
+**No mechanism offered.** Cut and boost may use different topologies; or the
+measured "centre" is the extremum of an asymmetric response rather than a
+design centre, which would move with gain on a shelving-ish shape.
+Distinguishing them needs `FIL2FR` swept at fixed `Q` on each arm separately --
+a different experiment, not an extension of this one.
 
 **The non-monotonicity is real, not a metric artefact.** A sibling session
 proposed that resolving the feature would make the minimum at 16 disappear;
