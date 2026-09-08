@@ -18002,6 +18002,35 @@ own numbers, which is free. **Then** name the quantity each number measures and
 check it against the quantity the claim requires -- which costs a sentence and
 catches the class the first step cannot see.
 
+### A third class that neither step catches
+
+**A correct number, attached to the right quantity, measured on a thing that
+has since been replaced.** Nothing is wrong anywhere. The claim has simply
+expired, and no reading of the output reveals it, because the output is
+correct.
+
+Two instances, one per axis:
+
+- **The instrument.** One capture here legitimately yielded 1, 4 and 6 onsets
+  across four detector builds in a single night, distinguishable only by
+  timestamp. That was long enough for a committed finding (§184) to describe a
+  detector that no longer existed, with every number in it correctly measured.
+- **The source.** §190's flatness result holds only while the noise generator
+  stays deterministic. A well-meant substitution to `random` would leave a
+  source that really is broadband, a measurement that really was taken, and a
+  link between them that has quietly gone.
+
+**Neither of the two checks above fires on either case**, because there is
+nothing internally inconsistent and nothing mis-joined. **So the fixes are
+structural rather than analytical**: stamp the instrument version beside every
+result it produced, and pin the source so it cannot be silently regenerated.
+A sibling session's `ONSET_DETECTOR_VERSION` and its generator docstring are
+the same idea applied to the two axes.
+
+The distinction that makes all three visible: **a definition is not a thing you
+recompute.** Every arithmetic in this section is correct, and re-running all of
+it would have confirmed every wrong conclusion.
+
 ## §189 — What the shared onset check can and cannot see, measured (2026-09-08)
 
 The onset check reports "more events than notes were commanded", which is the
