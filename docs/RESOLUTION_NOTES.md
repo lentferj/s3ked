@@ -18290,6 +18290,24 @@ scaler, **gain proportional to x**.
 reference and the normalisation cancels. Only the proportionality is
 established.
 
+**The law is established on 60..99 and 0 is NOT on it.** The sweep stopped at
+60 deliberately -- a stated guard, because `STEREO` 0 removes the program from
+the stereo mix and looks exactly like a broken rig. A sibling session reports
+the manual makes 0 a **routing** choice rather than a level: the program is
+mixed out of the stereo outputs and heard on an individual output instead. So
+extrapolating the amplitude law to 0 would convert a *re-routed* program into
+near-silence.
+
+**This bench cannot discriminate the two readings of 0**, and that is worth
+stating rather than leaving as an untested gap: the rig captures the stereo
+pair only, and `OUTPUT` was 255 (individual outputs off). "Gain zero" and
+"removed from the stereo mix" both predict silence there. **Settling it needs a
+capture of an individual output, which this bench is not wired for.**
+
+Real material does not reach it -- 10..99 across 5,124 library programs on the
+sibling's corpus, and 10..99 in this project's own range check -- but a
+zero-filled header does, which is `KGMUTE`'s 0-is-a-real-value trap again.
+
 ### OSHIFT is accepted, stored, and ignored
 
     OSHIFT   0   f0 131.26 Hz   spectral peak 131.54    +0.0 cents
