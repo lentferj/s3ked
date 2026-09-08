@@ -17970,6 +17970,38 @@ Related: §182 catalogues detectors that moved plausibly and measured the wrong
 thing. This is the adjacent failure -- a *report* that states a thing its own
 numbers deny.
 
+### What this check does NOT catch, which is the larger class
+
+"No failure mode of its own" means it raises no false alarms. **It is not
+complete**, and the gap matters more than the coverage: it catches only reports
+that contradict *themselves*. The broader family is **a correct number attached
+to the wrong quantity**, and most of those are internally consistent. Four from
+one exchange:
+
+    +6.1 dB          a real rise, measured against a 2 s lookback instead of
+                     the detector's own running minimum
+    44               a real byte, read at 0x17 (RELSE2) under a "SUSTN2" heading
+    -96 dB @ 1 kHz   correct arithmetic, answering a question the design does
+                     not ask
+    2.448 s          a real interval, belonging to the matching rule rather
+                     than the detector
+
+**Only the first is self-refuting** -- a 6.1 dB rise cannot trip an 8 dB
+threshold, so it collides with the sentence beside it. **The other three read
+perfectly.** 44 is a plausible sustain, -96 dB is the right answer to the
+question actually asked, 2.448 s is a real measured interval. Nothing in any of
+them contradicts anything nearby, so the first check passes them.
+
+**The tell is never in the number, it is in the join:** what quantity is this a
+measurement *of*, and is that the quantity the conclusion needs? They are
+usually one definition apart, which is precisely why re-checking the arithmetic
+never finds it -- the arithmetic is correct in every case above.
+
+So the sequence is two steps, not one. **First** read the report against its
+own numbers, which is free. **Then** name the quantity each number measures and
+check it against the quantity the claim requires -- which costs a sentence and
+catches the class the first step cannot see.
+
 ## §189 — What the shared onset check can and cannot see, measured (2026-09-08)
 
 The onset check reports "more events than notes were commanded", which is the
