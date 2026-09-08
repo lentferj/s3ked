@@ -2082,14 +2082,19 @@ byte). Reading the panel at a known byte value would settle it in one look.
 
 **Status:** open, observation recorded in §195, mechanism not investigated.
 
-With `FIL2FR` fixed at 80, the measured centre drifts 2411 → 2189 Hz across the
-cut arm and then **steps 368 Hz (19.6%) down** when the action changes sign to
-boost. So `FIL2FR` alone does not determine the centre, and a converter
-calibrated on one arm is ~20% out on the other.
+With `FIL2FR` fixed at 80, the centre **steps ~17%** (317–332 Hz) when the
+action changes sign to boost. A converter calibrated on one arm is ~17% out on
+the other.
 
-**Two candidates, not distinguished:** cut and boost may use different filter
-topologies; or the measured extremum of an asymmetric response is not the
-design centre and moves with gain.
+**The within-arm drift is NOT part of this** — it correlates with feature width
+at r = +0.826 and is the extremum estimator degrading on broad shallow
+features, the same failure as measuring a corner that has left the analysis
+window. Do not model it.
+
+**The step's mechanism is open.** "Extremum of an asymmetric response moves
+with gain" explains the within-arm drift completely but predicts no step, so
+something changes at the sign inversion — different topology per arm being the
+obvious candidate.
 
 **The measurement:** `FIL2FR` swept at fixed `Q` on each arm separately — say
 `Q` 10 and `Q` 29, four or five `FIL2FR` values each. That is a different

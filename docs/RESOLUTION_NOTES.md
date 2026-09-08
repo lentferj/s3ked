@@ -18844,16 +18844,41 @@ constant. It is not:
 
     step across the sign change: 368 Hz, 19.6%
 
-**The centre is not a function of `FIL2FR` alone.** It drifts 222 Hz within the
-cut arm as `Q` rises and then **steps 368 Hz down as the action changes sign**.
-Anything mapping `FIL2FR` to a centre frequency will be ~20% out on one arm or
-the other depending which it was calibrated against.
+**These are two effects and only the second is real.**
 
-**No mechanism offered.** Cut and boost may use different topologies; or the
-measured "centre" is the extremum of an asymmetric response rather than a
-design centre, which would move with gain on a shelving-ish shape.
-Distinguishing them needs `FIL2FR` swept at fixed `Q` on each arm separately --
-a different experiment, not an extension of this one.
+**Within an arm the drift is the estimator, not the filter.** Sorting the cut
+arm by feature *width* rather than by `FLT2Q` makes it almost monotonic, at
+**r = +0.826**:
+
+    width 2616 Hz -> centre 2411      width  829 -> 2178
+    width 1836    -> centre 2298      width  638 -> 2216
+    width 1360    -> centre 2189      width  108 -> 2201
+    width 1156    -> centre 2180
+
+A 2616 Hz-wide, 4.3 dB-deep dip has a **poorly located extremum**: the
+estimator degrades as the feature stops fitting the assumption behind it.
+**Do not model this drift** -- it is the same lesson as `FIL2FR` 20, in a third
+guise.
+
+**The step between arms survives every estimate**, which is what makes it real:
+
+    sharpest point on each arm (Q16 vs Q31)   2201 - 1884 = 317 Hz   16.8%
+    excluding Q16 as singular (Q15 vs Q31)    2216 - 1884 = 332 Hz   17.6%
+    arm means                                 2239 - 1872 = 367 Hz   19.6%
+
+**Quote ~17%, not 19.6%.** The arm means are contaminated by the width artefact
+and the widest captures all sit on the cut arm, which inflates that side
+specifically. The two width-independent estimates agree at 317 and 332 Hz.
+
+**Mechanism: partly settled.** "The measured extremum of an asymmetric response
+moves with gain" predicts the width correlation exactly and accounts for the
+within-arm drift in full. **It does not predict a step**, so something else
+changes at the sign inversion -- different topology per arm being the obvious
+candidate, and one this data cannot confirm. Separating it needs `FIL2FR` swept
+at fixed `Q` on each arm, which is a different experiment.
+
+**Decoder consequence, unchanged:** a `FIL2FR` -> centre mapping calibrated on
+one arm is ~17% out on the other.
 
 **The non-monotonicity is real, not a metric artefact.** A sibling session
 proposed that resolving the feature would make the minimum at 16 disappear;
