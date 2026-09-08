@@ -234,6 +234,7 @@ silently wrong one.
 - [§191](#191--stereo-is-linear-in-amplitude-oshift-is-inert-and-playloplayhi-did-not-gate-2026-09-08) — STEREO is linear in amplitude, OSHIFT is inert, and PLAYLO/PLAYHI did not gate (2026-09-08)
 - [§192](#192--an-ib304f-was-fitted-what-that-does-and-does-not-invalidate-2026-09-08) — An IB304F was fitted; what that does and does not invalidate (2026-09-08)
 - [§193](#193--a-correction-lands-on-the-half-a-reader-reads-and-misses-the-half-that-acts-2026-09-08) — A correction lands on the half a reader reads, and misses the half that acts (2026-09-08)
+- [§194](#194--lsi2on--0-is-an-exact-bypass-so-every-prior-audio-baseline-stands-2026-09-08) — LSI2_ON = 0 is an exact bypass, so every prior audio baseline stands (2026-09-08)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -18485,8 +18486,10 @@ Not "everything is undated" -- that was the overclaim. With the enable off the
 signal path should be as before, so the honest list is short:
 
 - **Confirm enable-off really bypasses.** That is §50's sweep re-run, and it is
-  the one measurement everything else depends on. Until it is done, "prior
-  results still hold" is an expectation, not a finding.
+  the one measurement everything else depends on. **Done: §194. It is an exact
+  bypass -- 0.00 dB span on level and brightness across `FIL2FR` 20..99 -- so
+  every prior audio measurement here stands and the enabled case needs
+  companions, not replacements.**
 - **§190's rig noise floor** only if it does not. Everything else is quoted
   against that table.
 - **Nothing else**, unless the sweep shows enable-off is not a bypass.
@@ -18594,3 +18597,62 @@ carries a citation that says it was already examined.
 **Status of the instance in this repo: recorded, not fixed.** The eight ENV3
 stages still declare the board. Removing the flag is a behaviour change and is
 the user's call.
+
+## §194 — LSI2_ON = 0 is an exact bypass, so every prior audio baseline stands (2026-09-08)
+
+§50's sweep, re-run with the IB304F fitted. Same rig, same fields, same range.
+`TC10 NOISE` loaded from partition A -- broadband, single keygroup, S3000 -- and
+`N50` swept at both enable states, snapshot restored and verified.
+
+    LSI2_ON  FIL2FR   level dB   hi/total dB
+       0       20       +56.83      -1.42
+       0       40       +56.83      -1.42
+       0       60       +56.83      -1.42
+       0       80       +56.83      -1.42
+       0       99       +56.83      -1.42    <- span 0.00 dB on BOTH metrics
+
+       1       20       +12.80     -19.88
+       1       40       +28.54     -33.59
+       1       60       +37.23     -22.38
+       1       80       +43.77      -7.48
+       1       99       +50.79      -1.42    <- span 38.00 dB level
+
+**`LSI2_ON = 0` is an exact bypass**, and **`LSI2_ON = 1` responds by 38 dB**.
+§50's null was the board's absence and not a method failure -- which the A/B
+now demonstrates instead of assuming, because the *before* arm was recorded
+with the fields and the range it swept rather than as "no response".
+
+### What it settles
+
+§192 left provenance **conditional on the enable state**. It resolves in favour
+of the existing work: **with the enable off the signal path is unchanged, so
+every prior audio measurement here stands** and the enabled case needs
+*companion* measurements rather than replacements. Programs carrying zeros in
+these fields -- which is what a zero-filled header gives, and what converted
+material carries -- are unaffected by the board being fitted.
+
+### Filter 2 costs 6.04 dB even wide open
+
+At `FIL2FR` 99 the enabled path is **+50.79** against **+56.83** bypassed, with
+**identical brightness** (-1.42 both), so it is spectrally transparent there and
+simply quieter. `FLT2GAIN` was 0 throughout, which the panel reads as "+0 dB".
+So either 0 is not unity gain or the filter has insertion loss. **Untested
+which**, and it matters to anything that enables filter 2 with the rest at
+default.
+
+### Not interpreted: the brightness is non-monotonic at the dark end
+
+`FIL2FR` 20 reads -19.88 against 40 at -33.59. SNR is 23.8 dB at the darkest
+point, so this is signal and not floor. Candidates are resonance at a low
+corner, or `FLT2MODE = 0` not being a low-pass -- the enum is still a panel
+reading plus a corpus distribution, two weak sources agreeing, and this sweep
+did not vary the mode. **Recorded, not explained.**
+
+### A check that measured nothing
+
+The bypass arm was nearly reported as *sample-identical*. That test is
+meaningless on a **stochastic source**: two takes of noise are never
+sample-identical, and the comparison duly returned a large difference while
+saying nothing about bypass. **The evidence that holds is that the aggregate
+statistics match to 0.00 dB** -- which is what a bypass predicts and what a
+noise source can actually show. Choose the statistic the source can support.
