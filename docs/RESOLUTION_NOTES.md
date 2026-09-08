@@ -228,6 +228,7 @@ silently wrong one.
 - [§185](#185--a-real-post-note-off-re-articulation-095-s-late-on-the-upper-half-of-one-programs-range-2026-09-07) — A real post-note-off re-articulation, 0.95 s late, on the upper half of one program's range (2026-09-07)
 - [§186](#186--141-predicts-t90-well-and-captured-level-badly-and-the-attacks-shape-is-not-one-curve-2026-09-07) — §141 predicts t90 well and captured level badly, and the attack's shape is not one curve (2026-09-07)
 - [§187](#187--amplitude-alone-cannot-tell-a-re-articulation-from-a-mid-note-swell-only-position-relative-to-note-off-can-2026-09-07) — Amplitude alone cannot tell a re-articulation from a mid-note swell; only position relative to note-off can (2026-09-07)
+- [§188](#188--two-artefacts-that-carried-their-own-refutation-produced-independently-within-an-hour-2026-09-08) — Two artefacts that carried their own refutation, produced independently within an hour (2026-09-08)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -17619,7 +17620,7 @@ explanation every time so far.
   entry against `program_list()` matches nothing, because they are different
   namespaces that both read as "the name".
 
-### The check is one-sided: it catches extra events and misses missing ones
+### The under-count direction became INFORMATIVE when the detector was fixed
 
 On heavily overlapping material the onset count ran *low*: the long-attack
 program's source capture returned **1 onset for 4 notes**, because an 8.6 s
@@ -18117,3 +18118,40 @@ that is not a regression -- both are real amplitude events. The call site
 should classify by position relative to note-off before treating an extra event
 as contamination, because an uncommanded sound is a claim about *another
 program*, and a mid-hold swell is not evidence for it.
+
+## §188 — Two artefacts that carried their own refutation, produced independently within an hour (2026-09-08)
+
+The instruments built and rebuilt during one night's work were checked against
+each other, against real captures, and against a sibling session's corpus. **The
+two errors that survived longest were checkable with no external reference at
+all**, because each report contradicted itself internally.
+
+**A label that does not read the value it labels.** A diagnostic here printed
+`the SOUND IS THERE` beside a measured rise of **0.7 dB**. The string was
+hardcoded next to the number rather than derived from it. Read together the two
+halves refute each other; read as a summary line the sentence wins, and the
+conclusion would have been that the detector was dropping a note that sounded.
+
+**A number that contradicts the conclusion it is offered as support for.** A
+sibling session reported measured rises of **+6.1 and +7.7 dB** as the evidence
+that an **8 dB** threshold detects those events. A 6.1 dB rise cannot trip an
+8 dB threshold. Both figures were in one message and the collision did not
+register. (The true figures, measured the way the detector computes them, are
++9.31 and +9.17 dB -- the reported ones came from a 2 s lookback minimum rather
+than the detector's running minimum, so it was again a model of the instrument
+standing in for the instrument.)
+
+**Neither needed a second measurement, a reference capture, or a peer.** Each
+report contained the material to falsify itself. They were produced
+independently, on different machines, within an hour, and both survived because
+nobody read the two halves of a line against each other.
+
+**This is cheaper than every check in this file.** The onset detector, the
+spacing gate, the guard margin and the blind fraction all cost a corpus run and
+all were themselves wrong at some point tonight. **Reading a number against the
+sentence next to it costs nothing and has no failure mode.** Do it before
+reaching for an instrument.
+
+Related: §182 catalogues detectors that moved plausibly and measured the wrong
+thing. This is the adjacent failure -- a *report* that states a thing its own
+numbers deny.
