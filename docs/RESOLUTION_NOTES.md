@@ -18078,6 +18078,42 @@ recompute**, and neither is a representation. Every arithmetic in this section
 is correct and every query well-formed; re-running all of it would have
 confirmed every wrong conclusion.
 
+### The cheap defence: print the provenance, do not reason about it
+
+Two sessions on one instrument caught most of the above, but that defence only
+works while a number is being **argued**. It fails when a number is merely
+**used** -- and that is the common case.
+
+A worked instance. A sibling session was told, and accepted, the rule *"compare
+filter 2's corner against §139's measured corner, not §54's resonance-peak
+law"*. The rule was correct, understood, and agreed. **A ladder value of
+`FIL2FR` 95 still went into the design**, because at 95 the converter's
+frequency function stops evaluating the law and reads a measured table instead
+-- so the comparison would have recovered §146's known law-vs-measured gap and
+read as a property of filter 2.
+
+What caught it was **one printed column** saying which branch each ladder value
+came from:
+
+    FIL2FR   §54 peak   §139 corner   theirs   where theirs comes from
+        30       54.4        70.0      66.9    LAW
+        64      607.6       783.0     785.2    LAW
+        80     1892.4      2438.5    2502.7    LAW
+        95     5489.4      7073.7    8481.0    MEASURED TABLE   <- different origin
+
+**Reasoning about provenance is what failed; printing it is what worked.** The
+rule had already been stated and accepted; knowing it was not enough, because
+the value's origin is a property of the code path, not of the intention.
+
+Worse at 95 specifically: **8481 Hz is the `FILFRQ` 94 entry**, so the function
+is not interpolating there but returning the nearest measured point -- and §146
+marks 94 **marginal**, one rung below saturation at 96. Three different reasons
+that one comparand is unusable, none visible without printing where it came
+from.
+
+**So: before comparing two figures, print where each one came from -- even when
+someone has already told you the rule.**
+
 ## §189 — What the shared onset check can and cannot see, measured (2026-09-08)
 
 The onset check reports "more events than notes were commanded", which is the
