@@ -18780,14 +18780,20 @@ Decode as **cut at `Q` <= 21, boost at `Q` >= 25**, both ends measured, with
 characterise a feature whose width is a free parameter. Re-analysed at raw bin
 resolution (0.62 Hz bins, 15-bin median smoothing):
 
-    FLT2Q   octave said   ACTUAL    at Hz   width Hz     Q
-       0       -4.13       -4.3     2411      2616      0.9
-      16       -4.57      -53.9     2201       108     20.5
-      18       -3.86      -16.6     2178       829      2.6
-      20       -2.77       -9.5     2180      1156      1.9
-      21       -2.06       -7.0     2189      1360      1.6
-      25       +1.85       +2.3     1836       742      2.5
-      31      +15.48      +22.4     1884       423      4.5
+    FLT2Q    depth dB    at Hz   width Hz     Q
+       0        -4.3      2411      2616      0.9
+      15       -23.9      2216       638      3.5
+      16       -53.9      2201       108     20.5
+      18       -16.6      2178       829      2.6
+      20        -9.5      2180      1156      1.9
+      21        -7.0      2189      1360      1.6
+      25        +2.3      1836       742      2.5
+      27        +6.5      1870       767      2.4
+      29       +12.0      1896       661      2.9
+      31       +22.4      1884       423      4.5
+
+For comparison, the octave-band means for the same captures read -4.13, -4.57,
+-3.86, -2.77, -2.06, +1.85 and +15.48 at `Q` 0/16/18/20/21/25/31.
 
 **At `FLT2Q` 16 the octave mean read -4.57 dB where the notch is -53.9 dB** --
 a 108 Hz feature averaged inside a band nearly 2 kHz wide.
@@ -18797,11 +18803,29 @@ is a **-9.5 dB** dip rather than -2.8, and `Q` 31 is **+22.4 dB** rather than
 +15.5 -- so the worst-case headroom with `FLT2GAIN` 1 is about **+22 dB above
 bypass**, seven higher than this section first reported.
 
-**`FLT2Q` 16 looks like a distinct setting rather than a point on a curve.**
-Its Q is 20.5 against 1.6-2.6 either side, and the depth jumps 37 dB between 16
-and 18 -- the signature of a **true notch**, its floor set by measurement noise,
-sitting among ordinary peaking shapes. That would make the manual's *"16 is no
-cut or boost"* a garbled description of *"16 is the notch"*. **Not asserted.**
+**`FLT2Q` 16 is a distinct setting, confirmed on both sides.** Depth spikes
+30 dB above its neighbours and Q spikes six-fold -- **20.5 against 3.5 at 15
+and 2.6 at 18**. That is a **true notch** among ordinary peaking shapes, its
+floor set by measurement noise. It makes the manual's *"16 is no cut or boost"*
+read as a garbled *"16 is the notch"* -- still not asserted, but now supported
+from both neighbours rather than one.
+
+The falsifier was filed before the run: `Q` 15 deeper than -30 dB, or with a Q
+above 10, would have meant a notch *region* rather than a single value.
+
+### Neither arm interpolates
+
+    Q 15   linear from 0 and 16 predicts  ~-50 dB    measured  -23.9   26 dB error
+    Q 27   linear from 25 and 31 predicts  +8.9 dB   measured   +6.5    2.4 dB
+    Q 29   linear from 25 and 31 predicts +15.1 dB   measured  +12.0    3.1 dB
+
+The boost run **accelerates** -- gradients of 2.1, 2.75 and 5.2 dB/unit across
+25->27->29->31 -- so linear interpolation overshoots throughout it. Predicted
+in advance that both new boost points would fall below their linear values.
+
+**Every populated value is now measured rather than inferred**: 0, 15, 16, 18,
+20, 21, 25, 27, 29, 31. Interpolating between *those* is defensible; between
+the earlier endpoints it was not.
 
 **The non-monotonicity is real, not a metric artefact.** A sibling session
 proposed that resolving the feature would make the minimum at 16 disappear;
