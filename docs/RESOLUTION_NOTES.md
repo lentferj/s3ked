@@ -18640,13 +18640,43 @@ So either 0 is not unity gain or the filter has insertion loss. **Untested
 which**, and it matters to anything that enables filter 2 with the rest at
 default.
 
-### Not interpreted: the brightness is non-monotonic at the dark end
+### The dark-end anomaly was the metric, and octave bands show why
 
-`FIL2FR` 20 reads -19.88 against 40 at -33.59. SNR is 23.8 dB at the darkest
-point, so this is signal and not floor. Candidates are resonance at a low
-corner, or `FLT2MODE = 0` not being a low-pass -- the enum is still a panel
-reading plus a corpus distribution, two weak sources agreeing, and this sweep
-did not vary the mode. **Recorded, not explained.**
+`FIL2FR` 20 read -19.88 on `hi/total` against 40 at -33.59, which is
+non-monotonic where the filter is not. Octave-band levels against the bypass
+capture explain it:
+
+    FIL2FR     31    63   125   250   500  1000  2000  4000  8000 Hz
+      20      -18   -28   -36   -48   -56   -64   -66   -66   -58
+      40       -8   -11   -16   -26   -37   -49   -60   -64   -58
+      60       -6    -7    -7   -10   -16   -26   -37   -47   -54
+      80       -6    -6    -6    -6    -8   -10   -16   -23   -30
+      99       -6    -6    -6    -6    -6    -6    -6    -6    -6
+
+**At `FIL2FR` 20 every band is attenuated: the corner is below the entire
+analysis window.** So the ratio was comparing two *stopband* regions and had
+stopped describing the filter at all. **Not resonance, not a mode question --
+the metric left the region it describes**, which is the same failure as probing
+a deep corner at a fixed high frequency (§190).
+
+The `FIL2FR` 99 row also settles the insertion loss: **-6 dB in every band**,
+so it is flat and not tonal.
+
+### Mode 0 is about 12 dB/octave -- two poles, not four
+
+Asymptotic slopes from the same table, restricted to bands more than 10 dB
+above the measured noise floor:
+
+    FIL2FR 40   -11.3, -12.0, -10.4 dB/octave    mean above 250 Hz  -11.2
+    FIL2FR 60    -9.3, -10.8, -10.7              mean               -8.7
+
+    reference:  2-pole = -12 dB/oct,  4-pole = -24 dB/oct
+
+**`FLT2MODE` was 0 throughout and the enum is unverified**, so the claim is
+"mode 0 is ~12 dB/octave", **not** "the board is 2-pole". If a 4-pole slope
+exists it is in another mode. A procedure that opens by validating a rig
+against an expected 4-pole response would fail here and look like a broken
+rig -- flagged upstream before it ran.
 
 ### A check that measured nothing
 
