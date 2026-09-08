@@ -2008,3 +2008,26 @@ reading the MX10 build's fields says nothing, since it is the build that does
 Related: a sibling session filed a comparable event on other hardware at
 ~1.15 s as a property of a superseded bank, four mechanisms refuted. That
 framing no longer covers a similar event on a different machine.
+
+## PLAYLO/PLAYHI did not gate playback, and the pan combination is unmeasured
+
+**Status:** two open questions left by §191, neither needing a card.
+
+**PLAYLO/PLAYHI.** Narrowed to 60..62 on a one-keygroup program and read back
+as stored, notes 48 and 72 sounded at full level. Either they are a second pair
+of stored-but-unused fields on this machine — like `OSHIFT`, which §191 shows
+is accepted and ignored — or they need something that run did not do
+(a different recalculation, or the keygroup's own span governing instead).
+
+**Blocked on:** nothing but bench time. Read the keygroup's own key span and
+narrow *that* as the control, so the two candidate gates are distinguished
+rather than conflated.
+
+**The pan combination rule.** Program `PANPOS` is live (+48.23 dB at +50).
+There is **no keygroup-scope `PANPOS`** in the parameter table, so what a
+converter calls "zone pan" is some other field, and the combination question
+cannot be posed until that field is identified.
+
+**Blocked on:** finding which field a converter means by zone pan. If it is a
+keygroup or zone output assignment rather than a pan, the question changes
+shape entirely.

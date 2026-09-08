@@ -231,6 +231,7 @@ silently wrong one.
 - [§188](#188--two-artefacts-that-carried-their-own-refutation-produced-independently-within-an-hour-2026-09-08) — Two artefacts that carried their own refutation, produced independently within an hour (2026-09-08)
 - [§189](#189--what-the-shared-onset-check-can-and-cannot-see-measured-2026-09-08) — What the shared onset check can and cannot see, measured (2026-09-08)
 - [§190](#190--this-rigs-noise-floor-is-flat-to-11-hz-so-a-filter-corner-near-30-hz-is-measurable-here-2026-09-08) — This rig's noise floor is flat to 11 Hz, so a filter corner near 30 Hz is measurable here (2026-09-08)
+- [§191](#191--stereo-is-linear-in-amplitude-oshift-is-inert-and-playloplayhi-did-not-gate-2026-09-08) — STEREO is linear in amplitude, OSHIFT is inert, and PLAYLO/PLAYHI did not gate (2026-09-08)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -18262,3 +18263,95 @@ band table is the measurement. Same shape as a field read back from the machine
 rather than asserted -- in the same exchange, a depth table's `SUSTN2` turned
 out to be reading `RELSE2`, a real value under a wrong label, which only a
 printed readback exposed.
+
+## §191 — STEREO is linear in amplitude, OSHIFT is inert, and PLAYLO/PLAYHI did not gate (2026-09-08)
+
+Three program-scope fields measured on hardware at a sibling project's request,
+in **SINGLE** (mode register read 0, never written) so the multi part's copies
+cannot override. Program index 11, one keygroup, `PRGNUM` 10 -- `PRGNUM` 0 is
+never free (§91). All writes snapshotted and verified restored field-by-field.
+
+### STEREO does NOT reuse the program-loudness law
+
+The proposal was that `STEREO` (offset 23) follows `dB = 0.642719 x - 87.63`,
+the `PRLOUD` law. It does not:
+
+    x     measured   PRLOUD law   20log(x/99)
+    99     +0.000       +0.00       +0.000
+    90     -0.876       -5.78       -0.828
+    80     -1.835      -12.21       -1.851
+    60     -4.426      -25.07       -4.350
+
+**Mean error against linear-in-amplitude: 0.035 dB over four points**, against
+a law that is wrong by **20.6 dB** at x=60. `STEREO` is a plain amplitude
+scaler, **gain proportional to x**.
+
+`x/99` and `x/100` are not separable here: both are ratios to the same
+reference and the normalisation cancels. Only the proportionality is
+established.
+
+### OSHIFT is accepted, stored, and ignored
+
+    OSHIFT   0   f0 131.26 Hz   spectral peak 131.54    +0.0 cents
+    OSHIFT  +1   f0 131.26 Hz   spectral peak 131.54    +0.0 cents
+    OSHIFT  -1   f0 131.26 Hz   spectral peak 131.54    -0.0 cents
+
+Two independent detectors (YIN and a spectral peak), route live at 1/1 sounded
+and -39.9 dB. Raw byte writes at offset 21 read back as 0, 1 and 255, so **the
+machine stores the value and does not act on it.**
+
+**The two Akai documents disagree and the S3000-family one is right here.** The
+S1000 struct comments the field *"Play octave (keyboard) shift(+/-2)"*; the
+S2800/S3000 document gives *"Range: 0. Description: Not used"*. s3ked
+transcribes the latter as `0..0`, which is why `set_parameter` refuses it and
+the test needed `set_header_bytes`. **A converter applying `OSHIFT` would
+introduce a pitch error this hardware does not produce.**
+
+### PLAYLO/PLAYHI did not gate playback -- open
+
+Narrowed to 60..62 and read back as stored, notes 48 and 72 sounded at full
+level (-45.7 and -48.3 dB, against -47.0 for the in-range 60):
+
+    MIDI 48  above floor +43.3  SOUNDS      <- outside PLAYLO..PLAYHI
+    MIDI 60  above floor +42.0  SOUNDS
+    MIDI 72  above floor +40.7  SOUNDS      <- outside PLAYLO..PLAYHI
+
+Whether these are a second pair of stored-but-unused fields, or need something
+this run did not do, is **not established**. The consequence for the octave
+question is that the key-range half of it is **not measured** -- the gate that
+would have shown a range shift does not gate.
+
+### The pan combination is VOID, by a fault in the experiment
+
+Program `PANPOS` is live and strong: **+48.23 dB** L/R balance at +50, against
+**-0.74 dB** at centre, read from the capture's channels directly (the shared
+harness folds to mono).
+
+The combination rule with keygroup pan is **unmeasured**, and the four
+conditions that were supposed to establish it are void. **There is no
+keygroup-scope `PANPOS`** -- it exists in `program` and `multipart` only. The
+script wrote a supposed keygroup copy and then the program copy, **both
+resolving to the same field**, so the second write overwrote the first in every
+condition.
+
+**The numbers looked like a clean "program overrides keygroup" result.** The
+keygroup-alone arm read identical to baseline, and the combined arm read
+identical to program-alone -- exactly the signature of an override rule, and
+exactly what two writes to one field produce. **The read-backs printed the
+intended values because each was read before the next write.**
+
+What caught it was designing the four conditions so each field had to be shown
+live *on its own* before the combination was interpreted. The keygroup arm was
+not live, so the combination was not interpretable -- and that is the check
+earning its place, not a lucky escape.
+
+### Predictions, filed before any write
+
+Written to `PREDICTION_progscope.md` before the first write:
+
+1. *`OSHIFT` +1 raises pitch an octave* -- **FALSIFIED**; it does nothing.
+2. *`STEREO` reuses the `PRLOUD` law* -- **FALSIFIED**; linear in amplitude.
+3. *Program and keygroup pan sum, clamped* -- **VOID**, not tested.
+
+Two of three falsified and the third void is the outcome that says the
+predictions were doing work rather than decorating the run.
