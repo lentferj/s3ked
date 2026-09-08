@@ -18525,6 +18525,15 @@ would not produce it.
 permit it.** A capability being present, declared, or enabled is three separate
 things from it being exercised, and each reads identically in a header.
 
+**And the halving did not weaken the case, it improved it.** What the
+correction removed was the inert 60% -- pass-throughs that were never going to
+sound different however they were converted. What it left is the material
+somebody deliberately configured, three to six parameters at a time. **The
+claim got smaller and the argument got better**, which is worth stating plainly
+because the instinct on seeing 18.7% become 7.5% is that the case has weakened.
+A correction that shrinks a claim usually strengthens it, since the part
+removed is generally the part that was doing no work.
+
 ## §193 — A correction lands on the half a reader reads, and misses the half that acts (2026-09-08)
 
 Three instances in one day, across two projects, with the same shape: a claim
