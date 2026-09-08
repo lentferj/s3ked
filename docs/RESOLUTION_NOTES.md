@@ -18284,13 +18284,45 @@ the `PRLOUD` law. It does not:
 
 **Mean error against linear-in-amplitude: 0.035 dB over four points**, against
 a law that is wrong by **20.6 dB** at x=60. `STEREO` is a plain amplitude
-scaler, **gain proportional to x**.
+scaler, **gain proportional to x** -- extended below to the full 10..99 range.
 
 `x/99` and `x/100` are not separable here: both are ratios to the same
 reference and the normalisation cancels. Only the proportionality is
 established.
 
-**The law is established on 60..99 and 0 is NOT on it.** The sweep stopped at
+**Extended to 10..99 (2026-09-08), because 1.76% of library programs sit below
+60** -- 90 of 5,124 on a sibling's corpus, down to level 10, where the 60..99
+fit would have been extrapolated 15.6 dB past anything measured.
+
+    x    measured   20log(x/99)   residual    SNR
+    99     +0.000      +0.000      +0.000    +44.0
+    90     -0.877      -0.828      -0.049    +42.2
+    80     -1.839      -1.851      +0.012    +41.7
+    60     -4.431      -4.350      -0.081    +39.3
+    50     -6.005      -5.933      -0.072    +38.2
+    40     -7.954      -7.872      -0.082    +36.1
+    30    -10.504     -10.370      -0.134    +33.1
+    20    -14.073     -13.892      -0.181    +29.5
+    10    -20.157     -19.913      -0.244    +23.6
+
+**Proportionality holds across the whole field range to within 0.244 dB**,
+which is inside any rendering tolerance -- for a converter, `gain = x/99` is
+the answer.
+
+**But the residuals are structured, not scatter:** 8 of 9 negative and growing
+monotonically as `x` falls. A single offset, `gain = (x-0.38)/(99-0.38)`,
+absorbs it and takes the maximum error from 0.244 dB to **0.059 dB**. That is
+one free parameter fitted to nine points with no mechanism behind it, so it is
+**recorded as an observation and not adopted**; what it establishes is that
+pure proportionality is not the exact law, not what the exact law is.
+
+**A note on the criterion, because it nearly hid this.** The prediction was
+filed as *"mean |error| stays under 0.2 dB"*. It passed at 0.095 -- while the
+residuals were monotonic in `x`. **A mean of absolute residuals destroys the
+sign structure that reveals a systematic term**, so it can only ever confirm.
+The criterion should have been stated on the signed residuals against `x`.
+
+**The law is established on 10..99 and 0 is NOT on it.** The sweep stopped at
 60 deliberately -- a stated guard, because `STEREO` 0 removes the program from
 the stereo mix and looks exactly like a broken rig. A sibling session reports
 the manual makes 0 a **routing** choice rather than a level: the program is
