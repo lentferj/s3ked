@@ -18027,9 +18027,42 @@ result it produced, and pin the source so it cannot be silently regenerated.
 A sibling session's `ONSET_DETECTOR_VERSION` and its generator docstring are
 the same idea applied to the two axes.
 
-The distinction that makes all three visible: **a definition is not a thing you
-recompute.** Every arithmetic in this section is correct, and re-running all of
-it would have confirmed every wrong conclusion.
+### A fourth class: a correct query against the wrong representation
+
+The three above are about numbers. This one is about a **negative** result from
+a search, and it produced two wrong reports here within an hour.
+
+- **Grepping a table's source text for its entries.** `_p("program", 2[3-4],`
+  matches only the *compact single-line* declarations in `s3k/params.py`. Seven
+  fields at those offsets are written multi-line, so the pattern returned
+  nothing and "no match" was reported as "not in the table" -- including to the
+  user. The module was importable the whole time:
+  `lookup(("program", "STEREO"))` answers in one line.
+- **Grepping a prose document for struct identifiers.** A sibling session
+  searched its own format reference for `PRLOUD`, `PLAYLO`, `OSHIFT` -- names
+  the document never uses, because it writes "loudness", "play range", "octave
+  shift". Zero matches, reported as an undocumented gap. The fields had been
+  there all along.
+
+**Both had the real artefact available and queried a projection of it instead**
+-- source text standing in for a parsed table, prose standing in for a field
+list. A correct procedure, applied to the wrong representation of the thing.
+
+**Neither would be caught by re-running the query**, which is the property it
+shares with the three above. The first was caught by another party contradicting
+it; the second by opening the file to add what was thought missing and finding
+it already present.
+
+**So a negative search result is a claim about the query, not about the
+artefact**, until the two are known to be in the same form. Query a table by
+importing it, a file by opening it, a machine by reading it back -- and treat
+"grep found nothing" as evidence only when the pattern demonstrably matches the
+form the artefact is written in.
+
+The distinction that makes all four visible: **a definition is not a thing you
+recompute**, and neither is a representation. Every arithmetic in this section
+is correct and every query well-formed; re-running all of it would have
+confirmed every wrong conclusion.
 
 ## §189 — What the shared onset check can and cannot see, measured (2026-09-08)
 
