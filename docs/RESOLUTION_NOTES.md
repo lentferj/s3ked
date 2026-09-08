@@ -233,6 +233,7 @@ silently wrong one.
 - [§190](#190--this-rigs-noise-floor-is-flat-to-11-hz-so-a-filter-corner-near-30-hz-is-measurable-here-2026-09-08) — This rig's noise floor is flat to 11 Hz, so a filter corner near 30 Hz is measurable here (2026-09-08)
 - [§191](#191--stereo-is-linear-in-amplitude-oshift-is-inert-and-playloplayhi-did-not-gate-2026-09-08) — STEREO is linear in amplitude, OSHIFT is inert, and PLAYLO/PLAYHI did not gate (2026-09-08)
 - [§192](#192--an-ib304f-was-fitted-what-that-does-and-does-not-invalidate-2026-09-08) — An IB304F was fitted; what that does and does not invalidate (2026-09-08)
+- [§193](#193--a-correction-lands-on-the-half-a-reader-reads-and-misses-the-half-that-acts-2026-09-08) — A correction lands on the half a reader reads, and misses the half that acts (2026-09-08)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -18495,3 +18496,64 @@ section: a hardware change is an instrument change, and the fix is structural
 -- record the hardware state, dated, when it changes. What Jan's correction
 adds is that **the scope of such a change is itself a measurable question**,
 not something to assume at either extreme.
+
+## §193 — A correction lands on the half a reader reads, and misses the half that acts (2026-09-08)
+
+Three instances in one day, across two projects, with the same shape: a claim
+was found wrong, the **prose** was corrected, and the **thing that enforced the
+claim** was left running.
+
+    prose corrected                        enforcer left in place
+    ---------------------------------      ------------------------------------
+    §87 retracted "envelope 3 needs        requires="IB304F" on the eight ENV3
+    the IB304F", and rewrote the note      stages, which still REFUSES the read
+    on the field                           on a boardless machine
+
+    a sibling's README disclaimer          the published copy, restated three
+    corrected                              weeks later without re-checking
+
+    a sibling's writer default flipped     the comment above the branch, still
+                                           describing the replaced behaviour
+
+**The correction lands where the error was noticed** -- a note, a docstring, a
+README line -- because that is where a person was reading when they saw it. The
+declaration, the default, the flag is a few lines away and keeps working.
+
+### The second-order property is what makes it durable
+
+**After the correction, the survivor looks inspected.** §87 is titled
+*"Envelope 3 does not need the IB304F"* and is marked "Status: corrected". A
+reader who finds `requires="IB304F"` and traces it to a field whose note cites
+§87 will conclude the flag was considered and kept. **The correction's own
+reference number now does for the enforcer exactly what a citation did for the
+original claim.**
+
+§87 diagnosed that mechanism in the claim it was retracting -- *"an assumption
+wearing a citation, the most persuasive form a wrong claim can take in this
+project, because the reference makes it look checked"* -- and then produced a
+fresh instance of it in the same edit.
+
+### It propagates, because a table is copied and a note is not
+
+The wrong flag was transcribed into a sibling project's format document
+straight from this table, and a mechanism was then built on top of it: an
+explanation for why envelope-3 scaling was measurable on a boardless machine.
+**The explanation was satisfying and explained an artefact.** A machine-readable
+field is exactly the part downstream tools consume; the note beside it is not.
+
+### The rule
+
+**When you correct a claim, find what enforced it.** A retraction is not
+complete until the code, the flag, the default, the fixture and the published
+copy have each been checked against it -- and the check has to be by
+enumeration, not by memory of where the claim appeared.
+
+**This is not §188's family.** Those four are failures of a *measurement or a
+query* -- self-contradiction, a wrong quantity, expired provenance, a
+mis-shaped search. This one is a failure of a *repair*, and it is invisible to
+all four: every number stays correct, every query well-formed, and the artefact
+carries a citation that says it was already examined.
+
+**Status of the instance in this repo: recorded, not fixed.** The eight ENV3
+stages still declare the board. Removing the flag is a behaviour change and is
+the user's call.

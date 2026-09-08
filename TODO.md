@@ -2031,3 +2031,23 @@ cannot be posed until that field is identified.
 **Blocked on:** finding which field a converter means by zone pan. If it is a
 keygroup or zone output assignment rather than a pan, the question changes
 shape entirely.
+
+## The eight ENV3 stages still declare the IB304F, which §87 retracted
+
+**Status:** defect recorded (§193), fix not applied — it is a behaviour change
+and Jan's call while a sibling session holds the lead on the board.
+
+`ENV3R1`..`ENV3L4` at keygroup offsets 179–186 carry `requires="IB304F"`, so
+`s3ked` **refuses to read or write them unless the board is declared**. §87 is
+marked "Status: corrected" and names the seven fields that genuinely are gated
+— `FLT2GAIN`, `FLT2MODE`, `FLT2Q`, `FIL2FR`, `K_FRQ2`, `TONEFREQ`, `TONESLOP`.
+Envelope 3 is not among them; §50, §63 and §64 measured it on a machine that
+never had the board.
+
+**The fix is small**: drop `requires` from those eight declarations, and add a
+test asserting envelope 3 needs no board so the flag cannot come back.
+
+**It has already propagated once.** A sibling project transcribed the flag into
+its own format document from this table and built an explanation on top of it.
+A machine-readable field is what downstream tools consume; the note beside it
+is not.
