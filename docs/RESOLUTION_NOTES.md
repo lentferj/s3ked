@@ -18672,11 +18672,42 @@ above the measured noise floor:
 
     reference:  2-pole = -12 dB/oct,  4-pole = -24 dB/oct
 
-**`FLT2MODE` was 0 throughout and the enum is unverified**, so the claim is
-"mode 0 is ~12 dB/octave", **not** "the board is 2-pole". If a 4-pole slope
-exists it is in another mode. A procedure that opens by validating a rig
-against an expected 4-pole response would fail here and look like a broken
-rig -- flagged upstream before it ran.
+`FLT2MODE` was 0 throughout, which the mode sweep below establishes is the
+**lowpass**, so these slopes describe a 2-pole lowpass section.
+
+**A warning issued here was wrong and is withdrawn.** It said a procedure
+validating a rig against an expected 4-pole response would fail. It would not:
+that check puts `FILFRQ` and `FIL2FR` at the **same corner**, so the two 2-pole
+sections sit **in series**, and two cascaded 2-pole lowpasses give 24 dB/octave
+by ordinary filter theory. **~11.3 dB/octave for filter 2 alone is the premise
+of that check, not a contradiction of it** -- one section was measured and
+compared against the cascade's expectation. Had the figure been ~6 dB/octave
+the warning would have been right, because a 1-pole section cannot cascade to
+24.
+
+### The mode enum, from response shape
+
+`FIL2FR` 80 puts the corner mid-band so a peak, a rise or a dip is visible.
+All four values read back. Levels relative to the bypass capture:
+
+    mode   31    63   125   250   500  1000  2000  4000  8000 Hz
+     0     -6    -6    -6    -6    -8   -10   -16   -23   -30   monotonic fall
+     1    -35   -31   -26   -20   -16   -13   -12   -14   -17   PEAK at 2 kHz
+     2    -31   -25   -20   -14    -9    -6    -5    -5    -6   rise then plateau
+     3     -6    -6    -6    -6    -8   -10   -12   -10    -8   DIP at 2 kHz
+
+**`LP, BP, HP, EQ` = `0, 1, 2, 3`**, established from the curves rather than
+from the panel. The enum had been a panel photograph plus a corpus
+distribution -- two weak sources agreeing, which is not a measurement.
+
+**Mode 3 is a notch, not a shelf**: it cuts 6 dB at the corner and recovers,
+sitting at bypass level below 250 Hz. Anything decoding "EQ" as a tilt has it
+wrong.
+
+**A classifier error worth recording.** The first pass compared the lowest band
+against the highest and called mode 1 a highpass. It peaks at 2 kHz and falls
+either side -- a bandpass, which endpoints cannot distinguish from a rise. The
+statistic was correct and could not describe the shape it was applied to.
 
 ### A check that measured nothing
 
