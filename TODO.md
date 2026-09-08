@@ -2051,3 +2051,22 @@ test asserting envelope 3 needs no board so the flag cannot come back.
 its own format document from this table and built an explanation on top of it.
 A machine-readable field is what downstream tools consume; the note beside it
 is not.
+
+## Filter 2's mode-3 pivot is unresolved between FLT2Q 17 and 24
+
+**Status:** open, two captures would close it, no card needed — `TC10 NOISE`
+is resident.
+
+§195 confirms mode 3 inverts sign with `FLT2Q` but places the pivot **between
+16 and 25**, not at 16 as the manual states: at `FLT2Q` 16 the filter still
+cuts by 7.3 dB, the deepest cut measured.
+
+**Why it matters:** the commonest real values are 20, 25 and 27. The last two
+are safely boosts; **20 sits inside the unmeasured interval**, so a decoder
+using `Q > 16` may invert the sign on material at 17–20.
+
+**The measurement:** mode 3, `FIL2FR` 80, `FLT2Q` 18 and 21, normalised to each
+row's own low-frequency plateau. Two captures.
+
+**Until then**, decode with a threshold nearer 20 than 16 and flag 17–23 as
+uncertain rather than picking an unmeasured boundary.

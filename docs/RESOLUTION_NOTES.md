@@ -235,6 +235,7 @@ silently wrong one.
 - [§192](#192--an-ib304f-was-fitted-what-that-does-and-does-not-invalidate-2026-09-08) — An IB304F was fitted; what that does and does not invalidate (2026-09-08)
 - [§193](#193--a-correction-lands-on-the-half-a-reader-reads-and-misses-the-half-that-acts-2026-09-08) — A correction lands on the half a reader reads, and misses the half that acts (2026-09-08)
 - [§194](#194--lsi2on--0-is-an-exact-bypass-so-every-prior-audio-baseline-stands-2026-09-08) — LSI2_ON = 0 is an exact bypass, so every prior audio baseline stands (2026-09-08)
+- [§195](#195--flt2gain-is-a-6-db-switch-that-cancels-filter-2s-insertion-loss-and-mode-3s-pivot-is-not-at-16-2026-09-08) — FLT2GAIN is a +6 dB switch that cancels filter 2's insertion loss, and mode 3's pivot is not at 16 (2026-09-08)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -18717,3 +18718,58 @@ sample-identical, and the comparison duly returned a large difference while
 saying nothing about bypass. **The evidence that holds is that the aggregate
 statistics match to 0.00 dB** -- which is what a bypass predicts and what a
 noise source can actually show. Choose the statistic the source can support.
+
+## §195 — FLT2GAIN is a +6 dB switch that cancels filter 2's insertion loss, and mode 3's pivot is not at 16 (2026-09-08)
+
+Both measured on `N50` from `TC10 NOISE`, snapshot restored and verified.
+
+### FLT2GAIN: two values, +0 and +6 dB, flat
+
+§194 found filter 2 costing **6.04 dB** even at `FIL2FR` 99 where it is
+spectrally transparent. `FLT2GAIN`'s declared range is **0..1** -- a switch,
+not a level. Difference between 1 and 0 at mode 0, `FIL2FR` 99:
+
+    band   44    89   177   354   707  1414  2828  5657 11314 Hz
+    diff  +6.0  +6.0  +6.0  +6.0  +6.0  +6.0  +6.0  +6.0  +6.0
+
+**Mean +6.03 dB, spread 0.02 dB across nine octaves**, and it brings the
+enabled path to **+0 dB in every band** against bypass. So the loss is by
+design and the switch cancels it exactly. **Enabling filter 2 with `FLT2GAIN`
+1 is level-neutral**; enabling it with `FLT2GAIN` 0 costs 6 dB.
+
+### Mode 3 inverts sign with FLT2Q, but not at 16
+
+The manual states 16 is neither cut nor boost, above 16 boosts the corner and
+below 16 cuts it. §194 characterised mode 3 as a notch **from a single capture
+at `FLT2Q` 0** -- one point inside a parameterised behaviour, which does not
+characterise the mode. A sibling session's corpus has 78% of real mode-3
+keygroups above 16, so the boost half covers most of the material.
+
+Normalised to each row's own low-frequency plateau, removing the insertion loss
+so only the EQ action remains:
+
+    FLT2Q    44    89   177   354   707  1414  2828  5657 Hz
+       0   +0.2  +0.1  +0.0  -0.3  -1.5  -4.1  -5.6  -3.6    CUT  -5.6 dB
+      16   +0.0  +0.0  +0.0  -0.1  -0.6  -4.6  -7.3  -2.5    CUT  -7.3 dB
+      25   -0.0  -0.0  -0.0  +0.0  +0.3  +1.9  -0.5  -1.4    BOOST +1.9 dB
+      31   -0.1  -0.1  -0.0  +0.1  +1.0 +15.5  +6.0  -0.8    BOOST +15.5 dB
+
+**The sign inversion is confirmed. The pivot value is not.** At `FLT2Q` 16 the
+filter still cuts, by 7.3 dB -- the *deepest* cut of the four measured. The
+inversion happens somewhere **between 16 and 25**, and 17..24 is unresolved.
+
+**This matters for decoding.** The commonest real values are 20, 25 and 27; 25
+and 27 are safely boosts, **20 sits inside the unmeasured interval**. A decoder
+using `Q > 16` may assign the wrong *sign* to material at 17..20, and a sign
+error is worse than dropping the field.
+
+**And the boost is not gentle**: +15.5 dB at `FLT2Q` 31 against +1.9 at 25.
+Anything rendering it needs headroom.
+
+### Method note
+
+The first reading of this sweep took "the corner" to be the 2 kHz band, when
+`FIL2FR` 80 puts it near 1 kHz, and read the rows raw rather than against each
+row's own plateau -- so the insertion loss sat inside every number and the
+pivot could not be seen at all. **Normalising to the thing being varied, not to
+an absolute reference, is what made the sign visible.**
