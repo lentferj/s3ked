@@ -18759,9 +18759,13 @@ filter still cuts -- the *deepest* cut measured. Filled in at the values real
 material actually uses rather than by bracketing:
 
     FLT2Q     0     16     18     20     21     25     31
-    action  -4.13  -4.57  -3.86  -2.77  -2.06  +1.85  +15.48   dB at the corner
+    action  -4.13  -4.57  -3.86  -2.77  -2.06  +1.85  +15.48   dB, OCTAVE BANDS
 
     zero crossing, interpolated 21..25:  FLT2Q 23.1
+
+**Those magnitudes are badly wrong and are superseded below** -- the octave
+bands understate a narrow feature. The **signs**, and therefore the crossing,
+survive.
 
 **`FLT2Q` 20 is a CUT**, and it is the single commonest value in real EQ-mode
 keygroups (104 of 469 on a sibling's corpus). **A `Q > 16` decode rule would
@@ -18770,11 +18774,44 @@ invert the sign on 22% of the material that uses the mode.**
 Decode as **cut at `Q` <= 21, boost at `Q` >= 25**, both ends measured, with
 22..24 unmeasured and narrow.
 
-**And it is not a signed gain.** The cut *deepens* from `Q` 0 to 16 (-4.13 to
--4.57) before shallowing, so the curve has a minimum near 16 rather than a
-zero there. **Do not model it as sign x magnitude.** One possibility is that
-the panel displays this field signed -- -16..+15 over an 0..31 byte, making the
-manual's "16" a panel number and byte 16 the panel's 0 -- but that is untested.
+### The octave bands understated the depth by up to 49 dB
+
+`FLT2Q` is a **width** control, and a fixed-width analysis band cannot
+characterise a feature whose width is a free parameter. Re-analysed at raw bin
+resolution (0.62 Hz bins, 15-bin median smoothing):
+
+    FLT2Q   octave said   ACTUAL    at Hz   width Hz     Q
+       0       -4.13       -4.3     2411      2616      0.9
+      16       -4.57      -53.9     2201       108     20.5
+      18       -3.86      -16.6     2178       829      2.6
+      20       -2.77       -9.5     2180      1156      1.9
+      21       -2.06       -7.0     2189      1360      1.6
+      25       +1.85       +2.3     1836       742      2.5
+      31      +15.48      +22.4     1884       423      4.5
+
+**At `FLT2Q` 16 the octave mean read -4.57 dB where the notch is -53.9 dB** --
+a 108 Hz feature averaged inside a band nearly 2 kHz wide.
+
+**Every sign conclusion above survives; every magnitude is superseded.** `Q` 20
+is a **-9.5 dB** dip rather than -2.8, and `Q` 31 is **+22.4 dB** rather than
++15.5 -- so the worst-case headroom with `FLT2GAIN` 1 is about **+22 dB above
+bypass**, seven higher than this section first reported.
+
+**`FLT2Q` 16 looks like a distinct setting rather than a point on a curve.**
+Its Q is 20.5 against 1.6-2.6 either side, and the depth jumps 37 dB between 16
+and 18 -- the signature of a **true notch**, its floor set by measurement noise,
+sitting among ordinary peaking shapes. That would make the manual's *"16 is no
+cut or boost"* a garbled description of *"16 is the notch"*. **Not asserted.**
+
+**The non-monotonicity is real, not a metric artefact.** A sibling session
+proposed that resolving the feature would make the minimum at 16 disappear;
+resolving it makes the minimum **49 dB deeper**. The metric was wrong *and* the
+parameter is not monotonic, where those had been offered as alternatives.
+
+**Do not model this field as sign x magnitude**, and do not characterise it
+with a fixed-width band: this project has now made that error at both ends of
+one sweep -- averaging a corner that had left the window at `FIL2FR` 20, and
+averaging a notch narrower than the band at `FLT2Q` 16.
 
 **This matters for decoding.** The commonest real values are 20, 25 and 27; 25
 and 27 are safely boosts, **20 sits inside the unmeasured interval**. A decoder
