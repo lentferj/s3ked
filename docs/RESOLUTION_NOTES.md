@@ -18497,6 +18497,34 @@ section: a hardware change is an instrument change, and the fix is structural
 adds is that **the scope of such a change is itself a measurable question**,
 not something to assume at either extreme.
 
+### The same distinction, one level down, in the data
+
+Jan made it twice in one evening. The second time was to a sibling session's
+corpus figure: **the enable being set is not the filter being in circuit.**
+
+    enabled keygroups                                   2,457
+      audibly INERT (LP, freq 99, Q 0, no mod/tone/     1,474   60.0%
+      key-follow -- a pass-through)
+      actually doing something                            983   40.0%
+
+    programs with at least one ENABLED keygroup    831   18.7%
+    programs with at least one ACTIVE keygroup     333    7.5%   <- the real figure
+
+**A flag was counted and called usage**, and the prevalence claim was 2.5x too
+high. The parallel is exact: *fitted* is not *in circuit* for the hardware, and
+*enabled* is not *in use* for the data.
+
+**The corroboration is the part worth keeping**, because nobody designed it:
+the mode distribution **inverts** once pass-throughs are excluded. Enabled
+overall is LP 64%; among the *active* keygroups it is EQ and HP dominant with
+LP a distant third. That is exactly right -- HP and EQ change the sound at any
+corner, while a low-pass at frequency 99 cannot -- and an artefact of counting
+would not produce it.
+
+**The rule: count the configurations that do something, not the flags that
+permit it.** A capability being present, declared, or enabled is three separate
+things from it being exercised, and each reads identically in a header.
+
 ## §193 — A correction lands on the half a reader reads, and misses the half that acts (2026-09-08)
 
 Three instances in one day, across two projects, with the same shape: a claim
