@@ -2065,8 +2065,15 @@ cuts by 7.3 dB, the deepest cut measured.
 are safely boosts; **20 sits inside the unmeasured interval**, so a decoder
 using `Q > 16` may invert the sign on material at 17–20.
 
-**The measurement:** mode 3, `FIL2FR` 80, `FLT2Q` 18 and 21, normalised to each
-row's own low-frequency plateau. Two captures.
+**Largely closed 2026-09-08 (§195):** measured at 18, 20 and 21, all cuts, with
+the zero crossing interpolating to **23.1**. `FLT2Q` 20 — the commonest real
+value — is a cut, so a `Q > 16` rule would invert the sign on 22% of EQ-mode
+material.
 
-**Until then**, decode with a threshold nearer 20 than 16 and flag 17–23 as
-uncertain rather than picking an unmeasured boundary.
+**Remaining:** `FLT2Q` 22 and 23, two captures, covering 14 keygroups. Decode
+meanwhile as cut at `Q` ≤ 21 and boost at `Q` ≥ 25, both ends measured.
+
+**Also open and more interesting:** the cut *deepens* from `Q` 0 to 16 before
+shallowing, so the field is not a signed gain and has a minimum near 16. One
+untested explanation is that the panel shows it signed (−16..+15 over an 0..31
+byte). Reading the panel at a known byte value would settle it in one look.

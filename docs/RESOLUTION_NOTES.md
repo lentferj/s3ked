@@ -18755,8 +18755,26 @@ so only the EQ action remains:
       31   -0.1  -0.1  -0.0  +0.1  +1.0 +15.5  +6.0  -0.8    BOOST +15.5 dB
 
 **The sign inversion is confirmed. The pivot value is not.** At `FLT2Q` 16 the
-filter still cuts, by 7.3 dB -- the *deepest* cut of the four measured. The
-inversion happens somewhere **between 16 and 25**, and 17..24 is unresolved.
+filter still cuts -- the *deepest* cut measured. Filled in at the values real
+material actually uses rather than by bracketing:
+
+    FLT2Q     0     16     18     20     21     25     31
+    action  -4.13  -4.57  -3.86  -2.77  -2.06  +1.85  +15.48   dB at the corner
+
+    zero crossing, interpolated 21..25:  FLT2Q 23.1
+
+**`FLT2Q` 20 is a CUT**, and it is the single commonest value in real EQ-mode
+keygroups (104 of 469 on a sibling's corpus). **A `Q > 16` decode rule would
+invert the sign on 22% of the material that uses the mode.**
+
+Decode as **cut at `Q` <= 21, boost at `Q` >= 25**, both ends measured, with
+22..24 unmeasured and narrow.
+
+**And it is not a signed gain.** The cut *deepens* from `Q` 0 to 16 (-4.13 to
+-4.57) before shallowing, so the curve has a minimum near 16 rather than a
+zero there. **Do not model it as sign x magnitude.** One possibility is that
+the panel displays this field signed -- -16..+15 over an 0..31 byte, making the
+manual's "16" a panel number and byte 16 the panel's 0 -- but that is untested.
 
 **This matters for decoding.** The commonest real values are 20, 25 and 27; 25
 and 27 are safely boosts, **20 sits inside the unmeasured interval**. A decoder
@@ -18764,7 +18782,17 @@ using `Q > 16` may assign the wrong *sign* to material at 17..20, and a sign
 error is worse than dropping the field.
 
 **And the boost is not gentle**: +15.5 dB at `FLT2Q` 31 against +1.9 at 25.
-Anything rendering it needs headroom.
+
+### The make-up gain is downstream, and the headroom is 15.57 dB
+
+    Q31, FLT2GAIN 0   peak +9.54 dB vs bypass   +15.48 vs own plateau   max|sample| 0.1288
+    Q31, FLT2GAIN 1   peak +15.57 dB vs bypass  +15.49 vs own plateau   max|sample| 0.2572
+
+**Shape identical to 0.01 dB, sample maximum exactly doubled, no clipping at
+either setting.** So `FLT2GAIN` is a plain output gain sitting after the EQ
+stage, and the worst case for a converter is **+15.57 dB above bypass** -- the
+boost and the make-up gain are the same 6 dB already accounted for, not
+additive.
 
 ### Method note
 
