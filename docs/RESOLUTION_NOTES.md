@@ -18870,6 +18870,34 @@ guise.
 and the widest captures all sit on the cut arm, which inflates that side
 specifically. The two width-independent estimates agree at 317 and 332 Hz.
 
+**But all three estimates share a defect and the step may not survive it.** The
+"width-independent" pair compares the sharpest point on each arm -- and those
+are `FLT2Q` **16, a notch MINIMUM**, against `FLT2Q` **31, a peak MAXIMUM**. On
+an asymmetric response those are **not the same quantity**, so the check
+controlled for width and not for *what was being located*. A sibling session
+caught this after it was written here. **The step is not established**, and
+mode 0's unambiguous corner is the way to settle it -- one quantity, no sign,
+no arms.
+
+### Why the boost arm matches filter 1's law and the cut arm does not
+
+    §54 (resonance peak) at byte 80                      1892 Hz
+    measured boost-arm centre, FLT2Q 25..31, mean        1872 Hz   0.989x
+    measured cut-arm centre,  FLT2Q 0..21, mean          2239 Hz   1.183x
+
+**An EQ boost peak IS a resonance peak**, so the boost arm is like-for-like
+with §54 and agrees to 1.1%. **`FIL2FR` may drive filter 2 with the same law
+that drives filter 1** -- which would make a corner sweep confirm rather than
+discover.
+
+**Do not compare either against §139's corner law.** §139 measured the -3 dB
+corner of the plain cascade and found `measured/§54 = 1.2886`; a sibling session
+compared this section's EQ extremum against that corner law, recovered the
+documented 1.29x, and read it as a property of filter 2. **The two laws
+describe different quantities of the same filter and the ratio between them is
+already recorded.** Comparing an extremum against a corner reproduces it every
+time.
+
 **Mechanism: partly settled.** "The measured extremum of an asymmetric response
 moves with gain" predicts the width correlation exactly and accounts for the
 within-arm drift in full. **It does not predict a step**, so something else

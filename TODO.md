@@ -2082,8 +2082,14 @@ byte). Reading the panel at a known byte value would settle it in one look.
 
 **Status:** open, observation recorded in §195, mechanism not investigated.
 
-With `FIL2FR` fixed at 80, the centre **steps ~17%** (317–332 Hz) when the
-action changes sign to boost. A converter calibrated on one arm is ~17% out on
+With `FIL2FR` fixed at 80, the centre appears to step **~17%** (317–332 Hz)
+when the action changes sign to boost — **but the step is not established.**
+Every estimate compares a notch *minimum* against a peak *maximum*, which are
+not the same quantity on an asymmetric response, so the "width-independent"
+check controlled for the wrong thing.
+
+**Settle it in mode 0**, whose −3 dB corner is unambiguous and has no sign and
+therefore no arms. A converter calibrated on one arm is ~17% out on
 the other.
 
 **The within-arm drift is NOT part of this** — it correlates with feature width
