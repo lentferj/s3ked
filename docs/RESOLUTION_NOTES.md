@@ -230,6 +230,7 @@ silently wrong one.
 - [§187](#187--amplitude-alone-cannot-tell-a-re-articulation-from-a-mid-note-swell-only-position-relative-to-note-off-can-2026-09-07) — Amplitude alone cannot tell a re-articulation from a mid-note swell; only position relative to note-off can (2026-09-07)
 - [§188](#188--two-artefacts-that-carried-their-own-refutation-produced-independently-within-an-hour-2026-09-08) — Two artefacts that carried their own refutation, produced independently within an hour (2026-09-08)
 - [§189](#189--what-the-shared-onset-check-can-and-cannot-see-measured-2026-09-08) — What the shared onset check can and cannot see, measured (2026-09-08)
+- [§190](#190--this-rigs-noise-floor-is-flat-to-11-hz-so-a-filter-corner-near-30-hz-is-measurable-here-2026-09-08) — This rig's noise floor is flat to 11 Hz, so a filter corner near 30 Hz is measurable here (2026-09-08)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -18117,3 +18118,53 @@ opposite door:** the old rule broke on an envelope that never fell far enough,
 this one on an envelope that falls too far. Both are an absolute level
 defeating a check meant to be relative. Fixed by tracking the minimum over
 every sample and using the floor only to withhold a trigger in silence.
+
+## §190 — This rig's noise floor is flat to 11 Hz, so a filter corner near 30 Hz is measurable here (2026-09-08)
+
+Measured because a sibling session's ENV2 floor procedure needed to know
+whether its deepest settings were worth capturing, and the answer was not
+derivable from the filter slope.
+
+### The chain
+
+Per-band level during a note against the same band during the pre-note
+silence, from captures already on disk:
+
+    band (Hz)        11-22   22-44   44-88   88-176   176-352
+    noise floor       -32     -35     -25      -26      -34
+    SNR, typical      +78     +72     +45      +28      +20
+
+**The floor is not elevated at the bottom** -- 11-22 Hz is as quiet as
+176-352 Hz -- and there is 60-80 dB of headroom in the two bands below 44 Hz.
+Sampler output, interface and JACK are not what limits low-frequency work on
+this bench.
+
+**What this licenses:** a -3 dB corner anywhere down to roughly 30 Hz can be
+found here, provided the source has energy either side of it. What it does not
+license is a *fixed high-frequency probe* of a deep corner: with the corner at
+31.5 Hz, 1 kHz sits five octaves up, which is -60 dB on a 2-pole filter and
+-120 dB on a 4-pole. **That measurement lands in the floor; the same corner
+measured in a band around itself does not.** The failure is the probe
+frequency, not the setting.
+
+### Verify a "broadband" source rather than trusting the label
+
+The sibling session's noise sample was generated from a deterministic LCG and
+described as broadband in a comment. Measured:
+
+    11-22 Hz  +37.0     88-176 Hz  +37.3     1408-2816 Hz  +37.1
+    22-44 Hz  +37.9    176-352 Hz  +37.1     2816-5632 Hz  +37.3
+    44-88 Hz  +36.5    352-704 Hz  +37.1
+
+**Flat within 0.9 dB from 11 Hz to 5.6 kHz**, which is what makes the comment
+true. Had it been coloured at the bottom, every deep step would have read a
+corner that was partly the source and nothing in the output would have said so.
+The file is 352992 bytes: a 192-byte header plus exactly 176400 samples,
+4.0000 s at 44.1 kHz.
+
+**The general form.** A source's spectrum is a property of the file and can be
+measured before any hardware is touched. "Broadband" in a comment is prose; the
+band table is the measurement. Same shape as a field read back from the machine
+rather than asserted -- in the same exchange, a depth table's `SUSTN2` turned
+out to be reading `RELSE2`, a real value under a wrong label, which only a
+printed readback exposed.
