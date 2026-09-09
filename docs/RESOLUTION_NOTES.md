@@ -241,6 +241,7 @@ silently wrong one.
 - [§198](#198--the-first-validation-of-emitted-files-the-converters-filter-2-output-renders-2026-09-09) — The first validation of emitted files: the converter's filter-2 output renders (2026-09-09)
 - [§199](#199--backups-follow-attention-and-attention-follows-activity-2026-09-09) — Backups follow attention, and attention follows activity (2026-09-09)
 - [§200](#200--program-header-offset-109-is-the-last-played-note-and-the-iso-path-is-verified-2026-09-09) — Program header offset 109 is the last-played note, and the ISO path is verified (2026-09-09)
+- [§201](#201--the-highpass-has-its-own-exponent-so-the-mode-factor-is-not-a-factor-2026-09-09) — The highpass has its own exponent, so the "mode factor" is not a factor (2026-09-09)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -19468,3 +19469,143 @@ conclusion was wrong.
 
 **A wrong conclusion in the right format is harder to catch than a vague one**,
 because the format itself reads as evidence of care.
+
+## §201 — The highpass has its own exponent, so the "mode factor" is not a factor (2026-09-09)
+
+**Every point of the `FIL2FR` corner law in §196 was measured in `FLT2MODE` 0
+(LP), which is 7 % of how the IB-304F is used in real library material.** HP is
+39 %, EQ 50 %. mpc2emu had measured single-byte ratios to the mode-0 law —
+HP 0.688, BP 1.653, EQ boost 1.515, all at `FIL2FR` 74 — and deliberately
+declined to apply them, on the grounds that each rested on one byte out of 100.
+This is the ladder that was supposed to earn them the right to.
+
+It did the opposite for HP.
+
+### Rig
+
+`TC10 NOISE`, program 50, single keygroup. Filter 1 wide open (`FILFRQ` 99),
+`FLT2Q` 0, `FLT2GAIN` 0, `FLT2MODE` 2. **The reference is the same program with
+`LSI2_ON` 0**, so source spectrum, filter 1, converters and interface all cancel
+in the ratio — §194 established that `LSI2_ON` 0 is an exact bypass (0.00 dB
+span), which is what makes this reference legitimate rather than merely
+convenient. Snapshot taken before and all six fields read back after.
+
+### Result
+
+The passband of a highpass is *above* its corner, so the plateau is taken at
+high frequency and the corner is the walk *down* out of it.
+
+| `FIL2FR` | corner (Hz) | §196 law at same byte | ratio |
+|---|---|---|---|
+| 37 | 34.2 | 60.6 | 0.564 |
+| 45 | 63.0 | 106.3 | 0.593 |
+| 64 | 250.6 | 403.8 | 0.621 |
+| 72 | 467.4 | 708.3 | 0.660 |
+
+**Monotonic, no reversal — which is exactly the falsifier the procedure named in
+advance.** The ratio is not a constant with scatter; it is a trend.
+
+The mechanism is that HP is not mode 0 rescaled. It has a different exponent:
+
+```
+  HP:      Hz = 2.2036 * exp(0.07425 * FIL2FR)     residuals +0.5 -1.2 +1.8 -1.1 %
+  mode 0:  Hz = 4.5069 * exp(0.07024 * FIL2FR)     (§196)
+```
+
+so the "factor" is itself an exponential, `0.4889 * exp(0.00401 * FIL2FR)`,
+running **0.489 at byte 0 to 0.727 at byte 99**. A single constant is wrong by
+up to a third at the ends.
+
+**The single-point measurement was not bad.** Byte 74 is near the top of the
+range, where the factor is largest; the model puts it at 0.658 against a
+measured 0.688, 4.6 % apart. Two instruments agreeing about the highest rung is
+not the same as agreeing about the law, and only the ladder can tell those
+apart.
+
+### The denominator was wrong, and the right one makes the case stronger
+
+The ratio column above divides by `4.5069 * exp(0.07024 * FIL2FR)` — §196's
+single exponential. **mpc2emu does not ship that**, because the mode-0 corner
+turned out to have three regions and a single exponential through them was
+falsified by its own extension. Against the curve actually in use:
+
+| `FIL2FR` | HP (Hz) | ÷ one-exponential | ÷ the shipped mode-0 curve |
+|---|---|---|---|
+| 37 | 34.2 | 0.564 | **0.493** |
+| 45 | 63.0 | 0.593 | 0.589 |
+| 64 | 250.6 | 0.621 | 0.605 |
+| 72 | 467.4 | 0.660 | **0.649** |
+
+Monotonic against both, so the drift is not an artefact of the denominator —
+but it is **larger** against the real curve, 0.493→0.649 rather than
+0.564→0.660. A constant factor is worse than the first table suggests.
+
+**And the gap between those two columns is itself the finding.** At byte 37
+mode 0 sits **+14.5 %** above its own exponential — that is the bottom-end
+flattening §196 recorded — while HP sits **−0.5 %** from its own, a clean
+exponential right down to the last measurable rung. **Whatever makes mode 0
+flatten at the bottom does not happen in highpass.**
+
+That is a stronger statement than "different exponent". Two curves with
+different exponents are still the same kind of curve; these are not. The modes
+differ in shape, not in scale, and no factor of any kind — constant or
+byte-dependent — can carry one onto the other.
+
+It also falls straight out of the same four points, at no extra cost on the
+bench. **A measurement compared against the wrong reference still contains the
+right answer; it is the comparison that has to be redone, not the run.**
+
+### Consequence for the other two modes
+
+BP and EQ were not run. But the reason HP drifted is that a mode sets its own
+exponent, and there is no reason that would be true of one mode and not the
+others. **1.653 and 1.515 should be treated as top-of-range values, not
+factors**, until their own ladders exist.
+
+### Rung 30 is reported as no-result, and the source table inherits the error
+
+Predicted ~21 Hz under the measured law. That is 0.9 octaves above the rig's
+verified-flat 11 Hz floor (§190) — as marginal as the rung 20 the procedure
+already skipped. No crossing was found and **no number is reported for it**.
+
+The procedure's source-selection table was built on the 0.688 factor, so its
+whole HP column sits ~18 % high: rung 30 was budgeted as 30 Hz and is really
+21 Hz. A frequency table used to choose an instrument has to be built from the
+law being measured, and before that law exists it can only be built from a
+guess — so the low rungs are the ones to distrust, in any ladder, always.
+
+### The instrument produced the opposite conclusion first
+
+**The first pass reported 0.745, 0.684, 0.643, 0.631, 0.672 — a bowl, not
+monotonic — and would have confirmed the constant-factor model.** Nothing about
+the machine changed between that and the table above. The difference was the
+smoother: a fixed 9-bin (48 Hz) boxcar, which is ~1/10 octave at 476 Hz and
+~2.5 octaves at 27.6 Hz. The bottom rung was being averaged over a window wider
+than the feature it was measuring, and the resulting distortion turned the
+bottom of a rising trend into the left wall of a bowl.
+
+> **Smoothing must be constant in the coordinate the feature lives in.** A
+> filter corner lives in log frequency. A linear-frequency window applied across
+> a wide range is not a mild approximation at the bottom, it is a different
+> instrument at every rung — and its error is largest exactly where the trend is
+> being read.
+
+This is §188's class again, from a new direction: an artefact of the instrument
+read as a property of the machine. What caught it was not a second run but
+reading the first result against its own geometry — the bowl's minimum sat at
+the rung where the window was widest relative to the feature, which is a
+signature of the analysis, not of a filter.
+
+Note also what the failure looked like: **confirmation.** The wrong smoother
+agreed with the standing hypothesis and the right one refuted it. An instrument
+error that disagrees with expectation gets investigated; one that agrees gets
+adopted.
+
+### Internal check on the reference side
+
+The passband plateau reads **−6.02 dB at every rung** (drifting to −5.75 at the
+top rung, where 3 octaves of headroom is not quite enough for filter 2's very
+wide knee — §197). §195 measured `FLT2GAIN` independently as a **+6.03 dB**
+switch that cancels the insertion loss exactly. Recovering the insertion loss to
+0.01 dB from an unrelated direction is good evidence the reference is doing what
+it is supposed to.
