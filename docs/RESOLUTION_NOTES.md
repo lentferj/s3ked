@@ -19440,3 +19440,31 @@ separated them was asking what a byte *is* before asking what it proves.
 **A consequence for anyone diffing headers on this machine:** any two dumps of
 the same program differ at offset 109 unless nothing has been played between
 them.
+
+### The field was being written correctly by coincidence
+
+A sibling session's writer carried offset 109 as `RESERVED[6]` with **69
+hardcoded** beside it -- exactly what the machine leaves from cold. So its
+files matched an untouched machine **by accident rather than by
+understanding**, and would have kept doing so indefinitely.
+
+The comment above that constant read *"reserved fields are exactly the ones to
+copy rather than reason about"*. **That is good practice, and it is also what
+kept the field unexamined for months** -- a rule that correctly discourages
+speculation equally discourages the one question worth asking, which was why a
+field labelled reserved was being written a specific non-zero value at all.
+
+**Same shape as §188's asymmetric scrutiny**: the thing that exempts an
+artefact from examination is usually a virtue, not an oversight.
+
+### A wrong conclusion in the right format
+
+Worth stating separately, because it is the actual danger here. Had the
+runtime field not been recognised, the report would have named the program, the
+offset, the before value and the after value, consistently across twelve
+programs. **That is the specific, actionable, checkable form a good finding
+takes** -- and every particular of it would have been correct while the
+conclusion was wrong.
+
+**A wrong conclusion in the right format is harder to catch than a vague one**,
+because the format itself reads as evidence of care.
