@@ -240,6 +240,7 @@ silently wrong one.
 - [§197](#197--the-two-filters-cascade-independently-combined-equals-the-sum-in-db-2026-09-09) — The two filters cascade independently: combined equals the sum in dB (2026-09-09)
 - [§198](#198--the-first-validation-of-emitted-files-the-converters-filter-2-output-renders-2026-09-09) — The first validation of emitted files: the converter's filter-2 output renders (2026-09-09)
 - [§199](#199--backups-follow-attention-and-attention-follows-activity-2026-09-09) — Backups follow attention, and attention follows activity (2026-09-09)
+- [§200](#200--program-header-offset-109-is-the-last-played-note-and-the-iso-path-is-verified-2026-09-09) — Program header offset 109 is the last-played note, and the ISO path is verified (2026-09-09)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -19383,3 +19384,59 @@ wearing a safe-looking name.
 **The scarce resource was card availability, not disk.** The copies were taken
 while the card happened to be in the reader, which was the moment they were
 cheap -- not when someone next needs one of the discs.
+
+## §200 — Program header offset 109 is the last-played note, and the ISO path is verified (2026-09-09)
+
+An ISO built by a sibling session, byte-identical in content to a disk-image
+volume already on the card, was loaded from SCSI 3 to test whether the ISO
+transport delivers the same bytes. **No sampler had ever read one.**
+
+**The test is a byte diff, not a render.** The question was about bytes, and an
+audio comparison can only answer it statistically: two captures of one program
+are never sample-identical. A header diff answers exactly, covers twelve
+programs instead of one, and removes analysis-band judgement entirely -- which
+mattered on this volume, where five separate passes had already been lost to
+choosing an analysis band rather than deriving it (§198).
+
+**The baseline had to be taken before the ISO load**, because loading destroys
+it: the twelve HD4-loaded headers were dumped while still resident.
+
+### Which id was loaded, verified three ways
+
+Both volumes are named `FILTER2` and are byte-identical, so **a load from the
+wrong id produces a perfect match and reads as a pass.** The volume *listing*
+is the discriminator:
+
+    volume count   SCSI 3 presents 1 volume; SCSI 4 presents 24
+    the select     select_drive(3), with a refusal if the count is wrong
+    the machine    LOAD page reports scsi_drive_id: 3
+
+### The first diff said every program differed
+
+    program offset 109:   HD4 0x24 (36)   ->   ID3 0x45 (69)
+    keygroups:            identical
+
+**One byte, the same offset, the same values, on all twelve.** That is a
+signature rather than corruption -- and 36 was the note played all evening,
+while nothing had been played since the ISO load. Tested directly:
+
+    before any note         offset 109 = 0x45  (69)
+    after playing MIDI 36   offset 109 = 0x24  (36)
+    after playing MIDI 60   offset 109 = 0x3C  (60)
+
+**Program header offset 109 holds the last-played MIDI note.** It is runtime
+state, not file content, and it is not in this project's parameter table.
+
+**Excluding it: 3720 bytes across twelve programs, zero differences. The ISO
+path is verified.**
+
+### Why this nearly went the other way
+
+Twelve programs failing identically is exactly the shape of a transport fault.
+The report would have been correct in every particular -- the offset, the
+values, the consistency -- **and the conclusion would have been wrong**. What
+separated them was asking what a byte *is* before asking what it proves.
+
+**A consequence for anyone diffing headers on this machine:** any two dumps of
+the same program differ at offset 109 unless nothing has been played between
+them.
