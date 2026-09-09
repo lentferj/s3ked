@@ -19285,8 +19285,24 @@ the time as possibly inside the HP transition; this is a proper reference at
 +55 dB SNR. **0.707 is also one point** and byte-dependence is unmeasured.
 
 **The non-LP modes do not place their feature at the LP corner** -- BP and
-EQ-cut centre at 1.70x nominal, EQ-boost at 1.56x. §195 saw 1.53x from the
-other direction. So that offset reproduces across two independent measurements.
+EQ-cut centre at 1.70x nominal, EQ-boost at 1.56x.
+
+**Two consistency checks fall out of this that nobody designed.**
+
+**The EQ offset reproduces across bytes, sessions and methods to 0.1%:**
+
+    byte 74, this disc, an EMITTED FILE   centre 1246 Hz / LP 815 Hz  = 1.529
+    byte 80, §195, a SysEx EDIT           centre 1872 Hz / LP 1225 Hz = 1.528
+
+**Two bytes, two mechanisms, two sessions, and the ratio agrees to one part in
+a thousand.** §195 measured by editing a resident program; this by rendering a
+file a converter emitted.
+
+**And the bandpass peak and the EQ-cut dip land on the same frequency**,
+1359 Hz, to the analysis resolution -- one section placing its feature
+identically across a mode change, which is coherence rather than two
+measurements agreeing by luck. The EQ *boost* arm sits lower at 1246 Hz,
+reproducing §195's arm asymmetry from an independent direction.
 
 ### 4-pole confirmed at a low corner
 
