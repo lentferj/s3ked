@@ -19784,3 +19784,85 @@ to support it.
 > the fitting ranges until those are shown to be identical** — and when a range
 > is short one point, the cheap move is to go and measure that point rather
 > than argue about the fit.
+
+### Correction 2: the HP plateau was moving, and the grouping is unresolved
+
+The correction above is itself wrong in one respect, caught only because
+mpc2emu asked for the byte-80 corner **in Hz** rather than deriving it from the
+fitted exponent — on the grounds that a table of measurements must not contain
+a fitted number. That distinction paid for itself within the hour.
+
+It was written above that HP's byte-80 plateau read −5.34 dB against a −6.02 dB
+insertion loss because §197's wide knee had not settled, so the corner was
+*understated* and correcting it would push HP further from BP. **That was wrong
+in direction and in mechanism.**
+
+What is actually there:
+
+| byte | corner (Hz) | passband peak | position |
+|---|---|---|---|
+| 37 | 36.1 | −4.74 dB at 145 Hz | 4.0 × corner |
+| 45 | 64.9 | −4.80 dB at 227 Hz | 3.5 × corner |
+| 64 | 247.8 | −4.86 dB at 921 Hz | 3.7 × corner |
+| 72 | 448.4 | −4.92 dB at 1720 Hz | 3.8 × corner |
+| 80 | 794.8 | −4.98 dB at 3303 Hz | 4.2 × corner |
+
+**The highpass has a passband bump of about +1.1 dB over its insertion loss,
+at ~3.8 × the corner, and it scales with the corner at every rung.** It was
+worth testing whether it scaled: a bump at a *fixed* frequency would have been
+a level artefact of the chain and meant something else entirely.
+
+So the plateau was **moving**. Taken per-curve as a median above the corner, it
+sits above the bump at low rungs and reads the settled −6.02 dB; at byte 80 the
+band sits *on* the bump and reads −5.34. The reference slid with the curve —
+which is the failure mpc2emu's own ENV2 procedure sets in bold ("normalise
+against ONE FIXED reference… never per-curve"), reached here from the opposite
+direction: not a reference sliding down onto a slope, but one riding up onto a
+resonance.
+
+Refitting every rung against the fixed −6.02 dB insertion loss gives the table
+above and **k = 0.07161 over 45–80**. This **supersedes §201's HP corners**
+(34.2 / 63.0 / 250.6 / 467.4), which used per-curve plateaus at 8192 points.
+
+### Where that leaves the grouping: nowhere, and that is the honest answer
+
+| mode | k (45–80, n=4) |
+|---|---|
+| mode 0 (LP) | 0.06988 |
+| EQ boost | 0.07068 |
+| **HP** | **0.07161** |
+| EQ cut | 0.07371 |
+| BP | 0.07421 |
+
+HP sits *between* the groups — 1.3 % above EQ boost, 2.9 % below EQ cut.
+
+**This is not a vindication of this section's original pairing.** That pairing
+came out of a range mismatch and was right by accident, which is not a result.
+The two-group structure is now weaker than any of the three ratios quoted
+tonight, and it is recorded here as **unresolved** rather than shipped.
+
+BP and both EQ arms are untouched: their features are extrema of the ratio
+curve, so no passband normalisation enters them. Only HP used a plateau, and
+only HP moved.
+
+**The open question this hands back to mode 0.** If §196's law was fitted
+against a per-curve passband reference, and if the lowpass carries an analogous
+bump, then mode 0's bottom-end bend may be partly the same artefact — and mode
+0 is the denominator under every ratio in §201 and §202.
+
+**Answered, and mode 0 is not exposed.** The mode-0 ladder was referenced
+against the same program *bypassed* — an external capture with the filter out
+of circuit, not a band inside its own response. A bump within the filter's own
+curve cannot move a reference taken outside it, and the bend is a per-rung
+deviation, which no constant reference offset could produce even if the bypass
+capture had structure of its own. **§196's +14.5 % bottom-end flattening
+survives.**
+
+Worth noting what that argument rests on: the single word "bypassed" recording
+how the reference was taken. Lose it and the number stays while the evidence
+that the number means anything goes — which is the shape of failure this
+section and §201 are both about.
+> Four analyses of one HP capture set gave four different byte-80 corners, and
+> the sampler produced the same volts each time. **Every one of the differences
+> was a choice about what to call 0 dB.** The measurement was never the
+> uncertain part.
