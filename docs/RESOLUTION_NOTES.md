@@ -242,7 +242,7 @@ silently wrong one.
 - [§199](#199--backups-follow-attention-and-attention-follows-activity-2026-09-09) — Backups follow attention, and attention follows activity (2026-09-09)
 - [§200](#200--program-header-offset-109-is-the-last-played-note-and-the-iso-path-is-verified-2026-09-09) — Program header offset 109 is the last-played note, and the ISO path is verified (2026-09-09)
 - [§201](#201--the-highpass-has-its-own-exponent-so-the-mode-factor-is-not-a-factor-2026-09-09) — The highpass has its own exponent, so the "mode factor" is not a factor (2026-09-09)
-- [§202](#202--bp-and-eq-ladders-four-modes-three-exponents-and-mode-0-alone-flattens-2026-09-09) — BP and EQ ladders: four modes, three exponents, and mode 0 alone flattens (2026-09-09)
+- [§202](#202--bp-and-eq-ladders-four-modes-three-exponents-and-mode-0-alone-flattens-2026-09-09) — BP and EQ ladders: four modes, and the exponents group in two (2026-09-09)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -19722,3 +19722,65 @@ and **cut BP's apparent drift from +29 % to +20 %**.
 Both errors lived at the bottom of the range, and in both ladders the bottom
 rung is the one the trend is read from. **Spend the care where the lever is
 longest.**
+
+### Correction: the exponents group in two, and this section's pairing was a fitting artefact
+
+The grouping above — BP with EQ cut, HP separate — **is wrong, and wrong for a
+reason worth more than the result.** HP was fitted over 37–72 and BP/EQ over
+30–80. Two exponents fitted over different ranges are not comparable at all
+when the underlying curve is not a perfect exponential, and mode 0's own bend
+is the proof that these curves are not.
+
+mpc2emu caught it. Refitting on a matched range moves HP *into* the BP/EQcut
+group and moves EQ boost out, to sit with the lowpass.
+
+Their refit compared HP over 45–72 against BP/EQcut over 45–80, because **HP
+had no byte-80 point** — it was never captured. That is the same unequal-range
+error one turn later, and it inflated the separation: byte 80 is where BP and
+EQ cut carry their largest positive residuals, so including it for them and not
+for HP pushes the groups apart. On the range genuinely common to all four the
+separation collapses to 1.2 : 1 and nothing is established.
+
+**Settled by capturing the missing point** — one HP capture at `FIL2FR` 80,
+about a minute of bench time on a volume already loaded, against the same
+`BQref`. All five modes then fit over 45–80 with n = 4:
+
+| mode | k | group |
+|---|---|---|
+| mode 0 (LP) | 0.06988 | B |
+| EQ boost | 0.07068 | B |
+| EQ cut | 0.07371 | A |
+| BP | 0.07421 | A |
+| HP | 0.07469 | A |
+
+Spread within A 1.3 %, within B 1.1 %, gap between them 4.3 % — **3.2 : 1**.
+The two-group structure is real. It is not the 5 : 1 first reported, and it is
+not the 1.2 : 1 that the incomplete range suggested; each of those was an
+artefact of which points were in the fit.
+
+HP sits at the *top* of group A rather than merged into it, and its byte-80
+corner is if anything understated: at 895 Hz the plateau band is 2.4 octaves up
+and reads −5.34 dB against the −6.02 dB insertion loss, so filter 2's wide knee
+(§197) has not fully settled there. Correcting that would raise HP's exponent
+further, not lower it.
+
+**This explains this section's own point about EQ boost rather than sitting
+beside it.** EQ boost's factor is near-constant against mode 0 *because it
+shares mode 0's exponent* — one grouping seen from two angles, not one
+well-behaved mode. So 1.515 should not be shipped as a constant either: it
+would be right for the wrong reason, and would fail wherever mode 0's bent
+bottom does.
+
+And that bend is the deeper problem. §196's mode 0 is not merely one special
+case among five — **it is the denominator every mode factor is expressed
+against**, so its bend was built into every ratio in this section and §201.
+That is why every factor appeared to drift hardest at the bottom, including the
+HP drift confirmed two hours earlier. The framing did not need refining; it
+needed replacing, and the evidence that killed it came out of the ladders built
+to support it.
+
+> Three fits of the same five modes gave 5 : 1, 1.2 : 1 and 3.2 : 1, and the
+> data never changed. **A comparison between fitted parameters is a claim about
+> the fitting ranges until those are shown to be identical** — and when a range
+> is short one point, the cheap move is to go and measure that point rather
+> than argue about the fit.
