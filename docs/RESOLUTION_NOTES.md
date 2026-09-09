@@ -18086,6 +18086,22 @@ recompute**, and neither is a representation. Every arithmetic in this section
 is correct and every query well-formed; re-running all of it would have
 confirmed every wrong conclusion.
 
+### A round trip cannot catch a symmetric error
+
+A sibling session's writer set both filter sections to the corner a source
+asked for, and its reader reported the pair's corner back as a section's. The
+two shared **one wrong definition**, so they agreed exactly, and a round-trip
+regression passed at +/-2.5% throughout while every 4-pole lowpass came out
+**16% low** (§197: the pair lands at 0.841x, not 1.0x).
+
+**A round trip validates agreement between two pieces of code, not agreement
+with the world.** A symmetric error is invisible to it *by construction* -- the
+check cannot fail on the thing it looks like it is testing.
+
+The fix is the same shape as the others here: assert an **absolute** quantity
+against a measurement, not a relative one against yourself. That check can
+fail, and this one could not.
+
 ### The cheap defence: print the provenance, do not reason about it
 
 Two sessions on one instrument caught most of the above, but that defence only
@@ -19127,6 +19143,17 @@ there would be reporting the floor.
     f1 alone 679 Hz    f2 alone 678 Hz    both 571 Hz    ratio 0.841
 
 Predicted 0.6-0.8x; measured 0.841 -- right direction, outside the range.
+
+**Theory puts it at 0.802 and the gap is accounted for.** Two ideal 2-pole
+Butterworth sections at a common corner are -3 dB together at
+`(sqrt(2)-1)^0.25` = **0.8022x**. Measured is 0.841, an excess of 1.048x or
+**+0.41 dB** of passband headroom -- and filter 1 alone measures **+0.74 dB at
+250 Hz**, a rise before its own corner. A raised passband reference pushes the
+-3 dB crossing up in frequency, which is the direction observed.
+
+**Theory and measurement disagreeing by roughly the amount a separately
+observed feature explains is better evidence than either alone.** The
+measurement is what to use; the theory is why to believe it.
 And the cascade's passband sits where the singles' do: **the 6 dB insertion
 loss appears once**, because it is filter 2's and filter 1 is in circuit in
 every capture including the reference.
