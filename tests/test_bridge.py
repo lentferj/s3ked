@@ -1313,16 +1313,20 @@ def _quiet_bridge(**kw):
 def test_a_board_field_is_refused_when_the_board_is_not_declared():
     """Crash prevention, not tidiness.
 
-    The panel gates these pages outright on a machine without the board --
-    EFFECTS and ENV3 both refuse to open -- and an S3000XL was crashed twice
-    in one session with the same flooding-display signature while this area
-    was being exercised (§85, §90).
+    The panel gates the FILTER 2 page on a machine without the board, and an
+    S3000XL was crashed twice in one session with the same flooding-display
+    signature while this area was being exercised (§85, §90).
+
+    **`ENV3R1` was in this list and is not any more.** Envelope 3 works
+    without the board -- §87, measured in §50, §63 and §64 -- so fencing it
+    was refusing a field the machine answers. The remaining four are the
+    filter-2 and TONE fields, which the board really does supply.
     """
     import pytest
     from s3k.bridge import BoardNotFitted
 
     bridge = _quiet_bridge()
-    for name in ("ENV3R1", "FLT2Q", "FIL2FR", "TONEFREQ"):
+    for name in ("FLT2Q", "FIL2FR", "TONEFREQ", "FLT2MODE"):
         with pytest.raises(BoardNotFitted, match="IB304F"):
             bridge.get_parameter(("keygroup", name), 0, keygroup=0)
         with pytest.raises(BoardNotFitted, match="IB304F"):
@@ -1336,7 +1340,9 @@ def test_declaring_the_board_lifts_the_fence():
 
     bridge = _quiet_bridge(boards=["IB304F"])
     try:
-        bridge.get_parameter(("keygroup", "ENV3R1"), 0, keygroup=0)
+        # A field that IS fenced -- ENV3R1 stopped being one (§87), so using
+        # it here would pass without testing anything.
+        bridge.get_parameter(("keygroup", "FIL2FR"), 0, keygroup=0)
     except BoardNotFitted:
         raise AssertionError("still fenced with the board declared")
     except Exception:
@@ -1344,7 +1350,7 @@ def test_declaring_the_board_lifts_the_fence():
 
 
 def test_base_machine_fields_are_never_fenced():
-    """The guard must not spread. Only the fifteen tagged fields are gated."""
+    """The guard must not spread. Only the seven gated fields are fenced."""
     from s3k.bridge import BoardNotFitted
 
     bridge = _quiet_bridge()
@@ -1358,15 +1364,21 @@ def test_base_machine_fields_are_never_fenced():
 
 
 def test_exactly_the_documented_fields_carry_a_requirement():
-    """Pins the list, so a future edit cannot quietly widen or narrow it."""
+    """Pins the list, so a future edit cannot quietly widen or narrow it.
+
+    **Seven, not fifteen.** This test previously pinned the eight ENV3 stages
+    too, which is what kept §87's retraction from reaching the code: §87
+    corrected the note on those fields and left `requires` standing, and this
+    assertion then held the mistake in place against exactly the "quiet edit"
+    it was written to prevent (§193). Envelope 3 was measured on a machine
+    that never had the board (§50, §63, §64).
+    """
     from s3k import params as p
 
     tagged = {q.name for q in p.region_params("keygroup") if q.requires}
     assert tagged == {
         "FLT2GAIN", "FLT2MODE", "FLT2Q", "TONEFREQ", "TONESLOP",
         "FIL2FR", "K_FRQ2",
-        "ENV3R1", "ENV3L1", "ENV3R2", "ENV3L2",
-        "ENV3R3", "ENV3L3", "ENV3R4", "ENV3L4",
     }
     assert all(q.requires == "IB304F"
                for q in p.region_params("keygroup") if q.requires)

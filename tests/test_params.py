@@ -556,20 +556,49 @@ def test_modulation_sources_are_named_not_bare_numbers():
 
 
 def test_the_optional_filter_board_fields_are_marked_as_optional():
-    """Filter 2, TONE and ENV3 need hardware not every machine has.
+    """Filter 2 and TONE need hardware not every machine has. ENV3 does NOT.
 
     The S3200 carries the second LSI as standard; an S3000XL needs the
     optional IB304F board, and without it the machine answers "2nd filter
     board IB304F not fitted!" at the panel. The fields exist in the header
     either way, so nothing on the wire distinguishes them -- which is exactly
     why the table has to say so. RESOLUTION_NOTES §19.
+
+    **Fifteen fields carry that note; only seven are GATED by it.** §87
+    retracted the claim for envelope 3: its stages were measured on a machine
+    that never had the board, routed to filter 1 through the assignable
+    matrix (§50, §63, §64). The board supplies the second filter that envelope
+    3 can also target -- not the envelope.
     """
-    expected = {"FLT2GAIN", "FLT2MODE", "FLT2Q", "TONEFREQ", "TONESLOP",
-                "FIL2FR", "K_FRQ2"} | {f"ENV3{s}" for s in
-                                       ("R1", "L1", "R2", "L2", "R3", "L3",
-                                        "R4", "L4")}
+    documented = {"FLT2GAIN", "FLT2MODE", "FLT2Q", "TONEFREQ", "TONESLOP",
+                  "FIL2FR", "K_FRQ2"} | {f"ENV3{s}" for s in
+                                         ("R1", "L1", "R2", "L2", "R3", "L3",
+                                          "R4", "L4")}
     marked = {x.name for x in p._PARAMS if x.models and "IB304F" in x.models}
-    assert marked == expected, marked ^ expected
+    assert marked == documented, marked ^ documented
+
+
+def test_envelope_3_is_documented_against_the_board_but_not_gated_by_it():
+    """The note is documentation; `requires` is enforcement. §87, §193.
+
+    §87 corrected the note on these eight fields and left `requires="IB304F"`
+    standing, so `s3ked` went on refusing to read envelope 3 on a boardless
+    machine -- the fields §50, §63 and §64 had measured there. The correction
+    landed on the half a reader reads and missed the half that acts (§193),
+    and the section number then made the survivor look inspected.
+
+    This pins the distinction so the flag cannot come back quietly.
+    """
+    gated = {x.name for x in p._PARAMS if getattr(x, "requires", "")}
+    assert gated == {"FLT2GAIN", "FLT2MODE", "FLT2Q", "TONEFREQ", "TONESLOP",
+                     "FIL2FR", "K_FRQ2"}, gated
+
+    for stage in ("R1", "L1", "R2", "L2", "R3", "L3", "R4", "L4"):
+        param = p.lookup(("keygroup", f"ENV3{stage}"))
+        assert not getattr(param, "requires", ""), (
+            f"ENV3{stage} declares a board it does not need -- see §87")
+        assert "IB304F" in (param.models or ""), (
+            f"ENV3{stage} lost the note explaining why it is NOT gated")
 
 
 # --- TEMPER is twelve values, not one --------------------------------------

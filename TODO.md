@@ -2032,10 +2032,14 @@ cannot be posed until that field is identified.
 keygroup or zone output assignment rather than a pan, the question changes
 shape entirely.
 
-## The eight ENV3 stages still declare the IB304F, which §87 retracted
+## The eight ENV3 stages declared the IB304F — FIXED 2026-09-09
 
-**Status:** defect recorded (§193), fix not applied — it is a behaviour change
-and Jan's call while a sibling session holds the lead on the board.
+**Status:** done. `requires` removed from `ENV3R1`..`ENV3L4`; the seven fields
+§87 names as genuinely gated keep it. Two tests pin the distinction between
+the note (documentation, still on all fifteen) and `requires` (enforcement,
+now on seven), so the flag cannot return quietly.
+
+Original report below.
 
 `ENV3R1`..`ENV3L4` at keygroup offsets 179–186 carry `requires="IB304F"`, so
 `s3ked` **refuses to read or write them unless the board is declared**. §87 is

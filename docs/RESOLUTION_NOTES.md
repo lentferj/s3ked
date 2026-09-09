@@ -1847,6 +1847,12 @@ S3000XL it is an option. The fifteen affected fields are now marked in
 `params.py` — they exist in the header on every machine and simply do nothing
 without the board, so nothing on the wire distinguishes them.
 
+> **PARTLY RETRACTED by §87, and the code caught up on 2026-09-09.** Envelope 3
+> does **not** need the board: its stages were measured on a machine that never
+> had one (§50, §63, §64). Fifteen fields carry the *note*; only **seven** are
+> gated by `requires` — the filter-2 and TONE fields. The eight `ENV3` stages
+> were enforced against this retracted claim for three weeks (§193).
+
 ### Rig note: JACK wedges about every eight recordings
 
 `jack_rec` stops exiting roughly every 8-10 captures, and the wedge takes the
