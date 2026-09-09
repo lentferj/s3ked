@@ -242,6 +242,7 @@ silently wrong one.
 - [§199](#199--backups-follow-attention-and-attention-follows-activity-2026-09-09) — Backups follow attention, and attention follows activity (2026-09-09)
 - [§200](#200--program-header-offset-109-is-the-last-played-note-and-the-iso-path-is-verified-2026-09-09) — Program header offset 109 is the last-played note, and the ISO path is verified (2026-09-09)
 - [§201](#201--the-highpass-has-its-own-exponent-so-the-mode-factor-is-not-a-factor-2026-09-09) — The highpass has its own exponent, so the "mode factor" is not a factor (2026-09-09)
+- [§202](#202--bp-and-eq-ladders-four-modes-three-exponents-and-mode-0-alone-flattens-2026-09-09) — BP and EQ ladders: four modes, three exponents, and mode 0 alone flattens (2026-09-09)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -19609,3 +19610,115 @@ wide knee — §197). §195 measured `FLT2GAIN` independently as a **+6.03 dB**
 switch that cancels the insertion loss exactly. Recovering the insertion loss to
 0.01 dB from an unrelated direction is good evidence the reference is doing what
 it is supposed to.
+
+## §202 — BP and EQ ladders: four modes, three exponents, and mode 0 alone flattens (2026-09-09)
+
+§201 ran the HP ladder and found the "mode factor" was not a factor. This runs
+the remaining two modes, and splits EQ into its two arms because whether their
+centres coincide is the same question one level down.
+
+### Rig
+
+`TC10 NOISE`, program 50, filter 1 wide open, `FLT2GAIN` 0, rungs 30–80. One
+reference for all eighteen captures (`LSI2_ON` 0, §194's exact bypass).
+`FLT2MODE` 1 for BP at `FLT2Q` 0; `FLT2MODE` 3 for EQ at `FLT2Q` 20 (cut) and
+27 (boost). Snapshot taken, all six fields read back.
+
+**Rung 20 was not attempted.** Under a drifting factor it lands near 24 Hz, and
+§201's rung 30 already returned nothing at ~21 Hz. A rung that is only
+measurable if the hypothesis is true cannot test the hypothesis.
+
+### Result
+
+Feature is an extremum — BP peak, EQ-cut dip, EQ-boost peak — so unlike the HP
+corner there is no plateau to normalise against. Ratios are to §196's
+single exponential.
+
+| `FIL2FR` | BP (Hz) | ratio | EQcut (Hz) | ratio | EQboost (Hz) | ratio |
+|---|---|---|---|---|---|---|
+| 30 | 55.7 | 1.502 | 55.7 | 1.502 | 54.2 | 1.462 |
+| 37 | 95.2 | 1.571 | 90.8 | 1.498 | 90.8 | 1.498 |
+| 45 | 165.5 | 1.557 | 164.1 | 1.543 | 159.7 | 1.502 |
+| 64 | 635.7 | 1.574 | 632.8 | 1.567 | 607.9 | 1.505 |
+| 72 | 1190.9 | 1.681 | 1171.9 | 1.654 | 1082.5 | 1.528 |
+| 80 | 2241.2 | 1.804 | 2179.7 | 1.754 | 1889.6 | 1.521 |
+
+**The top rungs confirm mpc2emu's single-byte measurements**, independently and
+to within 1.6 %: their byte 74 gave BP 1.653, EQcut 1.653, EQboost 1.515,
+against 1.681 / 1.654 / 1.528 here at byte 72. Those were good measurements of
+the wrong quantity — a point on a curve, taken for the curve.
+
+### Three exponents across four modes, and two that are indistinguishable
+
+```
+  LP  (§196)   k = 0.07024        EQboost   k = 0.07090   resid 1.1 %
+  EQcut        k = 0.07307        BP        k = 0.07312   resid 3.8 / 5.2 %
+  HP  (§201)   k = 0.07425
+```
+
+**EQ boost tracks mode 0** — 0.9 % apart in exponent — which is why its factor
+is nearly constant across the range (+4.0 %, and non-monotonic at the top).
+**It is the one mode where a constant factor is defensible**, and it is
+defensible because it was measured, not because it was assumed.
+
+**BP and EQ cut are indistinguishable from each other** (0.07 % apart) and share
+a residual pattern — both −4 % at byte 64 and +3.5 % at byte 80, a shallow S
+neither shows against the other. Two modes agreeing to that precision in two
+independent respects is more likely one filter core reached two ways than a
+coincidence, but this ladder cannot prove that and does not claim it.
+
+BP carries the worst residual (5.2 %) for an honest reason: its peak is **2.6
+octaves wide** at `FLT2Q` 0, so its centre is the least well-determined feature
+of the four.
+
+### The cheapest finding: mode 0's bottom-end flattening is unique to mode 0
+
+Residual from each mode's own exponential, against mode 0's **+14.5 %** at
+byte 37:
+
+| byte | BP | EQcut | EQboost |
+|---|---|---|---|
+| 30 | +0.1 % | +1.7 % | −1.1 % |
+| 37 | +2.5 % | −0.6 % | +0.9 % |
+
+Nothing. §201 found HP exponential down to its last measurable rung; the same
+now holds for BP and both EQ arms. **Four modes are clean at the bottom and
+mode 0 is not**, which makes mode 0 the special case rather than the reference
+— an awkward position for the mode every other mode's factor is expressed
+against. It cost no bench time: it falls out of rungs already captured.
+
+### The EQ arm gap is not constant either
+
+Centre separation between the two arms: under resolution at bytes 30–45,
+**4.1 % at 64, 8.3 % at 72, 15.4 % at 80**. mpc2emu's 8 % at byte 74 sits on the
+rise. One centre serves both arms below byte ~64 and is wrong above it.
+
+### Two instrument errors, both caught by reading the output against itself
+
+**The reference has a ~70 dB null at 11 kHz** — 30.8 dBFS against ~101
+elsewhere. A ratio is only meaningful where its denominator carries signal, and
+BP is attenuated far enough elsewhere to lose to the artefact: the first fit
+returned **11 kHz for every byte**. What exposed it was not suspicion of the
+rig but the shape of the answer — *a feature that does not move when the
+parameter moves is not the filter.* A per-mode result would have looked
+plausible in isolation; six identical ones could not.
+
+Fixed by capping the band at 9 kHz. A null guard was written alongside and
+**masked zero bins** — recorded because the guard is easy to credit with a fix
+the band cap actually made.
+
+**And the low rungs were bin-collapsed.** At 48 kHz with 8192-point frames the
+bins are 5.86 Hz, so 55.7 Hz is a ±11 % quantity: all three modes reported
+*identical* ratios at bytes 30 and 37 — read at the time as three modes
+agreeing, actually one bin. Re-fitting at 32768 points (1.46 Hz) separated them
+and **cut BP's apparent drift from +29 % to +20 %**.
+
+> The coarse instrument did not merely blur the drift, it **exaggerated** it —
+> in the direction of the conclusion being drawn. §201 was written about a
+> smoother that produced a false confirmation; this is the same failure at the
+> opposite end, where the resolution limit sat on the rung carrying the most
+> weight.
+
+Both errors lived at the bottom of the range, and in both ladders the bottom
+rung is the one the trend is read from. **Spend the care where the lever is
+longest.**
