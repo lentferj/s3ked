@@ -237,6 +237,7 @@ silently wrong one.
 - [§194](#194--lsi2on--0-is-an-exact-bypass-so-every-prior-audio-baseline-stands-2026-09-08) — LSI2_ON = 0 is an exact bypass, so every prior audio baseline stands (2026-09-08)
 - [§195](#195--flt2gain-is-a-6-db-switch-that-cancels-filter-2s-insertion-loss-and-mode-3s-pivot-is-not-at-16-2026-09-08) — FLT2GAIN is a +6 dB switch that cancels filter 2's insertion loss, and mode 3's pivot is not at 16 (2026-09-08)
 - [§196](#196--filter-2s-corner-is-about-half-filter-1s-on-its-own-law-2026-09-09) — Filter 2's corner is about half filter 1's, on its own law (2026-09-09)
+- [§197](#197--the-two-filters-cascade-independently-combined-equals-the-sum-in-db-2026-09-09) — The two filters cascade independently: combined equals the sum in dB (2026-09-09)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -19088,3 +19089,63 @@ feature it measures will report the window.**
   library corpus is 88, so it matters. That needs a measured table built the way
   §146 built filter 1's.
 - **Do not combine with §195's EQ-peak figure.** Different mode, different `Q`.
+
+## §197 — The two filters cascade independently: combined equals the sum in dB (2026-09-09)
+
+Every filter-2 measurement in §194-§196 was taken with `FILFRQ` at 96 -- corner
+~10.9 kHz, which §146 calls "not measurable" because the section is
+essentially open there. So filter 1 was never shaping the same band, and
+nothing in those sections says how the two behave together. This does.
+
+Four captures, because measuring the pair without the singles would repeat the
+comparand error this file records three times: reference with both open, each
+section alone, and both. Matched corner ~700 Hz -- `FILFRQ` 62 and `FIL2FR` 72,
+which measured **679 Hz and 678 Hz**, so the byte choice landed within 1 Hz.
+
+### They multiply cleanly
+
+Response against the both-open reference, normalised to 30-90 Hz:
+
+      Hz     f1 alone   f2 alone     SUM      both    residual
+      63       +0.02      -0.01    +0.01    -0.02      -0.03
+     125       +0.16      -0.10    +0.05    +0.03      -0.03
+     250       +0.74      -0.47    +0.27    +0.23      -0.04
+     500       +0.39      -1.79    -1.40    -1.41      -0.01
+    1000       -9.78      -5.38   -15.16   -15.17      -0.01
+    2000      -22.46     -12.22   -34.68   -34.72      -0.04
+
+**The cascade is the sum of the singles in dB to within 0.04 dB over six
+octaves.** The sections do not interact.
+
+**The 4 kHz and 8 kHz rows are the noise floor, not a result.** The `both`
+capture has +10.0 dB SNR at 4 kHz and +9.4 at 8 kHz, so it has run out of
+signal exactly as a -78 dB predicted response should. Reporting a residual
+there would be reporting the floor.
+
+### The corner moves, and the insertion loss does not double
+
+    f1 alone 679 Hz    f2 alone 678 Hz    both 571 Hz    ratio 0.841
+
+Predicted 0.6-0.8x; measured 0.841 -- right direction, outside the range.
+And the cascade's passband sits where the singles' do: **the 6 dB insertion
+loss appears once**, because it is filter 2's and filter 1 is in circuit in
+every capture including the reference.
+
+### 24 dB/octave is not reachable at this corner
+
+    slope 1-2 kHz:   f1 -12.7    f2 -6.8    sum -19.5    both -19.6 dB/oct
+
+Additivity holds here too, **but filter 2 contributes only -6.8 dB/octave
+because it is still in its transition, not its asymptote.** Two 2-pole sections
+do give 24 dB/octave asymptotically; at a 700 Hz corner the response is 78 dB
+down before either section gets there, and the floor arrives first.
+
+**So a rig validation against an expected 4-pole slope must choose its corner
+for headroom.** Around `FILFRQ` 50 / `FIL2FR` 60 leaves room for both sections
+to reach their asymptotes above the floor. At 700 Hz such a check would measure
+19.6 and look like a failure.
+
+### Also noted
+
+Filter 1 alone reads **+0.74 dB at 250 Hz** -- a small passband rise before its
+corner. Not investigated.
