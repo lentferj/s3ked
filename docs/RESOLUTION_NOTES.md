@@ -236,6 +236,7 @@ silently wrong one.
 - [§193](#193--a-correction-lands-on-the-half-a-reader-reads-and-misses-the-half-that-acts-2026-09-08) — A correction lands on the half a reader reads, and misses the half that acts (2026-09-08)
 - [§194](#194--lsi2on--0-is-an-exact-bypass-so-every-prior-audio-baseline-stands-2026-09-08) — LSI2_ON = 0 is an exact bypass, so every prior audio baseline stands (2026-09-08)
 - [§195](#195--flt2gain-is-a-6-db-switch-that-cancels-filter-2s-insertion-loss-and-mode-3s-pivot-is-not-at-16-2026-09-08) — FLT2GAIN is a +6 dB switch that cancels filter 2's insertion loss, and mode 3's pivot is not at 16 (2026-09-08)
+- [§196](#196--filter-2s-corner-is-about-half-filter-1s-on-its-own-law-2026-09-09) — Filter 2's corner is about half filter 1's, on its own law (2026-09-09)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -18979,3 +18980,62 @@ The first reading of this sweep took "the corner" to be the 2 kHz band, when
 row's own plateau -- so the insertion loss sat inside every number and the
 pivot could not be seen at all. **Normalising to the thing being varied, not to
 an absolute reference, is what made the sign visible.**
+
+## §196 — Filter 2's corner is about half filter 1's, on its own law (2026-09-09)
+
+`FIL2FR` -> Hz, measured. Mode 0 (lowpass, established §194), `FLT2Q` 0,
+`LSI2_ON` 1, broadband source, five points inside the range where filter 1's
+law is trusted. The **-3 dB corner is taken against the same program bypassed**,
+which cancels source, chain and the 6 dB insertion loss in one step.
+
+    FIL2FR   corner Hz   §139 corner law   ratio   SNR at corner
+       30        43.8           70.0       0.625      +35 dB
+       45       105.0          203.2       0.517      +40
+       64       411.9          783.0       0.526      +52
+       72       718.1         1381.8       0.520      +58
+       80      1215.6         2438.5       0.499      +59
+
+    fit:  Hz = 5.4836 * exp(0.06744 * FIL2FR)      r2 = 0.99867
+    filter 1's exponent is 0.07100; ratio of exponents 0.950
+
+**Filter 2's corner is roughly half filter 1's at the same byte** -- about an
+octave lower -- with a slightly shallower exponent. The ratio is stable at
+0.50-0.53 across the top four points.
+
+**The prediction filed before the run was that filter 2 would follow §139's law
+within 10%. Falsified.** The basis was that a filter-2 EQ *boost peak* had
+matched filter 1's *resonance-peak* law to 1.1%, so the frequency control
+looked shared. **It is not** -- and the earlier agreement must not be read as
+evidence about the corner, because it was a different mode at a different `Q`.
+
+### The comparand had to be §139, not §54
+
+§54 fits filter 1's **resonance peak**; §139 measured its **-3 dB corner** and
+recorded `measured/§54 = 1.2886`. Comparing this section's corner against §54
+would recover that documented ratio and read as a property of filter 2 -- which
+is exactly the error that produced a "2503 Hz at byte 80" figure elsewhere.
+**One quantity, one comparand, chosen before the analysis.**
+
+### A window that did not follow what it measured
+
+The first pass normalised every row to a fixed 25-60 Hz passband and reported
+byte 30's corner as **61.9 Hz**. That band **straddles the corner** at byte 30,
+so the reference sat on the slope. Iterating the window down to a full octave
+below each row's own corner gives **43.8 Hz**.
+
+**Third instance of one fault**: a fixed high-frequency probe on a deep corner
+(§190), a fixed-width analysis band on a variable-width notch (§195), and now a
+fixed passband window on a moving corner. **Any window that does not follow the
+feature it measures will report the window.**
+
+### Limits
+
+- **Byte 30 is the weakest point**: ratio 0.625 against a cluster at 0.50-0.53
+  and a +5.5% fit residual, with its passband window down at 12-20 Hz. Inside
+  the rig's flat region (§190) but not a point to lean on.
+- **Do not extend the fit above 80.** Filter 1 departs from its own exponential
+  from 84 upwards (§146: 1.023 at 84 rising to 1.229 at 94, saturation at 96).
+  Whether filter 2 does the same, and where, is **unmeasured** -- and p90 of the
+  library corpus is 88, so it matters. That needs a measured table built the way
+  §146 built filter 1's.
+- **Do not combine with §195's EQ-peak figure.** Different mode, different `Q`.
