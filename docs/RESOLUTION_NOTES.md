@@ -238,6 +238,7 @@ silently wrong one.
 - [§195](#195--flt2gain-is-a-6-db-switch-that-cancels-filter-2s-insertion-loss-and-mode-3s-pivot-is-not-at-16-2026-09-08) — FLT2GAIN is a +6 dB switch that cancels filter 2's insertion loss, and mode 3's pivot is not at 16 (2026-09-08)
 - [§196](#196--filter-2s-corner-is-about-half-filter-1s-on-its-own-law-2026-09-09) — Filter 2's corner is about half filter 1's, on its own law (2026-09-09)
 - [§197](#197--the-two-filters-cascade-independently-combined-equals-the-sum-in-db-2026-09-09) — The two filters cascade independently: combined equals the sum in dB (2026-09-09)
+- [§198](#198--the-first-validation-of-emitted-files-the-converters-filter-2-output-renders-2026-09-09) — The first validation of emitted files: the converter's filter-2 output renders (2026-09-09)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -18102,6 +18103,22 @@ The fix is the same shape as the others here: assert an **absolute** quantity
 against a measurement, not a relative one against yourself. That check can
 fail, and this one could not.
 
+### Evidence that convicts you gets less scrutiny than evidence that acquits you
+
+A sibling session parked a one-point claim as "inconclusive" and treated it
+with suspicion for hours. It was then **refuted** by a second measurement --
+which was taken at face value and quoted to 0.1 Hz, and was the *weaker* of the
+two, from a program whose corner the source could not resolve. When that
+measurement was withdrawn the original claim came back.
+
+**The claim was checked harder than the evidence against it.** And the reason
+is uncomfortable: a correction pointing at *"I was wrong"* arrives wearing the
+clothes of rigour, so the retraction itself is never audited. Retracting your
+own parked fact feels like good practice, which is exactly what exempts it.
+
+**The direction a number points is not evidence about the number.** Evidence
+that convicts needs the same scrutiny as evidence that acquits.
+
 ### The cheap defence: print the provenance, do not reason about it
 
 Two sessions on one instrument caught most of the above, but that defence only
@@ -19057,6 +19074,13 @@ point.
     FIL2FR 64, mode 0 (LP)   corner 414.4 Hz
     FIL2FR 64, mode 2 (HP)   corner 246.2 Hz     ratio 0.594
 
+> **THE 0.594 IS WITHDRAWN (§198).** Measured again from an emitted file at
+> `FIL2FR` 74, with the disc's own unfiltered reference and +55 dB SNR at the
+> corner, the ratio is **0.707**. This figure came from a single point whose
+> normalisation band was flagged, in this section, as possibly inside the HP
+> transition -- and it was. **The conclusion that the corner moves with mode
+> stands; the number does not.**
+
 **41% apart at the same byte**, so this section's law is a **mode-0 law** and
 must not be applied to the other three. A sibling's corpus makes that the
 larger part of the problem: **mode 0 is 7% of active filter-2 use**, against
@@ -19193,3 +19217,110 @@ to reach their asymptotes above the floor. At 700 Hz such a check would measure
 
 Filter 1 alone reads **+0.74 dB at 250 Hz** -- a small passband rise before its
 corner. Not investigated.
+
+## §198 — The first validation of emitted files: the converter's filter-2 output renders (2026-09-09)
+
+Everything in §194-§197 was measured by **editing a program the machine already
+had**. This is the first time the *file a converter emits* was put in front of
+the sampler. Twelve programs on volume `FILTER2`, appended to HD4 by a sibling
+session (verified non-destructive by file-by-file hash: 1400 pre-existing files,
+0 missing, 0 changed). Source is a Schroeder complex, flat to 20 kHz.
+
+**Program 40 is the disc's own unfiltered reference** -- `FILFRQ` 99, filter 2
+off -- and referencing every capture to it cancels the source, the chain and the
+insertion loss in one step.
+
+**The emitted bytes were read back before any capture** and are exactly as
+intended across all twelve programs, so file *content* was validated
+independently of rendering.
+
+### The feature is live, and the cascade correction is correct
+
+    prog 41  4-pole asked, board withheld   FILFRQ 64 alone
+    prog 42  4-pole asked, board used       FILFRQ 67 + FIL2FR 77
+
+               800 Hz   2 kHz    3 kHz    4 kHz    6 kHz
+    41 (2-pole) -4.09  -20.61   -27.81   -32.86   -39.63
+    42 (4-pole) -3.01  -24.36   -36.07   -44.84   -56.54
+    difference  +1.09   -3.75    -8.26   -11.98   -16.91
+
+    slope 2-3 kHz:  41 -12.3    42 -20.0 dB/oct
+    corner:         41 745 Hz   42 786 Hz     nominal 800
+
+**This path had shipped completely inert earlier the same day**, past nine unit
+tests and a nine-case round trip, so a null here was the live possibility.
+
+**Cascade corners against nominal**, at the two frequencies this source can
+resolve (see the limitation below):
+
+    prog 44   nominal  800   measured  789.6   ratio 0.987
+    prog 45   nominal 3000   measured 2804.4   ratio 0.935
+
+No corner is near 16% low on any defensible passband, which was the stated
+falsifier for the 1/0.841 lift being applied backwards. **The lift is right.**
+
+### All four modes render, and the mode enum is confirmed a second time
+
+All at `FIL2FR` 74, filter 1 open, nominal 800 Hz, SNR +55 to +74 dB:
+
+    46 HIGHPASS     plateau -5.42   -3 dB corner  566 Hz    0.707 x nominal
+    47 BANDPASS     baseline -19.53  peak +7.52 dB at 1359 Hz   1.70 x
+    48 EQ cut  Q20  baseline  -6.06  dip  -9.49 dB at 1359 Hz   1.70 x
+    49 EQ boost Q27 baseline  -5.94  peak +6.73 dB at 1246 Hz   1.56 x
+
+**§195's `FLT2Q` table is confirmed from a completely independent path:**
+
+                     §195 predicted    this disc
+    FLT2Q 20            -9.5 dB          -9.49 dB
+    FLT2Q 27            +6.5             +6.73
+    insertion loss       6.03           -6.06 and -5.94
+
+Different program, different byte, different source, different session --
+§195 measured by editing a resident program, this by rendering an emitted file.
+**The depths agree within 0.25 dB.**
+
+**§195's 0.594 LP/HP ratio is WITHDRAWN. The disc measures 0.707.** The old
+figure came from one point at `FIL2FR` 64 with a normalisation band flagged at
+the time as possibly inside the HP transition; this is a proper reference at
++55 dB SNR. **0.707 is also one point** and byte-dependence is unmeasured.
+
+**The non-LP modes do not place their feature at the LP corner** -- BP and
+EQ-cut centre at 1.70x nominal, EQ-boost at 1.56x. §195 saw 1.53x from the
+other direction. So that offset reproduces across two independent measurements.
+
+### 4-pole confirmed at a low corner
+
+    250 Hz nominal, 600-1200 Hz:   2-pole -12.7    4-pole -22.3 dB/oct
+    ideal:                                  -12            -24
+
+Closer to ideal than the 700 Hz pair's -20.0, exactly as the low-corner
+argument predicted (§197). Filter 2's contribution is 9.6 dB/oct here, still
+short of 12 at 4.8 octaves above the corner -- **the wide knee, measured a
+third time**.
+
+### The limitation this run established: low corners are not measurable here
+
+Corner estimates below about 400 Hz are **passband-sensitive at the +/-30%
+level**, because this source's usable energy starts near 90 Hz and a passband
+must sit an octave below the corner to be a valid reference:
+
+    prog 43, nominal 200   passband 90-140 -> 204.4 Hz    95-160 -> 148.9 Hz
+    prog 44, nominal 800                      789.6                793.4
+    prog 45, nominal 3000                    2804.4               2818.0
+
+**Corners at 800 Hz and above are stable to 0.5%; corners at 200-250 Hz are
+not measurable with this source on this rig.** Any trend fitted across the low
+corners is unmeasured rather than under-determined.
+
+### Slopes survive what corners do not
+
+**A slope is a difference between two points, so the passband normalisation
+cancels exactly. A corner is an absolute crossing against a reference, so it
+inherits every defect in that reference.** From the same captures, the 4-pole
+conclusion stands and the low-corner numbers are withdrawn.
+
+**Knowing which kind a conclusion rests on tells you in advance what a
+retraction will take with it.** Five analysis passes were wasted on this run by
+choosing an analysis band rather than deriving it -- normalising where the
+source has no energy, searching below the passband, assuming a harmonic root,
+and twice putting a passband on top of the corner it was measuring.
