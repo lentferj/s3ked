@@ -239,6 +239,7 @@ silently wrong one.
 - [§196](#196--filter-2s-corner-is-about-half-filter-1s-on-its-own-law-2026-09-09) — Filter 2's corner is about half filter 1's, on its own law (2026-09-09)
 - [§197](#197--the-two-filters-cascade-independently-combined-equals-the-sum-in-db-2026-09-09) — The two filters cascade independently: combined equals the sum in dB (2026-09-09)
 - [§198](#198--the-first-validation-of-emitted-files-the-converters-filter-2-output-renders-2026-09-09) — The first validation of emitted files: the converter's filter-2 output renders (2026-09-09)
+- [§199](#199--backups-follow-attention-and-attention-follows-activity-2026-09-09) — Backups follow attention, and attention follows activity (2026-09-09)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -19340,3 +19341,45 @@ retraction will take with it.** Five analysis passes were wasted on this run by
 choosing an analysis band rather than deriving it -- normalising where the
 source has no energy, searching below the passband, assuming a harmonic root,
 and twice putting a passband on top of the corner it was measuring.
+
+## §199 — Backups follow attention, and attention follows activity (2026-09-09)
+
+A sibling session prepared to move one CD image on the shared card. Before
+proposing it, they took a verified byte-identical copy of that image. Then,
+checking the claim "the parked copy is the only copy" properly, they found:
+
+    CD0  inputs.iso    220 MB   local copy: NONE
+    CD1  options.iso   200 MB   local copy: NONE
+    CD2  limits.iso    200 MB   local copy: NONE
+    CD3  krzfix.iso    (the one being moved)  -- already backed up
+
+**620 MB of irreproducible data in exactly one place**, on a card that gets
+renamed, appended to and carried between rooms. The build recipe those discs
+cite no longer exists, so none can be rebuilt.
+
+**The disc that was protected was the one about to be touched -- the only one
+that was not at risk.** The three nobody was touching were the exposed ones.
+
+### Why this is systematic rather than an oversight
+
+**Protection follows attention, and attention follows activity.** The artefact
+you are about to modify is the one in mind, so it gets the backup; the
+artefacts you are not modifying are, by definition, not in mind. **The result
+is that care concentrates precisely where the danger is lowest.**
+
+It is worth stating because the feeling is inverted: taking a backup before a
+risky operation *feels* like the diligent moment, and it is -- but the same
+prompt should ask what else is in the blast radius and unbacked, which is a
+question about everything *not* being touched.
+
+### And a safe-looking prefix is not protection
+
+Renaming a volume so the sampler cannot see it -- here an `XX_` prefix, since
+ZuluSCSI presents only names beginning `CDn`/`HDn` -- hides it from the machine
+and **not from a later append, a rename typo, or a tool walking the card**. An
+only-copy behind such a prefix is the original, sitting in the blast radius
+wearing a safe-looking name.
+
+**The scarce resource was card availability, not disk.** The copies were taken
+while the card happened to be in the reader, which was the moment they were
+cheap -- not when someone next needs one of the discs.
