@@ -18995,12 +18995,55 @@ which cancels source, chain and the 6 dB insertion loss in one step.
        72       718.1         1381.8       0.520      +58
        80      1215.6         2438.5       0.499      +59
 
-    fit:  Hz = 5.4836 * exp(0.06744 * FIL2FR)      r2 = 0.99867
-    filter 1's exponent is 0.07100; ratio of exponents 0.950
+**Extended to ten points. Ship the measurements, not a fit** -- a single
+exponential is wrong at both ends:
 
-**Filter 2's corner is roughly half filter 1's at the same byte** -- about an
-octave lower -- with a slightly shallower exponent. The ratio is stable at
-0.50-0.53 across the top four points.
+    FIL2FR   corner Hz   exponential(45..80)   ratio   note
+       20        26.9          18.4            1.463   flattens
+       30        43.1          37.1            1.163   (re-take of 43.8)
+       37        69.4          60.6            1.145
+       45       106.9         106.3            1.005
+       64       414.4         403.8            1.026
+       72       720.0         708.3            1.016
+       80      1225.0        1242.4            0.986
+       88      2073.1        2179.2            0.951
+       94      5904.4        3321.5            1.778   departs
+       99          --        4719.1              --    TRANSPARENT
+
+    fit over 45..80 only:  Hz = 4.5069 * exp(0.07024 * FIL2FR)
+
+**Filter 2's corner is about half filter 1's at the same byte** -- 0.50-0.53x
+across 45..80, about 0.96 octaves down. **That factor is the solid result.**
+
+**The exponent is NOT shallower.** Fitting all points gave 0.06744 and looked
+like a real difference; that was the fit being levered by the flattened bottom.
+Over 45..80 alone it is **0.07024**, within 1.1% of filter 1's 0.07100.
+
+**Byte 99 is not a filter.** Flat to 0.0 dB in every octave band -- the section
+is out of circuit. A sibling's corpus puts **1,532 of 2,457 enabled keygroups
+at 99**, so most "enabled" material has no corner to convert.
+
+**The ends both depart.** Below 45 the law flattens, reaching **+46% at byte
+20**; the byte 30 re-take at 43.1 against 43.8 confirms that is the filter and
+not a straddling window. Above 88 it departs upward, **1.78x at byte 94** --
+and filter 1 departs above 84, so the two do not even share their breakdown
+point.
+
+### The corner moves with mode
+
+    FIL2FR 64, mode 0 (LP)   corner 414.4 Hz
+    FIL2FR 64, mode 2 (HP)   corner 246.2 Hz     ratio 0.594
+
+**41% apart at the same byte**, so this section's law is a **mode-0 law** and
+must not be applied to the other three. A sibling's corpus makes that the
+larger part of the problem: **mode 0 is 7% of active filter-2 use**, against
+EQ 50% and HP 39%.
+
+Caution on the HP figure: its response rises only ~17 dB from 31 Hz to its
+plateau, shallower than a 2-pole highpass at 246 Hz should give, so either the
+section is a different order or the normalisation band sits inside its
+transition. **The ratio is solid enough to establish that the corner moves; the
+HP's shape needs its own ladder.**
 
 **The prediction filed before the run was that filter 2 would follow §139's law
 within 10%. Falsified.** The basis was that a filter-2 EQ *boost peak* had

@@ -2106,3 +2106,26 @@ obvious candidate.
 `Q` 10 and `Q` 29, four or five `FIL2FR` values each. That is a different
 experiment from the `Q` sweep, not an extension of it, and needs `TC10 NOISE`
 resident.
+
+## Filter 2: three more corner ladders, one per mode
+
+**Status:** open. §196 measured mode 0 only, which is **7% of real filter-2
+use**. EQ is 50% and HP 39% on a sibling's corpus of 887 active keygroups.
+
+**Why it cannot be extrapolated:** the corner *moves with mode*. At `FIL2FR` 64
+the lowpass corner is 414.4 Hz and the highpass corner is 246.2 Hz — **41%
+apart at the same byte**. So §196's law is a mode-0 law.
+
+**Needed:** a ladder per mode — HP, BP and EQ — over the same `FIL2FR` values,
+mode 0's being 20/30/37/45/64/72/80/88/94/99. `TC10 NOISE` is the source and no
+card write is involved.
+
+**Also open, from §196:**
+
+- **The HP shape.** Its response rises only ~17 dB from 31 Hz to its plateau,
+  shallower than a 2-pole highpass at 246 Hz should give. Either the section is
+  a different order in HP, or the normalisation band sat inside its transition.
+  Needs a dedicated capture with a passband window placed well above the corner.
+- **Where the top departs.** Byte 88 is still on the exponential (0.951) and 94
+  is 1.78x above it, so the breakdown is between them. Filter 1 departs above
+  84, so they do not share it. 22% of active material sits above `FIL2FR` 80.
