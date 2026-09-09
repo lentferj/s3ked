@@ -19094,6 +19094,23 @@ below each row's own corner gives **43.8 Hz**.
 fixed passband window on a moving corner. **Any window that does not follow the
 feature it measures will report the window.**
 
+**A fourth, caught before it ran, and its direction is the dangerous part.** A
+sibling session proposed measuring a 4-pole slope over 500 Hz - 2 kHz at a
+250 Hz corner. This rig has 73.5 dB of headroom at 2 kHz and a 4-pole is 72 dB
+down there, so the top of the window would have read the **floor**, not the
+filter:
+
+    500 Hz   headroom +62.5   response -24   SNR +38
+   1400      headroom +71.9   response -60   SNR +12
+   2000      headroom +73.5   response -72   SNR +1.5   unusable
+
+The first three faults lost the *feature*; this one loses the **signal**. And
+**a floor-limited reading makes a steep curve look shallower**, so the error
+runs toward "the second section is not doing much" -- a null result, and the
+one a session that had just found the feature inert would be predisposed to
+accept. **Check the headroom against the predicted response before choosing a
+window, not the window against what looks tidy.**
+
 ### Limits
 
 - **Byte 30 is the weakest point**: ratio 0.625 against a cluster at 0.50-0.53
