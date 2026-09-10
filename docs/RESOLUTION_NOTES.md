@@ -245,6 +245,7 @@ silently wrong one.
 - [§202](#202--bp-and-eq-ladders-four-modes-three-exponents-and-mode-0-alone-flattens-2026-09-09) — BP and EQ ladders: four modes, and the exponents group in two (2026-09-09)
 - [§203](#203--there-are-no-mode-groups-one-tuning-law-read-through-four-features-2026-09-10) — There are no mode groups: one tuning law, read through four features (2026-09-10)
 - [§204](#204--the-tuning-law-holds-from-rung-25-to-88-and-mode-0s-bend-is-not-in-it-2026-09-10) — The tuning law holds from rung 25 to 88, and mode 0's bend is not in it (2026-09-10)
+- [§205](#205--above-rung-88-the-law-steepens-immediately-and-the-steps-are-uneven-2026-09-10) — Above rung 88 the law steepens immediately, and the steps are uneven (2026-09-10)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -20188,3 +20189,64 @@ rung 30 to 1.54 at rung 80** — the bend was always in that ratio, exactly wher
 this section puts it, in data both projects had been carrying for a day. An
 independent route to the same conclusion, from numbers that were already
 written down.
+
+## §205 — Above rung 88 the law steepens immediately, and the steps are uneven (2026-09-10)
+
+§204 left the departure bracketed only between rungs 88 and 94, and noted the
+band matters: mpc2emu's scan of six library discs puts **`FIL2FR` 89–93 at
+8.4 % of 891 active keygroups**. Rungs 89–93 measured at `FLT2Q` 31, three modes
+each, same rig and reference as §204. Snapshot taken, all six fields verified
+restored.
+
+| rung | BP | HP | EQ | mode spread | mean | 25–88 law | residual |
+|---|---|---|---|---|---|---|---|
+| 88 | 3300.3 | 3313.5 | 3300.3 | 0.40 % | 3304.7 | 3304.2 | +0.0 % |
+| 89 | 3596.2 | 3616.7 | 3593.3 | 0.65 % | 3602.1 | 3544.9 | **+1.6 %** |
+| 90 | 3810.1 | 3817.4 | 3792.5 | 0.66 % | 3806.6 | 3803.2 | +0.1 % |
+| 91 | 4138.2 | 4163.1 | 4138.2 | 0.60 % | 4146.5 | 4080.3 | +1.6 % |
+| 92 | 4514.6 | 4532.2 | 4507.3 | 0.55 % | 4518.1 | 4377.6 | +3.2 % |
+| 93 | 4775.4 | 4801.8 | 4775.4 | 0.55 % | 4784.2 | 4696.6 | +1.9 % |
+| 94 | 5219.2 | 5245.6 | 5213.4 | 0.62 % | 5226.1 | 5038.8 | +3.7 % |
+
+Convergence across the three modes holds at every rung, so this is the tuning
+frequency and not one mode's feature drifting.
+
+### There is no breakpoint — it begins at once
+
+**Rung 89 is already +1.6 % off.** The departure does not start somewhere in the
+middle of the bracket; it starts at the first byte above 88. Over 88–94 the
+local law is
+
+```
+  Hz = 4.3094 * exp(0.07550 * FIL2FR)      worst residual 1.1 %
+```
+
+against 0.07033 below — the top is **0.5 % steeper per byte**, which compounds
+to the +3.7 % seen at rung 94.
+
+### The steps are uneven, and that is not scatter
+
+Per-byte ratios, against the 1.0729 the lower law predicts:
+
+| step | 88→89 | 89→90 | 90→91 | 91→92 | 92→93 | 93→94 |
+|---|---|---|---|---|---|---|
+| ratio | 1.0900 | **1.0568** | 1.0893 | 1.0896 | **1.0589** | 1.0924 |
+
+Four large steps of ~1.089–1.092 and two small ones of ~1.057–1.059. **The
+3.4 % step-to-step difference is six times the mode spread at these rungs**, so
+it is structure in the machine, not measurement noise — which is exactly why
+all three modes were captured at every rung rather than one.
+
+The two small steps fall at 89→90 and 92→93, three bytes apart. **Two instances
+do not establish a period** and none is claimed; if it is one, the next small
+step is 95→96 and a single capture pair would say. Recorded as observed
+spacing, not as a mechanism.
+
+### What to ship
+
+The exponential is the wrong shape here even locally: a 1.1 % worst residual
+over seven rungs hides ±3 % steps. **Ship rungs 89–93 as measured points with
+geometric interpolation between them**, the same treatment the mode-0 table
+already gets, and move the bound only as far as the captures reach. A fitted
+curve through this region would reproduce its average and none of its steps —
+and the steps are the part a keygroup actually lands on.
