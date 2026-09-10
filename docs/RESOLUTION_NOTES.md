@@ -248,6 +248,7 @@ silently wrong one.
 - [§205](#205--above-rung-88-the-law-steepens-immediately-and-the-steps-are-uneven-2026-09-10) — Above rung 88 the law steepens immediately, and the steps are uneven (2026-09-10)
 - [§206](#206--the-flt2q-depth-table-and-a-notch-narrower-than-the-instrument-2026-09-10) — The `FLT2Q` depth table, and a notch narrower than the instrument (2026-09-10)
 - [§207](#207--per-mode-resonance-and-the-notch-is-finite-after-all-2026-09-10) — Per-mode resonance, and the notch is finite after all (2026-09-10)
+- [§208](#208--filter-2-is-not-a-state-variable-filter-the-taps-differ-in-order-2026-09-10) — Filter 2 is not a state-variable filter: the taps differ in order (2026-09-10)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -20519,3 +20520,76 @@ and 9.8 at −20 dB, because those describe different parts of the same shape.
 
 Neighbours from the same run: `FLT2Q` 15 reads −25.03 dB and 17 reads
 −24.52 dB, confirming §206's one-byte spike at full resolution.
+
+## §208 — Filter 2 is not a state-variable filter: the taps differ in order (2026-09-10)
+
+The open modelling question was what "bandpass resonance" should mean, given a
+bandpass has no passband to be above (§207). mpc2emu proposed a reframing that
+would dissolve it: if filter 2 is a state-variable filter — one resonant core,
+three output taps — then LP, BP and HP share poles and Q, and BP inherits the
+shared curve **by evidence** rather than by default.
+
+Two measurements pointed that way: all three topologies peak on one frequency at
+`FLT2Q` 31 (§203), and LP/HP peak-above-passband converge to 0.02 dB (§207).
+
+**It is not an SVF.** Asymptotic skirt slopes, `FLT2Q` 0, `FIL2FR` 64, f0 =
+611 Hz, against the bypass reference so filter 1 and the source cancel:
+
+| tap | lower skirt | upper skirt | order |
+|---|---|---|---|
+| LP | −0.12 / −0.44 | −10.31 / −11.23 | **2-pole** |
+| BP | +6.15 / +5.71 | −4.31 / −5.40 | **1-pole each side** |
+| HP | +6.10 / +5.82 | −0.58 / −0.32 | **1-pole** |
+
+A state-variable filter tapping one 2-pole core gives −12 / ±6 / **+12**. This
+gives −12 / ±6 / **+6**: the highpass tap is first-order, and its region above
+f0 is flat to 8 f0, so no second pole is hiding further out.
+
+The architecture consistent with every slope is **two cascaded one-pole
+sections, each switchable** — LP mode = LP+LP, BP mode = HP+LP, HP mode = HP
+alone. No shared resonant core, so **there is no common Q for BP to inherit.**
+
+**That description is incomplete, and its own numbers say so.** Two independent
+one-pole sections have only *real* poles, and a cascade of real poles cannot
+peak at all — yet the bandpass measures **+29.98 dB** over its own `FLT2Q` 0 at
+`FLT2Q` 31 (§207). Both facts are in this document and they contradict each
+other on their face; mpc2emu spotted it, from figures already sent.
+
+The architecture fitting both is **two one-pole sections with feedback**: at
+`FLT2Q` 0 the poles are real and each section shows its 6 dB/octave, and as
+`FLT2Q` rises the feedback moves them to a complex pair, so the shape near f0
+peaks **while the far asymptotes stay at the section count**.
+
+That is confirmed by the `FLT2Q` 31 measurement below — far-band slopes
+unchanged at −12.2 / −6.3 / +6.1 while the near bands steepen. **Pole count is
+asymptotic, so the order table holds at every `FLT2Q`**; nothing about *shape
+near f0* at high resonance follows from it.
+
+### This also explains a factor-of-two disagreement
+
+mpc2emu derived Q two ways and got 0.686 from the LP tap against 0.327 from the
+BP skirts, and proposed that filter 2 might not be a clean resonator at all so
+that "Q" is ill-defined. **The skirts refute that — they are textbook, reached
+by two to three octaves.** The disagreement is that the BP expression
+`|H(r)|/|H(f0)| = 1/√(1 + Q²(r − 1/r)²)` is the *two-pole* bandpass, applied to
+a one-pole-pair one. Right formula, wrong order, ratio ≈ 2.
+
+**So the answer to "what should bandpass resonance mean" is none of the three
+options on the table.** Not "BP needs its own reference", not "the filter has no
+Q": **the bandpass tap is a different filter order from the lowpass tap**, so a
+resonance value ported from either neighbour is describing a different filter.
+Borrowing the HP curve for BP is now known wrong rather than merely unverified.
+
+### Measuring order near a strong resonance reads it too high
+
+Repeating at `FLT2Q` 31, the slopes *near* f0 steepen — LP −13.82, BP −7.89,
+HP **+12.26** — while the far bands hold the same asymptotes as `FLT2Q` 0:
+LP −12.22, BP −6.30, HP +6.13.
+
+> **A resonance steepens the local slope on its own skirt.** Read the order two
+> octaves out at high Q and the highpass looks second-order; read it four out
+> and it is first-order at every `FLT2Q`. The pole count is a property of the
+> asymptote, and at high resonance the asymptote is further away than it looks.
+
+Taken at face value, the `FLT2Q` 31 near-band figure would have produced
+"HP is 2-pole" — agreeing with the SVF hypothesis, and wrong.
