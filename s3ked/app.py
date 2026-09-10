@@ -806,6 +806,74 @@ class MenuScreen(ModalScreen[Optional[int]]):
         self.dismiss(None)
 
 
+#: How many parts a multi holds. NOT ESTABLISHED -- see RESOLUTION_NOTES §213.
+#: The wire protocol addresses parts by index and none of the three transcribed
+#: specs says how many exist. 16 is the MIDI channel count and is one of three
+#: layouts that divide a 4096-byte multi file cleanly; it is a guess, and it is
+#: offered rather than probed because probing means reading past the end.
+_MULTI_PARTS = 16
+
+
+class MultiScreen(ModalScreen[Optional[Tuple[str, int]]]):
+    """Choose the multi file header, or one of its parts.
+
+    The multi is where effects routing actually lives. `multi` holds
+    `FX1`-`FX4` -- which fx setup is assigned to each fx channel -- and each
+    `multipart` carries its own `PFXCHAN` and `PFXSLEV`. Akai's text documents
+    offset 114 twice and differently: "Not used" in the program header,
+    "Effects send level" here. The program copy is inert and this one is live,
+    so a send level set in EDIT PROGRAM does nothing (§213).
+
+    **Reading a part index that does not exist is not safe to do casually.**
+    §11 Finding A: an out-of-range extended read returns the PREVIOUS read's
+    buffer rather than an error, so the reply is well-formed and plausible and
+    belongs to another structure. `program`, `keygroup` and `sample` are
+    defended by a block-identifier check; a multi part reads `0x01` exactly as
+    a program header does, so it is deliberately absent from `BLOCK_IDENT` and
+    **that defence is not available here**. Until the part count is
+    established, a high part number may show the last thing read.
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+        Binding("enter", "choose", "Show"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="multi-box"):
+            yield Label("[b]Multi[/b]", id="multi-title")
+            table = DataTable(id="multi-list", cursor_type="row")
+            table.add_columns("", "section")
+            table.add_row("", "file header  — MULTINAME, FX1-FX4, FXFILENAME")
+            for part in range(_MULTI_PARTS):
+                table.add_row(str(part), f"part {part}")
+            yield table
+            yield Label(
+                "[dim]The part count is NOT established (§213). A part index "
+                "past the end\n  returns the previous read rather than an "
+                "error, and a multi part cannot be\n  told from a program "
+                "header by its block identifier — so it is not checked.[/dim]")
+            yield Label("[b]Enter[/b] show   [b]Esc[/b] cancel")
+
+    def on_mount(self) -> None:
+        self.query_one("#multi-list", DataTable).focus()
+
+    def action_choose(self) -> None:
+        table = self.query_one("#multi-list", DataTable)
+        row = table.cursor_row
+        if row <= 0:
+            self.dismiss(("multi", 0))
+        else:
+            self.dismiss(("multipart", row - 1))
+
+    def on_data_table_row_selected(self, event) -> None:
+        event.stop()
+        self.action_choose()
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
 class EditValueScreen(ModalScreen[Optional[str]]):
     """Prompt for a new parameter value."""
 
@@ -1114,6 +1182,7 @@ class S3kedApp(App):
         Binding("equals_sign", "nudge_up", "Nudge +", show=False),
         Binding("h", "history", "History"),
         Binding("m", "master", "Master"),
+        Binding("M", "multi", "Multi"),
         Binding("d", "disk", "Read disk"),
         Binding("[", "partition_prev", "Prev partition", show=False),
         Binding("]", "partition_next", "Next partition", show=False),
@@ -3049,6 +3118,50 @@ class S3kedApp(App):
             "Change history",
             "\n".join(lines),
             f"{len(self._undo)} change(s) — z undoes the last, Z undoes all"))
+
+    def action_multi(self) -> None:
+        """Show the multi file header, or one of its parts.
+
+        Reading only -- edits go through the same gate and the same
+        EditValueScreen as every other region, because `_show_params` and the
+        write path are region-generic. Nothing here needs the write gate; the
+        edit that follows does.
+        """
+        def chosen(pick: Optional[Tuple[str, int]]) -> None:
+            if pick is None:
+                return
+            region, index = pick
+            self.notify_status(
+                f"reading {region} {index}…" if region == "multipart"
+                else "reading the multi file header…")
+            self._load_multi_worker(region, index, self._claim_param_pane())
+
+        self.push_screen(MultiScreen(), chosen)
+
+    @work(thread=True)
+    def _load_multi_worker(self, region: str, index: int, token: int) -> None:
+        try:
+            with self._bridge_lock:
+                header = self.bridge.get_header(region, index)
+        except Exception as exc:
+            self.call_from_thread(
+                self.notify_status, f"{region}: {exc}", refused=True)
+            return
+        self.call_from_thread(self._apply_multi, region, index, header, token)
+
+    def _apply_multi(self, region: str, index: int, header,
+                     token: Optional[int] = None) -> None:
+        if token is not None and token != self._param_request:
+            return          # a later request has already claimed the pane
+        if region == "multi":
+            title = "Parameters — multi file header"
+        else:
+            name = str(header.get("PRNAME", "") or "").strip()
+            title = f"Parameters — multi part {index}"
+            if name:
+                title += f" ({name})"
+        self.query_one("#param-title", Static).update(title)
+        self._show_params(region, header, index)
 
     def action_master(self) -> None:
         index = self._selected_program()

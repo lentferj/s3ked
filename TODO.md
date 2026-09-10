@@ -2055,81 +2055,70 @@ test asserting envelope 3 needs no board so the flag cannot come back.
 its own format document from this table and built an explanation on top of it.
 A machine-readable field is what downstream tools consume; the note beside it
 is not.
+## Filter 2's mode-3 pivot — RESOLVED 2026-09-10
 
-## Filter 2's mode-3 pivot is unresolved between FLT2Q 17 and 24
+**Status:** closed by §206. All 32 `FLT2Q` values measured at `FIL2FR` 64. The
+pivot is between **23 (−2.01 dB) and 24 (+0.77 dB)**, and 24 is the only value
+in the range passing an inert test at |depth| < 1 dB.
 
-**Status:** open, two captures would close it, no card needed — `TC10 NOISE`
-is resident.
+## Filter 2 mode 3: the centre moves with `FLT2Q` — RESOLVED 2026-09-10
 
-§195 confirms mode 3 inverts sign with `FLT2Q` but places the pivot **between
-16 and 25**, not at 16 as the manual states: at `FLT2Q` 16 the filter still
-cuts by 7.3 dB, the deepest cut measured.
+**Status:** closed by §203, and the mechanism turned out to be the whole
+filter-2 story rather than a mode-3 quirk. Every mode's feature sits at its own
+`FLT2Q`-dependent offset from `f0`; the offsets collapse at high resonance,
+where all topologies agree to under 1 %. There is one tuning law, not five.
 
-**Why it matters:** the commonest real values are 20, 25 and 27. The last two
-are safely boosts; **20 sits inside the unmeasured interval**, so a decoder
-using `Q > 16` may invert the sign on material at 17–20.
+## Filter 2: three more corner ladders, one per mode — RESOLVED 2026-09-10
 
-**Largely closed 2026-09-08 (§195):** measured at 18, 20 and 21, all cuts, with
-the zero crossing interpolating to **23.1**. `FLT2Q` 20 — the commonest real
-value — is a cut, so a `Q > 16` rule would invert the sign on 22% of EQ-mode
-material.
+**Status:** closed by §201, §202 and §203. All four modes measured. The premise
+— that each mode has its own corner law — was itself wrong: §203 showed the
+per-mode "laws" were one law read through four different features at four
+different `FLT2Q` values.
 
-**Remaining:** `FLT2Q` 22 and 23, two captures, covering 14 keygroups. Decode
-meanwhile as cut at `Q` ≤ 21 and boost at `Q` ≥ 25, both ends measured.
+The prevalence figures quoted in the original entry (7 % / 50 % / 39 %) came
+from a 6-of-64-disc sample and are wrong; the full corpus gives **LP 4.7 %,
+EQ 34.2 %, HP 57.6 %, BP 3.5 %** (§212). HP is the *most* common mode.
 
-**Also open and more interesting:** the cut *deepens* from `Q` 0 to 16 before
-shallowing, so the field is not a signed gain and has a minimum near 16. One
-untested explanation is that the panel shows it signed (−16..+15 over an 0..31
-byte). Reading the panel at a known byte value would settle it in one look.
+**The two sub-items both closed as well:**
 
-## Filter 2 mode 3: the centre frequency moves with FLT2Q
+- **The HP shape.** Resolved by §208, and the entry's own suspicion — "either
+  the section is a different order in HP" — was correct. **The highpass tap is
+  one pole**, not two: +6.1 dB/oct asymptotically at every `FLT2Q`. mpc2emu was
+  decoding it as XPM `High 2`; it is `High 1`, on 57.6 % of board use.
+- **Where the top departs.** Resolved by §205. There is no breakpoint: rung 89
+  is already +1.6 % off, so it begins at the first byte above 88, and the steps
+  are uneven (four large at ~1.089–1.092, two small at ~1.057–1.059). §204
+  confirmed it is not filter 1's departure seen twice — filter 2 is still
+  exponential four bytes and 0.4 octaves past filter 1's.
 
-**Status:** open, observation recorded in §195, mechanism not investigated.
+## Multi: three things an RE session has to settle (OPEN 2026-09-10)
 
-With `FIL2FR` fixed at 80, the centre appears to step **~17%** (317–332 Hz)
-when the action changes sign to boost — **but the step is not established.**
-Every estimate compares a notch *minimum* against a peak *maximum*, which are
-not the same quantity on an asymmetric response, so the "width-independent"
-check controlled for the wrong thing.
+**Status:** open. Multi edit is wired into the TUI behind the write gate
+(§213); these are what it does not know. No card write is involved in any of
+them, and the first two need the rig.
 
-**Settle it in mode 0**, whose −3 dB corner is unambiguous and has no sign and
-therefore no arms. A converter calibrated on one arm is ~17% out on
-the other.
+1. **The part count.** `_MULTI_PARTS` is 16 and that is a guess — the MIDI
+   channel count, and one of three layouts dividing a 4096-byte multi file
+   cleanly. **It cannot be probed by reading upward:** §11 Finding A returns the
+   *previous* read's buffer for an out-of-range extended read, and a multi part
+   reads block identifier `0x01` exactly as a program header does, so
+   `multipart` is absent from `BLOCK_IDENT` and that defence does not apply. A
+   high part index may show the last thing read and look normal doing it.
 
-**The within-arm drift is NOT part of this** — it correlates with feature width
-at r = +0.826 and is the extremum estimator degrading on broad shallow
-features, the same failure as measuring a corner that has left the analysis
-window. Do not model it.
+2. **What an `FX1`–`FX4` value indexes.** Declared `0..255`, "the fx setup
+   assigned to fx channel N". Whether that is a slot in the effects file, a
+   position in a list or a type code is not in any transcribed spec. Writable
+   behind the write gate on Jan's instruction; nothing here knows what a given
+   value does on a machine with the EB16 fitted.
 
-**The step's mechanism is open.** "Extremum of an asymmetric response moves
-with gain" explains the within-arm drift completely but predicts no step, so
-something changes at the sign inversion — different topology per arm being the
-obvious candidate.
+3. **The `.M3` record offset and stride.** s3ked has the *wire* layout, verified
+   on hardware (§11 Finding F), which is not the same claim as the *file*
+   layout. mpc2emu has 169 multi files it cannot read a field in. **Derive the
+   stride from the files, not the arithmetic:** `PRNAME`/`MULTINAME` are
+   AKAI-charset text, their spacing is the stride, and it self-checks — every
+   part name should be blank or name a program on the same volume.
 
-**The measurement:** `FIL2FR` swept at fixed `Q` on each arm separately — say
-`Q` 10 and `Q` 29, four or five `FIL2FR` values each. That is a different
-experiment from the `Q` sweep, not an extension of it, and needs `TC10 NOISE`
-resident.
-
-## Filter 2: three more corner ladders, one per mode
-
-**Status:** open. §196 measured mode 0 only, which is **7% of real filter-2
-use**. EQ is 50% and HP 39% on a sibling's corpus of 887 active keygroups.
-
-**Why it cannot be extrapolated:** the corner *moves with mode*. At `FIL2FR` 64
-the lowpass corner is 414.4 Hz and the highpass corner is 246.2 Hz — **41%
-apart at the same byte**. So §196's law is a mode-0 law.
-
-**Needed:** a ladder per mode — HP, BP and EQ — over the same `FIL2FR` values,
-mode 0's being 20/30/37/45/64/72/80/88/94/99. `TC10 NOISE` is the source and no
-card write is involved.
-
-**Also open, from §196:**
-
-- **The HP shape.** Its response rises only ~17 dB from 31 Hz to its plateau,
-  shallower than a 2-pole highpass at 246 Hz should give. Either the section is
-  a different order in HP, or the normalisation band sat inside its transition.
-  Needs a dedicated capture with a passband window placed well above the corner.
-- **Where the top departs.** Byte 88 is still on the exponential (0.951) and 94
-  is 1.78x above it, so the breakdown is between them. Filter 1 departs above
-  84, so they do not share it. 22% of active material sits above `FIL2FR` 80.
+**Why this outranks its 4.0 % file prevalence:** Akai documents offset 114
+twice — `PFXSLEV` is "Not used" in the program header and "Effects send level"
+in the part. The send level is inert where both corpus scans counted it and
+live in a region neither had looked at (§213).

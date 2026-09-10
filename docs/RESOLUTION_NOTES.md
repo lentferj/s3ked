@@ -253,6 +253,7 @@ silently wrong one.
 - [§210](#210--the-effects-bus-is-never-selected-and-non-zero-was-not-the-check-2026-09-10) — The effects bus is never selected, and "non-zero" was not the check (2026-09-10)
 - [§211](#211--kfxchan-0-means-prg-settled-from-files-and-a-corpus-that-was-9--of-itself-2026-09-10) — `KFXCHAN` 0 means PRG, settled from files; and a corpus that was 9 % of itself (2026-09-10)
 - [§212](#212--the-highpass-is-the-most-common-mode-and-every-mode-split-figure-here-was-wrong-2026-09-10) — The highpass is the most common mode, and every mode-split figure here was wrong (2026-09-10)
+- [§213](#213--multi-edit-wired-and-the-three-things-an-re-session-has-to-settle-2026-09-10) — Multi edit wired, and the three things an RE session has to settle (2026-09-10)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -20878,3 +20879,79 @@ across three source files, a format document and a test.
 > stale caveat reads as excess caution while a stale justification reads as
 > support. Nothing about the number looked wrong; it had simply stopped being
 > about the code beneath it.
+
+## §213 — Multi edit wired, and the three things an RE session has to settle (2026-09-10)
+
+The multi had no TUI path: `_show_params` was reached for `program`, `keygroup`
+and `sample` only, while the bridge has carried `RMULTIDATA`/`MULTIDATA` and
+`params.py` has declared both regions all along. Wired behind the existing write
+gate — the parameter table, `EditValueScreen`, the nudge handling and the undo
+log are region-generic, so this is a modal and a fetch and nothing else changed.
+
+### Why it matters more than a missing screen
+
+Akai's own text documents offset 114 **twice and differently**:
+
+```
+  program    114  PFXSLEV   "Not used"
+  multipart  114  PFXSLEV   "Effects send level"
+```
+
+**The send level is dead in the program header and live in the multi part.**
+That reframes §210–§211's corpus result: `PFXSLEV` non-zero on 62 % of programs
+looked like a field the machine stores and ignores, and *in the program header
+it is*. The working copy lives in a region neither project's corpus scan had
+touched, because neither had a reason to look there.
+
+mpc2emu's format doc, quoting the manual, has the precedence rule that makes
+this coherent: *"stereo level, pan, output and effects assignment are MULTI
+parameters, these are not accessible in EDIT MULTI"* — the part's copies win in
+MULTI, the program's own apply in SINGLE. So the 23.3 % of programs selecting a
+bus is **the SINGLE-mode figure**, and one of two copies.
+
+This came out of Jan asking whether the TUI had Multi edit. Neither corpus scan
+would have found it: **both were counting occurrences of fields nobody had
+established were the operative ones.**
+
+### RE item 1 — the part count is not established
+
+`_MULTI_PARTS` is **16**, and that is a guess. It is the MIDI channel count, and
+one of three layouts dividing a 4096-byte multi file cleanly (64 + 21×192,
+256 + 20×192, 1024 + 16×192, taking the program header as 192 bytes). Nothing in
+the three transcribed specs states it.
+
+**It cannot be safely probed by reading upward.** §11 Finding A: an
+out-of-range extended read returns the **previous read's buffer** rather than an
+error, so the reply is well-formed, plausible, and from another structure.
+`program`, `keygroup` and `sample` are defended by a block-identifier check;
+**a multi part reads `0x01` exactly as a program header does**, which is why
+`multipart` is deliberately absent from `BLOCK_IDENT` — and why that defence is
+unavailable here. A high part index may show the last thing read, and look
+entirely normal doing it.
+
+The screen says so, and a test asserts a failed read does not fill the pane.
+
+### RE item 2 — what an `FX1`-`FX4` value indexes
+
+Declared `0..255`, described as "the fx setup assigned to fx channel N". What
+the number refers to — a slot in the effects file, a position in a list, a type
+code — is not established anywhere in the transcribed specs. **It is writable
+behind the write gate on Jan's instruction**, not gated further, but nothing
+here knows what a given value will do on a machine with the EB16 fitted.
+
+### RE item 3 — the `.M3` record offset and stride
+
+mpc2emu can see 169 multi files across 4253 volumes (4.0 %), 4096 bytes each,
+and cannot read a field in them without the layout. **s3ked has the wire layout,
+not the file layout**, and those are different claims: the offsets in
+`params.py` are what `RMULTIDATA` addresses, verified on hardware (§11 Finding
+F, where every field a multi part shares with the program header returned an
+identical value). Whether the file stores the same structure at the same
+offsets is untested.
+
+> The layout should be **derived from the files, not from the arithmetic**.
+> `PRNAME` and `MULTINAME` are AKAI-charset text and stand out; their spacing
+> *is* the stride, and it comes with its own check — every part name should be
+> blank or match a program that exists on the same volume. Handing over
+> `1024 + 16×192` because it divides cleanly is exactly what produced a
+> "`KFXCHAN`" distribution running to 204 earlier this evening.

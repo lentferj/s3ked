@@ -4552,3 +4552,76 @@ async def test_loading_a_program_takes_the_samples_pane_off_a_keygroup():
 
         assert app._samples_scope == "program", "still scoped to the old keygroup"
         assert app._samples_keygroup is None
+
+
+async def test_multi_screen_reaches_the_file_header_and_its_parts():
+    """The multi is where effects routing lives, and it had no TUI path.
+
+    `_show_params` and the write path are region-generic, so wiring this is
+    a screen and a fetch -- the parameter table, the editor and the nudge
+    handling need no changes at all.
+    """
+    from textual.widgets import DataTable, Static
+    from s3ked.app import S3kedApp, MultiScreen
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("M")
+        await pilot.pause()
+        assert isinstance(app.screen_stack[-1], MultiScreen)
+
+        await pilot.press("enter")          # row 0 is the file header
+        for _ in range(40):
+            await pilot.pause()
+        title = str(app.query_one("#param-title", Static).render())
+        assert "multi file header" in title
+        names = {r.name for r in app._param_rows}
+        assert {"FX1", "FX2", "FX3", "FX4"} <= names, names
+
+
+async def test_a_multi_part_exposes_the_send_level_the_program_header_does_not():
+    """§213: offset 114 is documented twice and differently by Akai --
+    "Not used" in the program header, "Effects send level" in the part. The
+    program copy is inert, so a send level set in EDIT PROGRAM does nothing;
+    the multi part is where it is live."""
+    from textual.widgets import DataTable, Static
+    from s3ked.app import S3kedApp, MultiScreen
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("M")
+        await pilot.pause()
+        table = app.screen_stack[-1].query_one("#multi-list", DataTable)
+        table.move_cursor(row=1)            # part 0
+        await pilot.pause()
+        await pilot.press("enter")
+        for _ in range(40):
+            await pilot.pause()
+        title = str(app.query_one("#param-title", Static).render())
+        assert "multi part 0" in title
+        names = {r.name for r in app._param_rows}
+        assert {"PFXCHAN", "PFXSLEV"} <= names, names
+
+
+async def test_a_part_index_past_the_end_reports_instead_of_showing_stale_data():
+    """§11 Finding A: an out-of-range extended read returns the PREVIOUS
+    read's buffer, and a multi part cannot be told from a program header by
+    its block identifier -- so `multipart` is absent from BLOCK_IDENT and
+    that defence does not apply. The pane must not silently fill.
+    """
+    from textual.widgets import Static
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        app._load_multi_worker("multipart", 999, app._claim_param_pane())
+        for _ in range(40):
+            await pilot.pause()
+        title = str(app.query_one("#param-title", Static).render())
+        assert "multi part 999" not in title
