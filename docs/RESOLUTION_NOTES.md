@@ -252,6 +252,7 @@ silently wrong one.
 - [§209](#209--manufactured-urgency-around-an-action-that-needs-permission-2026-09-10) — Manufactured urgency around an action that needs permission (2026-09-10)
 - [§210](#210--the-effects-bus-is-never-selected-and-non-zero-was-not-the-check-2026-09-10) — The effects bus is never selected, and "non-zero" was not the check (2026-09-10)
 - [§211](#211--kfxchan-0-means-prg-settled-from-files-and-a-corpus-that-was-9--of-itself-2026-09-10) — `KFXCHAN` 0 means PRG, settled from files; and a corpus that was 9 % of itself (2026-09-10)
+- [§212](#212--the-highpass-is-the-most-common-mode-and-every-mode-split-figure-here-was-wrong-2026-09-10) — The highpass is the most common mode, and every mode-split figure here was wrong (2026-09-10)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -19096,8 +19097,9 @@ point.
 
 **41% apart at the same byte**, so this section's law is a **mode-0 law** and
 must not be applied to the other three. A sibling's corpus makes that the
-larger part of the problem: **mode 0 is 7% of active filter-2 use**, against
-EQ 50% and HP 39%.
+larger part of the problem: **mode 0 is 4.7% of active filter-2 use**, against
+HP 57.6% and EQ 34.2% (full 64-disc corpus, §212; the 7/50/39 figures first
+quoted here came from a 6-disc sample).
 
 Caution on the HP figure: its response rises only ~17 dB from 31 Hz to its
 plateau, shallower than a 2-pole highpass at 246 Hz should give, so either the
@@ -19483,8 +19485,9 @@ because the format itself reads as evidence of care.
 ## §201 — The highpass has its own exponent, so the "mode factor" is not a factor (2026-09-09)
 
 **Every point of the `FIL2FR` corner law in §196 was measured in `FLT2MODE` 0
-(LP), which is 7 % of how the IB-304F is used in real library material.** HP is
-39 %, EQ 50 %. mpc2emu had measured single-byte ratios to the mode-0 law —
+(LP), which is 4.7 % of how the IB-304F is used in real library material.** HP
+is 57.6 %, EQ 34.2 % (corrected in §212 from a 6-disc sample that read
+7 / 39 / 50 and had HP and EQ the wrong way round). mpc2emu had measured single-byte ratios to the mode-0 law —
 HP 0.688, BP 1.653, EQ boost 1.515, all at `FIL2FR` 74 — and deliberately
 declined to apply them, on the grounds that each rested on one byte out of 100.
 This is the ladder that was supposed to earn them the right to.
@@ -20345,7 +20348,7 @@ depth law, so one table serves with a ±1–2 dB uncertainty.
 ### Resonance gain in the non-EQ modes
 
 mpc2emu's model takes `filter_resonance` from **`FILQ`, filter 1's resonance**,
-while filter 2 does the shaping in 89 % of board use. Gain over each mode's own
+while filter 2 does the shaping in 91.8 % of board use (§212). Gain over each mode's own
 `FLT2Q` 0, at `FIL2FR` 80 — three points, not a curve:
 
 | `FLT2Q` | BP | HP | EQ |
@@ -20405,7 +20408,7 @@ times. 97 captures for the resonance sweep, 11 for the notch.
 ### Resonance gain per mode, all 32 `FLT2Q` values
 
 mpc2emu's model takes `filter_resonance` from **`FILQ`, filter 1's resonance**,
-while filter 2 does the shaping in 89 % of board use. This is the quantity it
+while filter 2 does the shaping in 91.8 % of board use (§212). This is the quantity it
 could consume instead: peak gain over each mode's own `FLT2Q` 0.
 
 | `FLT2Q` | LP | BP | HP | | `FLT2Q` | LP | BP | HP |
@@ -20421,7 +20424,8 @@ interpolate safely and the dense sweep confirms rather than corrects.
 **One curve will not serve.** The spread at full resonance is 7.25 dB, and the
 gaps *widen* with `FLT2Q` — BP−LP runs 0.55 dB at 10 and 2.32 dB at 31, LP−HP
 1.69 to 4.92 — so it is not a constant offset that could be factored out. HP is
-the lowest throughout and is 39 % of board use.
+the lowest throughout and is **57.6 %** of board use — the largest mode, not
+the second; see §212.
 
 ### Correction: measured in the consumer's quantity, LP and HP nearly coincide
 
@@ -20810,3 +20814,67 @@ that would have cost real work, because "zero" retires a question.
 The rule from §204 stands and gains a second half: the corpus side owes the
 prevalence figure before the decision, **and owes the denominator with it.**
 "6 of 64" is not a caveat, it is the number.
+
+## §212 — The highpass is the most common mode, and every mode-split figure here was wrong (2026-09-10)
+
+§211 recorded that mpc2emu's corpus scan had been reading 6 of 64 images. The
+filter-2-active total survived that (6.1 % against 6.4 %). **The mode split did
+not**, and it is the figure that shaped every filter decision in §201–§208.
+
+Re-run across all 64 images, 3168 active filter-2 keygroups:
+
+| mode | full corpus | the 6-disc sample used here |
+|---|---|---|
+| **HP** | 1824 — **57.6 %** | 38.7 % |
+| EQ | 1084 — 34.2 % | 50.1 % |
+| LP | 149 — 4.7 % | 7.0 % |
+| BP | 111 — 3.5 % | 4.2 % |
+
+**HP and EQ swap ranks.** The highpass is the most common filter-2 mode by a
+wide margin, not the second.
+
+### What that changes here
+
+**§208's pole-count correction was larger than it was credited.** The highpass
+tap is one pole where mpc2emu's decoder read two; that commit says the fix
+touched "39 % of board use". It touched **57.6 %** — the single largest
+correction to come out of this work, on the most common mode.
+
+**The framings survive and mostly strengthen.** "EQ and HP together are ~89 %"
+becomes **91.8 %**. "Mode 0 is only 7 %, so the corner law was measured in the
+mode that matters least" becomes **4.7 %** — the argument for the mode ladders
+was stronger than the number that motivated them.
+
+Every stale figure above has been corrected in place rather than left standing
+with a footnote, because a percentage in running prose is read, quoted and
+built on without anyone checking the section it came from.
+
+### Nothing measured changes
+
+All four ladders were run; §203 dissolved the mode groups into one tuning law
+and §208 established the tap orders. **None of that depends on how often each
+mode is used** — the prevalence figures decided *what to measure first*, never
+what the answer was. Had the correct split been known, the same four ladders
+would have run in a different order.
+
+> Worth being exact about the escape: the 6-disc sample under-weighted HP by
+> 19 points and over-weighted EQ by 16, and **it changed no conclusion because
+> the work was done exhaustively rather than prioritised down to the top mode.**
+> Doing all four when the split said 89 % lived in two was mild
+> over-thoroughness at the time. It is the only reason this correction is a
+> renumbering rather than a re-run.
+
+### And a justification that outlived the rule it justified
+
+mpc2emu's `akai_flt2q_is_boost` carried the comment *"78 % of real material
+does"*. That figure is **correct under the manual's pivot** (`FLT2Q` > 16) and
+holds at 74.5 % on the full corpus — but the function had already moved to the
+**measured** sign change at 23/24 (§206), under which only **45 %** boost. The
+prose kept the old pivot's statistic while the code followed a different rule,
+across three source files, a format document and a test.
+
+> §188's pattern is a *caveat* outliving its fix. This is the mirror: a
+> **justification** outliving the rule it justified — and it is worse, because a
+> stale caveat reads as excess caution while a stale justification reads as
+> support. Nothing about the number looked wrong; it had simply stopped being
+> about the code beneath it.
