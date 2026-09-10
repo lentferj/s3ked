@@ -21084,5 +21084,48 @@ by nudging.
 > default, it is an unmeasured claim**, and here it was wrong at both ends of
 > what matters: 51 values too generous, and one of them a crash.
 
+### What real material holds, and what that suggests the value is
+
+The domain came from the machine; the *usage* came from files. mpc2emu's scan of
+all 169 multis across the 64-image corpus, bytes 16–19:
+
+| field | distinct values | max |
+|---|---|---|
+| `FX1` | 7 | 37 |
+| `FX2` | 8 | 27 |
+| `FX3` | 9 | 37 |
+| `FX4` | 8 | 44 |
+
+**Nothing above 204 anywhere** — real material comes nowhere near the refused
+band, let alone the crash. So the fence costs nothing that has ever been used.
+
+**120 of the 169 hold all four slots at 0.** Of the 49 that do not, one
+configuration — 37 / 24 / 5 / 13 — accounts for about 36, and it lines up
+exactly with a 36-file md5 cluster. **That is one authoring house's default
+copied 36 times, not 36 independent choices**, which matters because 36 of 49
+reads as a strong mode until you notice it is one file.
+
+**The suggestive part is a field that is empty everywhere.** `FXFILENAME`
+(bytes 20–31) decodes **all-zero on every one of the 169** — not one multi in
+the corpus names an effects file. The multi resident on this machine reads
+`'000000000000'` in the same field, so **170 of 170**.
+
+So whatever an `FX` value selects, the material never pairs it with a named
+external file. A 0–44 observed range inside a 0–204 domain fits a **type code
+or a built-in slot list**; it does not fit a dense index into something the
+multi identifies. **Not settled** — 49 non-zero multis, most of them one
+repeated configuration, is thin evidence — and recorded as the reading the
+corpus supports rather than as an answer.
+
+### Why a too-wide range is the worst kind of wrong
+
+> **A too-wide range fails only for someone who reaches the far end**, so it
+> survives every test written by someone who does not.
+
+That is mpc2emu's formulation and it explains why `0..255` sat here unchallenged
+through every synthetic test in the suite: nothing in 963 tests had any reason
+to try 239. The failure was reachable only from the one direction nobody
+travels, and only against real hardware.
+
 Still unknown, and not answered by this: **what an accepted value actually
 selects.** 0–204 is a domain, not a meaning.
