@@ -2112,11 +2112,26 @@ them, and the first two need the rig.
    divide overflow" (recovered with F8, nothing lost). The declarations now say
    `0..204` as a safety fence.
 
-   **Still open: what an accepted value SELECTS.** 0-204 is a domain, not a
-   meaning — whether it is a slot in the effects file, a position in a list or
-   a type code is still in no transcribed spec. Also unconfirmed: that 239 is
-   specifically the trigger. One run, one crash, one read-back mismatch; each
-   confirmation costs a physical F8 press, so ask before re-running.
+   **CLOSED 2026-09-10 by §216, read off the panel by camera.** They are
+   **intrinsic built-in setups with names** — byte 37 displays "38 CLEAR
+   DETUNE", byte 0 displays "1 REVERB EQ 1". The panel is 1-based and the byte
+   0-based (`display_offset=1` now declared), which also means §215's figures
+   are RAW BYTES: crash at byte 239 is **panel 240**.
+
+   And the four fields are **not** four fx setups: the page is headed
+   EFFECTS/REVERB SELECT with rows FX1, FX2, RV3, RV4, and only FX1/FX2 have an
+   Effects column. **Bytes 16-17 index the effects list, bytes 18-19 index the
+   reverb list.** An effects setup carries its own reverb — setting FX1 to
+   byte 0 changed both its columns to match FX2's exactly, as predicted before
+   the test — which is why no byte in the 32-byte header stores a per-channel
+   reverb, and why `FXFILENAME` is all-zero on all 170 known multis.
+
+   **Two things still open here.** That 239 is specifically the crash trigger is
+   unconfirmed (one run, one read-back mismatch; each confirmation costs a
+   physical F8 press). And the 0-204 domain was measured on FX1, which indexes
+   EFFECTS — RV3/RV4 index REVERBS, a different list, and their bound is
+   inherited rather than measured. Both flagged in the field notes; ask before
+   re-running either.
 
 3. **The `.M3` record offset and stride.** s3ked has the *wire* layout, verified
    on hardware (§11 Finding F), which is not the same claim as the *file*

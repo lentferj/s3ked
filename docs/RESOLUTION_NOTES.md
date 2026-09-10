@@ -256,6 +256,7 @@ silently wrong one.
 - [§213](#213--multi-edit-wired-and-the-three-things-an-re-session-has-to-settle-2026-09-10) — Multi edit wired, and the three things an RE session has to settle (2026-09-10)
 - [§214](#214--the-multi-has-16-parts-and-the-write-path-is-the-oracle-reads-cannot-be-2026-09-10) — The multi has 16 parts, and the write path is the oracle reads cannot be (2026-09-10)
 - [§215](#215--fx1fx4-accept-0204-and-239-crashes-the-machine-2026-09-10) — `FX1`–`FX4` accept 0–204, and 239 crashes the machine (2026-09-10)
+- [§216](#216--what-an-fx-value-selects-read-off-the-panel-by-camera-2026-09-10) — What an `FX` value selects, read off the panel by camera (2026-09-10)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -21129,3 +21130,74 @@ travels, and only against real hardware.
 
 Still unknown, and not answered by this: **what an accepted value actually
 selects.** 0–204 is a domain, not a meaning.
+
+## §216 — What an `FX` value selects, read off the panel by camera (2026-09-10)
+
+§215 measured the domain — `FX1` accepts bytes 0–204 — and said plainly that a
+domain is not a meaning. Jan offered the missing instrument: **s3ked sets the
+value and the page over SysEx, and a human photographs the display.** This
+family has no screen-mirror protocol (CLAUDE.md settles that), so a camera is
+the only way to read the panel, and driving both the page and the value from
+here reduces the human's part to one photograph.
+
+Two photographs answered four questions.
+
+### 1. The panel is 1-based and the byte is 0-based
+
+`FX1` byte **37** displays as **38 CLEAR DETUNE**. And the same photograph
+confirms it independently: `FX2` holds byte **0** and displays **1 REVERB EQ 1**.
+Two points, one offset, one photo.
+
+This is `POLYPH`'s convention (§11 Finding H: panel 32, byte 31), and
+`display_offset=1` is now declared on all four fields.
+
+> **This changes what every earlier number in §215 means.** That scan ran before
+> the offset existed, so *accepted 0–204, refused 205–238, crash at 239* are all
+> **raw bytes**. In panel terms: accepted 1–205, refused 206–239, **crash at
+> panel 240**. Anyone who reads "239 crashes" and types 239 into the TUI now
+> writes byte 238, lands harmlessly in the refused band, and concludes the
+> finding was wrong.
+
+### 2. The four fields are two effects and two reverbs, not four fx setups
+
+The page is headed **EFFECTS/REVERB SELECT for Multi-File** and its rows are
+labelled **FX1, FX2, RV3, RV4** — which is `PFXCHAN`'s enumeration
+(`1 = FX1, 2 = FX2, 3 = RV3, 4 = RV4`) read off the machine rather than off the
+spec.
+
+**`FX1` and `FX2` have an Effects column; `RV3` and `RV4` have none.** So
+bytes 16–17 index the **effects** list and bytes 18–19 index the **reverb**
+list. The declarations said "the fx setup assigned to fx channel N" for all
+four; that is wrong for two of them and now reads as a reverb.
+
+### 3. The reverb travels with the effects setup
+
+The first photograph showed something the header cannot explain: `FX2`, `RV3`
+and `RV4` all hold byte 0, yet `FX2`'s reverb read **3 LONG HALL 1** while
+`RV3`/`RV4` read **1 TIGHT ROOM 1**. Same byte, different reverb.
+
+Dumping the whole 32-byte multi header found no candidate — **no byte anywhere
+in it holds 2**, which is what a 1-based `3` would need.
+
+Predicted before the test: *set `FX1` to byte 0 and its row should become
+identical to `FX2`'s.* It did — both rows read `1 REVERB EQ 1 ▶ 3 LONG HALL 1`,
+where `FX1` had been `38 CLEAR DETUNE ▶ 1 TIGHT ROOM 1`. **One byte moved both
+columns**, so an effects setup carries its own reverb and there is nothing to
+store per channel.
+
+That also closes §215's open question the corpus could only guess at: these are
+**intrinsic built-in setups with names**, which is why `FXFILENAME` is all-zero
+on all 170 multis either project can see — no external file is needed to
+resolve them.
+
+### 4. A range I inherited without measuring, flagged rather than trusted
+
+The 0–204 domain was scanned on `FX1`, which indexes **effects**. `RV3`/`RV4`
+index **reverbs** — a different list, certainly a different length. Clamping all
+four to 0–204 on one field's evidence is precisely the move §215 was written to
+condemn, one section later and by the same hand. The bound stays, because a
+too-generous range is what crashed the machine, but it is **marked provisional
+for `RV3`/`RV4`** rather than presented as measured.
+
+Establishing it means another write scan and possibly another panic screen, so
+it is not being run without asking.

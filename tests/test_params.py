@@ -485,10 +485,26 @@ def test_display_offset_round_trips():
         assert p.describe_value(param, p.decode_field(param, stored)) == str(shown)
 
 
-def test_every_other_parameter_is_unaffected():
-    """Exactly one field has a stored-vs-displayed mapping; keep it that way."""
+def test_only_fields_seen_on_the_panel_carry_a_display_offset():
+    """A stored-vs-displayed mapping is a claim about the PANEL, so every
+    field carrying one must have been read off the machine.
+
+    POLYPH: panel 32 against byte 31 (§11 Finding H).
+    FX1-FX4: panel "38 CLEAR DETUNE" against byte 37, and panel "1 REVERB EQ 1"
+    against byte 0 -- two points in one photograph (§216).
+
+    Adding a name here without a panel reading would be inferring the offset
+    from the spec, which is what the spec is silent about.
+    """
     offsets = {x.name for x in p._PARAMS if x.display_offset}
-    assert offsets == {"POLYPH"}
+    assert offsets == {"POLYPH", "FX1", "FX2", "FX3", "FX4"}, offsets
+
+
+def test_the_fx_fields_render_the_numbers_the_panel_showed():
+    """Through the real path, against the two values photographed."""
+    param = p.lookup(("multi", "FX1"))
+    for raw, shown in ((37, "38"), (0, "1")):
+        assert p.describe_value(param, p.decode_field(param, bytes([raw]))) == shown
 
 
 def test_decode_and_encode_are_inverses_for_every_parameter():
