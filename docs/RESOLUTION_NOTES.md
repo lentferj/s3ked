@@ -254,6 +254,7 @@ silently wrong one.
 - [§211](#211--kfxchan-0-means-prg-settled-from-files-and-a-corpus-that-was-9--of-itself-2026-09-10) — `KFXCHAN` 0 means PRG, settled from files; and a corpus that was 9 % of itself (2026-09-10)
 - [§212](#212--the-highpass-is-the-most-common-mode-and-every-mode-split-figure-here-was-wrong-2026-09-10) — The highpass is the most common mode, and every mode-split figure here was wrong (2026-09-10)
 - [§213](#213--multi-edit-wired-and-the-three-things-an-re-session-has-to-settle-2026-09-10) — Multi edit wired, and the three things an RE session has to settle (2026-09-10)
+- [§214](#214--the-multi-has-16-parts-and-the-write-path-is-the-oracle-reads-cannot-be-2026-09-10) — The multi has 16 parts, and the write path is the oracle reads cannot be (2026-09-10)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -20955,3 +20956,67 @@ offsets is untested.
 > blank or match a program that exists on the same volume. Handing over
 > `1024 + 16×192` because it divides cleanly is exactly what produced a
 > "`KFXCHAN`" distribution running to 204 earlier this evening.
+
+## §214 — The multi has 16 parts, and the write path is the oracle reads cannot be (2026-09-10)
+
+§213 recorded `_MULTI_PARTS = 16` as a guess and said it could not be probed by
+reading upward. Jan authorised the write probe, accepting a crash or lockup.
+**Neither happened, and the answer is exact.**
+
+### What reading gives you, and why it is not the answer
+
+Reading parts 0–33 in order:
+
+```
+  part  0..15   PMCHAN 0, 1, 2 … 15      each part defaults to its own channel
+  part 16..33   byte-identical to part 15, every time, no error
+```
+
+The ascending `PMCHAN` run is a strong hint and the frozen repeat above 15 is
+§11 Finding A in the open — an out-of-range extended read returning the
+**previous read's buffer**. But it is only circumstantial: it is equally
+consistent with a machine having 34 parts of which 19 happen to duplicate. A
+reader cannot tell those apart, and `multipart` has no block-identifier defence
+because a part reads `0x01` exactly as a program header does.
+
+### What writing gives you
+
+`REPLY` (16h) is ok-or-error, so the write path answers directly:
+
+| part | write | part 15 afterwards |
+|---|---|---|
+| 14 | **OK** | — |
+| 15 | **OK** | — |
+| 16 | **ERROR code 1** | unchanged |
+| 20 | **ERROR code 1** | unchanged |
+| 31 | **ERROR code 1** | unchanged |
+
+**16 parts, 0–15.** Probed with the value 99, which nothing in the multi holds,
+so its appearance anywhere would have been unambiguous. It appeared nowhere.
+
+### The asymmetry is the finding
+
+> **The same out-of-range index is answered silently and wrongly by a read, and
+> loudly and correctly by a write.** Reads degrade into plausible fiction;
+> writes refuse. So where a structural question can be put to either path, put
+> it to the write path — which is the opposite of the instinct that reads are
+> the safe way to explore.
+
+This is CLAUDE.md's standing rule — *"writes are acknowledged; prefer `REPLY`
+over read-back verification"* — reaching further than intended. It was written
+about verifying a value; it is also how to establish a *shape*.
+
+**And the second question, which nobody had asked, has the reassuring answer:**
+an out-of-range write does **not** alias onto the last valid part. Part 15 read
+15 before, during and after all three refused writes. Had it aliased, editing a
+non-existent part in the TUI would silently corrupt a real one — the read-side
+failure mode with teeth.
+
+All 16 parts verified byte-identical to the pre-probe snapshot afterwards.
+
+### Incidental: this multi's own state
+
+`MULTINAME` "MULTI FILE", `FX1` = 33 with FX2–FX4 at 0, `FXFILENAME`
+"000000000000", and **`PFXSLEV` = 25 on all 16 parts** — a real default send
+level sitting in the region where §213 established the field is live, against
+the program header's copy that Akai documents as "Not used".

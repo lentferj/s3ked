@@ -806,11 +806,12 @@ class MenuScreen(ModalScreen[Optional[int]]):
         self.dismiss(None)
 
 
-#: How many parts a multi holds. NOT ESTABLISHED -- see RESOLUTION_NOTES §213.
-#: The wire protocol addresses parts by index and none of the three transcribed
-#: specs says how many exist. 16 is the MIDI channel count and is one of three
-#: layouts that divide a 4096-byte multi file cleanly; it is a guess, and it is
-#: offered rather than probed because probing means reading past the end.
+#: How many parts a multi holds. MEASURED on hardware 2026-09-10 (§214): the
+#: machine accepts a write to parts 0-15 and answers REPLY *error* code 1 for
+#: 16, 20 and 31. Reads cannot establish this -- part 16 and above return part
+#: 15's buffer byte-for-byte, with no error (§11 Finding A) -- so the write
+#: path is the oracle here, and it refuses cleanly without aliasing onto the
+#: last valid part.
 _MULTI_PARTS = 16
 
 
@@ -824,14 +825,13 @@ class MultiScreen(ModalScreen[Optional[Tuple[str, int]]]):
     "Effects send level" here. The program copy is inert and this one is live,
     so a send level set in EDIT PROGRAM does nothing (§213).
 
-    **Reading a part index that does not exist is not safe to do casually.**
-    §11 Finding A: an out-of-range extended read returns the PREVIOUS read's
-    buffer rather than an error, so the reply is well-formed and plausible and
-    belongs to another structure. `program`, `keygroup` and `sample` are
-    defended by a block-identifier check; a multi part reads `0x01` exactly as
-    a program header does, so it is deliberately absent from `BLOCK_IDENT` and
-    **that defence is not available here**. Until the part count is
-    established, a high part number may show the last thing read.
+    **The 16 parts are measured, not assumed** (§214). Reads could not have
+    told us: part 16 and above return part 15's buffer byte-for-byte with no
+    error (§11 Finding A), and a multi part cannot be told from a program
+    header by its block identifier, so `multipart` is absent from
+    `BLOCK_IDENT` and that defence does not apply. The *write* path answers —
+    parts 0-15 accept, 16 and beyond return REPLY error code 1 — and it does
+    not alias onto part 15 while refusing.
     """
 
     BINDINGS = [
@@ -849,10 +849,10 @@ class MultiScreen(ModalScreen[Optional[Tuple[str, int]]]):
                 table.add_row(str(part), f"part {part}")
             yield table
             yield Label(
-                "[dim]The part count is NOT established (§213). A part index "
-                "past the end\n  returns the previous read rather than an "
-                "error, and a multi part cannot be\n  told from a program "
-                "header by its block identifier — so it is not checked.[/dim]")
+                "[dim]16 parts, measured on hardware (§214). A part index past "
+                "the end returns\n  the previous read rather than an error, so "
+                "the count could not be read —\n  the write path refuses it, "
+                "and refuses without touching part 15.[/dim]")
             yield Label("[b]Enter[/b] show   [b]Esc[/b] cancel")
 
     def on_mount(self) -> None:

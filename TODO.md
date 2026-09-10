@@ -2097,13 +2097,13 @@ EQ 34.2 %, HP 57.6 %, BP 3.5 %** (§212). HP is the *most* common mode.
 (§213); these are what it does not know. No card write is involved in any of
 them, and the first two need the rig.
 
-1. **The part count.** `_MULTI_PARTS` is 16 and that is a guess — the MIDI
-   channel count, and one of three layouts dividing a 4096-byte multi file
-   cleanly. **It cannot be probed by reading upward:** §11 Finding A returns the
-   *previous* read's buffer for an out-of-range extended read, and a multi part
-   reads block identifier `0x01` exactly as a program header does, so
-   `multipart` is absent from `BLOCK_IDENT` and that defence does not apply. A
-   high part index may show the last thing read and look normal doing it.
+1. ~~**The part count.**~~ **CLOSED 2026-09-10 by §214: 16 parts, 0-15,
+   measured.** Reads could not answer it — parts 16+ return part 15's buffer
+   byte-for-byte with no error — but a write to part 16, 20 or 31 returns
+   REPLY error code 1 while parts 14 and 15 accept. The write path also does
+   **not** alias onto part 15 while refusing, so a TUI edit of a non-existent
+   part cannot silently corrupt a real one. All 16 parts verified byte-identical
+   to the pre-probe snapshot.
 
 2. **What an `FX1`–`FX4` value indexes.** Declared `0..255`, "the fx setup
    assigned to fx channel N". Whether that is a slot in the effects file, a
