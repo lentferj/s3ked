@@ -20454,6 +20454,17 @@ Two consequences, both of which nearly reached shipped code:
 BP's skirts fall away on both sides (−20.15 dB at f0/8, −20.38 at f0×8, against
 a −11.33 peak). That is a modelling question, not a measurement one.
 
+**What stopped it was a rule, not judgement.** mpc2emu's check — *do not wire a
+table until you know its quantity is the model's quantity* — fired mechanically
+at a moment when the numbers looked fine and only the label was wrong. Their
+own reading of the situation pointed the other way: +29.98 against a 25.51
+ceiling reads as an ordinary headroom problem with an obvious fix, and acting on
+that reading would have moved a constant four other writers depend on.
+
+> A check that only fires when something looks wrong cannot catch this class,
+> because nothing looked wrong. **The rules worth applying mechanically are the
+> ones whose trigger is a category of action rather than a smell.**
+
 > The measurement was correct and the *quantity* was not the one anyone would
 > consume. Nothing about the numbers said so — they were monotonic, clean,
 > reproducible, and pointed the wrong way. **A table is only as good as the
