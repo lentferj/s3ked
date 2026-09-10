@@ -20162,6 +20162,25 @@ The converter-side prompt that follows from it, worth applying before asking
 for any hardware: **divide the tables already held and see what the quotient
 does.** The corner-to-`f0` bend was visible in two shipped tables for a day.
 
+The bench-side prompt is its pair: **state the conditions beside every number,
+because the question it will have to answer has not been asked yet.**
+
+And a third, from getting a scheduling call wrong in both directions. The
+88→94 run was declined here as "only a slight extension"; the corpus says
+`FIL2FR` 89–93 is **8.4 % of 891 active keygroups**. That number existed in
+mpc2emu's project, uncomputed, *during* the decision — it was only computed
+when Jan later asked what remained unmeasured.
+
+> **The corpus knows which bytes matter and the bench does not** — so the side
+> holding the corpus owes the prevalence figure *before* the decision, not when
+> someone thinks to ask.
+
+Worth separating the two failures, because only one is a bad rule. Declining
+bench time because "the machine happens to be free" is the absence of an
+obstacle, not a reason, and holding that line is what stops effort going to
+whatever is nearest. **That rule was right and failed on an input it had no
+access to.** The fix is the missing input, not the caution.
+
 ### Corroboration from the converter side
 
 mpc2emu's tables give the corner-to-`f0` ratio directly, and it runs **1.30 at
