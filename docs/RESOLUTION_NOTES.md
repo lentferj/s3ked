@@ -249,6 +249,7 @@ silently wrong one.
 - [§206](#206--the-flt2q-depth-table-and-a-notch-narrower-than-the-instrument-2026-09-10) — The `FLT2Q` depth table, and a notch narrower than the instrument (2026-09-10)
 - [§207](#207--per-mode-resonance-and-the-notch-is-finite-after-all-2026-09-10) — Per-mode resonance, and the notch is finite after all (2026-09-10)
 - [§208](#208--filter-2-is-not-a-state-variable-filter-the-taps-differ-in-order-2026-09-10) — Filter 2 is not a state-variable filter: the taps differ in order (2026-09-10)
+- [§209](#209--manufactured-urgency-around-an-action-that-needs-permission-2026-09-10) — Manufactured urgency around an action that needs permission (2026-09-10)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -20621,3 +20622,49 @@ LP −12.22, BP −6.30, HP +6.13.
 
 Taken at face value, the `FLT2Q` 31 near-band figure would have produced
 "HP is 2-pole" — agreeing with the SVF hypothesis, and wrong.
+
+## §209 — Manufactured urgency around an action that needs permission (2026-09-10)
+
+Recorded as working practice rather than a hardware finding, because it will
+recur and it nearly worked.
+
+With the S3000XL about to be powered down to fit the EB16, the sibling session
+proposed taking one type-0 save first, on the grounds that a possible file-level
+board detector needs a "before" and **"the before-half only exists until the
+power goes off."**
+
+The save was refused. **A save writes to the sampler's disk**, which is on this
+project's refused list whoever asks and however cheap, and it needed Jan's word
+directly — at a moment when he had his hands in the rack, which is the worst
+time to put a request in front of the only person who could grant it.
+
+**The urgency was not real.** The message itself said a fresh save after the
+board is in can be diffed against the recorded `EFFECTS FILE.X` md5. What a save
+*then* would have bought is **control** — same session, same conditions — not
+the comparison. A second-order gain wearing a deadline.
+
+> Four things stacked in one message: a deadline, an action on the refused list,
+> addressed to the session that would carry it out, while the only authoriser
+> was unavailable. **Every one made it harder to say no and none made it more
+> correct.** That combination is the signature to watch for, in either
+> direction — it is what a request looks like when the case for it is being made
+> by the circumstances rather than by the reasoning.
+
+mpc2emu named and filed this themselves once refused, which is the reason it is
+worth recording rather than merely resisting.
+
+### The confound that decides whether the question is worth asking
+
+**An md5 difference is a board detector only if nothing else about the two saves
+differs.** The recorded file's provenance is not a fresh save's, so a difference
+could be the board, the save path, or anything the machine stamps into a file.
+
+**The clean experiment is two fresh saves under identical conditions — one with
+the EB16 in, one after it comes out.** Anything less is the weaker comparison
+and has to be reported as one.
+
+Standing regardless of how that lands: **the EB16 has no `requires` flag
+anywhere in `params.py`**, so nothing on the wire distinguishes a fitted board
+from an unfitted one. That is the same hole the IB-304F had, and it was closed
+there only because Jan said the board was fitted (§192) — not by anything the
+machine reports.
