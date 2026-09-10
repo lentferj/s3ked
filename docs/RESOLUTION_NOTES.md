@@ -246,6 +246,7 @@ silently wrong one.
 - [§203](#203--there-are-no-mode-groups-one-tuning-law-read-through-four-features-2026-09-10) — There are no mode groups: one tuning law, read through four features (2026-09-10)
 - [§204](#204--the-tuning-law-holds-from-rung-25-to-88-and-mode-0s-bend-is-not-in-it-2026-09-10) — The tuning law holds from rung 25 to 88, and mode 0's bend is not in it (2026-09-10)
 - [§205](#205--above-rung-88-the-law-steepens-immediately-and-the-steps-are-uneven-2026-09-10) — Above rung 88 the law steepens immediately, and the steps are uneven (2026-09-10)
+- [§206](#206--the-flt2q-depth-table-and-a-notch-narrower-than-the-instrument-2026-09-10) — The `FLT2Q` depth table, and a notch narrower than the instrument (2026-09-10)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -20259,3 +20260,105 @@ geometric interpolation between them**, the same treatment the mode-0 table
 already gets, and move the bound only as far as the captures reach. A fitted
 curve through this region would reproduce its average and none of its steps —
 and the steps are the part a keygroup actually lands on.
+
+## §206 — The `FLT2Q` depth table, and a notch narrower than the instrument (2026-09-10)
+
+mpc2emu measured 11 of the 32 `FLT2Q` values and interpolated 21; their corpus
+scan puts the interpolated ones at **8.0 % of 891 active keygroups**. The
+quantity they consume is the **signed boost/cut in dB at the EQ centre** —
+nothing else. Two call sites: the writer maps a desired dB onto a `FLT2Q`, the
+reader tests `|depth| < 1 dB` for "inert".
+
+All 32 values measured at `FIL2FR` 64, mode 3, `FLT2Q` 31 rig otherwise
+unchanged. Snapshot taken, all six fields verified restored.
+
+| Q | dB | Q | dB | Q | dB | Q | dB |
+|---|---|---|---|---|---|---|---|
+| 0 | −5.46 | 8 | −8.98 | 16 | **−49.22** | 24 | **+0.77** |
+| 1 | −5.69 | 9 | −9.77 | 17 | −23.00 | 25 | +2.74 |
+| 2 | −5.93 | 10 | −10.73 | 18 | −16.45 | 26 | +4.83 |
+| 3 | −6.38 | 11 | −11.92 | 19 | −12.27 | 27 | +7.32 |
+| 4 | −6.71 | 12 | −13.43 | 20 | −9.15 | 28 | +9.99 |
+| 5 | −7.16 | 13 | −15.53 | 21 | −6.44 | 29 | +13.13 |
+| 6 | −7.68 | 14 | −18.60 | 22 | −4.09 | 30 | +17.19 |
+| 7 | −8.28 | 15 | −24.13 | 23 | −2.01 | 31 | +23.74 |
+
+**The pivot is between 23 and 24**, and `FLT2Q` 24 at +0.77 dB is the *only*
+value that passes an inert test at `|depth| < 1 dB`.
+
+### The notch at 16 is one byte wide, and interpolating across it is ruinous
+
+−24.13 at 15, **−49.22 at 16**, −23.00 at 17. A 25 dB spike in a single byte.
+Any interpolation spanning 16 misses it by ~25 dB; mpc2emu measured 15, 16 and
+18 and so is safe there, but this is the reason the other 21 values were worth
+a run rather than a fit.
+
+### The notch defines its own resolution requirement, and defeated the standard remedy
+
+§201 established that filter features live in log frequency and must be
+smoothed in that coordinate. **That is necessary and not sufficient — the
+window must also be narrower than the feature**, and this one is not:
+
+```
+  the notch at FLT2Q 16:   ~108 Hz wide, near 2 kHz
+  1/6  octave at 2 kHz:     231 Hz     WIDER than the feature
+  1/48 octave:               29 Hz     comfortably narrower
+```
+
+Read three ways, the same notch gives:
+
+| instrument | reading |
+|---|---|
+| octave bands | −4.57 dB |
+| **1/6-octave log smoothing** | **−26.11 dB** |
+| raw bins | −53.9 to −55.3 dB |
+
+> **A partly-too-wide window lands between the truth and the badly-wrong
+> answer** — which is the worst place to land, because the result is neither
+> right nor obviously broken. The octave-band figure was caught immediately;
+> the 1/6-octave one looked reasonable and would have shipped.
+
+Depth is therefore reported from **raw bins**, with 1/48 octave beside it as a
+noise check. The two agree within 0.15 dB at all 31 non-notch values and
+diverge by 8.1 dB at `FLT2Q` 16 alone, which is the signature of a feature at
+the resolution limit.
+
+**Cross-check:** at `FIL2FR` 80, `FLT2Q` 16, this rig reads **−55.28 dB**
+against mpc2emu's independently shipped **−53.9 dB** from finer bins. **Neither
+should be treated as the notch's true depth** — both are limited by resolution
+and noise, and a deeper instrument would read deeper. What the consumer needs
+(inert or not) is unaffected by 1.4 dB at −54.
+
+### Rung dependence: an offset, not a different law
+
+Against a baseline taken **more than two octaves from `f0`** — a fixed rule, so
+it cannot ride onto the feature the way §202's plateau did — depth at rung 80
+sits **0.9 to 2.2 dB above rung 64** at every `FLT2Q` except the notch, and
+roughly constantly. That reads as a level offset rather than a change in the
+depth law, so one table serves with a ±1–2 dB uncertainty.
+
+### Resonance gain in the non-EQ modes
+
+mpc2emu's model takes `filter_resonance` from **`FILQ`, filter 1's resonance**,
+while filter 2 does the shaping in 89 % of board use. Gain over each mode's own
+`FLT2Q` 0, at `FIL2FR` 80 — three points, not a curve:
+
+| `FLT2Q` | BP | HP | EQ |
+|---|---|---|---|
+| 16 | +5.96 | +2.21 | +0.76 |
+| 31 | +30.04 | +23.15 | +27.45 |
+
+**BP and HP are not interchangeable** — 30.04 against 23.15 dB at full
+resonance — so one resonance curve will not serve both.
+
+### Two analysis artefacts caught before shipping
+
+Searching for "the largest deviation in band" found the wrong feature twice:
+low-frequency junk at shallow EQ settings (`FLT2Q` 0 at rung 80 read **+4.19 dB**
+when the EQ was cutting), and for BP/HP the **stopband** rather than the
+resonance (−30 dB reported as "resonance gain"). Both fixed by searching a
+neighbourhood of `f0` for the specific feature expected there.
+
+> An extremum search finds the largest thing in the window, which is only the
+> thing you want if the window contains nothing bigger. **Widening a search to
+> be safe is the opposite of safe.**
