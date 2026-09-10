@@ -257,6 +257,7 @@ silently wrong one.
 - [§214](#214--the-multi-has-16-parts-and-the-write-path-is-the-oracle-reads-cannot-be-2026-09-10) — The multi has 16 parts, and the write path is the oracle reads cannot be (2026-09-10)
 - [§215](#215--fx1fx4-accept-0204-and-239-crashes-the-machine-2026-09-10) — `FX1`–`FX4` accept 0–204, and 239 crashes the machine (2026-09-10)
 - [§216](#216--what-an-fx-value-selects-read-off-the-panel-by-camera-2026-09-10) — What an `FX` value selects, read off the panel by camera (2026-09-10)
+- [§217](#217--205-panics-the-machine-and-the-refusal-stores-the-byte-2026-09-10) — 205 panics the machine, and the "refusal" stores the byte (2026-09-10)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -21201,3 +21202,81 @@ for `RV3`/`RV4`** rather than presented as measured.
 
 Establishing it means another write scan and possibly another panic screen, so
 it is not being run without asking.
+
+## §217 — 205 panics the machine, and the "refusal" stores the byte (2026-09-10)
+
+§215 named **239** as the crash trigger and described **205–238** as a band the
+device refuses. **Both are wrong**, and the hedge that section carried — *"the
+shape the data suggests, not as established"* — is what made re-testing it
+obvious rather than pedantic. Jan authorised the confirmation and watched the
+panel.
+
+### 239 is exonerated
+
+Written on its own, byte 239 returns `REPLY` ok, reads back **239**, and the
+panel stays clean. The control at 204 behaved normally in the same run.
+
+### 205 is the trigger, and it is the *first* value of the supposed refused band
+
+Verified again on a **single send** from a clean machine, at Jan's request —
+one write, no loop, nothing that could turn a dead machine's answers into more
+rows:
+
+```
+  FX1 before: 33
+  one write of 205  ->  no reply within 6.0s
+  read-back         ->  no reply within 5.0s   (SysEx down)
+```
+
+### There is no error reply — the machine simply stops
+
+**205 is not refused. It is not rejected. Nothing is reported.** The device
+stops answering mid-transaction and the panel shows the panic.
+
+The `REPLY ERROR` rows in the walk above were **s3ked reporting a timeout**, and
+this session read them as the device refusing a value. They were an already-dead
+machine failing to answer. So §215's "refused band 205–238" was never an error
+reply at all — it was 34 consecutive timeouts recorded as data, and the 34-wide
+arithmetic, the fold-into-invalid reading and the 239 trigger were all built on
+top of them.
+
+And the byte lands anyway: after the earlier recovery the multi header read
+**`FX1` = 205**. Stored, unacknowledged, machine down.
+
+> **A raised exception from a write is not one fact, it is three.** A genuine
+> `REPLY` error, a timeout, and a transport failure arrive through the same
+> `except` and mean different things — and only the first says the write did not
+> land. CLAUDE.md's rule *"writes are acknowledged; prefer `REPLY` over
+> read-back verification"* holds for a well-formed value and says nothing about
+> a poisonous one.
+
+§214's 16-part count is unaffected and worth checking against this: those rows
+carried a real `REPLY` **error code 1**, not a timeout, and the machine kept
+answering throughout. That is what a genuine refusal looks like, and it looks
+nothing like this.
+
+### What survives of §215
+
+Only **0–204 accepted**, because those writes completed before the machine went
+down. The refused band, the 34-wide arithmetic, the fold-into-invalid reading
+and the trigger value were all built on rows produced after the crash. The
+domain stands; the structure does not.
+
+### The fence is more valuable than it was written to be
+
+`FX1`–`FX4` clamped at 0–204 was justified as keeping a crash out of a nudge
+range. It is doing more than that: **the first value past the fence does not
+get politely rejected, it panics the machine and leaves a poisoned byte in the
+header.** A fence whose far side merely errored would be a convenience. This one
+is the only thing between an editable field and a firmware panic.
+
+And the RV3/RV4 caveat from §216 gains weight with it — their bound is
+*inherited* from an `FX1` scan, they index a different list, and the first step
+past a wrong bound is now known to cost a panic rather than an error message.
+
+### Machine state
+
+Recovered with F8. `FX1` restored to 33 and verified; all 16 multi parts
+byte-identical to the pre-probe snapshot except part 15 at offset 109, which
+§200 established is the last-played MIDI note and tracks playback rather than
+anything written here.
