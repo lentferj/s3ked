@@ -247,6 +247,7 @@ silently wrong one.
 - [§204](#204--the-tuning-law-holds-from-rung-25-to-88-and-mode-0s-bend-is-not-in-it-2026-09-10) — The tuning law holds from rung 25 to 88, and mode 0's bend is not in it (2026-09-10)
 - [§205](#205--above-rung-88-the-law-steepens-immediately-and-the-steps-are-uneven-2026-09-10) — Above rung 88 the law steepens immediately, and the steps are uneven (2026-09-10)
 - [§206](#206--the-flt2q-depth-table-and-a-notch-narrower-than-the-instrument-2026-09-10) — The `FLT2Q` depth table, and a notch narrower than the instrument (2026-09-10)
+- [§207](#207--per-mode-resonance-and-the-notch-is-finite-after-all-2026-09-10) — Per-mode resonance, and the notch is finite after all (2026-09-10)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -20391,3 +20392,79 @@ neighbourhood of `f0` for the specific feature expected there.
 > An extremum search finds the largest thing in the window, which is only the
 > thing you want if the window contains nothing bigger. **Widening a search to
 > be safe is the opposite of safe.**
+
+## §207 — Per-mode resonance, and the notch is finite after all (2026-09-10)
+
+Two runs on `TC10 NOISE` at `FIL2FR` 64, snapshot and verified restore both
+times. 97 captures for the resonance sweep, 11 for the notch.
+
+### Resonance gain per mode, all 32 `FLT2Q` values
+
+mpc2emu's model takes `filter_resonance` from **`FILQ`, filter 1's resonance**,
+while filter 2 does the shaping in 89 % of board use. This is the quantity it
+could consume instead: peak gain over each mode's own `FLT2Q` 0.
+
+| `FLT2Q` | LP | BP | HP | | `FLT2Q` | LP | BP | HP |
+|---|---|---|---|---|---|---|---|---|
+| 4 | +0.99 | +1.12 | +0.23 | | 20 | +6.75 | +8.53 | +3.41 |
+| 8 | +2.12 | +2.53 | +0.71 | | 24 | +9.85 | +12.07 | +5.87 |
+| 12 | +3.38 | +4.09 | +1.36 | | 28 | +15.70 | +18.13 | +11.07 |
+| 16 | +4.83 | +6.03 | +2.13 | | 31 | +27.66 | +29.98 | +22.74 |
+
+**All three are monotonic in `FLT2Q`** — so unlike the EQ depth curve, these
+interpolate safely and the dense sweep confirms rather than corrects.
+
+**One curve will not serve.** The spread at full resonance is 7.25 dB, and the
+gaps *widen* with `FLT2Q` — BP−LP runs 0.55 dB at 10 and 2.32 dB at 31, LP−HP
+1.69 to 4.92 — so it is not a constant offset that could be factored out. HP is
+the lowest throughout and is 39 % of board use.
+
+### The sweep reproduces §203 as a side effect
+
+Peak frequency at `FLT2Q` 0: **LP 432 Hz, BP 664 Hz, HP 760 Hz**, straddling
+f0 = 611 Hz. At `FLT2Q` 31 all three read **606 Hz**. §203's whole finding —
+that each mode's feature sits at its own offset from `f0` and the offsets
+collapse at high resonance — is visible in one table taken for another purpose.
+
+### The notch at `FLT2Q` 16 is finite, and "deeper" never meant "better"
+
+§206 recorded that neither project had *measured* this notch, only bounded it,
+citing as evidence that s3ked's coarser bins read **deeper** (−55.28 dB) than
+mpc2emu's finer ones (−53.9). **That reasoning was right about the cause and
+wrong about the conclusion.**
+
+Eight independent captures, averaged cumulatively at 0.73 Hz bins:
+
+| captures averaged | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| depth (dB) | −63.66 | −59.58 | −59.49 | −58.12 | −55.66 | −55.30 | −55.67 | −56.21 |
+
+**It converges — and it converges upward, to about −55.5 dB.** The notch is a
+finite feature, not a null beyond the instrument's reach.
+
+> **A minimum found in a noisy spectrum is biased deep**, because the search
+> picks whichever bin noise happened to push lowest, and the bias shrinks as
+> variance averages down. So a *deeper* reading is not a better-resolved one —
+> it is usually a less-averaged one.
+
+That fully explains the s3ked-versus-mpc2emu discrepancy, and it is not
+resolution: both figures come from comparable averaging and agree to 1.4 dB.
+**The earlier three-way spread of −4.57 / −26.11 / −53.9 dB was entirely window
+width** (§206), and none of it was the notch being unmeasurable.
+
+### Notch shape
+
+At `FIL2FR` 64 the centre is 636 Hz.
+
+| level | bandwidth | Q |
+|---|---|---|
+| −10 dB | 216.8 Hz | 2.9 |
+| −20 dB | 65.2 Hz | 9.8 |
+
+**No −3 dB points exist within ±0.5 octave** — the feature is a *broad* cut
+carrying a deep narrow core, not a narrow notch. That is why window width
+mattered so much and why a single "Q" for it is misleading: Q is 2.9 at −10 dB
+and 9.8 at −20 dB, because those describe different parts of the same shape.
+
+Neighbours from the same run: `FLT2Q` 15 reads −25.03 dB and 17 reads
+−24.52 dB, confirming §206's one-byte spike at full resolution.
