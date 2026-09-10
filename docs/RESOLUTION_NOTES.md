@@ -19922,9 +19922,16 @@ nine points:
 
 ### The corroboration that makes this more than a tidy fit
 
-That exponent is **§196's mode-0 exponent to 0.04 %** — 0.07021 against
-0.07024 — arrived at from a different feature, in three modes none of which is
-mode 0, on captures taken a day later through a restarted audio chain.
+That exponent lands on mode 0's from a different feature, in three modes none
+of which is mode 0, on captures taken a day later through a restarted audio
+chain: **0.48 % from the mode-0 curve mpc2emu ships**, and 0.04 % from §196's
+own four-point exponential (0.07021 against 0.07024).
+
+**Quote the 0.48 %.** The shipped curve is the real reference; §196's single
+exponential is the fit that mode 0 was already known to exceed. This is the
+third time in two days a ratio here has been taken against that four-point fit
+instead of the curve in use, and the first two both overstated a result. A
+number good enough to be quoted is exactly the one to check the denominator of.
 
 So mode 0's law was never the special case. It was **the** law, and the four
 "other exponents" were four measurements of how far each feature sits from it
@@ -19951,6 +19958,29 @@ relationship at 1.2886 (§139), so this is a known shape, not a new puzzle.
 What survives untouched is every *measurement*: the corners, peaks and dips in
 §201 and §202 are where those features are, and are still what you need to place
 one. Only their interpretation as tuning laws is withdrawn.
+
+### The general form, which is worth more than the filter result
+
+Every ladder in §201 and §202 swept `FIL2FR` and held `FLT2Q` fixed — **at a
+different fixed value each time**: 0 for BP, 0 for HP, 20 for EQ cut, 27 for EQ
+boost. mpc2emu's generalisation of that, which is the part to carry to other
+work:
+
+> A parameter held constant across an experiment is invisible to it. Held at
+> **different** constants across several experiments it is worse than invisible
+> — **it manufactures per-condition structure**, and that structure is stable,
+> reproducible and entirely spurious.
+
+Which is exactly what two clean groups with 1 % internal spread looked like.
+Every property a real finding has, and no content: it reproduced across
+sessions, survived independent refits, and sharpened when the ranges were
+matched.
+
+Worth naming what we did with the one observation that contradicted it. The two
+EQ arms diverging 15.4 % at the same `FIL2FR` was in both trees for a day, and
+**the response was to give the two arms separate tables** — encoding the
+anomaly as a feature rather than reading it as a refutation. The data was never
+ambiguous. It was filed under the wrong heading.
 
 > Five quantities disagreed by 6.2 % and the disagreement was entirely in what
 > was being measured, not in what the machine was doing. **Two numbers are only
