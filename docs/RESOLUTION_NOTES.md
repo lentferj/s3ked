@@ -243,6 +243,7 @@ silently wrong one.
 - [§200](#200--program-header-offset-109-is-the-last-played-note-and-the-iso-path-is-verified-2026-09-09) — Program header offset 109 is the last-played note, and the ISO path is verified (2026-09-09)
 - [§201](#201--the-highpass-has-its-own-exponent-so-the-mode-factor-is-not-a-factor-2026-09-09) — The highpass has its own exponent, so the "mode factor" is not a factor (2026-09-09)
 - [§202](#202--bp-and-eq-ladders-four-modes-three-exponents-and-mode-0-alone-flattens-2026-09-09) — BP and EQ ladders: four modes, and the exponents group in two (2026-09-09)
+- [§203](#203--there-are-no-mode-groups-one-tuning-law-read-through-four-features-2026-09-10) — There are no mode groups: one tuning law, read through four features (2026-09-10)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -19866,3 +19867,94 @@ section and §201 are both about.
 > the sampler produced the same volts each time. **Every one of the differences
 > was a choice about what to call 0 dB.** The measurement was never the
 > uncertain part.
+
+## §203 — There are no mode groups: one tuning law, read through four features (2026-09-10)
+
+§201 and §202 ended with five per-mode exponents spread over 6.2 %, a two-group
+structure stated four different ways, and the whole thing recorded as
+unresolved. **It was unresolved because the question was wrong.**
+
+### What was actually being compared
+
+Each "mode exponent" came from a *different feature*: a −3 dB corner (HP), a
+peak (BP), a dip (EQ cut), another peak (EQ boost), a corner again (LP). All
+four are readouts of the same underlying tuning frequency `f0`, but each sits at
+its own multiple of it — and if that multiple moves, the fitted exponent moves
+with it and reports a tuning difference that is not there.
+
+The tell was already in §202: the two EQ arms are **the same mode at the same
+`FIL2FR`**, differing only in `FLT2Q`, and their centres diverge to 15.4 % by
+byte 80. No tuning law can do that. Something about the *feature* had to be
+moving.
+
+### The measurement: hold `FIL2FR`, sweep `FLT2Q`
+
+At `FIL2FR` 80, every mode's feature moves substantially with resonance alone:
+
+| `FLT2Q` | BP peak | HP peak | EQ feature |
+|---|---|---|---|
+| 0 | 2241.2 Hz | 3398.4 Hz | dip 2523.9 Hz |
+| 16 | 2030.3 | 2400.9 | dip 2191.4 |
+| 31 | 1889.6 | 1895.5 | peak 1877.9 |
+
+The BP peak slides 16 %, the HP peak 44 % — while getting *deeper* at every
+step, so this is real movement and not a shallow-feature artefact. **Each mode
+in §201/§202 was measured at one fixed `FLT2Q`, and not the same one:** BP and
+HP at 0, EQ at 20 and 27. Five exponents, five different points on five
+different feature-offset curves.
+
+### At high resonance the modes converge
+
+Push `FLT2Q` to 31 and every topology's peak sits at `f0`:
+
+| `FIL2FR` | BP | HP | EQ | spread |
+|---|---|---|---|---|
+| 45 | 161.1 | 162.6 | 161.1 | 0.91 % |
+| 64 | 607.9 | 610.8 | 607.9 | 0.48 % |
+| 80 | 1889.6 | 1895.5 | 1877.9 | 0.94 % |
+
+**Three topologies, three rungs, under 1 % apart everywhere.** One law fits all
+nine points:
+
+```
+  Hz = 6.8437 * exp(0.07021 * FIL2FR)        worst residual 0.8 %
+```
+
+### The corroboration that makes this more than a tidy fit
+
+That exponent is **§196's mode-0 exponent to 0.04 %** — 0.07021 against
+0.07024 — arrived at from a different feature, in three modes none of which is
+mode 0, on captures taken a day later through a restarted audio chain.
+
+So mode 0's law was never the special case. It was **the** law, and the four
+"other exponents" were four measurements of how far each feature sits from it
+at whatever resonance it happened to be measured at.
+
+The prefactor differs because the features differ: 6.8437 / 4.5069 = **1.5185**,
+the high-Q peak sitting that far above the −3 dB corner. Filter 1 has the same
+relationship at 1.2886 (§139), so this is a known shape, not a new puzzle.
+
+### What this retires
+
+- **The two-group structure.** There are no groups. Every ratio quoted for it —
+  5 : 1, 1.2 : 1, 3.2 : 1 — was measuring feature offsets.
+- **Every per-mode factor.** 0.688, 1.653, 1.515 and the drifting versions that
+  replaced them describe where a feature sits at one resonance, not how a mode
+  tunes. They remain valid for *placing that feature at that `FLT2Q`* and
+  nothing more.
+- **§202's "mode 0 alone flattens".** Mode 0 was the only mode whose law came
+  from a corner at low `FLT2Q` over the bottom of the range; the flattening may
+  be the same feature-offset effect. **Not retired, but no longer supported by
+  the argument that supported it** — testing it needs high-`FLT2Q` points below
+  rung 45, which no volume on the card can currently reach.
+
+What survives untouched is every *measurement*: the corners, peaks and dips in
+§201 and §202 are where those features are, and are still what you need to place
+one. Only their interpretation as tuning laws is withdrawn.
+
+> Five quantities disagreed by 6.2 % and the disagreement was entirely in what
+> was being measured, not in what the machine was doing. **Two numbers are only
+> comparable if they are the same kind of number** — and "the frequency of the
+> filter" is not one kind of number until the feature and the resonance are both
+> pinned. Four sections of ladders were needed to find that out, and one
+> afternoon of holding `FIL2FR` still would have shown it.
