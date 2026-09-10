@@ -250,6 +250,7 @@ silently wrong one.
 - [§207](#207--per-mode-resonance-and-the-notch-is-finite-after-all-2026-09-10) — Per-mode resonance, and the notch is finite after all (2026-09-10)
 - [§208](#208--filter-2-is-not-a-state-variable-filter-the-taps-differ-in-order-2026-09-10) — Filter 2 is not a state-variable filter: the taps differ in order (2026-09-10)
 - [§209](#209--manufactured-urgency-around-an-action-that-needs-permission-2026-09-10) — Manufactured urgency around an action that needs permission (2026-09-10)
+- [§210](#210--the-effects-bus-is-never-selected-and-non-zero-was-not-the-check-2026-09-10) — The effects bus is never selected, and "non-zero" was not the check (2026-09-10)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -20668,3 +20669,74 @@ anywhere in `params.py`**, so nothing on the wire distinguishes a fitted board
 from an unfitted one. That is the same hole the IB-304F had, and it was closed
 there only because Jan said the board was fitted (§192) — not by anything the
 machine reports.
+
+## §210 — The effects bus is never selected, and "non-zero" was not the check (2026-09-10)
+
+Prevalence across six library discs, 2293 S3000 programs, 8597 keygroups,
+measured by mpc2emu and retracted-then-corrected by them within the hour.
+
+```
+  PFXCHAN   2180 hold 0
+              71 hold 255  (the OFF convention, as OUTPUT)
+              41 are OUT OF RANGE -- 10, 29, 30 against a legal 0-4
+            -> not one program selects a legal bus
+
+  KFXCHAN   8439 in range and EVERY ONE IS 0
+             134 out of range
+            -> not one keygroup overrides the bus
+```
+
+**Zero, not the 1.8 % first reported.** The first pass counted non-zero,
+excluded the 255 off-sentinel, and stopped — producing "41 programs select a
+bus" and "144 keygroups override it", **every one of which was an out-of-range
+byte.**
+
+> **Checking that a value is non-zero and not the off-sentinel is not checking
+> that it is legal.** Two exclusions feel like diligence and the third is the
+> one that decides the answer.
+
+The out-of-range rate is itself the signal: 41 of 2292 and 134 of 8573 is the
+signature of **unwritten bytes**, the same shape as `FLT2MODE`'s 0.12 %. A field
+nobody sets reads as whatever the header happened to contain.
+
+### Consequence for §-KFXCHAN's off-by-one
+
+`KFXCHAN` (byte 161) carries an UNVERIFIED note: the spec documents that byte
+twice, once with the program header's enumeration and again with a leading
+`0 = PRG` that shifts every later value by one. s3ked uses the later reading.
+
+**That ambiguity affects zero material in this corpus**, because no keygroup
+carries a non-zero `KFXCHAN` at all. It cannot be ranked by prevalence here.
+
+The hazard is still real for material outside these six discs, and the argument
+for fixing it does not depend on the count — a wrong value in a field already
+exposed beats a missing annotation elsewhere. But **the supporting number is
+gone and the ranking that rested on it goes with it.** Recorded because the
+temptation is to keep a conclusion after its evidence is withdrawn, on the
+grounds that the reasoning was independently sound. It was; the priority was
+not.
+
+Resolving it needs the effects to *run* — readback returns whatever was written
+under either enumeration, so only hearing which bus processes a keygroup can
+tell. The EB16 fitted 2026-09-10 makes that possible for the first time.
+
+### s3ked's read path is safe against the real values
+
+Verified against the bytes actually found on disc, no hardware:
+
+| raw | decodes to | `describe_value` |
+|---|---|---|
+| 10, 29, 30, 255 | 10, 29, 30, 255 | `'10'`, `'29'`, `'30'`, `'255'` |
+
+`decode_field` does not raise, does not clamp, and `values=None` on both fields
+means no enumeration lookup to miss. **An out-of-range byte is reported as what
+it is**, which is the right behaviour for a reader — clamping to the declared
+range would have turned 41 unwritten headers into 41 programs claiming `FX1`.
+
+### The send levels are stored and ignored, from two directions
+
+`PFXSLEV` (190 programs) and `KFXSLEV` (114 keygroups) are the **only** effects
+fields carrying legal non-zero data anywhere in the corpus, and in every case
+with no bus selected. s3ked's `PFXSLEV` carries `desc="Not used"` transcribed
+from Akai's own document. **The spec and the corpus agree independently** that
+the machine stores these and does nothing with them.
