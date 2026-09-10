@@ -20130,6 +20130,38 @@ different purpose. **The zero-cost check is the one to run first**, and it is
 only zero-cost if the earlier measurement was recorded with enough context to
 be re-asked a question it was not taken for.
 
+### How the thread opened and how it closed, in the same two quantities
+
+Filter 2's investigation opened three days ago by comparing an **EQ extremum**
+against filter 1's **−3 dB corner law**, and reading the resulting 1.29 × gap
+as a property of filter 2. It closes by comparing filter 1's **resonance-peak
+law** against filter 2's **resonance-peak law** — the same two filters, the
+same instruments, the correct pairing — and finding two unrelated departures.
+
+**The same comparison, done properly, both opened and closed the question.**
+Everything between was the cost of the first pairing: four ladders, five
+spurious exponents, a two-group structure stated four ways, and two sliding
+references. mpc2emu's summary of the week is better than any of the filter
+results, and this is it.
+
+### Why two of this week's answers were free
+
+The rung-88 point settled the filter-1 comparison, and the corner-to-`f0` bend
+fell out of two shipped tables. Neither cost bench time, and both worked for
+the same reason:
+
+> **A measurement whose conditions travel with it can be re-asked. One that
+> arrives as a number cannot.**
+
+Mode, `FLT2Q`, reference and source were recorded beside every capture, so a
+capture taken to place a resonance could later answer a question about a
+departure mechanism nobody had thought of when it was taken. The cost was paid
+earlier, by writing the conditions down.
+
+The converter-side prompt that follows from it, worth applying before asking
+for any hardware: **divide the tables already held and see what the quotient
+does.** The corner-to-`f0` bend was visible in two shipped tables for a day.
+
 ### Corroboration from the converter side
 
 mpc2emu's tables give the corner-to-`f0` ratio directly, and it runs **1.30 at
