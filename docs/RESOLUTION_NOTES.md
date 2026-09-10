@@ -19825,6 +19825,34 @@ Refitting every rung against the fixed −6.02 dB insertion loss gives the table
 above and **k = 0.07161 over 45–80**. This **supersedes §201's HP corners**
 (34.2 / 63.0 / 250.6 / 467.4), which used per-curve plateaus at 8192 points.
 
+### Resolved: the bump is resonance, and the answer was already on disk
+
+Recorded above as an open question — resonance, or something structural in the
+highpass path? — with two captures at one rung named as the way to tell.
+
+**Those captures already existed.** The `FLT2Q` sweep run for §203, at
+`FIL2FR` 80 in mode 2, covers it outright:
+
+| `FLT2Q` | peak | amplitude |
+|---|---|---|
+| 0 | 3398.4 Hz | +0.28 dB |
+| 16 | 2400.9 | +1.98 |
+| 31 | 1895.5 | +20.13 |
+
+It strengthens monotonically and descends onto `f0`. **Resonance, with no
+"or".** The +1.1 dB feature sitting at ~3.8 × the corner at `FLT2Q` 0 is the
+same resonance, weak and high, at the bottom of its range.
+
+The confirming number is the last one: 1895.5 Hz for the highpass resonance
+against **1889.6 Hz for the bandpass peak** at the same rung — 0.3 % apart.
+§203's single-law result arriving from a direction nothing was set up to test.
+
+> **The cost of this open item was never bench time.** The sweep and the bump
+> write-up were hours apart, in this document, by the same session, and nobody
+> asked the two results about each other. Calling that "resolved from existing
+> data" would make it sound like a lucky find; it was an open question that had
+> already been answered and not noticed.
+
 ### Where that leaves the grouping: nowhere, and that is the honest answer
 
 | mode | k (45–80, n=4) |
