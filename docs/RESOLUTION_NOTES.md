@@ -20580,6 +20580,34 @@ Q": **the bandpass tap is a different filter order from the lowpass tap**, so a
 resonance value ported from either neighbour is describing a different filter.
 Borrowing the HP curve for BP is now known wrong rather than merely unverified.
 
+### The class of error that more measurement cannot reach
+
+Worth separating from the filter result, because it is the one lesson here that
+transfers whole.
+
+**Both numbers were correct.** The +29.98 dB peak and the 6 dB/octave sections
+were each measured properly and would survive any amount of re-running. The
+contradiction lived entirely in the *mechanism* offered to explain them — and a
+mechanism makes predictions about data already in hand, so it can be tested for
+free, before anything new is designed around it.
+
+> **Ask of the explanation, at the moment the explanation is offered, whether it
+> could produce the numbers already held.**
+
+That is harder than reading a report against its own figures (§188), and the
+difference is worth naming: there the two halves sit adjacent on one page. Here
+they were **two messages and several hours apart, and neither looked wrong
+alone.** Nothing in the data prompts the question; only the act of proposing a
+mechanism does.
+
+**And the catch did not come from an outside view.** It is tempting to record it
+as the value of a second pair of eyes, but mpc2emu's own account is better and is
+kept here instead: they held the figures and *no model of the machine*, so an
+architecture claim was the only thing they could check them against. This end
+had a working picture that accounted for everything in view — which is precisely
+the state in which a contradiction stops being visible. **Being able to see it
+was a property of knowing less, not of standing further back.**
+
 ### Measuring order near a strong resonance reads it too high
 
 Repeating at `FLT2Q` 31, the slopes *near* f0 steepen — LP −13.82, BP −7.89,
