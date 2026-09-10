@@ -251,6 +251,7 @@ silently wrong one.
 - [§208](#208--filter-2-is-not-a-state-variable-filter-the-taps-differ-in-order-2026-09-10) — Filter 2 is not a state-variable filter: the taps differ in order (2026-09-10)
 - [§209](#209--manufactured-urgency-around-an-action-that-needs-permission-2026-09-10) — Manufactured urgency around an action that needs permission (2026-09-10)
 - [§210](#210--the-effects-bus-is-never-selected-and-non-zero-was-not-the-check-2026-09-10) — The effects bus is never selected, and "non-zero" was not the check (2026-09-10)
+- [§211](#211--kfxchan-0-means-prg-settled-from-files-and-a-corpus-that-was-9--of-itself-2026-09-10) — `KFXCHAN` 0 means PRG, settled from files; and a corpus that was 9 % of itself (2026-09-10)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -20740,3 +20741,72 @@ fields carrying legal non-zero data anywhere in the corpus, and in every case
 with no bus selected. s3ked's `PFXSLEV` carries `desc="Not used"` transcribed
 from Akai's own document. **The spec and the corpus agree independently** that
 the machine stores these and does nothing with them.
+
+## §211 — `KFXCHAN` 0 means PRG, settled from files; and a corpus that was 9 % of itself (2026-09-10)
+
+§210 recorded that the effects bus is never selected in the library corpus, and
+that s3ked's `KFXCHAN` enumeration therefore could not be ranked by prevalence.
+**Both statements were wrong, and so was the corpus behind them.**
+
+mpc2emu's scan globbed non-recursively and stopped at the first six images.
+**Every Akai corpus figure quoted here today came from 6 of 64 — 9 % of the
+material.** Full corpus, 9442 programs and 52,034 keygroups:
+
+| field | count | share |
+|---|---|---|
+| `PFXCHAN` selects a legal bus | 2204 | **23.3 %** |
+| `PFXSLEV` non-zero | 5858 | 62.0 % |
+| `KFXSLEV` non-zero | 22947 | 44.1 % |
+| `KFXCHAN` non-zero, in range | 118 | 0.2 % |
+| filter 2 active | 3163 | **6.1 %** |
+
+**Effects outrank the filter board**, 23.3 % against 6.1 %.
+
+**The filter figure held** — 6.1 % against the 6.4 % that drove every filter
+decision this week — so nothing built on it needs revisiting. That is luck
+rather than method: the same sampling error could as easily have landed there.
+
+### The enumeration is settled, and it never needed the bench
+
+`KFXCHAN` (byte 161) is documented twice in Akai's own text: once with the
+program header's enumeration (`0 = OFF`), and again with a leading `0 = PRG`
+that shifts every later value by one. s3ked used the later reading and marked
+it UNVERIFIED. **It is correct.**
+
+> **51,780 keygroups carry `KFXCHAN` = 0.** Under `0 = OFF` every one of them
+> overrides its program to *no effects* — which would leave the 2204 programs
+> that select a bus unable to be heard at all. `0 = PRG` is the only reading
+> under which a program-level effects setting can do anything, and nearly a
+> quarter of programs make one.
+
+A second strand — five keygroups holding the value 5, which `0 = OFF … 4 = RV4`
+cannot produce — points the same way but is thin against a 0.26 % out-of-range
+rate, and is not what the conclusion rests on.
+
+**This is settled by coherence, not by measurement**, and the distinction is
+kept in the field notes: readback returns whatever was written under either
+enumeration, so the machine cannot answer it directly. What makes the argument
+strong is that it does not depend on the counts being right — it needs only
+*many* keygroups at 0 and *many* programs selecting a bus, both of which survive
+a 9 % sample.
+
+### It was answerable from files the whole time
+
+This question was queued for bench time on a board fitted three hours earlier.
+It was answerable from a disk that has been sitting there for a month.
+
+> Two open questions this week dissolved into a file read: the filter-1 versus
+> filter-2 departure comparison (§204), and this. **Both had been assigned to
+> hardware because hardware was the tool that had been working.**
+
+### And the third decision in a day turning on a number only one side holds
+
+After the 89–93 rungs (8.4 %) and the `.X` ranking, this is the third time a
+choice about what to measure rested on a corpus figure this project cannot
+compute. The first two were right. **This one was wrong twice in the same
+evening — 1.8 %, then zero, then 23.3 %** — and the middle value is the one
+that would have cost real work, because "zero" retires a question.
+
+The rule from §204 stands and gains a second half: the corpus side owes the
+prevalence figure before the decision, **and owes the denominator with it.**
+"6 of 64" is not a caveat, it is the number.

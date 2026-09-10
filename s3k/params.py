@@ -2321,7 +2321,7 @@ _PARAMS: List[Parameter] = [
         0,
         5,
         desc="Keygroup override Effects Bus select 0 = PRG (use the global program header selection) 1 = OFF 2 = FX1 3 = FX2 4 = RV3 5 = RV4",
-        notes="the specification documents this byte twice: earlier as PFXCHAN (with the program header's enumeration) and again here, with a leading \"0 = PRG\" that shifts every later value by one. The later definition is used. UNVERIFIED -- if the machine follows the earlier one, values read here are off by one",
+        notes="the specification documents this byte twice: earlier as PFXCHAN (with the program header's enumeration) and again here, with a leading \"0 = PRG\" that shifts every later value by one. The later definition is used, and RESOLUTION_NOTES §211 settles it: under the earlier reading, 0 would mean OFF, so the ~51,780 keygroups holding 0 across the library corpus would each override their program to no effects and the 23.3% of programs that select a bus could never be heard. \"0 = PRG\" is the only reading under which the program-level field can function. Settled by corpus coherence, NOT by hardware -- readback returns whatever was written under either enumeration",
     ),
     _p(
         "keygroup",
@@ -2332,7 +2332,7 @@ _PARAMS: List[Parameter] = [
         0,
         99,
         desc="Keygroup override Effects Send level",
-        notes="the specification documents this byte twice: earlier as PFXSLEV (with the program header's enumeration) and again here, with a leading \"0 = PRG\" that shifts every later value by one. The later definition is used. UNVERIFIED -- if the machine follows the earlier one, values read here are off by one",
+        notes="the specification documents this byte twice: earlier as PFXSLEV (with the program header's enumeration) and again here, with a leading \"0 = PRG\" that shifts every later value by one. The later definition is used, and RESOLUTION_NOTES §211 settles it: under the earlier reading, 0 would mean OFF, so the ~51,780 keygroups holding 0 across the library corpus would each override their program to no effects and the 23.3% of programs that select a bus could never be heard. \"0 = PRG\" is the only reading under which the program-level field can function. Settled by corpus coherence, NOT by hardware -- readback returns whatever was written under either enumeration",
     ),
     _p(
         "keygroup",

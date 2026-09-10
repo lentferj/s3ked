@@ -423,7 +423,21 @@ def test_superseded_definition_is_recorded_not_silently_dropped():
     param = p.lookup(("keygroup", 161))
     assert param.name == "KFXCHAN"
     assert "PFXCHAN" in (param.notes or "")
-    assert "UNVERIFIED" in (param.notes or "")
+
+
+def test_the_kfxchan_enumeration_records_how_it_was_settled():
+    """Was UNVERIFIED until §211; the note must now say WHICH WAY it was.
+
+    Settled by corpus coherence, not by the machine -- readback returns
+    whatever was written under either enumeration, so hardware cannot
+    answer it. A note claiming resolution without naming its basis would
+    read as a hardware result to the next person.
+    """
+    for offset in (161, 162):
+        notes = p.lookup(("keygroup", offset)).notes or ""
+        assert "UNVERIFIED" not in notes, offset
+        assert "211" in notes, offset
+        assert "NOT by hardware" in notes, offset
 
 
 def test_text_fields_use_the_device_character_set():
