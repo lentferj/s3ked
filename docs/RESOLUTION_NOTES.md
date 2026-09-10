@@ -20103,3 +20103,37 @@ itself, not only in a derived feature.
 top of the useful range; nothing here says where the departure begins between
 88 and 94, and one rung cannot be interpolated from its neighbours when it is
 the one that misbehaves.
+
+### It is not filter 1's departure seen twice
+
+Filter 1 departs from its own law above **byte 84** (§146). The obvious
+question is whether this is the same mechanism in the second filter, and it
+would be answered by the two departures sharing either a byte or a frequency.
+
+**Neither, and the data already taken settles it.** Filter 2 is on its law to
+−0.0 % at byte 88, which is 3304 Hz — past filter 1's departure in *both*
+coordinates:
+
+| | filter 1 | filter 2 |
+|---|---|---|
+| departs above byte | 84 | >88 |
+| departs above | 2514 Hz | >3304 Hz |
+
+Filter 1's departure frequency corresponds to byte 84.1 on filter 2's law, and
+filter 2 is still exponential four bytes past it. So whatever happens between
+88 and 94 starts higher in byte *and* higher in frequency than filter 1's does.
+Two separate departures, not one mechanism appearing twice.
+
+Worth noting no bench time was needed for that: the question arrived after the
+captures, and the rung-88 point answered it because it had been taken for a
+different purpose. **The zero-cost check is the one to run first**, and it is
+only zero-cost if the earlier measurement was recorded with enough context to
+be re-asked a question it was not taken for.
+
+### Corroboration from the converter side
+
+mpc2emu's tables give the corner-to-`f0` ratio directly, and it runs **1.30 at
+rung 30 to 1.54 at rung 80** — the bend was always in that ratio, exactly where
+this section puts it, in data both projects had been carrying for a day. An
+independent route to the same conclusion, from numbers that were already
+written down.
