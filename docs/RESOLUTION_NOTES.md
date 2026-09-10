@@ -258,6 +258,7 @@ silently wrong one.
 - [§215](#215--fx1fx4-accept-0204-and-239-crashes-the-machine-2026-09-10) — `FX1`–`FX4` accept 0–204, and 239 crashes the machine (2026-09-10)
 - [§216](#216--what-an-fx-value-selects-read-off-the-panel-by-camera-2026-09-10) — What an `FX` value selects, read off the panel by camera (2026-09-10)
 - [§217](#217--205-panics-the-machine-and-the-refusal-stores-the-byte-2026-09-10) — 205 panics the machine, and the "refusal" stores the byte (2026-09-10)
+- [§218](#218--a-per-rig-guard-does-not-cover-a-resource-that-is-not-per-rig-2026-09-11) — A per-rig guard does not cover a resource that is not per-rig (2026-09-11)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -21280,3 +21281,63 @@ Recovered with F8. `FX1` restored to 33 and verified; all 16 multi parts
 byte-identical to the pre-probe snapshot except part 15 at offset 109, which
 §200 established is the last-played MIDI note and tracks playback rather than
 anything written here.
+
+## §218 — A per-rig guard does not cover a resource that is not per-rig (2026-09-11)
+
+Three failures in one hour across three sessions, all the same shape. Recorded
+as the shape rather than as three incidents, because the incidents are cheap and
+the shape is not.
+
+`measure.py`'s busy-guard checks the **rig**: two runs on one rig share a MIDI
+port and a capture pair, and the resulting corruption is undetectable
+afterwards. That guard is correct for what it defends. It says nothing about
+anything else two runs share.
+
+### 1. JACK client registration is server-wide
+
+An `akai` run and an `e4xt` run registered JACK clients within a second of each
+other. **Both hung, and so did `jack_lsp` from an uninvolved shell** — the
+server's registration path was blocked for everything, not just for them. Two
+different rigs, guard passed cleanly, mutual wedge. eosed diagnosed it and
+fixed it with a filesystem lock around recorder construction only, so
+registrations serialise while captures still overlap.
+
+Loud, and it cost a run.
+
+### 2. The process table is shared, and `pkill -f` does not know about rigs
+
+Stopping a wedged grid, this session ran `pkill -f 'measure.py'` — **twice**,
+at 01:00:39 and 01:03:45 — and killed two of eosed's `e4xt` passes. A later
+kill by explicit PID looked targeted but was not: the PIDs had been selected
+seconds earlier by the same rig-blind pattern.
+
+The second one came **after** eosed's message explaining that rig-blind
+operations cross sessions, while hurrying to stop a run so it would not collide
+with theirs. **Hurrying to prevent a collision is how the collision was
+caused.**
+
+### 3. The worst one is silent: a completion check that certifies
+
+eosed's runner reported `attempt 1 finished` for a pass that had been SIGKILLed
+with **zero captures written**. Its check was `kill -0` on the child, so *the
+process is gone* counted as *the work is done*.
+
+> **A check that cannot distinguish finished from killed is not a check.** The
+> wedge announced itself by hanging. The kill announced itself by being
+> reported. This one would have delivered a 30-cell velocity row containing no
+> cells, labelled complete.
+
+Fixed by requiring six wavs **and** the features file, which works because
+`measure.py` writes the features file after the last program — so its absence is
+a fact about the *work*, not about the process.
+
+### The form
+
+> **A guard scoped to "my rig" does not cover a resource that is not per-rig.**
+> Tonight that resource was the JACK registration path, then the process table,
+> then — one level up — the *conclusion* itself, where what two sessions shared
+> was not a device at all.
+
+The third is the one to carry. The first two are shared hardware and shared OS,
+both obvious in hindsight; the third is a shared **claim**, and nothing about
+`kill -0` looks like it touches another session's work.
