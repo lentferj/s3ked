@@ -20351,6 +20351,35 @@ while filter 2 does the shaping in 89 % of board use. Gain over each mode's own
 **BP and HP are not interchangeable** — 30.04 against 23.15 dB at full
 resonance — so one resonance curve will not serve both.
 
+### What the measurement actually changed downstream
+
+Filling in 21 interpolated values sounds like completion rather than
+correction. It was both. The converter's boost/cut test was `FLT2Q >= 25`,
+derived from an interpolated crossing near 23.1 while 22, 23 and 24 were all
+unmeasured. Measured: 22 and 23 are cuts, and **24 is a +0.77 dB boost that the
+old rule classified as a cut.** A bound standing in for three real values got
+one of them wrong.
+
+The inert test gains a matching guard: because 24 is the *only* value under
+1 dB, widening that threshold "to be safe" would discard a −2.01 dB cut at 23
+and a +2.74 dB boost at 25. **A change that reads as robustness, and is not.**
+
+### A cross-check that is consistent without being evidence
+
+mpc2emu's earlier eleven-point table (rung 80) agrees with this dense one
+(rung 64) to within 1.34 dB at every value but the notch — which looks like
+confirmation of the 0.9–2.2 dB rung offset recorded above. They declined to use
+it as such, and were right to:
+
+> The comparison **mixes rung with session** and cannot separate them. It is
+> consistent with the offset; it is not evidence for it.
+
+Worth keeping because this project has repeatedly reached the wrong way for
+exactly this shape — §201's exponents compared across unequal ranges, §202's
+groups compared across unequal fitting windows. **A number that agrees with a
+hypothesis supports it only if it could have disagreed for that reason alone**,
+and a confounded comparison could have agreed either way.
+
 ### Two analysis artefacts caught before shipping
 
 Searching for "the largest deviation in band" found the wrong feature twice:
