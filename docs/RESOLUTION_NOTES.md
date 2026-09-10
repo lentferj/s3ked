@@ -244,6 +244,7 @@ silently wrong one.
 - [§201](#201--the-highpass-has-its-own-exponent-so-the-mode-factor-is-not-a-factor-2026-09-09) — The highpass has its own exponent, so the "mode factor" is not a factor (2026-09-09)
 - [§202](#202--bp-and-eq-ladders-four-modes-three-exponents-and-mode-0-alone-flattens-2026-09-09) — BP and EQ ladders: four modes, and the exponents group in two (2026-09-09)
 - [§203](#203--there-are-no-mode-groups-one-tuning-law-read-through-four-features-2026-09-10) — There are no mode groups: one tuning law, read through four features (2026-09-10)
+- [§204](#204--the-tuning-law-holds-from-rung-25-to-88-and-mode-0s-bend-is-not-in-it-2026-09-10) — The tuning law holds from rung 25 to 88, and mode 0's bend is not in it (2026-09-10)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -20016,3 +20017,89 @@ ambiguous. It was filed under the wrong heading.
 > filter" is not one kind of number until the feature and the resonance are both
 > pinned. Four sections of ladders were needed to find that out, and one
 > afternoon of holding `FIL2FR` still would have shown it.
+
+## §204 — The tuning law holds from rung 25 to 88, and mode 0's bend is not in it (2026-09-10)
+
+Two open items, both settled in one pass on `TC10 NOISE` at `FLT2Q` 31, three
+modes at every rung. Snapshot taken, all six fields verified restored.
+
+### Convergence was verified below rung 45, not assumed
+
+§203 established that at high resonance every topology's feature sits at `f0`,
+but only at rungs 45, 64 and 80. Extending the law downward on that basis would
+have carried an assumption into the experiment testing it — **which is exactly
+the four-ladder failure**, a condition assumed constant because it was constant
+everywhere it had been looked at. So all three modes were captured at every new
+rung and convergence checked there.
+
+| rung | BP | HP | EQ | spread | one bin |
+|---|---|---|---|---|---|
+| 25 | 39.6 | 39.6 | 39.6 | ≤3.7 % | 3.70 % |
+| 30 | 55.7 | 55.7 | 55.7 | ≤2.6 % | 2.63 % |
+| 37 | 90.8 | 90.8 | 90.8 | ≤1.6 % | 1.61 % |
+| 88 | 3300.3 | 3313.5 | 3300.3 | 0.40 % | 0.04 % |
+| 94 | 5219.2 | 5245.6 | 5213.4 | 0.62 % | 0.04 % |
+
+**The low rungs read 0.00 % and that figure must not be quoted.** All three
+modes landing in one FFT bin means they agree *to within a bin*, which at
+39.6 Hz is 3.7 % — not that they agree exactly. §202 made precisely this
+mistake, read three modes in one bin as three modes agreeing, and had to be
+corrected. The honest statement is that convergence holds below rung 45 to the
+resolution available there, which is still four to sixteen times tighter than
+the 6.2 % it was invoked to explain.
+
+### One law, rungs 25–88
+
+```
+  Hz = 6.7795 * exp(0.07033 * FIL2FR)      worst residual 0.8 %
+```
+
+Seven rungs, 21 measurements, three topologies, spanning **84 × in frequency**.
+
+| rung | 25 | 30 | 37 | 45 | 64 | 80 | 88 | 94 |
+|---|---|---|---|---|---|---|---|---|
+| residual | +0.7 % | −0.4 % | −0.8 % | +0.6 % | −0.4 % | +0.3 % | −0.0 % | **+3.7 %** |
+
+### Item 1 answered: the bend is not in the tuning
+
+Mode 0's corner sits **+14.5 % above its own exponential at byte 37** (§196,
+§202). At that same byte the tuning frequency sits **−0.8 %** from the law.
+
+**So the flattening is not a tuning effect.** `f0` runs clean through the
+bottom of the range; what bends is the relationship between the lowpass −3 dB
+corner and `f0`. That is a real property of the lowpass — the corner genuinely
+is where §196 measured it — but it is a *feature-offset* property, the last
+survivor of the class §203 identified, and it is now on the same footing as the
+mode factors rather than standing against them.
+
+This does not contradict mpc2emu's provenance argument, which showed the bend
+could not be a reference artefact. It was not a reference artefact. It is a
+feature offset, which that argument never spoke to.
+
+### Item 3 answered, and it cost no volume load
+
+Rungs 88 and 94 were expected to need `FLATCOMB` from the `FILTER2` volume,
+because the feature was predicted at 3.4–9.8 kHz where broadband noise is
+weakest. **§203 removed that need.** At `FLT2Q` 31 the feature is a +18 dB
+resonance rather than a −3 dB corner, and the law puts it at 3.3 and 5.2 kHz —
+inside this source's flat band. Both rungs measured at 0.40 % and 0.62 % mode
+spread with no volume load, saving two loads and an eviction of the very
+programs the rest of the work needs.
+
+> Worth noticing what happened there: a finding did not merely answer a
+> question, it made a *later* measurement cheaper by changing what had to be
+> measured. The `FLATCOMB` requirement was never a property of the machine — it
+> was a property of the weakest feature anyone had thought to look for.
+
+### Rung 94 steepens, and that is real
+
++3.7 % above the law, against ≤0.8 % everywhere else. Fitting 25–94 as one
+exponential smears it into a 2.2 % worst residual and hides it; fitting 25–88
+isolates it. mpc2emu flagged this as a caveat before it was measured — mode 0's
+own top steepened between 88 and 94 — and it holds in the tuning frequency
+itself, not only in a derived feature.
+
+**So the law is exponential over 25–88 and departs above it.** Rung 94 is the
+top of the useful range; nothing here says where the departure begins between
+88 and 94, and one rung cannot be interpolated from its neighbours when it is
+the one that misbehaves.
