@@ -20419,6 +20419,46 @@ gaps *widen* with `FLT2Q` — BP−LP runs 0.55 dB at 10 and 2.32 dB at 31, LP�
 1.69 to 4.92 — so it is not a constant offset that could be factored out. HP is
 the lowest throughout and is 39 % of board use.
 
+### Correction: measured in the consumer's quantity, LP and HP nearly coincide
+
+The table above uses **gain over each mode's own `FLT2Q` 0**. mpc2emu's model
+wants **peak above the curve's own passband**, and declined to wire these
+tables until the difference was resolved — correctly, because the two
+quantities do not agree even in sign of trend.
+
+Recomputed from the same captures. LP's passband is taken below f0 (76–153 Hz)
+and HP's above it (2444–4888 Hz), since **one band cannot serve both
+topologies**; insertion loss cancels, both terms coming from one capture
+against one bypass reference.
+
+| `FLT2Q` | 0 | 8 | 16 | 24 | 28 | 31 |
+|---|---|---|---|---|---|---|
+| LP | −3.27 | −1.43 | +1.06 | +5.96 | +11.77 | +23.70 |
+| HP | +1.00 | +1.70 | +3.11 | +6.86 | +12.07 | +23.72 |
+| gap | 4.27 | 3.13 | 2.05 | 0.90 | 0.30 | **0.02** |
+
+**The gaps narrow monotonically to 0.02 dB at full resonance.** The section
+above states that one curve will not serve "and the gaps *widen* with
+`FLT2Q`". In the consumer's quantity that is exactly backwards.
+
+Two consequences, both of which nearly reached shipped code:
+
+- **`RESONANCE_FULL_DB` is not exceeded.** LP +23.70 and HP +23.72 both sit
+  under mpc2emu's 25.51. Filter 2 out-resonating filter 1 was an artefact of
+  the reference, and a cross-format constant was one step from being changed on
+  the strength of it.
+- **The `FLT2Q` 0 conversion offsets are LP −3.27 dB and HP +1.00 dB** — not
+  one offset, and not even one sign.
+
+**A bandpass has no passband**, so the consumer's quantity is undefined for it:
+BP's skirts fall away on both sides (−20.15 dB at f0/8, −20.38 at f0×8, against
+a −11.33 peak). That is a modelling question, not a measurement one.
+
+> The measurement was correct and the *quantity* was not the one anyone would
+> consume. Nothing about the numbers said so — they were monotonic, clean,
+> reproducible, and pointed the wrong way. **A table is only as good as the
+> definition of its column, and the column heading is the part nobody checks.**
+
 ### The sweep reproduces §203 as a side effect
 
 Peak frequency at `FLT2Q` 0: **LP 432 Hz, BP 664 Hz, HP 760 Hz**, straddling
