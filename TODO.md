@@ -2105,11 +2105,18 @@ them, and the first two need the rig.
    part cannot silently corrupt a real one. All 16 parts verified byte-identical
    to the pre-probe snapshot.
 
-2. **What an `FX1`–`FX4` value indexes.** Declared `0..255`, "the fx setup
-   assigned to fx channel N". Whether that is a slot in the effects file, a
-   position in a list or a type code is not in any transcribed spec. Writable
-   behind the write gate on Jan's instruction; nothing here knows what a given
-   value does on a machine with the EB16 fitted.
+2. **What an `FX1`–`FX4` value indexes.** Partly answered by §215: the
+   **domain is 0-204**, measured by writing all 256 values and reading `REPLY`.
+   205-238 are refused; 239-255 are accepted but appear to fold into the
+   refused band, and **writing 239 panicked the machine** to "Internal Error -
+   divide overflow" (recovered with F8, nothing lost). The declarations now say
+   `0..204` as a safety fence.
+
+   **Still open: what an accepted value SELECTS.** 0-204 is a domain, not a
+   meaning — whether it is a slot in the effects file, a position in a list or
+   a type code is still in no transcribed spec. Also unconfirmed: that 239 is
+   specifically the trigger. One run, one crash, one read-back mismatch; each
+   confirmation costs a physical F8 press, so ask before re-running.
 
 3. **The `.M3` record offset and stride.** s3ked has the *wire* layout, verified
    on hardware (§11 Finding F), which is not the same claim as the *file*

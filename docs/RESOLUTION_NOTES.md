@@ -255,6 +255,7 @@ silently wrong one.
 - [§212](#212--the-highpass-is-the-most-common-mode-and-every-mode-split-figure-here-was-wrong-2026-09-10) — The highpass is the most common mode, and every mode-split figure here was wrong (2026-09-10)
 - [§213](#213--multi-edit-wired-and-the-three-things-an-re-session-has-to-settle-2026-09-10) — Multi edit wired, and the three things an RE session has to settle (2026-09-10)
 - [§214](#214--the-multi-has-16-parts-and-the-write-path-is-the-oracle-reads-cannot-be-2026-09-10) — The multi has 16 parts, and the write path is the oracle reads cannot be (2026-09-10)
+- [§215](#215--fx1fx4-accept-0204-and-239-crashes-the-machine-2026-09-10) — `FX1`–`FX4` accept 0–204, and 239 crashes the machine (2026-09-10)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -21020,3 +21021,68 @@ All 16 parts verified byte-identical to the pre-probe snapshot afterwards.
 "000000000000", and **`PFXSLEV` = 25 on all 16 parts** — a real default send
 level sitting in the region where §213 established the field is live, against
 the program header's copy that Akai documents as "Not used".
+
+## §215 — `FX1`–`FX4` accept 0–204, and 239 crashes the machine (2026-09-10)
+
+§213's second RE item: `FX1`–`FX4` are declared `0..255` because that is the
+byte, and no transcribed spec says what the number indexes or how large it may
+be. §214 established that the write path answers structural questions the read
+path cannot, so all 256 values were written to `FX1` with `REPLY` recorded.
+
+Jan authorised this with crash or lockup acceptable. **It crashed.**
+
+### The map
+
+| result | values | count |
+|---|---|---|
+| accepted | **0–204** | 205 |
+| **refused** | **205–238** | 34 |
+| accepted | 239–255 | 17 |
+
+`FX2`–`FX4` were untouched throughout and `FX1` was restored to 33.
+
+### The crash
+
+Writing `FX1` = 239 returned `REPLY` **ok**, read back as **205**, and put the
+machine on its own panic screen:
+
+```
+  Internal Error - divide overflow
+  Please tell Richard the operations that you performed to reach this state
+  Press F8 to continue
+```
+
+F8 recovered it. Afterwards `FX1` read 33, all sixteen multi parts were
+byte-identical to the pre-probe snapshot, and `status` was normal — **nothing
+was lost.**
+
+### Reading the shape
+
+**The refused band is 34 wide and 239 − 34 = 205.** The high tail 239–255 maps
+onto 205–221, which is exactly the region the device refuses when addressed
+directly. So the top of the byte appears to **fold into the invalid range**
+rather than being a second valid block — accepted at the door and then landing
+somewhere the firmware has already said it will not go. A "divide overflow" is
+what that looks like from inside.
+
+**This is stated as the shape the data suggests, not as established.** One run,
+one crash, and a single read-back mismatch — 239 was the only value that wrote
+ok and read back different, which is why it is named as the trigger. Confirming
+it means crashing the machine again, and each crash costs a physical F8 press,
+so it is not being re-run without asking.
+
+### What changed
+
+`FX1`–`FX4` now declare `0..204` rather than `0..255`, with the measurement in
+their notes. **This is a safety fence, not just documentation:** the TUI wires
+the multi behind the write gate (§213), and an editable field whose declared
+range includes a value that panics the firmware is a trap the user walks into
+by nudging.
+
+> The spec's silence had been carried as `0..255` — the byte's range standing
+> in for a documented one. **A range nobody has measured is not a permissive
+> default, it is an unmeasured claim**, and here it was wrong at both ends of
+> what matters: 51 values too generous, and one of them a crash.
+
+Still unknown, and not answered by this: **what an accepted value actually
+selects.** 0–204 is a domain, not a meaning.
