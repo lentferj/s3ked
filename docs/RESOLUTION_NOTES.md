@@ -20232,10 +20232,19 @@ Per-byte ratios, against the 1.0729 the lower law predicts:
 |---|---|---|---|---|---|---|
 | ratio | 1.0900 | **1.0568** | 1.0893 | 1.0896 | **1.0589** | 1.0924 |
 
-Four large steps of ~1.089–1.092 and two small ones of ~1.057–1.059. **The
-3.4 % step-to-step difference is six times the mode spread at these rungs**, so
-it is structure in the machine, not measurement noise — which is exactly why
-all three modes were captured at every rung rather than one.
+Four large steps of ~1.089–1.092 and two small ones of ~1.057–1.059.
+
+**The step-to-step difference is 3.1–3.4 %; the mode spread at these rungs is
+0.40–0.66 %.** So it is structure in the machine, not measurement noise — which
+is exactly why all three modes were captured at every rung rather than one.
+
+*No factor is quoted here on purpose.* This was first written as "six times the
+mode spread"; mpc2emu made it five, taking the spread as the mean over all
+seven rungs rather than at the step in question. Neither is wrong and neither
+is a measurement — **the same shape as the 5 : 1 / 1.2 : 1 / 3.2 : 1 sequence
+in §202, which cost three corrections before the ratio was retired in favour of
+the underlying figures.** Retired again, one section later, having been
+reintroduced by the person who agreed to retire it.
 
 The two small steps fall at 89→90 and 92→93, three bytes apart. **Two instances
 do not establish a period** and none is claimed; if it is one, the next small
