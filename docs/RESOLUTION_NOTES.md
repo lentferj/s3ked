@@ -265,6 +265,7 @@ silently wrong one.
 - [§222](#222--filter-2-costs-4-to-17-db-depending-on-the-note-and-a-two-variable-control-that-looked-like-one-2026-09-11) — Filter 2 costs 4 to 17 dB depending on the note, and a two-variable control that looked like one (2026-09-11)
 - [§223](#223--the-attak1-law-on-steady-material-and-the-two-machines-agree-to-37--2026-09-11) — The `ATTAK1` law on steady material, and the two machines agree to 3.7 % (2026-09-11)
 - [§224](#224--filter-1-is-201-poles-the-cascade-is-4-the-pole-branch-is-closed-2026-09-11) — Filter 1 is 2.01 poles; the cascade is ~4; the pole branch is closed (2026-09-11)
+- [§225](#225--modvflt23-is-220-cents-per-unit-and-the-attack-fix-is-confirmed-on-hardware-2026-09-11) — `MODVFLT2_3` is ~220 cents per unit, and the attack fix is confirmed on hardware (2026-09-11)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -21972,3 +21973,84 @@ extended, not what the machine does — and the tell was that it is *below* a
 measured 8481 Hz at byte 95, which would make a cutoff table non-monotonic.
 
 **A law that carries its own range is only as good as the reader checking it.**
+
+## §225 — `MODVFLT2_3` is ~220 cents per unit, and the attack fix is confirmed on hardware (2026-09-11)
+
+Two volumes, both measured at the same stated convention where a time is
+involved: **5 ms smoothing / threshold-crossing / −3.0 dB.**
+
+### `ATKFIX` — the attack fix reaches the machine
+
+§223's ladder exposed two laws each ~1.8 × wrong and cancelling. Both were
+refitted; this is the hardware confirmation, built **from SFZ through the
+shipping converter** rather than from E4B, because the two errors cancelled
+precisely on the E4B path — an E4B test would have passed before the fix and
+after it.
+
+| PRG | `ATTAK1` | SFZ asked | predicted | measured | vs SFZ |
+|---|---|---|---|---|---|
+| 19 | 77 | 0.50 s | 0.50 s | **0.495 s** | −1.0 % |
+| 38 | 90 | 2.00 | 1.99 | **2.005** | +0.2 % |
+| 39 | 97 | 4.00 | 4.15 | **4.350** | +8.7 % |
+
+**Falsifiers were filed before capture and neither fired**: ~0.55 × would have
+meant the refit never reached this path, ~1.8 × long would have meant a
+correction applied twice.
+
+> **This confirms the wiring, not the law.** The predicted column comes from the
+> same §223 fit the law was refitted against, so the two cannot check each
+> other. A real source's attack surviving parse, convert, write and playback is
+> the claim; the law's accuracy rests on §223 alone.
+
+PRG 39's +4.8 % against prediction sits inside §223's own residual band, so it
+is the law's accuracy at the top of the range — and worth noting that the
+weakest part of the fit is exactly where a user is nearest the 5.13 s ceiling.
+
+**Bytes verified on the card before measuring**: `ATTAK1` reads 77 / 90 / 97,
+matching what the converter said it wrote — the writer's byte and the machine's
+behaviour checked independently.
+
+### `F2DEPTH` v2 — the depth law, positive side
+
+The path from §222: `MODSLFLT2_3` = 14 (`env3`) is already correct in everything
+the converter writes; what is missing is an `ENV3` shape **and** a depth. This
+measures the second.
+
+| depth | corner | cents vs depth 0 | cents/unit |
+|---|---|---|---|
+| +0 | 470.9 Hz | — | — |
+| +5 | 885.9 | +1094.2 | **218.8** |
+| +10 | 1690.5 | +2212.9 | **221.3** |
+| −25 | 162.0 | −1847.2 | saturating |
+| −50 | 155.0 | −1923.2 | saturating |
+
+**Two positive points agreeing to 1.1 %: ~220 cents per unit.** Depth 0 lands at
+470.9 Hz against the generator's 476, so deflattening against a real reference
+program works where v1's theoretical −6 dB/oct put the same corner at 188 Hz.
+
+**The ladder outruns the subject above depth 10.** At 220 cents/unit, depth 20
+puts the corner near 6 kHz and depth 50 past the saw's highest harmonic — **a
+corner above the material cannot be found in it.** The negative side saturates
+for the mirror reason: −1900 cents from 476 Hz is 158 Hz, and the saw's
+fundamental is 55.1 Hz, so barely three harmonics remain below the corner to
+anchor a passband.
+
+So: the negative half is **confirmed to exist and act downward, magnitude
+unresolved below about −10**, and the cents-versus-bytes question is **open** —
+only one rung resolved at the second corner, and one point per corner compares
+nothing.
+
+### Two traps this volume was rebuilt to avoid, both verified absent
+
+v1 died on a **hidden filter 1** pinned at ~400 Hz in front of the subject, so
+the corner being measured could not move. v2 was checked before capture:
+`FILFRQ` 99 and `LSI2_ON` 1 on all twelve programs. The second trap is subtler —
+asking the writer for a 20 kHz cutoff to pin filter 1 open makes it decide
+filter 2 has nothing to do and emit `LSI2_ON` = 0, **removing the entire subject
+while the printed table still looks orderly.**
+
+> And a third, from the other side: reading `ATTAK1` at the wrong offset printed
+> `ATTAK1 2` for all three ATKFIX programs — which looks exactly like the writer
+> dropping the source attack, the very bug the volume existed to detect.
+> **A misread address does not fail. It produces the finding you were looking
+> for.**

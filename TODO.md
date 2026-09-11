@@ -2177,23 +2177,67 @@ floor), `R{43,44,45,46,47}v*` (post-rebuild re-captures), `OFF{43,44,45}`
 (board-off control), `D2_{0,12,25,50}_044` (filter-2 depth ladder), `LONG45`
 (HOLD 20). Analyses in `akai_P000.json` … `akai_P005.json`.
 
-**Where I was:** the filter-2 depth law is unfinished and **cannot be finished
-on this material** — the subject's own late-minus-early change is 9.52 dB rms
-against the modulation's 3.59, so the material moves more than the thing being
-measured. It needs the flat-contour subject in `~/temp/HD_f2depth.img`
-(PRGNUM 121-126), built with the `ENV3` bytes verified here — `(45, 99, 0, 99,
-0, 99, 0, 99)` at offsets 179-186.
-
-**Three volumes staged on the host, none on the card**, all one-machine designs:
+**Where I was — all three staged volumes are captured and reported (§223,
+§224, §225).** Each needed the flat/steady subject that the live `FXPATHS`
+material could not provide: the original filter-2 depth attempt failed because
+the subject's own late-minus-early change was 9.52 dB rms against the
+modulation's 3.59, so the material moved more than the thing being measured.
 
 ```
-  ~/temp/HD_atkcal.img    109-116   ATTAK1 ladder, steady sine
-  ~/temp/HD_poles.img     117-120   filter skirt, reference-subtracted saw
-  ~/temp/HD_f2depth.img   121-126   MODVFLT2_3 ladder, flat subject
+  ~/temp/HD_atkcal.img    109-116   ATTAK1 ladder, steady sine        -> §223
+  ~/temp/HD_poles.img     117-120   filter skirt, referenced saw      -> §224
+  ~/temp/HD_f2depth.img   121-126   MODVFLT2_3 ladder, flat subject   -> §225
 ```
 
-Each has its generator beside it carrying its own analysis spec. All three need
-a card crossing and none justifies a dedicated one.
+Resident on the AKAI at the end of the session: **F2DEPTH v2**, partition A.
 
-**46 commits unpushed** (§201-§222). Jan has not given the word and I have not
+## `MODVFLT2_3`: the negative half and the cents-versus-bytes law
+
+**Status:** open, blocked on a card crossing (Jan's to schedule).
+
+§225 settled the positive side at **~220 cents per unit** from two rungs
+agreeing to 1.1 %, and confirmed the deflattening method by landing depth 0 at
+470.9 Hz against the generator's 476. Two things it could not settle:
+
+- **The negative half below about −10.** −25 and −50 came back 76 cents apart,
+  which is the measurement saturating rather than the machine: at `FIL2FR` 66 a
+  −1900-cent excursion lands near 158 Hz with barely three harmonics of the
+  55.1 Hz saw beneath it, so there is no passband left to reference.
+- **Cents versus bytes.** One resolved rung at the second corner compares
+  nothing.
+
+mpc2emu has built **F2DEPTH v3** to that spec — 13 programs, every rung inside
+the subject: `FIL2FR` 66 at depths 0/2/4/6/8/10 for linearity, `FIL2FR` 72 at
+0/4/8 as the second corner, `FIL2FR` 80 at 0/−4/−8 for the negative half (a
+high corner so the downward excursion still lands above the fundamental), and
+one both-filters-open program as the deflattening reference. It costs one of
+the five free PRGNUM slots.
+
+## `FIL2FR` 45–64: a 19-byte interpolation gap, and one measurement inside it
+
+**Status:** open, blocked on a card crossing.
+
+`AKAI_FIL2FR_MEASURED` (mpc2emu's table) has points at 45 (106.9 Hz) and 64
+(414.4 Hz) and **nothing between** — every other gap in that table is 6–10
+bytes. §225's reference captures put `FIL2FR` 55 at **264.7 Hz** against the
+table's interpolated 218.1, an 18 % disagreement, while the same method agrees
+to 1.0 % at `FIL2FR` 66 where the table is dense. The provenance is the same
+measurer, mode, `FLT2Q` and feature, so the two numbers are directly
+comparable.
+
+One point cannot separate "the table is wrong at 55" from "the region has
+structure the table averages over", and those want different fixes — so
+**264.7 is recorded as suspicion, not offered for the table.** What would
+settle it: four programs at `FIL2FR` 48 / 52 / 56 / 60, **plus 45 and 64
+re-read in the same session** — the re-read being what makes the new points
+commensurable with the old rather than merely adjacent to them. Added as
+points, never as a refitted curve: the first run of that table fitted one
+exponential and byte 20 falsified it 46 % high.
+
+If it holds, §204's filter-2 law (`Hz = 6.7795·exp(0.07033·FIL2FR)`, rungs
+25–88) wants labelling with the feature it actually measures rather than
+silently disagreeing with two tables — §139 is the precedent for a peak-versus-
+corner factor. **I have not checked that and it is suspicion only.**
+
+**49 commits unpushed** (§201-§225). Jan has not given the word and I have not
 pushed.
