@@ -21503,6 +21503,35 @@ practice was identical and the escape was luck.**
 > and a warning is, by construction, the line that does not match the pattern
 > you wrote while thinking about success.
 
+### A fourth member: the verification procedure itself
+
+Found by mpc2emu while writing the tests suggested here, and it is the sharpest
+of the four because of which way it lies.
+
+Their revert-check — save the file, break the fix, confirm the test fails,
+restore, re-run — **restored with `mv backup original`. `mv` preserves the
+backup's mtime.** That mtime was older than the `.pyc` compiled from the broken
+version, so Python went on loading the broken bytecode from cache.
+
+It presented as **three failing tests, one of them a pre-existing golden-hash
+test**, with `grep` showing the source fully restored. A constant read `14` in
+the file and loaded as `0`. Several minutes were spent reading a writer for a
+fault that was not in it.
+
+> §218's check **certified** work it could not observe. §219's help text
+> **promised** a guarantee never implemented. §220 **deleted** a correct
+> diagnosis. This one **accused** — it reported *the code is broken* while the
+> code was fine and the procedure was broken.
+
+A false alarm is usually the safe failure. Not here: it is *more* convincing
+than a control that cannot fail, because failing tests are evidence and nobody
+disbelieves their own red suite. The fix is `cp`, which writes a fresh mtime.
+
+**Checked here rather than assumed:** no `mv` on a `.py` anywhere in this
+project's probes or capture scripts, `__pycache__` is gitignored and untracked,
+so s3ked is not exposed. That is a property of how the tooling happens to be
+written, not of anyone having considered it.
+
 ### Why this class survives review
 
 A suppressed warning leaves **no trace at all**: not a wrong value, not a
