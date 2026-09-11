@@ -260,6 +260,7 @@ silently wrong one.
 - [§217](#217--205-panics-the-machine-and-the-refusal-stores-the-byte-2026-09-10) — 205 panics the machine, and the "refusal" stores the byte (2026-09-10)
 - [§218](#218--a-per-rig-guard-does-not-cover-a-resource-that-is-not-per-rig-2026-09-11) — A per-rig guard does not cover a resource that is not per-rig (2026-09-11)
 - [§219](#219--a-guarantee-in-the-help-text-that-the-code-does-not-implement-2026-09-11) — A guarantee in the help text that the code does not implement (2026-09-11)
+- [§220](#220--the-warning-existed-was-correct-and-was-unreachable-2026-09-11) — The warning existed, was correct, and was unreachable (2026-09-11)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -21415,3 +21416,100 @@ handed on rather than edited. **The rule for the interim is that a capture's
 hold is known only from the command line that produced it**, so it lives in the
 run script and the log, and any features file older than this note carries no
 hold at all.
+
+## §220 — The warning existed, was correct, and was unreachable (2026-09-11)
+
+Two machines were measured all night to rediscover something a converter had
+already said, in these words, once per sample:
+
+```
+  [WARN] 'Dos Moogs G3': stored at 28000 Hz, which the S3000XL cannot play.
+         It will sound at 44100 Hz -- +786 cents. Resample to one of
+         (22050, 44100) first (convert.py does this).
+```
+
+**It named the fault, quantified it to the cent, and gave the remedy.** The
+build script that produced the test volume wrapped the call in
+`contextlib.redirect_stdout(io.StringIO())` to keep build output tidy.
+
+### What it cost, and what it did not
+
+Chasing a modulation on one preset, this session measured the AKAI playing
+**1.5765 ×** faster than the E4XT on the same note, against
+`44100 / 28000 = 1.5750` — 0.10 % apart — and read `SSRATE` 28000 off the
+machine to match it. That is the warning's content, recovered from the audio of
+two samplers.
+
+It is worse than one preset. **Three of six are shifted** — `Rez Play` +831
+cents, `OBX BP Sweep` +210, `Mystery Moog` +786 — including `OBX BP Sweep`,
+which both sessions had adopted as the stable reference pair.
+
+**The conversion itself is correct.** `convert.py` conforms sample rates before
+the writer sees them; the test volume was built by a script that called the
+writer directly and skipped that step. The writer's `VTUNO1` is +5.000
+semitones and agrees with the audio to 4 cents (§ this session's harmonic-series
+check). The hard part was right and the easy part was bypassed.
+
+### Confirmed from both machines, on both layers
+
+eosed initially reported the E4XT sounding **one** layer where the AKAI sounds
+two, with the second "61 dB down — absent, not merely quieter". Withdrawn: they
+had searched a fourth *above*, because this side's two series are above each
+other. The E4XT's zone map puts its two roots at 67 and 72 with key ranges
+offset by five, so its second layer sounds five semitones **below**, at 130.83
+against a predicted 130.86 Hz.
+
+**Both machines have two layers five semitones apart**, and the shift is then
+measurable on each series independently:
+
+| | AKAI | E4XT | shift |
+|---|---|---|---|
+| upper series | 275.39 Hz | 174.68 Hz | +788.1 cents |
+| lower series | 205.81 Hz | 130.83 Hz | +784.4 cents |
+| predicted from `SSRATE` 28000 played at 44100 | | | **+786.4 cents** |
+
+Two series, two machines, agreeing with a number derived from a stored sample
+rate to within 2 cents. The modulation-rate ratio of 1.580 is +791.9 cents —
+the same shift again, so the rate difference and the pitch difference were never
+two findings.
+
+> **An absence is only as good as where you looked.** "No second series" and
+> "no second series within 3 % of 233.2 Hz" are different claims, and only the
+> second can be checked by its reader. The 61 dB figure made the wrong one look
+> quantitative.
+
+**Half the grid is affected**, not one preset: `Rez Play` +831 cents,
+`OBX BP Sweep` +210, `Mystery Moog` +786. `OBX BP Sweep` had been adopted by
+both sessions as the *stable reference pair*. Within-machine repeatability
+survives — both halves of a repeat pair play the same shifted sample on the same
+machine — but **no cross-machine band residual on those three means anything**,
+leaving three comparable presets of six.
+
+### The same pattern here, found by checking rather than sympathising
+
+mpc2emu asked whether any of this side's tooling suppresses output for
+tidiness. It does: `analyse.sh` piped `gridfeat.py` through `tail -3` with **no
+file behind it**, discarding 7 of 10 lines — including every
+`ASSUMED … (NOT measured)` provenance line, which had been added an hour earlier
+precisely so the assumption would travel with the numbers.
+
+No warning was lost in that particular case, so no finding was missed. **The
+practice was identical and the escape was luck.**
+
+> **Filter the view, never the record.** Redirect full output to a file and
+> grep the file. A pipe into `tail` or `grep` destroys what does not match —
+> and a warning is, by construction, the line that does not match the pattern
+> you wrote while thinking about success.
+
+### Why this class survives review
+
+A suppressed warning leaves **no trace at all**: not a wrong value, not a
+failed check, not a missing field. The build succeeds, the numbers look
+reasonable, and the only evidence is a discrepancy someone may or may not chase
+later — here, two sessions and several hours of hardware time.
+
+It is the third member of tonight's family. §218's `kill -0` **certified**
+completion it could not observe. §219's help text **promised** a guarantee the
+code never implemented. This one **deleted** a diagnosis that was already
+correct. In all three the information needed was present or cheaply available,
+and in all three what failed was the path from it to a reader.
