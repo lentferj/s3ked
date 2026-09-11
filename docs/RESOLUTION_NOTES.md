@@ -263,6 +263,8 @@ silently wrong one.
 - [§220](#220--the-warning-existed-was-correct-and-was-unreachable-2026-09-11) — The warning existed, was correct, and was unreachable (2026-09-11)
 - [§221](#221--attack-and-decay-measured-across-both-machines-and-three-mismatches-inside-one-shared-tool-2026-09-11) — Attack and decay measured across both machines, and three mismatches inside one shared tool (2026-09-11)
 - [§222](#222--filter-2-costs-4-to-17-db-depending-on-the-note-and-a-two-variable-control-that-looked-like-one-2026-09-11) — Filter 2 costs 4 to 17 dB depending on the note, and a two-variable control that looked like one (2026-09-11)
+- [§223](#223--the-attak1-law-on-steady-material-and-the-two-machines-agree-to-37--2026-09-11) — The `ATTAK1` law on steady material, and the two machines agree to 3.7 % (2026-09-11)
+- [§224](#224--filter-1-is-201-poles-the-cascade-is-4-the-pole-branch-is-closed-2026-09-11) — Filter 1 is 2.01 poles; the cascade is ~4; the pole branch is closed (2026-09-11)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -21817,3 +21819,121 @@ the pole count; if it collapses, it was the dropped sweep throughout.
 cannot express it.** That is a quantisation limit, not a conversion defect, and
 worth the distinction — a written 0 against a non-zero source value is the shape
 of a dropped field, and here it is not one.
+
+## §223 — The `ATTAK1` law on steady material, and the two machines agree to 3.7 % (2026-09-11)
+
+Measured on `ATKCAL`, a volume built for this: a synthesized constant-amplitude
+sine, so the envelope under test is the *only* contour in the signal.
+
+**Convention, stated with every number because the detector families differ by
+1.69 × on this material: 5 ms smoothing / threshold-crossing / −3.0 dB**, with
+the plateau reference taken as the median of the last 2.0 s of the hold.
+
+| `ATTAK1` | 60 | 70 | 80 | 85 | 90 | 95 | 99 |
+|---|---|---|---|---|---|---|---|
+| attack (s) | 0.085 | 0.248 | 0.669 | 1.095 | 1.960 | 3.425 | 5.305 |
+
+```
+  attack_s = 0.00015 * exp(0.10545 * ATTAK1)      residuals -3.6% to +6.7%
+```
+
+### The control that could have failed
+
+A second program at `ATTAK1` 90 with **five keygroups** instead of one returns
+**1.960 s against 1.960 s — a difference of −0.000 s.** Keygroup count does not
+enter the measurement.
+
+### Both machines are ~45 % faster than the file
+
+| | attack |
+|---|---|
+| source file declares, byte 72 | 3.60 s |
+| E4XT measured, byte 72 | **2.035 s** |
+| AKAI measured, `ATTAK1` 90 | **1.960 s** |
+
+**The two machines agree to 3.7 %. Both are about 45 % faster than the declared
+value.** The disagreement is between the machines and the file, not between the
+machines.
+
+> **Two earlier answers to this question were both measuring something else.**
+> One compared a byte round-tripped through the converter's own law against the
+> source's field — two file-side numbers, no machine in it. The other was this
+> session's `t_peak` on *decaying* material, which is biased, and biased **more
+> for longer attacks**, so it produced +30 %. Neither was wrong about its own
+> quantity; neither was about the hardware.
+
+`t_peak` is unusable here for the opposite reason and that is why the material
+exists: a constant-amplitude sample gives a ramp into a **flat plateau**, and a
+plateau has no unique maximum — the argmax lands wherever capture noise peaks,
+scattering by the plateau length (~11.9 s of a 12 s hold at `ATTAK1` 60).
+**Removing the contour that biases `t_peak` removes the feature that gives it a
+location.**
+
+## §224 — Filter 1 is 2.01 poles; the cascade is ~4; the pole branch is closed (2026-09-11)
+
+Measured on `POLES`: one steady saw, ~200 harmonics over 5 octaves, every slope
+differenced against a reference program so the source spectrum, the converter,
+the sample and the rig all cancel.
+
+| PRG | | fit band | octaves | slope | poles |
+|---|---|---|---|---|---|
+| 118 | filter 1 only, `Low 2` | 331–2811 Hz | 3.09 | −12.06 dB/oct | **2.01** |
+| 119 | cascade `Low 4` | 772–1158 | 0.58 | −24.13 | 4.02 |
+| 120 | cascade `Low 4`, higher corner | 1433–1984 | 0.47 | −21.13 | 3.52 |
+
+**Filter 1 delivers exactly two poles over three octaves on 45 harmonics**, and
+that also validates the method on a band long enough to trust.
+
+**The cascade lands 3.5–4.0 and nowhere near 3 or 5**, which closes the question
+it was built for: the converter's cascade model is not off by one, so a
+pole-count error does not own the −6.40 dB/oct cross-machine slope.
+
+**The corner-independence check is inconclusive, not passed.** 119 and 120
+differ by half a pole, inside what a half-octave fit on 8 and 11 points can
+resolve. The reason is structural: **a 4-pole cascade reaches the recording
+floor within about 1.5 octaves of its corner**, so the usable skirt is short
+however the fit is done. Excluding 3 and 5 is what these captures support;
+separating 3.52 from 4.02 is not.
+
+### The floor is the chain, not the sampler
+
+Median 9–15 kHz, same window, before note-on against during:
+
+| PRG | before | during | Δ |
+|---|---|---|---|
+| 117 (reference, open) | 38.9 | 63.7 | +24.8 |
+| 118 | 39.0 | 42.0 | +3.0 |
+| 119 | 37.9 | 42.2 | +4.3 |
+| 120 | 39.0 | 41.9 | +2.9 |
+
+A flat ~39 dB **before every note**, identical across four programs, with the
+filtered captures reaching only ~42 during. Sampler output noise would not be
+present before the note at the same level. **So more headroom is available from
+input gain or program level** — worth knowing before anyone rebuilds material to
+chase it.
+
+### Three fits discarded, one cause
+
+The first returned **positive slopes for a lowpass** — impossible — because the
+floor guard tested the *reference's* level rather than the filtered program's.
+The second estimated the floor from inter-harmonic bins, which sat **below** the
+true floor, so a 12 dB guard passed points already flat. Only reading absolute
+levels showed PRG 119 falling to 46 dB and then *rising* to 54: a signal on the
+floor.
+
+> Each fit produced a plausible number and each number was made of noise. The
+> common cause is a **reference that is wrong in a smooth way** — the wrong
+> level, a floor estimate below the floor, or elsewhere the same day a
+> theoretical −6 dB/oct in place of the measured source. A reference wrong
+> *noisily* produces obvious rubbish; one wrong *smoothly* produces a clean
+> number with a plausible slope and nothing in the output to distrust.
+
+### And a law used outside its own range
+
+This session quoted `FILFRQ` 99 as 7292 Hz from §54's exponential. **§54 states
+its validity as `FILFRQ` 44..92**, and §146 caps the underlying fit at 84
+because the law departs above it. 7292 is what the exponential returns if
+extended, not what the machine does — and the tell was that it is *below* a
+measured 8481 Hz at byte 95, which would make a cutoff table non-monotonic.
+
+**A law that carries its own range is only as good as the reader checking it.**
