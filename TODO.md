@@ -2144,3 +2144,56 @@ them, and the first two need the rig.
 twice — `PFXSLEV` is "Not used" in the program header and "Effects send level"
 in the part. The send level is inert where both corpus scans counted it and
 live in a region neither had looked at (§213).
+
+## Session state at 2026-09-11 16:15, written before a host reboot
+
+**AKAI hardware state: NOTHING OUTSTANDING. Every edit restored and verified.**
+
+Three RAM edit sessions today, all snapshot-then-restore with read-back
+confirmation. None left anything modified:
+
+- **Multi `FX1`** (§214, §215, §217). Probed to 205/239 and the crash band;
+  restored to **33** and verified after each of two panics. All 16 multi parts
+  byte-identical to the pre-probe snapshot except part 15 offset 109, which
+  §200 established is the last-played-note byte and tracks playback.
+- **`LSI2_ON`** on PRG 43/44/45, all 23 keygroups set to 0 for the
+  single-variable board test (§222). Restored to `1` on every keygroup,
+  read-back verified.
+- **`ENV3` + `MODVFLT2_3`** on PRG 44, all 5 keygroups, for the filter-2 depth
+  probe. Restored to the snapshot `(0,0,0,0,0,0,0,0)` and depth `0`; the script
+  asserted `matches snapshot: True` before exiting.
+
+Snapshots on disk if any doubt arises: `~/temp/s3ked-logs/multi_snapshot.json`,
+`truectl_snap.json`, `fl2depth_snap.json`.
+
+**Resident on the AKAI:** `FXPATHS` from HD4 partition B — 15 programs
+(PRGNUM 0, 40-47, 50-55), 21 samples. This is the **corrected** build; the
+sample-rate rebuild is confirmed on hardware (§220, gate check: PRG 45 note 65
+gives 130.37 / 175.05 Hz against the E4XT's 130.83 / 174.73).
+
+**Captures held**, all in `~/temp/matrix/captures/`: `GRIDv{16,48,80,104,127}_
+0{40..45}` (the original 150-cell grid), `GRIDr80_*` (repeat pair for the noise
+floor), `R{43,44,45,46,47}v*` (post-rebuild re-captures), `OFF{43,44,45}`
+(board-off control), `D2_{0,12,25,50}_044` (filter-2 depth ladder), `LONG45`
+(HOLD 20). Analyses in `akai_P000.json` … `akai_P005.json`.
+
+**Where I was:** the filter-2 depth law is unfinished and **cannot be finished
+on this material** — the subject's own late-minus-early change is 9.52 dB rms
+against the modulation's 3.59, so the material moves more than the thing being
+measured. It needs the flat-contour subject in `~/temp/HD_f2depth.img`
+(PRGNUM 121-126), built with the `ENV3` bytes verified here — `(45, 99, 0, 99,
+0, 99, 0, 99)` at offsets 179-186.
+
+**Three volumes staged on the host, none on the card**, all one-machine designs:
+
+```
+  ~/temp/HD_atkcal.img    109-116   ATTAK1 ladder, steady sine
+  ~/temp/HD_poles.img     117-120   filter skirt, reference-subtracted saw
+  ~/temp/HD_f2depth.img   121-126   MODVFLT2_3 ladder, flat subject
+```
+
+Each has its generator beside it carrying its own analysis spec. All three need
+a card crossing and none justifies a dedicated one.
+
+**46 commits unpushed** (§201-§222). Jan has not given the word and I have not
+pushed.
