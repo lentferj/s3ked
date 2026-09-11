@@ -266,6 +266,7 @@ silently wrong one.
 - [§223](#223--the-attak1-law-on-steady-material-and-the-two-machines-agree-to-37--2026-09-11) — The `ATTAK1` law on steady material, and the two machines agree to 3.7 % (2026-09-11)
 - [§224](#224--filter-1-is-201-poles-the-cascade-is-4-the-pole-branch-is-closed-2026-09-11) — Filter 1 is 2.01 poles; the cascade is ~4; the pole branch is closed (2026-09-11)
 - [§225](#225--modvflt23-is-220-cents-per-unit-and-the-attack-fix-is-confirmed-on-hardware-2026-09-11) — `MODVFLT2_3` is ~220 cents per unit, and the attack fix is confirmed on hardware (2026-09-11)
+- [§226](#226--the-depth-field-is-symmetric-and-a-baseline-window-nearly-convicted-the-wrong-table-2026-09-11) — The depth field is symmetric, and a baseline window nearly convicted the wrong table (2026-09-11)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -22028,6 +22029,12 @@ measures the second.
 470.9 Hz against the generator's 476, so deflattening against a real reference
 program works where v1's theoretical −6 dB/oct put the same corner at 188 Hz.
 
+> **Superseded by §226 — read that first.** The 218.8 / 221.3 figures come from
+> a fit whose passband baseline sat in a fixed 80–200 Hz window while the corner
+> moved. On the same captures with the baseline held at a fixed *relative*
+> position they are **229.1 and 230.9**. The two-rung agreement and the depth-0
+> check below survive; the value does not.
+
 **The ladder outruns the subject above depth 10.** At 220 cents/unit, depth 20
 puts the corner near 6 kHz and depth 50 past the saw's highest harmonic — **a
 corner above the material cannot be found in it.** The negative side saturates
@@ -22054,3 +22061,119 @@ while the printed table still looks orderly.**
 > dropping the source attack, the very bug the volume existed to detect.
 > **A misread address does not fail. It produces the finding you were looking
 > for.**
+
+## §226 — The depth field is symmetric, and a baseline window nearly convicted the wrong table (2026-09-11)
+
+F2DEPTH v3: 13 programs, every rung inside the subject, built by mpc2emu to the
+spec §225 ended with. Captured at note 36 / v80 / HOLD 6.0, all 13 sounded,
+peaks −18.3 to −19.2 dB. Deflattened against **PRG 56** (both filters open) —
+not §225's PRG 37, which in this volume is a −8 rung.
+
+### The finding that nearly went out as a table error
+
+Analysed in the order the volume required — interval first, then residual — the
+deflattening residual came back like this:
+
+| `FIL2FR` | stated | measured | residual |
+|---|---|---|---|
+| 66 | 476.0 Hz | 470.8 | **−19.0 cents** |
+| 72 | 720.0 | 695.5 | **−59.8** |
+| 80 | 1225.0 | 1154.8 | **−102.1** |
+
+Not scatter. A monotone drift of about −60 cents per octave, which reads
+exactly like `FIL2FR`'s byte→Hz spacing being too wide in the table — and
+§FIL2FRGAP had just established that this table does have a bad region. The
+accusation was available, it was consistent with a known defect, and it was
+wrong.
+
+**The passband baseline was taken in a fixed 80–200 Hz window while the corner
+it referenced moved from 436 Hz to 1873 Hz.** So the baseline-to-corner gap
+grew from 1.3 octaves to 3.5, and any residual slope left by the deflattening
+accumulated over more octaves at the top than at the bottom. Held at a fixed
+*relative* position instead — 1.6 to 2.6 octaves below each corner, iterated —
+the residual spread collapses:
+
+```
+  absolute window:   -19.0   -59.8  -102.1     spread  83.2 cents
+  relative window:   -19.0    -7.8   -23.1     spread  15.3 cents
+```
+
+15.3 cents is inside §225's own 18.6-cent method residual. **The table was
+right and the instrument was tilted.**
+
+> This is the third time in this project that a window held constant in the
+> wrong coordinate has manufactured a result: the 48 Hz boxcar that produced a
+> confirming *bowl*, the 1/6-octave smoother wider than the 108 Hz notch it was
+> measuring, and now this. The first two destroyed a feature. **This one built
+> one, pointed it at a specific table with a specific known defect, and gave a
+> plausible magnitude.** A smoother that erases gets caught by the thing going
+> missing; a baseline that tilts gets caught by nothing, because a tilt is what
+> a real tuning error looks like.
+
+### What the volume measured once the window was fixed
+
+**`FIL2FR` 72→80, measured here against the same reference: 904.7 cents,
+113.1 per byte.** Against the table's 920.1 (115.0/byte) and §204's 974.1
+(121.8/byte). The table is within 15.4 cents over eight bytes — agreement.
+
+> **And that retires my §225 suspicion about §204, by a different route than I
+> expected.** I had guessed §204 measures a different feature (a §139-style
+> peak-versus-corner factor). It does not need one: §204 is a *single
+> exponential* over bytes 25–88, and mpc2emu's table already records that one
+> exponential does not fit this parameter — the first attempt was falsified 46 %
+> high at byte 20. A single exponential misfitting locally is the expected
+> behaviour of a known-wrong model, not evidence of a different feature. **The
+> suspicion is withdrawn and no peak-versus-corner factor is claimed.**
+
+**The depth law, five ladders across two volumes, all on the corrected window:**
+
+| corner | rungs | cents/unit | max residual |
+|---|---|---|---|
+| `FIL2FR` 66 (v3) | 0,2,4,6,8,10 | **230.0** | 68.8 cents |
+| `FIL2FR` 72 (v3) | 0,4,8 | **219.7** | 13.1 |
+| `FIL2FR` 80 (v3) | 0,−4,−8 | **227.8** | 19.2 |
+| `FIL2FR` 66 (v2) | 0,5 | 229.1 | — |
+| `FIL2FR` 66 (v2) | 0,10 | 230.9 | — |
+
+**~225 cents per unit, spread about ±5 % between corners.** v2's own `FIL2FR`
+66 ladder reprocessed (229.1 / 230.9) lands on v3's independent `FIL2FR` 66 fit
+(230.0) — different session, different reference program, same corner.
+
+**The six-rung ladder is the worst of the three, not the best** (68.8 cents
+against 13.1 and 19.2). Its low rungs sit where the fewest harmonics fall in
+the baseline window, so the extra rungs bought resolution in the place the
+method is weakest. Rung count is not evidence quality.
+
+### The symmetry, which is what v2 could not reach at all
+
+| excursion | from `FIL2FR` 72 | from `FIL2FR` 80 | difference |
+|---|---|---|---|
+| ±4 | +891.9 cents | −892.0 | **0.1 cents** |
+| ±8 | +1757.6 | −1822.5 | **65.0 cents** |
+
+**The field acts symmetrically.** §225 could only say the negative half existed
+and acted downward.
+
+> **The 0.1 cents is not a precision claim.** The method's own residual is 15–20
+> cents, so two numbers agreeing to 0.1 agree *to the resolution of the
+> measurement* and no further. Reporting it as 0.1 would be reporting the
+> instrument. The ±8 pair differing by 65 cents is the honest indication of how
+> far the symmetry has actually been tested.
+
+Both coincident pairs closed at **+12.7 and +12.8 cents** — equal to each other
+to 0.1 cents, which is the predicted behaviour: both members of a pair sit at
+the same frequency, so a residual tilt corrects them almost equally and cancels
+within the pair. That prediction is confirmed; it is also why the pairs could
+not have caught the baseline tilt, and did not.
+
+### The corrected window refuses where the old one answered
+
+§225 reported `FIL2FR` 66 depth −25 and −50 as 161.8 and 156.2 Hz and called
+the 76-cent gap "saturating". On the corrected window those two rungs **do not
+resolve at all**: at a ~160 Hz corner the relative baseline window is 27–53 Hz,
+below the 55.1 Hz fundamental, so there is nothing to average and the fit
+declines.
+
+**That is the better outcome.** §225 needed a human to notice that two numbers
+14 cents apart per unit were an artefact of running out of harmonics. The
+corrected method says so itself, by returning nothing.

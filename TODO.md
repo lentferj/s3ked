@@ -2193,7 +2193,14 @@ Resident on the AKAI at the end of the session: **F2DEPTH v2**, partition A.
 
 ## `MODVFLT2_3`: the negative half and the cents-versus-bytes law
 
-**Status:** open, blocked on a card crossing (Jan's to schedule).
+**Status:** CLOSED by §226. F2DEPTH v3 was loaded from partition A on
+2026-09-11 and captured; both open questions are answered and a third thing
+was found. **~225 cents per unit** across five ladders on two volumes
+(219.7 / 227.8 / 230.0 in v3, 229.1 / 230.9 from v2 reprocessed), the field
+is **symmetric** (±4 excursions agree to within the method's resolution), and
+the measurement is **linear within the ~15-20 cent scatter**. The history
+below is kept because §226's main finding is about the instrument, not the
+field.
 
 §225 settled the positive side at **~220 cents per unit** from two rungs
 agreeing to 1.1 %, and confirmed the deflattening method by landing depth 0 at
@@ -2275,10 +2282,18 @@ commensurable with the old rather than merely adjacent to them. Added as
 points, never as a refitted curve: the first run of that table fitted one
 exponential and byte 20 falsified it 46 % high.
 
-If it holds, §204's filter-2 law (`Hz = 6.7795·exp(0.07033·FIL2FR)`, rungs
-25–88) wants labelling with the feature it actually measures rather than
-silently disagreeing with two tables — §139 is the precedent for a peak-versus-
-corner factor. **I have not checked that and it is suspicion only.**
+~~If it holds, §204's filter-2 law wants labelling with the feature it
+actually measures — §139 is the precedent for a peak-versus-corner factor.~~
+**Withdrawn by §226.** §204 is a *single exponential* over bytes 25–88, and
+this table already records that one exponential does not fit `FIL2FR` — the
+first attempt was falsified 46 % high at byte 20. A known-wrong model
+misfitting locally is that model behaving as recorded, not evidence of a
+different feature. No peak-versus-corner factor is claimed.
 
-**49 commits unpushed** (§201-§225). Jan has not given the word and I have not
-pushed.
+§226 measured `FIL2FR` 72→80 at **113.1 cents/byte** against the table's 115.0
+and §204's 121.8, so the table is within 15.4 cents over eight bytes. That is
+agreement, and it is also why the 45–64 gap below stays a gap rather than
+becoming a general doubt about the table.
+
+**Unpushed commits: run `git rev-list --count @{u}..HEAD`.** §201 onward. Jan
+has not given the word and I have not pushed.
