@@ -21869,6 +21869,41 @@ scattering by the plateau length (~11.9 s of a 12 s hold at `ATTAK1` 60).
 **Removing the contour that biases `t_peak` removes the feature that gives it a
 location.**
 
+### What the ladder found downstream: two wrong laws, cancelling
+
+The ladder was built to calibrate one constant. It exposed **two, each about
+1.8 × wrong in opposite directions**, which is why neither had ever been heard.
+
+**The converter's `_E4XT_ATK_SLOWDOWN = 1.838` models a slowdown that does not
+exist.** Its derivation table pairs an `intends` column against a `t_peak`
+column — 2.00 against 3.60 at byte 72, 3.00 against 5.70 at 79 — and the ratio
+is constant at 1.80–1.90 across a 116 × range. **That constancy was taken as
+proof the effect was real.** It is the opposite: a fixed-shape decaying sample
+biases `t_peak` by a roughly fixed factor, so constancy is what the *artefact*
+predicts and cannot discriminate. At the convention here, byte 72 measures
+2.035 s — the `intends` column. There is no slowdown.
+
+**The AKAI-side law has the same disease**, running 1.58–1.85 × slow against
+these seven rungs, with an error that *grows* with attack length: 1.29 × at
+`ATTAK1` 70, 1.62 × at 99. Same cause, different code path.
+
+> **The two errors cancel on the path anyone would test.** E4B → AKAI comes out
+> accurate to −0.7 % / +0.9 / +2.6 at three E4XT bytes. The route that matters
+> most is right **by coincidence**, and fixing either side alone makes it worse
+> than it is today — 0.59 × with only the parser, 1.84 × with only the writer.
+
+What is actually broken is everything else: any non-E4B source into the AKAI
+attacks at 0.54–0.61 × the requested time, and E4B past the ceiling runs −36 %
+and −56 % at the top two bytes.
+
+**And the ladder puts a real ceiling on the record.** With the inflation removed,
+`ATTAK1` 99 is **5.13 s** and nothing slower can be represented — today masked
+because every request arrives 1.8 × inflated and saturates earlier.
+
+**Neither error is visible from a file.** A round trip through the converter's
+own law is exactly what hid them, and it is the same shape as the withdrawn
+"agrees to 0.05 s": two file-side numbers with no machine between them.
+
 ## §224 — Filter 1 is 2.01 poles; the cascade is ~4; the pole branch is closed (2026-09-11)
 
 Measured on `POLES`: one steady saw, ~200 harmonics over 5 octaves, every slope
