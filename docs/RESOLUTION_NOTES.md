@@ -21742,12 +21742,44 @@ and the pooled result does not rest on it.
 > was made unnecessary by reading six parameters. Neither design was poor; both
 > answers were cheaper than the experiment.
 
-**And it leaves a question pointing the other way.** The source is reported to
-carry a filter sweep of 3707–8316 cents on these presets, and the conversion
-wrote **zero** modulation depth on two of them. Either the sweep was dropped in
-conversion — a defect larger than the pole count and sitting underneath all of
-today's numbers — or the source's sweep is represented some other way. That is a
-question about the source and belongs on the converter side.
+### Correction: the sweep was dropped, and that inverts the paragraph above
+
+The question above — whether the zero depth was a dropped sweep or a different
+representation — is answered, and it is the first. **The conversion drops the
+sweep, and PRG 44 and 45 are static because of it.**
+
+Their sources carry **4754 and 8316 cents** of filter envelope: 4.0 and 6.9
+octaves of corner movement, written as depth 0.
+
+**The mechanism, traced by mpc2emu through their own writer.** `_XPM_TO_FLT2`
+marks HP, BP and EQ rows `keep_f1 = False`, taking filter 1 out of circuit so
+the band does not sit on a lowpass knee — deliberate and correct. **But the
+AKAI's dedicated ENV2 depth at byte 153 modulates filter 1.** With filter 1
+bypassed the depth function receives `filfrq = 99` and does exactly what its own
+docstring promises: a wide-open base returns depth 0, *"since there is nowhere
+for the corner to sweep from there"*.
+
+> **The logic is right and the input is wrong.** The corner that should sweep is
+> `FIL2FR`, and nothing sweeps it. `MODVFLT2_1-3` — the three slots read at zero
+> here — are the unused route that would.
+
+**And the ENV2 shape bytes are still written**, so the program carries a
+complete filter envelope with zero depth. It reads as legitimately static to
+anyone who looks, which is exactly how both sessions read it.
+
+Across 666 voices in 21 banks: 318 carry a filter envelope, 292 keep filter 1
+and the sweep survives, **23 bypass filter 1 and lose it — 7.2 %**, dropping a
+median of **3784 cents, 3.2 octaves**.
+
+**So "the static subject already existed" is wrong.** Only one side was static.
+PRG 44 and 45 compare a static AKAI against a sweeping E4XT, which makes the
+dropped sweep a live candidate for the −6.40 dB/oct alongside the pole count —
+and **the two cleanest presets are the two carrying the largest dropped
+sweeps.**
+
+The genuine static-vs-static test now needs the *E4XT's* envelope flattened
+against the already-static AKAI programs. If the −6 dB/oct survives that, it is
+the pole count; if it collapses, it was the dropped sweep throughout.
 
 ### Also recorded: a zero that is rounding, not a dropped field
 
