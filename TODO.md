@@ -2249,6 +2249,11 @@ different reference (PRG 56, not 37); but v3 carries three depth-0 rungs at
 `FIL2FR` 66 / 72 / 80, so it measures its own method's absolute residual at
 three frequencies in the same session it needs it.
 
+**And that residual measurement is uncontaminated by the gap it sits beside:**
+none of the three depth-0 corners falls in the 45–64 hole. 66 and 72 sit in
+dense parts of the table and 80 is itself a measured point, so a disagreement
+there indicts the method rather than §FIL2FRGAP. (mpc2emu's check.)
+
 ## `FIL2FR` 45–64: a 19-byte interpolation gap, and one measurement inside it
 
 **Status:** open, blocked on a card crossing.
