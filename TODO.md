@@ -2213,6 +2213,34 @@ high corner so the downward excursion still lands above the fundamental), and
 one both-filters-open program as the deflattening reference. It costs one of
 the five free PRGNUM slots.
 
+**Two coincident pairs fall out of that ladder, 40 cents apart on paper** —
+`FIL2FR` 72 depth 0 (720 Hz) against 80 depth −4 (737 Hz), and 72 depth 4
+(1197 Hz) against 80 depth 0 (1225 Hz). The first crosses the sign of the
+field and the second does not, so comparing the two isolates an asymmetry
+between the halves.
+
+**But neither pair separates the depth law from the byte→Hz table, and the
+analysis must not be written as if it does.** Both pairs agree on exactly one
+condition: that 4 depth units equal the `FIL2FR` 72→80 interval. At 220
+cents/unit that is **880 cents**, while the two available tunings of that
+interval are **920 cents** (mpc2emu's measured table) and **974 cents**
+(§204's law) — a 54-cent spread between the sources, larger than the 40-cent
+offset the pairs were designed around. A pair disagreeing tells you the
+product is wrong, not which factor.
+
+**The ladder already carries its own un-confounding, at no extra cost:** 72
+depth 0 and 80 depth 0 are both in it, so the 72→80 interval is measurable
+directly in the same session, against the same reference, before either pair
+is looked at. Measure the interval first, then the pairs test the depth law
+alone. Taking them in the other order buys a number that cannot be assigned to
+anything.
+
+A residual tilt in the deflattening is **not** what the pairs catch: both
+members of a pair sit at the same frequency to within 40 cents, so a smooth
+tilt corrects them almost equally and cancels within the pair. That is a
+virtue — it is why the pairs test the field and not the reference — but it
+means a tilt has to be caught somewhere else.
+
 ## `FIL2FR` 45–64: a 19-byte interpolation gap, and one measurement inside it
 
 **Status:** open, blocked on a card crossing.
