@@ -262,6 +262,7 @@ silently wrong one.
 - [§219](#219--a-guarantee-in-the-help-text-that-the-code-does-not-implement-2026-09-11) — A guarantee in the help text that the code does not implement (2026-09-11)
 - [§220](#220--the-warning-existed-was-correct-and-was-unreachable-2026-09-11) — The warning existed, was correct, and was unreachable (2026-09-11)
 - [§221](#221--attack-and-decay-measured-across-both-machines-and-three-mismatches-inside-one-shared-tool-2026-09-11) — Attack and decay measured across both machines, and three mismatches inside one shared tool (2026-09-11)
+- [§222](#222--filter-2-costs-4-to-17-db-depending-on-the-note-and-a-two-variable-control-that-looked-like-one-2026-09-11) — Filter 2 costs 4 to 17 dB depending on the note, and a two-variable control that looked like one (2026-09-11)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -21625,3 +21626,133 @@ The sign test. On `t_peak` the AKAI is longer on **every** note, +325 to
 differences change sign is not measuring the thing whose per-note differences do
 not** — so the `attack_ms` medians "agreeing" was a median landing between
 disagreeing signs.
+
+## §222 — Filter 2 costs 4 to 17 dB depending on the note, and a two-variable control that looked like one (2026-09-11)
+
+mpc2emu asked for the `NB` twins — the no-board conversions of the same six
+sources — as a single-variable control for a broadband level difference between
+machines they could not account for. **`NB` is not a single-variable control.**
+
+### The confound, and why it sat exactly on the axis under test
+
+The writer **re-tunes filter 1** when the board is withheld. PRG 44, keygroup 0:
+
+| | `FILFRQ` | `FILQ` | `K_FREQ` |
+|---|---|---|---|
+| FX | 99 | 11 | **0** |
+| NB | 39 | 0 | **1** |
+
+`K_FREQ` is filter keyfollow. It is off on one side and on on the other, so the
+corner tracks the keyboard in `NB` and not in `FX` — which produces
+note-dependent level differences **by construction**. The test was *"do per-note
+level swings appear when the board is withheld"*, and it would have found them
+whether or not the board contributed any.
+
+> **A two-variable control looks exactly like a one-variable control until
+> someone reads both headers.** Nothing about the `FX`/`NB` pairing announces the
+> second variable — same sources, same samples, same names, one flag in the
+> description.
+
+### The real control, and the answer
+
+Take the `FX` programs and set `LSI2_ON` = 0 in RAM. Filter 1, the samples, the
+levels and the keygroup map are all untouched; the only difference is whether
+the board is in circuit. Snapshot and verified restore across all 23 keygroups.
+
+Board on minus board off, broadband RMS per note, velocity 80:
+
+| PRG | n24 | n38 | n52 | n65 | n79 | swing |
+|---|---|---|---|---|---|---|
+| 43 | −7.25 | −7.40 | −7.38 | −10.38 | **−24.14** | 16.88 dB |
+| 44 | −6.53 | −7.00 | −8.46 | −10.76 | −7.81 | 4.23 dB |
+| 45 | −6.89 | −7.51 | −7.30 | −9.73 | −13.56 | 6.67 dB |
+
+**Engaging filter 2 costs 4.2 to 16.9 dB of per-note broadband swing inside a
+single preset.** The low-note offset sits near §195's −6.02 dB insertion loss,
+and the attenuation *grows with pitch* — which is the signature of a
+**non-tracking** filter: `FIL2FR` is a fixed byte, so as the fundamental rises
+past the corner more of the signal falls outside the passband.
+
+mpc2emu's file-side reading agrees: corners pinned at 133–164 Hz against
+fundamentals running 33 to 784 Hz, so the note crosses the corner between
+note 52 and note 65 — exactly where these numbers turn.
+
+### A hypothesis raised and refuted in one exchange
+
+Proposed here: the cross-machine difference is a *tracking asymmetry* — one
+machine's filter follows the keyboard, the other's does not. **Refuted from the
+source files without any measurement:** `filter_keytrack` is 0.0449 oct/oct,
+which moves the corner 2.5 semitones across a grid whose fundamentals move 4.58
+octaves. Neither machine tracks.
+
+**The effect survives the refutation, because it never needed tracking.** Two
+fixed-corner filters with different corners or different *slopes* attenuate
+differently per note, and non-tracking is the precondition for the effect rather
+than an obstacle to it.
+
+The quantitative candidate now on the table, from §208: the AKAI's highpass tap
+is **one pole**, measured at +6.1 dB/octave asymptotic at both extremes of
+resonance, where the converter had read it as two. A one-pole/two-pole
+divergence over 4.58 octaves is **27.5 dB**, against the ~32 dB observed —
+right order, right kind of cause, and falsifiable from band vectors both sides
+already hold: the difference should grow at ~6 dB per octave of note frequency,
+and be flat on presets where the note never crosses the corner.
+
+### The prediction held, and the rival explanation died on a parameter read
+
+mpc2emu tested the ~6 dB/octave prediction against the cross-machine per-note
+offsets already in hand, no new captures:
+
+| preset | slope dB/oct | r | endpoint span | implied poles |
+|---|---|---|---|---|
+| P003 | −6.83 | −0.840 | 35.64 dB | 1.14 |
+| P004 | −6.62 | −0.894 | 31.81 | 1.10 |
+| P005 | −5.75 | −0.850 | 28.29 | 0.96 |
+| **pooled** | **−6.40** | | | **1.07** |
+
+**Predicted ~6, measured 6.40, across three presets with different filter
+modes.** The sign says the AKAI has the *steeper* skirt — it loses more as pitch
+rises — which the prediction did not specify.
+
+A caution raised here in advance, that mixed modes should not give a clean
+slope, turned out not to bite. That is either luck or says the modes share
+whatever is responsible, and it is not resolved.
+
+**The rival account was sweep depth**, since a moving corner and a pole-count
+difference produce the same signature — both make the offset pitch-dependent,
+where a horizontal corner offset gives a constant dB offset instead. mpc2emu
+proposed building a static-subject volume to separate them.
+
+**It was answered by reading six parameters.** Both filters are swept only
+through the assignable mod matrix, so the depths settle it:
+
+```
+  PRG 43   5/8 keygroups modulate filter 1 (source 3, depth 12), 0/8 filter 2
+  PRG 44   0/5 modulate filter 1,  0/5 filter 2
+  PRG 45   0/10 modulate filter 1, 0/10 filter 2
+```
+
+**PRG 44 and 45 have no filter modulation at all — their corners are static for
+the whole note — and they carry slopes of −6.62 and −5.75 dB/oct.** The static
+subject already existed and had been in the machine all day. Only PRG 43 sweeps,
+and the pooled result does not rest on it.
+
+> Two proposed controls in one afternoon, both **checkable before building**:
+> the `NB` pairing was disproved by reading two headers, and the static volume
+> was made unnecessary by reading six parameters. Neither design was poor; both
+> answers were cheaper than the experiment.
+
+**And it leaves a question pointing the other way.** The source is reported to
+carry a filter sweep of 3707–8316 cents on these presets, and the conversion
+wrote **zero** modulation depth on two of them. Either the sweep was dropped in
+conversion — a defect larger than the pole count and sitting underneath all of
+today's numbers — or the source's sweep is represented some other way. That is a
+question about the source and belongs on the converter side.
+
+### Also recorded: a zero that is rounding, not a dropped field
+
+`K_FREQ` writes 0 where the source asks 0.0449 oct/oct. A step is nominally
+1/12 oct/oct, so the request is **0.54 steps** and rounds to zero. **The field
+cannot express it.** That is a quantisation limit, not a conversion defect, and
+worth the distinction — a written 0 against a non-zero source value is the shape
+of a dropped field, and here it is not one.
