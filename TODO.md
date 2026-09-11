@@ -2280,14 +2280,23 @@ and a relative baseline window holds at most one. Reprocessed it gives 215.1
 or 243.1 depending on the window — bracketing the table's 218.1, supporting
 mpc2emu's window-proximity explanation in direction, and determining nothing.
 
-**The four-program run must be redesigned before it is scheduled.** At
-`FIL2FR` 48 the corner is near 131 Hz with two harmonics beneath it and no
-room for a baseline at all, so 48 / 52 / 56 / 60 measured flat would come back
-as four undetermined numbers after a card crossing. **Put all four at a common
-`MODVFLT2_3` offset of +8**: that lifts a 131 Hz corner to roughly 380 Hz, and
-because the offset is shared it cancels exactly in the byte-to-byte intervals
-the table needs — the depth law's own ±8 cents/unit never enters. Absolute
-anchor still from re-reading 45 and 64 in the same session. Added as points,
+~~The four-program run must be redesigned: put all four at a common
+`MODVFLT2_3` offset of +8, lifting a 131 Hz corner into the denser part of the
+comb.~~ **Both the original run and that redesign are withdrawn by §228.**
+
+Doubling the harmonic density — note 24 instead of 36, `K_FREQ` and `K_FRQ2`
+both 0 so the corners stay put — moves the window sensitivity **not at all**:
+269 → 284 cents at `FIL2FR` 66 and 347 → 347 at `FIL2FR` 80. Sampling density
+was never the constraint. The deflattened response has no flat passband to
+reference, so the −3 dB corner is not a well-defined observable by this method
+at any note or any corner frequency.
+
+**What that costs this item:** the `FIL2FR` 66→80 interval moves ~70 cents
+across the window sweep and §FIL2FRGAP needs 40. **This table cannot be
+settled by the −3 dB-below-passband method**, so no card crossing should be
+spent on it until a different observable exists — a fixed-slope crossing, a
+fit to the whole transition, or an A/B against a program *known* flat rather
+than assumed flat. That is the open work here now. Added as points,
 never as a refitted curve: the first run of that table fitted one exponential
 and byte 20 falsified it 46 % high.
 

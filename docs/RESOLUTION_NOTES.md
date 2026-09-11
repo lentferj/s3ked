@@ -268,6 +268,7 @@ silently wrong one.
 - [§225](#225--modvflt23-is-220-cents-per-unit-and-the-attack-fix-is-confirmed-on-hardware-2026-09-11) — `MODVFLT2_3` is ~220 cents per unit, and the attack fix is confirmed on hardware (2026-09-11)
 - [§226](#226--the-depth-field-is-symmetric-and-a-baseline-window-nearly-convicted-the-wrong-table-2026-09-11) — The depth field is symmetric, and a baseline window nearly convicted the wrong table (2026-09-11)
 - [§227](#227--i-fixed-the-window-and-then-reported-the-best-of-six-choices-2026-09-11) — I fixed the window and then reported the best of six choices (2026-09-11)
+- [§228](#228--doubling-the-harmonic-density-changes-nothing-so-the-corner-is-the-problem-not-the-comb-2026-09-11) — Doubling the harmonic density changes nothing, so the corner is the problem, not the comb (2026-09-11)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -22291,3 +22292,84 @@ as an accuracy figure.
 
 A window held in the wrong coordinate manufactures a result. **A window held in
 the right coordinate at an unexamined position manufactures a precision.**
+
+## §228 — Doubling the harmonic density changes nothing, so the corner is the problem, not the comb (2026-09-11)
+
+§227 left one explanation standing for why an absolute corner reading moves 295
+cents when the baseline window is nudged: **too few harmonics under the
+corner** for a baseline to stand on. It was a good story. `FIL2FR` 55 has three
+harmonics below its corner, `FIL2FR` 48 has two, and those are exactly the
+bytes the table is emptiest at. I filed a redesign on it — put the gap
+programs at a common `MODVFLT2_3` +8 so their corners rise into a denser part
+of the comb.
+
+**It is wrong, and the test cost nothing on the card.**
+
+`K_FREQ` and `K_FRQ2` read 0 on all fourteen resident programs, so neither
+filter's cutoff follows the key. Playing an octave lower therefore halves the
+comb spacing to 27.56 Hz and **doubles the harmonic count below every corner
+while the corners stay put**. `LONOTE` was widened to 24 on three programs in
+RAM, captured, and restored with an independent re-read.
+
+```
+              PRG 121 (FIL2FR 66)        PRG 35 (FIL2FR 80)
+   window   note 36      note 24       note 36      note 24
+  3.0/1.7   535.7 (2)   535.4 (5)     1437.0 (7)  1439.0 (13)
+  4.0/2.0   500.3 (2)   491.9 (4)     1299.2 (6)  1308.6 (12)
+  5.0/2.5   470.8 (2)   470.4 (3)     1235.4 (4)  1235.1  (9)
+  6.0/3.0   458.5 (1)   458.9 (3)     1208.8 (4)  1210.9  (7)
+  7.0/3.5   458.5 (1)   454.4 (2)     1196.4 (3)  1192.4  (6)
+  8.0/4.0   458.5 (1)   454.4 (2)     1176.2 (3)  1177.8  (5)
+
+   spread   269.3 c     284.1 c        346.7 c     346.7 c
+```
+
+**Two to six times the harmonics, and the spread does not move** — 269 → 284
+and 347 → 347, with the readings tracking each other window-by-window to a few
+Hz. Sampling density was never the constraint.
+
+### What that leaves
+
+The deflattened response **has no flat passband to reference**. Where the
+baseline sits changes what "3 dB below the passband" means, because there is no
+passband — only a gentler slope leading into a steeper one. So the −3 dB corner
+is not a well-defined observable for this filter by this method, **at any note
+and at any corner frequency**: the 1225 Hz rung is no better behaved than the
+476 Hz one, and it has 13 harmonics beneath it.
+
+**This is why the differential measurements worked and the absolute ones did
+not**, and it is a stronger reason than §227 had. A difference between two
+programs cancels the ill-definition because both are read at the same place on
+the same ambiguous curve. An absolute reading has to commit to what the
+passband is, and nothing in the data determines that.
+
+### The cost, which is a card crossing not taken
+
+Measured across the same sweep:
+
+| quantity | moves with the window |
+|---|---|
+| absolute corner | **~300 cents** |
+| `FIL2FR` 66→80 interval (14 bytes) | **~70 cents** |
+| depth law, per unit | **~18 cents/unit** (230 ± 8) |
+
+**§FIL2FRGAP wants 40-cent resolution and the interval is good to 70.** So the
+four-program run cannot settle that table — and neither can my own `+8` offset
+redesign, which fixes a constraint that turned out not to bind. **Both are
+withdrawn.** Settling `FIL2FR` needs a different observable, not a better
+subject: something that does not require estimating a passband — a fixed-slope
+crossing, a fit to the whole transition, or a direct A/B against a program
+known to be flat rather than one assumed to be.
+
+> **The redesign was the more dangerous artefact, not the original error.** A
+> wrong number gets checked. A *plausible mechanism attached to a real
+> limitation* gets built: it explained the data, it predicted the right
+> direction, it named the right bytes, and it came with a concrete fix that
+> would have consumed six of the card's four free slots and a crossing. The
+> falsifying experiment took twenty minutes of RAM writes and no card contact
+> at all, and I only ran it because a peer asked a question that made the
+> answer matter.
+
+**Hardware state: nothing outstanding.** `LONOTE` snapshot taken to disk before
+the write, restored to 36 on all three programs, and confirmed by a separate
+read-back script rather than by the writer's own report.
