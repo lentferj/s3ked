@@ -21591,6 +21591,21 @@ All three inside tooling adopted specifically to make the two sides comparable.
    whose peaks span 206 ms were sampled at points up to 206 ms apart in their
    own envelopes.
 
+**By the end of the day the count was six**, not three: the interpolation rule,
+the level law, and **smoothing width** — which eosed found moves a ratio from
+**0.935 to 1.069** across widths from 5 ms to 1 s, and withdrew a "+7 % above the
+ladder" finding once they varied it. Fixed at 5 ms by agreement, **not because
+5 ms is right but because it is what both tools already do**, so nothing already
+computed changes and the parameter stops being implicit.
+
+A seventh was caught at design time rather than after: `t_peak` is degenerate on
+constant-amplitude material. A sample built deliberately without contour — to
+remove the decay bias that pulls `t_peak` early — gives a ramp into a flat
+plateau, and **a plateau has no unique maximum**, so the argmax lands wherever
+capture noise peaks. Scatter of order the plateau length on a measurement of
+tenths of a second. Removing the feature that biases an argmax removed the
+feature that gives it a location.
+
 > **Sharing an analyser removes implementation differences and leaves every
 > naming and reference choice untouched.** §105's ambiguity did not survive
 > being coded — it *moved*, from "which definition do we mean" to "which key do
