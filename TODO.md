@@ -2241,6 +2241,14 @@ tilt corrects them almost equally and cancels within the pair. That is a
 virtue — it is why the pairs test the field and not the reference — but it
 means a tilt has to be caught somewhere else.
 
+The size of that tilt is better taken from a measurement than from a model.
+§225's deflattening put depth 0 at 470.9 Hz against the generator's 476 —
+**19 cents absolute**, and the within-pair residual is a fraction of that.
+It is an indication rather than a bound for v3, which deflattens against a
+different reference (PRG 56, not 37); but v3 carries three depth-0 rungs at
+`FIL2FR` 66 / 72 / 80, so it measures its own method's absolute residual at
+three frequencies in the same session it needs it.
+
 ## `FIL2FR` 45–64: a 19-byte interpolation gap, and one measurement inside it
 
 **Status:** open, blocked on a card crossing.
