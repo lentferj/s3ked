@@ -259,6 +259,7 @@ silently wrong one.
 - [§216](#216--what-an-fx-value-selects-read-off-the-panel-by-camera-2026-09-10) — What an `FX` value selects, read off the panel by camera (2026-09-10)
 - [§217](#217--205-panics-the-machine-and-the-refusal-stores-the-byte-2026-09-10) — 205 panics the machine, and the "refusal" stores the byte (2026-09-10)
 - [§218](#218--a-per-rig-guard-does-not-cover-a-resource-that-is-not-per-rig-2026-09-11) — A per-rig guard does not cover a resource that is not per-rig (2026-09-11)
+- [§219](#219--a-guarantee-in-the-help-text-that-the-code-does-not-implement-2026-09-11) — A guarantee in the help text that the code does not implement (2026-09-11)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -21341,3 +21342,76 @@ a fact about the *work*, not about the process.
 The third is the one to carry. The first two are shared hardware and shared OS,
 both obvious in hindsight; the third is a shared **claim**, and nothing about
 `kill -0` looks like it touches another session's work.
+
+## §219 — A guarantee in the help text that the code does not implement (2026-09-11)
+
+The shared capture harness `~/temp/matrix/measure.py` documents its `--hold`
+option like this:
+
+> *"Recorded in the features file so takes at different holds can never be
+> compared by accident."*
+
+**It is not recorded.** What `run()` writes is `rig`, `tag`, `program`, `label`,
+`wav`, `notes`, `velocity`. Reading a features file back confirms it:
+`hold=None` on every capture in tonight's grid.
+
+So every `HOLD 2.0` and `HOLD 6.0` file in that directory is indistinguishable
+**on the one parameter changed all night** — and the hold was changed for a
+reason: a 2.0 s hold put the analysis window on a preset's rising ramp, 19.5 dB
+across the window, which is what forced the move to 6.0.
+
+### Why this is worse than a check that merely fails
+
+> **The help text is what a reader consults *instead of* checking.** A missing
+> guard leaves a reader uncertain and they may go and look. A documented guard
+> answers the question, so they stop.
+
+It is the same species as the `kill -0` completion check in §218 — a test that
+cannot distinguish finished from killed — and worse in one respect: that one
+merely returned the wrong answer, this one **promises** the right one in prose
+while the code does nothing.
+
+Found from the other end. This session noticed `hold: None` while verifying a
+repeat pair and flagged it as *"your guard may not be armed for my files"* —
+reading it as a gap in the consumer. eosed checked the producer and found the
+guarantee was never implemented at all.
+
+### And the downstream guard inherits the hole
+
+`gridfeat.py residual` refuses to pair two files whose `hold` differs, which
+sounds like the protection this needs. But its `hold` comes from **gridfeat's
+own `--hold` argument**, not from the capture. It catches two *analyses* run
+differently; it cannot catch **a HOLD 2.0 capture analysed with `--hold 6.0`**,
+which is the actual hazard and the one the help text claims to have closed.
+
+Two guards, one at each end, and the hazard passes between them: the producer
+does not record the value and the consumer reads its own copy of it.
+
+### Not fixed here
+
+### Fixed upstream, with a sharper rule than the fix
+
+mpc2emu has `measure.py` recording `hold`/`gap`/`pre`, and made the point that
+matters more than the fix: **a missing value must be UNKNOWN, never defaulted.**
+
+Every features file predating the fix lacks the key, and those files were
+captured at *both* 2.0 and 6.0. A `.get('hold', 2.0)` would read a HOLD 6.0
+capture as 2.0 and **pass a guard it should fail**.
+
+> Converting a missing guard into a wrong one is strictly worse than leaving it
+> missing — the missing one leaves everyone checking by hand, and they were.
+
+So `gridfeat analyse` now has no defaults on the schedule constants at all. It
+reads them from a features file that records them, or takes
+`--assume-hold`/`--assume-gap`/`--assume-pre` and stamps the output with
+`schedule_provenance: "ASSUMED … (NOT measured)"`, which `residual` prints for
+each side before comparing. **The assumption travels with the numbers instead of
+being inherited invisibly** — which is the same shape as recording a
+measurement's conditions beside it (§204), applied to a constant nobody
+measured.
+
+`measure.py` is shared and three sessions are mid-campaign in it. Recorded and
+handed on rather than edited. **The rule for the interim is that a capture's
+hold is known only from the command line that produced it**, so it lives in the
+run script and the log, and any features file older than this note carries no
+hold at all.
