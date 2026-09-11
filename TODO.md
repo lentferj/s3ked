@@ -2193,10 +2193,10 @@ Resident on the AKAI at the end of the session: **F2DEPTH v2**, partition A.
 
 ## `MODVFLT2_3`: the negative half and the cents-versus-bytes law
 
-**Status:** CLOSED by §226. F2DEPTH v3 was loaded from partition A on
+**Status:** CLOSED by §226, figures revised by §227. F2DEPTH v3 was loaded from partition A on
 2026-09-11 and captured; both open questions are answered and a third thing
-was found. **~225 cents per unit** across five ladders on two volumes
-(219.7 / 227.8 / 230.0 in v3, 229.1 / 230.9 from v2 reprocessed), the field
+was found. **~230 cents per unit, ±8** — §226's ~225 was the value at one
+baseline-window position; sweeping that position moves it 220–236, the field
 is **symmetric** (±4 excursions agree to within the method's resolution), and
 the measurement is **linear within the ~15-20 cent scatter**. The history
 below is kept because §226's main finding is about the instrument, not the
@@ -2273,14 +2273,23 @@ to 1.0 % at `FIL2FR` 66 where the table is dense. The provenance is the same
 measurer, mode, `FLT2Q` and feature, so the two numbers are directly
 comparable.
 
-One point cannot separate "the table is wrong at 55" from "the region has
-structure the table averages over", and those want different fixes — so
-**264.7 is recorded as suspicion, not offered for the table.** What would
-settle it: four programs at `FIL2FR` 48 / 52 / 56 / 60, **plus 45 and 64
-re-read in the same session** — the re-read being what makes the new points
-commensurable with the old rather than merely adjacent to them. Added as
-points, never as a refitted curve: the first run of that table fitted one
-exponential and byte 20 falsified it 46 % high.
+~~One point cannot separate "the table is wrong at 55" from "the region has
+structure the table averages over".~~ **264.7 is withdrawn by §227**, not as
+wrong but as *unmeasurable*: `FIL2FR` 55 has three harmonics below its corner
+and a relative baseline window holds at most one. Reprocessed it gives 215.1
+or 243.1 depending on the window — bracketing the table's 218.1, supporting
+mpc2emu's window-proximity explanation in direction, and determining nothing.
+
+**The four-program run must be redesigned before it is scheduled.** At
+`FIL2FR` 48 the corner is near 131 Hz with two harmonics beneath it and no
+room for a baseline at all, so 48 / 52 / 56 / 60 measured flat would come back
+as four undetermined numbers after a card crossing. **Put all four at a common
+`MODVFLT2_3` offset of +8**: that lifts a 131 Hz corner to roughly 380 Hz, and
+because the offset is shared it cancels exactly in the byte-to-byte intervals
+the table needs — the depth law's own ±8 cents/unit never enters. Absolute
+anchor still from re-reading 45 and 64 in the same session. Added as points,
+never as a refitted curve: the first run of that table fitted one exponential
+and byte 20 falsified it 46 % high.
 
 ~~If it holds, §204's filter-2 law wants labelling with the feature it
 actually measures — §139 is the precedent for a peak-versus-corner factor.~~

@@ -267,6 +267,7 @@ silently wrong one.
 - [§224](#224--filter-1-is-201-poles-the-cascade-is-4-the-pole-branch-is-closed-2026-09-11) — Filter 1 is 2.01 poles; the cascade is ~4; the pole branch is closed (2026-09-11)
 - [§225](#225--modvflt23-is-220-cents-per-unit-and-the-attack-fix-is-confirmed-on-hardware-2026-09-11) — `MODVFLT2_3` is ~220 cents per unit, and the attack fix is confirmed on hardware (2026-09-11)
 - [§226](#226--the-depth-field-is-symmetric-and-a-baseline-window-nearly-convicted-the-wrong-table-2026-09-11) — The depth field is symmetric, and a baseline window nearly convicted the wrong table (2026-09-11)
+- [§227](#227--i-fixed-the-window-and-then-reported-the-best-of-six-choices-2026-09-11) — I fixed the window and then reported the best of six choices (2026-09-11)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -22101,6 +22102,14 @@ the residual spread collapses:
 15.3 cents is inside §225's own 18.6-cent method residual. **The table was
 right and the instrument was tilted.**
 
+> **Corrected by §227 — the second half of that sentence stands, the
+> first does not.** The divisors 6 and 3 were picked, not derived, and
+> sweeping them moves the residual 295 cents. 15.3 was the best of six
+> choices, reported as the method's accuracy. The absolute window's drift
+> is an artefact — no relative window reproduces it — but the corrected
+> method does not *confirm* the table either. §227 also revises the depth
+> law to ~230 cents/unit and withdraws the `FIL2FR` 55 reading entirely.
+
 > This is the third time in this project that a window held constant in the
 > wrong coordinate has manufactured a result: the 48 Hz boxcar that produced a
 > confirming *bowl*, the 1/6-octave smoother wider than the 108 Hz notch it was
@@ -22177,3 +22186,108 @@ declines.
 **That is the better outcome.** §225 needed a human to notice that two numbers
 14 cents apart per unit were an artefact of running out of harmonics. The
 corrected method says so itself, by returning nothing.
+
+## §227 — I fixed the window and then reported the best of six choices (2026-09-11)
+
+§226 replaced a baseline window held in a fixed absolute band with one held at
+a fixed relative position, `[fc/6, fc/3]`, and reported that the Step-2
+residual spread fell from 83.2 cents to 15.3. **The divisors 6 and 3 were
+picked, not derived, and I did not sweep them.**
+
+mpc2emu proposed reprocessing v2's `FIL2FR` 55 rung on the corrected window,
+expecting §225's 264.7 Hz to collapse toward the table's 218.1. It does move —
+to 215.1 or 243.1 depending on where the window sits. **And the control moved
+too**, which is what turned a confirmation into this section.
+
+### The sweep
+
+Step-2 residual against the stated corners, v3's three depth-0 rungs, as the
+one arbitrary choice is varied (harmonic count in the baseline in brackets):
+
+```
+   window     FIL2FR 66     FIL2FR 72     FIL2FR 80  |  mean    drift 66->80
+  3.0/1.7    +204.5 (2)    +208.1 (4)    +276.3 (7)  | +229.6      +71.8
+  4.0/2.0     +86.1 (2)     +89.7 (3)    +101.8 (6)  |  +92.6      +15.7
+  5.0/2.5     -19.0 (2)     +20.3 (3)     +14.6 (4)  |   +5.3      +33.6
+  6.0/3.0     -64.8 (1)      -7.8 (2)     -23.1 (4)  |  -31.9      +41.8   <- SS226
+  7.0/3.5     -64.8 (1)     -59.8 (2)     -40.9 (3)  |  -55.2      +24.0
+  8.0/4.0     -64.8 (1)     -59.8 (2)     -70.4 (3)  |  -65.0       -5.5
+```
+
+**The level is not determined by the data at all** — it moves 295 cents across
+the sweep. What §226 reported as a 15.3-cent method residual was the closest
+approach of six, quoted as if it were the method's accuracy.
+
+### What survives, and what does not
+
+**Survives — the absolute window was tilted.** Its drift was −83.1 cents, and
+**no relative window reproduces it**: the sweep's drift runs −5.5 to +71.8, all
+of it on the other side. The −60 cents/octave finding §226 nearly filed against
+mpc2emu's table is an artefact of the fixed band, and that conclusion does not
+depend on which relative window replaces it.
+
+**Does not survive — "the table was right."** The drift scatters 77 cents
+across the sweep, so the corrected method does not confirm the table to better
+than about ±40 cents over 66→80. It clears the table of the specific charge;
+it does not vouch for it. Those are different results and §226 ran them
+together.
+
+**Survives, and is the volume's actual product — the depth law**, because it is
+a *difference* between programs measured at the same window position, so the
+common bias cancels:
+
+```
+   window    FIL2FR 66   FIL2FR 72   FIL2FR 80
+  3.0/1.7      240.5       236.9       243.7      <- window nearest the corner
+  4.0/2.0      235.6       228.3       236.3
+  5.0/2.5      236.4       224.1       225.4
+  6.0/3.0      235.6       219.7       227.8      <- SS226
+  7.0/3.5      233.2       224.9       225.6
+  8.0/4.0      230.1       221.5       230.8
+```
+
+**220 to 244 cents per unit across every choice; 220 to 236 once the window
+nearest the corner is dropped.** So the honest figure is **~230 cents/unit,
+±8**, and §226's "~225, ±5 %" was the value at one window read as the value.
+
+The contrast is the finding: the same sweep moves an **absolute** reading 295
+cents and a **differential** one 18. That is the quantitative form of what the
+coincident pairs already showed — a measurement that compares two things
+through the same instrument is robust to the instrument in a way an absolute
+reading never is.
+
+### §FIL2FRGAP: 264.7 is withdrawn, and the proposed run cannot work
+
+`FIL2FR` 55 has **three harmonics below its corner** — 55.1, 110.3, 165.4 — and
+a relative baseline holds at most one of them. Both reprocessed values (215.1,
+243.1) sit well below §225's 264.7 and bracket the table's 218.1, so
+mpc2emu's window-proximity explanation is supported in direction and rough
+size. But a reading resting on one harmonic is not a measurement.
+**264.7 is withdrawn as unmeasurable rather than corrected.**
+
+> **And the four-program run filed under §FIL2FRGAP cannot be measured with
+> this subject.** `FIL2FR` 48 puts the corner near 131 Hz, which leaves *two*
+> harmonics beneath it and no room at all for a baseline — a 2-octave-below
+> window lands at 33 Hz, under the 55.125 Hz fundamental. Bytes 48/52/56/60 are
+> the emptiest part of the table precisely because they are the hardest part to
+> measure, and the run as specified would come back with four undetermined
+> numbers after a card crossing.
+
+**A design that does work, using this volume's own result:** put all four
+programs at a **common depth offset** — `MODVFLT2_3` = +8 lifts a 131 Hz corner
+to roughly 380 Hz, into the measurable band. Because every program carries the
+*same* offset, the depth law cancels exactly in the byte-to-byte **intervals**,
+which is what the table needs; its ±8 cents/unit uncertainty never enters.
+The absolute anchor still comes from re-reading 45 and 64 in the same session,
+as mpc2emu specified.
+
+### The rule this cost
+
+**Fixing an instrument and reporting the new number is half the job.** The fix
+introduced a new arbitrary choice, and the check for an arbitrary choice is to
+vary it and see what moves. I ran that check only when a peer's proposal made
+the control move in front of me — otherwise §226 would have shipped 15.3 cents
+as an accuracy figure.
+
+A window held in the wrong coordinate manufactures a result. **A window held in
+the right coordinate at an unexamined position manufactures a precision.**
