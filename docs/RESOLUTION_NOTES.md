@@ -261,6 +261,7 @@ silently wrong one.
 - [§218](#218--a-per-rig-guard-does-not-cover-a-resource-that-is-not-per-rig-2026-09-11) — A per-rig guard does not cover a resource that is not per-rig (2026-09-11)
 - [§219](#219--a-guarantee-in-the-help-text-that-the-code-does-not-implement-2026-09-11) — A guarantee in the help text that the code does not implement (2026-09-11)
 - [§220](#220--the-warning-existed-was-correct-and-was-unreachable-2026-09-11) — The warning existed, was correct, and was unreachable (2026-09-11)
+- [§221](#221--attack-and-decay-measured-across-both-machines-and-three-mismatches-inside-one-shared-tool-2026-09-11) — Attack and decay measured across both machines, and three mismatches inside one shared tool (2026-09-11)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -21513,3 +21514,99 @@ completion it could not observe. §219's help text **promised** a guarantee the
 code never implemented. This one **deleted** a diagnosis that was already
 correct. In all three the information needed was present or cheaply available,
 and in all three what failed was the path from it to a reader.
+
+## §221 — Attack and decay measured across both machines, and three mismatches inside one shared tool (2026-09-11)
+
+Two cross-machine comparisons on the presets that never needed the sample-rate
+rebuild (§220), so no pitch shift confounds either. Both sides ran the same
+analyser on their own captures.
+
+### Attack: the AKAI is 30 % longer, past both branches of the prediction
+
+`t_peak`, velocity 80, five notes:
+
+| | E4XT | AKAI | difference |
+|---|---|---|---|
+| median | 2.92 s | **3.80 s** | +0.88 s, +30 % |
+| spread across notes | 0.21 s | **0.94 s** | 4.6 × wider |
+
+mpc2emu filed a prediction before either capture: **2.92 s** if their `ATTAK1`
+law is right, **3.48 s** if what the machine does is a round trip through the
+law being tested. **3.80 is past the worse branch.**
+
+They had previously reported the attack conversion agreeing to 0.05 s and
+withdrew it themselves: that figure compared *the byte they write, run back
+through their own law*, against *the source's own field* — two file-side
+numbers, neither a measurement, and §105 records that "attack time" means
+`t_peak` on one reading and a 10–90 % rise on another, differing by **1.6 ×** on
+this machine. **Two measured peaks sidestep that entirely**, which is the whole
+value of the test.
+
+**The 4.6 × spread difference is a second, independent finding.** It is
+deterministic on both sides — this side's note-24 value moves 3.79 / 3.79 /
+3.80 / 3.79 / 3.80 across five velocity passes — so it is the preset on both
+machines and scatter on neither. Same material, same nominal envelope, and the
+peak position varies with note four and a half times more on one machine.
+
+### Decay: less on the AKAI by ~4 dB, opposite to the predicted sign
+
+Anchored to **each note's own measured peak on each machine**, dB re the RMS at
+that peak, median over five notes, change across 1.0 s:
+
+| preset | AKAI | E4XT | difference |
+|---|---|---|---|
+| P001 | −0.87 dB | −5.28 dB | **+4.41** |
+| P002 | −2.03 | −5.80 | **+3.77** |
+
+mpc2emu predicted −0.90 and −0.08 — the AKAI decaying *lower*. It is higher, on
+both.
+
+**P002 was the designated floor** — the preset whose predicted divergence was
+9 % of P001's. It diverges **85 %** as much. That is the criterion its proposer
+set for withdrawing the explanation, met on numbers anchored the same way on
+both sides.
+
+A near-constant ~4 dB on both presets is the shape of a **systematic**
+difference, not of a `DECAY1` effect: a saturation account predicts divergence
+scaling with the shortfall, 2.58 × against 1.06 ×, and the measured ratio is
+nearly flat.
+
+**P001 is modulation-contaminated on both machines** and its three-point sample
+is partly measuring phase — this side reads −1.48 dB at +0.5 s then *back up* to
+−0.87 at +1.0, and the E4XT's note 79 does the same at −17.65 then −14.69. P002
+is monotonic on both, so **the control is the cleaner comparison of the two**,
+which is an awkward place to arrive.
+
+### The pattern worth more than either result: three mismatches in ninety minutes
+
+All three inside tooling adopted specifically to make the two sides comparable.
+
+1. **`hold` documented as recorded and never written** (§219).
+2. **`attack_ms` against `t_peak_ms`** — one analyser computes both from one
+   function, they differ by **a second** on this preset, and one message
+   described the definition of one while naming the other. Reading the wrong
+   column gave "agreement at 2.69 against 2.92" instead of a 30 % discrepancy.
+3. **The decay offset origin** — same reference *in words* (each note's own
+   peak) but offsets applied from a single clock time on one side, so notes
+   whose peaks span 206 ms were sampled at points up to 206 ms apart in their
+   own envelopes.
+
+> **Sharing an analyser removes implementation differences and leaves every
+> naming and reference choice untouched.** §105's ambiguity did not survive
+> being coded — it *moved*, from "which definition do we mean" to "which key do
+> we read", which is harder to see because both numbers come out of the same
+> trusted function.
+
+What caught all three was the same move: **put the two sides' numbers next to
+each other before interpreting either.** The `attack_ms`/`t_peak_ms` split
+showed up because both columns were printed rather than one; the anchor mismatch
+showed up because one side's `+0.00` was not zero and the other side's was zero
+by construction.
+
+### What resolves the attack/decay tie
+
+The sign test. On `t_peak` the AKAI is longer on **every** note, +325 to
++1181 ms; on `attack_ms` the sign flips at note 38. **A statistic whose per-note
+differences change sign is not measuring the thing whose per-note differences do
+not** — so the `attack_ms` medians "agreeing" was a median landing between
+disagreeing signs.
