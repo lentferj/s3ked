@@ -269,6 +269,7 @@ silently wrong one.
 - [§226](#226--the-depth-field-is-symmetric-and-a-baseline-window-nearly-convicted-the-wrong-table-2026-09-11) — The depth field is symmetric, and a baseline window nearly convicted the wrong table (2026-09-11)
 - [§227](#227--i-fixed-the-window-and-then-reported-the-best-of-six-choices-2026-09-11) — I fixed the window and then reported the best of six choices (2026-09-11)
 - [§228](#228--doubling-the-harmonic-density-changes-nothing-so-the-corner-is-the-problem-not-the-comb-2026-09-11) — Doubling the harmonic density changes nothing, so the corner is the problem, not the comb (2026-09-11)
+- [§229](#229--two-orderings-of-the-same-three-constants-and-why-the-transposition-is-silent-2026-09-12) — Two orderings of the same three constants, and why the transposition is silent (2026-09-12)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -22373,3 +22374,72 @@ known to be flat rather than one assumed to be.
 **Hardware state: nothing outstanding.** `LONOTE` snapshot taken to disk before
 the write, restored to 36 on all three programs, and confirmed by a separate
 read-back script rather than by the writer's own report.
+
+## §229 — Two orderings of the same three constants, and why the transposition is silent (2026-09-12)
+
+`~/temp/matrix` declares the capture schedule in **two orders**, and the
+analysis scripts this project's findings rest on are split across both:
+
+```
+  HOLD, GAP, PRE = 2.0, 3.0, 0.6    measure.py, decay.py, decay2.py, d2fit.py,
+                                    interval.py, interval2.py, repeat.py,
+                                    repeat2.py, reppair.py
+  PRE, HOLD, GAP = 0.6, 2.0, 3.0    perchannel.py
+  OLD_PRE, OLD_HOLD, OLD_GAP        reanalyze.py  (the GAP 0.8 era)
+```
+
+**Every one of them is correct today.** The hazard is copying the *values*
+between files without the names.
+
+### Why it cannot announce itself
+
+mpc2emu's account is that note onsets are set by `PRE + HOLD + GAP`, which a
+transposition leaves unchanged. True — but the reason is sharper than
+coincidence: **the two literal tuples are a rotation of each other.**
+`(2.0, 3.0, 0.6)` and `(0.6, 2.0, 3.0)` are the same three numbers cycled, and
+**a rotation always preserves the sum**. So the period is invariant by
+construction, not by luck, and the invariance would survive any future change
+to the values as long as both files keep quoting the same triple.
+
+Which means every note still lands exactly where it was commanded, the onset
+grid still validates, and **only the analysis window is wrong**. eosed lost a
+run to this shape on 2026-09-12: a 3 s window instead of 10, truncating before
+a peak at 3.8 s, returning 2.90–2.99 s — plausible values, from a window that
+ended before the thing it was measuring.
+
+### The guard put in, and the one not put in
+
+`measure.py` printed `hold` only when `--hold` was passed, and never printed
+`gap` or `pre`. It now prints all three **named, on every run**, with the
+period:
+
+```
+  schedule: pre 0.6 s, hold 10.0 s, gap 3.0 s  (period 13.60 s)
+```
+
+Additive, no behaviour change, verified on both the default and `--hold`
+paths. That is deliberately the weakest possible fix: it does not prevent a
+transposition, it makes the run's own output carry the names so a later
+analysis can be checked against the run that produced it.
+
+> **The durable fix already exists and is not being used consistently.**
+> `measure.py` records `hold`/`gap`/`pre` into the features file, and
+> `gridfeat.py` reads them with `schedule_provenance`. An analysis script that
+> re-declares the constants is choosing to re-derive something the capture
+> already told it. The re-declaration is the defect; the print is a smoke
+> alarm, not a repair.
+
+**Not changed: the nine other scripts.** They are shared with two other
+projects and a session may be mid-run. A harness edited underneath a running
+peer is a worse failure than the one being fixed.
+
+### The pattern this is the fourth instance of
+
+eosed caught it only because a prior measurement was in front of them and
+disagreed. That is the fourth error in two days caught by **an old number
+rather than anything in the new run** — the others being mpc2emu's four-point
+fit catching three divisions by the wrong curve, §225's depth-0 check against
+the generator's stated corner, and §226's absolute-window drift showing up only
+against stated corners. **An instrument compared to itself cannot detect a bias
+in itself**, so a script that does not print what it is assuming is not
+checkable at all.
