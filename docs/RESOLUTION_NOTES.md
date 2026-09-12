@@ -22391,6 +22391,19 @@ analysis scripts this project's findings rest on are split across both:
 **Every one of them is correct today.** The hazard is copying the *values*
 between files without the names.
 
+**But the three are not equally dangerous, and the ranking is the opposite of
+the obvious one.** `reanalyze.py` carries `(0.6, 2.0, 0.8)` — sum **3.4**
+against the current **5.6**. Copying from it shifts every onset and the onset
+grid rejects the run on the first capture. **It is the safe file.** Only files
+quoting the *same triple* can rotate silently, so the dangerous pair is
+`measure.py` ↔ `perchannel.py`, and they are dangerous *because they agree*.
+
+> **The file that looks most compatible with the one you are editing is the one
+> to be most careful with** — which is exactly backwards from how anyone picks
+> a file to copy from. Compatibility is what makes a wrong copy survive.
+> (mpc2emu's inversion of my own listing, which had `reanalyze.py` in the
+> hazard without that distinction.)
+
 ### Why it cannot announce itself
 
 mpc2emu's account is that note onsets are set by `PRE + HOLD + GAP`, which a
