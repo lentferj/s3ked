@@ -265,7 +265,7 @@ silently wrong one.
 - [§222](#222--filter-2-costs-4-to-17-db-depending-on-the-note-and-a-two-variable-control-that-looked-like-one-2026-09-11) — Filter 2 costs 4 to 17 dB depending on the note, and a two-variable control that looked like one (2026-09-11)
 - [§223](#223--the-attak1-law-on-steady-material-and-the-two-machines-agree-to-37--2026-09-11) — The `ATTAK1` law on steady material, and the two machines agree to 3.7 % (2026-09-11)
 - [§224](#224--filter-1-is-201-poles-the-cascade-is-4-the-pole-branch-is-closed-2026-09-11) — Filter 1 is 2.01 poles; the cascade is ~4; the pole branch is closed (2026-09-11)
-- [§225](#225--modvflt23-is-220-cents-per-unit-and-the-attack-fix-is-confirmed-on-hardware-2026-09-11) — `MODVFLT2_3` is ~220 cents per unit, and the attack fix is confirmed on hardware (2026-09-11)
+- [§225](#225--first-modvflt23-depth-measurement-value-superseded-by-227-and-the-attack-fix-confirmed-on-hardware-2026-09-11) — First `MODVFLT2_3` depth measurement (value superseded by §227), and the attack fix confirmed on hardware (2026-09-11)
 - [§226](#226--the-depth-field-is-symmetric-and-a-baseline-window-nearly-convicted-the-wrong-table-2026-09-11) — The depth field is symmetric, and a baseline window nearly convicted the wrong table (2026-09-11)
 - [§227](#227--i-fixed-the-window-and-then-reported-the-best-of-six-choices-2026-09-11) — I fixed the window and then reported the best of six choices (2026-09-11)
 - [§228](#228--doubling-the-harmonic-density-changes-nothing-so-the-corner-is-the-problem-not-the-comb-2026-09-11) — Doubling the harmonic density changes nothing, so the corner is the problem, not the comb (2026-09-11)
@@ -21977,7 +21977,7 @@ measured 8481 Hz at byte 95, which would make a cutoff table non-monotonic.
 
 **A law that carries its own range is only as good as the reader checking it.**
 
-## §225 — `MODVFLT2_3` is ~220 cents per unit, and the attack fix is confirmed on hardware (2026-09-11)
+## §225 — First `MODVFLT2_3` depth measurement (value superseded by §227), and the attack fix confirmed on hardware (2026-09-11)
 
 Two volumes, both measured at the same stated convention where a time is
 involved: **5 ms smoothing / threshold-crossing / −3.0 dB.**
