@@ -22567,4 +22567,54 @@ reads clean at every field and still plays flat.
 One incidental: program index 8, keygroup 3, `VTUNO1` = **−1687 raw** = −659
 cents at §56's 2.56 raw per cent. The only non-zero tune value on the volume.
 
+### The truncation challenge, and why it does not carry the −400
+
+VinSamLib read the converted samples and found them **unlooped and trimmed** —
+`--trim-tail` without `--trim-tail-keep-loops`, so all three lost their loops
+and cannot sustain: 10.47 → 5.80 s, 9.71 → **2.26 s**, 9.89 → 6.23 s at their
+roots. mpc2emu's point followed: a 3 s window starting 0.5 s after onset needs
+3.5 s of audio, and the middle keygroup has 2.26.
+
+**Correct about the material, and checkable in the captures already taken.**
+An RMS envelope in 0.25 s bins says how much each note actually sounded:
+
+```
+   note   sounds until      note   sounds until
+     36      ~5.00 s          72      ~5.00 s
+     48      ~4.75            84      ~5.00
+     60      ~3.00
+```
+
+**Only note 60 was short of the 3.5 s the window needed.** The other four had
+4.75–5.00 s, and note 60 still read with the rest. Re-measured with a 1 s
+window (0.20–1.20 s after onset) that fits inside even 2.26 s:
+
+```
+   36  -402.6     48  -391.3     60  -391.3     72  -421.2     84  -406.3
+```
+
+**The constant survives a window the material can support.** What the challenge
+does change is the error bar: across window choices the figure moves −391 to
+−421, so it is **−400 ± 15 cents, not ± 6**. §230's original spread was one
+window's scatter quoted as the uncertainty — the same error as §227's, caught
+this time by someone else's objection rather than my own sweep.
+
+**And the strongest form of the finding needs neither stretching nor sustain.**
+Notes 36, 60 and 84 each play their keygroup's sample **at its own declared
+root** — no transposition at all — and read −402.6, −391.3 and −406.3. A sample
+sounding four semitones below the root its own header declares, with no
+transposition, no stretch and a window inside its length, is a property of the
+sample's content.
+
+> **mpc2emu's heuristic — "a measurement artefact is constant; source chaos is
+> not" — is sound and points the other way here.** VinSamLib measured the five
+> *source* samples at −1221, −1186, −21, −4 and −109 cents against their own
+> declared roots. A faithful conversion of any three of those cannot produce
+> −400 either. **Neither the source's raggedness nor my window explains a
+> constant**, which leaves something in between having normalised it.
+>
+> The file-side test needs no hardware: **compare each output sample's declared
+> root against its source sample's declared root.** Equal means the content
+> moved; four semitones apart means the converter re-rooted.
+
 **Nothing was written.** Every step was a read or a note played.
