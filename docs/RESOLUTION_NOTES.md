@@ -270,6 +270,7 @@ silently wrong one.
 - [§227](#227--i-fixed-the-window-and-then-reported-the-best-of-six-choices-2026-09-11) — I fixed the window and then reported the best of six choices (2026-09-11)
 - [§228](#228--doubling-the-harmonic-density-changes-nothing-so-the-corner-is-the-problem-not-the-comb-2026-09-11) — Doubling the harmonic density changes nothing, so the corner is the problem, not the comb (2026-09-11)
 - [§229](#229--two-orderings-of-the-same-three-constants-and-why-the-transposition-is-silent-2026-09-12) — Two orderings of the same three constants, and why the transposition is silent (2026-09-12)
+- [§230](#230--a-consistent-wrong-answer-from-five-notes-and-a-fault-that-was-in-the-rig-2026-09-13) — A consistent wrong answer from five notes, and a fault that was in the rig (2026-09-13)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -22456,3 +22457,114 @@ the generator's stated corner, and §226's absolute-window drift showing up only
 against stated corners. **An instrument compared to itself cannot detect a bias
 in itself**, so a script that does not print what it is assuming is not
 checkable at all.
+
+## §230 — A consistent wrong answer from five notes, and a fault that was in the rig (2026-09-13)
+
+Two measurements asked for by mpc2emu on a nine-program volume, both read-only.
+Program and sample identities are slot numbers throughout: the material is a
+commercial library.
+
+### The balance question could not be answered, and the reason is the giveaway
+
+All nine programs, note 36, v100, hold 4.0 s. Peak is `max |sample|` in dBFS:
+
+```
+  prog   L peak   R peak   bal      prog   L peak   R peak   bal
+    0   -53.92    -0.10  -53.8       5   -58.27    -9.88  -48.4
+    1   -73.41   -20.50  -52.9       7   -58.27    -5.16  -53.1
+    2   -65.20   -11.47  -53.7       8   -90.31   -37.60  -52.7
+    3   -63.46   -11.58  -51.9       9   -57.64    -4.91  -52.7
+    4   -63.46   -12.51  -51.0
+```
+
+Read as a result, this says every program on the volume plays hard right. **Six
+of the nine are single-zone at pan 0 and cannot be one-sided at all** — which
+is what makes the table a rig reading rather than a finding. Three
+corroborations: the offset is the same ~53 dB across nine unrelated programs,
+which is the signature of bleed rather than of nine faults; prog 0's right
+channel sits at −0.10 dBFS, effectively clipping; and the previous day's
+captures on the identical rig entry balance to **+0.70 dB** at −15 to −19 dB
+peaks.
+
+> **A constant offset across unrelated subjects is the instrument.** The
+> temptation here was real: the request *was* "which programs play one-sided",
+> a one-sided answer arrived for every one of them, and the requester had
+> already established that the file side looked innocent. Everything lined up
+> except that a pan-0 single-zone program has no mechanism for it.
+>
+> The control was free and already in the data — **the six programs that could
+> not exhibit the effect**. Not a control anyone designed; just the part of the
+> requested set that the hypothesis did not cover.
+
+Withdrawn as unmeasurable and referred to the physical owner. Yesterday's
+`+0.70 dB` on the same rig entry is also the fourth-plus instance of an old
+number doing the catching (§229).
+
+### Every header mechanism checked out, which is why the machine was asked
+
+Before capturing: zone pans as reported (three programs −50/+50 on every
+keygroup, six single-zone at pan 0); **zone 2 populated** on all three panned
+ones; and each `SNAME1`/`SNAME2` checked against the 120-sample resident list —
+**0 missing across all nine**. The last was the best remaining mechanism, since
+a header naming a sample that a thinning pass removed reads as a correct stereo
+pair and plays one side. It is dead.
+
+### A consistent wrong answer from five notes
+
+Program index 4, a 3-keygroup pad spanning 24–47 / 48–71 / 72–127, played at
+notes 36/48/60/72/84. First pass used **harmonic product spectrum** and
+returned **+802 to +821 cents on all five notes** — five independent notes, one
+coherent story, and an octave wrong throughout.
+
+The partial series is what caught it:
+
+```
+  note 60, ten strongest partials, as multiples of the lowest strong peak
+    1.000   1.498   2.011   3.016   4.001   5.994   6.984   7.989
+```
+
+**A companion at 1.5× means the true fundamental is half the lowest peak** —
+those are harmonics 2, 3, 4, 6, 8, 12, 14, 16 of a fundamental that is itself
+too weak to appear in the top ten. HPS locks onto the second harmonic exactly
+when the fundamental is weak, which is the normal condition for a pad.
+
+Re-measured with autocorrelation (30–2000 Hz, 3 s window 0.5 s after onset),
+cross-checked against half the strongest partial:
+
+| note | keygroup | nominal | measured | cents |
+|---|---|---|---|---|
+| 36 | 0 | 65.406 Hz | 51.89 | **−400.7** |
+| 48 | 1 | 130.813 | 104.12 | **−395.1** |
+| 60 | 1 | 261.626 | 207.79 | **−398.8** |
+| 72 | 2 | 523.251 | 413.79 | **−406.3** |
+| 84 | 2 | 1046.502 | 827.59 | **−406.3** |
+
+**−400 cents, constant across all three keygroups and all five octaves.** Not
+growing with distance from a keygroup's centre, so not transposition of
+stretched survivors; and identical in all three keygroups, so not a
+per-keygroup root error either.
+
+> **Five notes agreeing was the thing that made it convincing, and five notes
+> agreeing is exactly what a systematic detector failure produces.** Consistency
+> across repeats tests for noise. It cannot test for a bias every repeat shares.
+
+### Where the offset is not
+
+A prediction filed before reading, and lost: `SPITCH` is the root a keygroup
+transposes from, so an `SPITCH` four semitones high plays four semitones flat.
+
+```
+  program index 4:  kg0 SPITCH 36   kg1 SPITCH 60   kg2 SPITCH 84
+                    STUNO 0 on all six zones
+                    PTUNO 0, KGTUNO 0 per keygroup, VTUNO1/2 0 per zone
+```
+
+Exactly the original roots; every tune field zero. **The offset is in neither
+the program nor the sample headers**, which leaves the sample audio itself — a
+sample whose header says root 36 but whose content is four semitones below a C2
+reads clean at every field and still plays flat.
+
+One incidental: program index 8, keygroup 3, `VTUNO1` = **−1687 raw** = −659
+cents at §56's 2.56 raw per cent. The only non-zero tune value on the volume.
+
+**Nothing was written.** Every step was a read or a note played.
