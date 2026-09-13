@@ -273,6 +273,7 @@ silently wrong one.
 - [§230](#230--a-consistent-wrong-answer-from-five-notes-and-a-fault-that-was-in-the-rig-2026-09-13) — A consistent wrong answer from five notes, and a fault that was in the rig (2026-09-13)
 - [§231](#231--i-withdrew-the-correct-reading-and-an-unrelated-field-read-settled-it-2026-09-13) — I withdrew the correct reading, and an unrelated field read settled it (2026-09-13)
 - [§232](#232--multipart-prname-is-writable-the-lock-was-ours-and-the-probe-lied-twice-first-2026-09-13) — Multipart `PRNAME` is writable; the lock was ours, and the probe lied twice first (2026-09-13)
+- [§233](#233--writing-a-parts-prname-changes-the-byte-and-nothing-else-2026-09-13) — Writing a part's `PRNAME` changes the byte and nothing else (2026-09-13)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -22724,11 +22725,8 @@ statement that the byte refuses.**
 to an empty part's `PRNAME` read back byte-exact, and the snapshot restored.
 So the lock is ours alone.
 
-> **What is NOT shown: that the part then plays that program.** §91 records
-> that index and `PRGNUM` are unrelated, and the machine may resolve a part to
-> a program by number at note time — in which case a written name is cosmetic,
-> and a field that accepts a value which changes nothing is *worse* than a
-> locked one. The flag stays until a note on the part's channel says otherwise.
+> **What is NOT shown by that: whether the part then plays the program.**
+> Measured below. It does not.
 
 ### The probe produced the expected answer twice before it produced a real one
 
@@ -22770,3 +22768,71 @@ times. `MULTINAME` confirmed unchanged at `'MULTI FILE'`.
 > The write was correct and the safety net was not, which is the worse way
 > round: every check the probe ran on itself passed, because they all ran at
 > the same wrong address.
+
+## §233 — Writing a part's `PRNAME` changes the byte and nothing else (2026-09-13)
+
+§232 established that multipart `PRNAME` accepts a write. The question that
+decides whether the field should be editable is different: **does the part then
+play that program?** §91 records that index and `PRGNUM` are unrelated, so the
+machine may resolve a part to a program by number at note time.
+
+**It does not play.** Note 60, velocity 100, 1.5 s, right channel only (§230):
+
+```
+  0. floor, no note played                 -79.7 dBFS
+  1. control -- part 15's channel          -30.8        <- route live
+  2. subject -- part 14, no program        -80.3
+  2b.   repeat                             -80.3
+        wrote 'a resident program name'; read back byte-exact
+  3. subject -- part 14, after the write   -80.8
+  3b.   repeat                             -80.6
+        restored to empty, verified
+  4. subject -- after the restore          -80.4
+  5. control again -- route still live?    -30.8        <- unchanged
+```
+
+The subject never leaves the noise floor. **`PRNAME` is a report of the
+assignment, not the control for it** — which is exactly what Akai's sentence
+says, and the transcription was right about the conclusion while having no
+evidence for it.
+
+`readonly=True` therefore **stays**, now for a measured reason rather than a
+transcribed one.
+
+### Two readings this produced before it produced a real one
+
+**Positive dBFS.** `jcap.stop()` returns a **mono** array *already scaled by
+32768*. The first version reshaped that into fake stereo, took every other
+sample as "the right channel", and logged it without dividing — printing
+**+59.6 dBFS**. A positive dBFS is not a loud reading or a quiet one; it is a
+broken one, and it was on screen for four takes before it was read.
+
+**A release tail read as a part sounding.** With 0.65 s between notes the four
+takes came back 59.6, 56.6, 36.1, 6.8 — a smooth decline, which is a pad's
+release, not four independent answers. Lengthened to 4 s the subject still read
+**−61.7 dBFS** four seconds after the control note, 18 dB above floor and over
+the audibility threshold.
+
+> **That −61.7 would have been the finding.** It sat exactly where "the part is
+> quietly sounding" lives, immediately after the write, in a run whose whole
+> purpose was to detect a part starting to sound. What stopped it was the
+> verdict logic refusing to conclude while the *before* reading was also above
+> threshold — a guard written before the numbers existed, which is the only
+> reason it could not be argued with afterwards.
+
+Settled at 7 s, with **each subject state read twice** (a tail falls between two
+readings; a sounding part does not) and **a second control at the end** proving
+the route was still live — −30.8 dBFS both times, identical to a tenth of a dB.
+
+### What this leaves open
+
+The documented route — a MIDI program change on the part's own channel — is
+**not wired in s3ked**, and the bridge has no channel-voice sender at all. So
+the field is correctly locked and the alternative it points to does not exist,
+which leaves multi editing unable to do the one job it was wired for.
+
+> **Not tested, and deliberately:** a program change on a part's channel may
+> not be reversible in RAM. `PRNAME` does not drive routing, so writing it back
+> to empty would not undo the assignment, and there may be no program-change
+> value meaning "no program". A probe that cannot restore what it changes needs
+> the owner's word first, not afterwards.

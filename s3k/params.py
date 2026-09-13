@@ -3016,8 +3016,16 @@ _PARAMS: List[Parameter] = [
               "PRGNUM are unrelated, and if the machine resolves a part to a "
               "program by number at note time then a written name changes "
               "nothing. A field that accepts a value which has no effect is "
-              "worse than a locked one. Unlock it when a note on the part's "
-              "own channel says the assignment took."),
+              "worse than a locked one. MEASURED 2026-09-13 (§233): "
+              "writing it does NOT make the part play -- the part stayed at "
+              "the noise floor, -80.6 dBFS against a control part sounding at "
+              "-30.8 on the same run, with the control re-read at the end to "
+              "prove the route stayed live. So the field REPORTS the "
+              "assignment and does not control it, Akai's sentence is right, "
+              "and readonly stays -- now on a measurement rather than on a "
+              "transcription. The documented route, a program change on the "
+              "part's own channel, is not wired in s3ked and the bridge has "
+              "no channel-voice sender."),
     _p("multipart", 16, "PMCHAN", 1, "multipart.midi", 0, 255,
         values={255: "OMNI"}, models="S2000/S3000XL/S3200XL",
         desc="MIDI channel this part responds to, irrespective of part number",
