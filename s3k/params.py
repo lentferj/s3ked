@@ -3005,7 +3005,19 @@ _PARAMS: List[Parameter] = [
         readonly=True, models="S2000/S3000XL/S3200XL",
         desc="Name of the program used for this multi part. To assign programs "
              "to parts it is better to use MIDI program change commands",
-        notes="read-only"),
+        notes="MEASURED 2026-09-13 (§232): the byte ACCEPTS a write -- a "
+              "resident program's name written to an empty part read back "
+              "byte-exact and restored. So `readonly` here is ours, not the "
+              "machine's: Akai's sentence about program change is advice "
+              "about the better route, not a statement that the field "
+              "refuses, and it was transcribed as if it were one. The flag "
+              "stays for now because what has NOT been shown is that the "
+              "part then PLAYS that program -- §91 records that index and "
+              "PRGNUM are unrelated, and if the machine resolves a part to a "
+              "program by number at note time then a written name changes "
+              "nothing. A field that accepts a value which has no effect is "
+              "worse than a locked one. Unlock it when a note on the part's "
+              "own channel says the assignment took."),
     _p("multipart", 16, "PMCHAN", 1, "multipart.midi", 0, 255,
         values={255: "OMNI"}, models="S2000/S3000XL/S3200XL",
         desc="MIDI channel this part responds to, irrespective of part number",

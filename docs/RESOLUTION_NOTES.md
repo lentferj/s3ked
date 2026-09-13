@@ -272,6 +272,7 @@ silently wrong one.
 - [§229](#229--two-orderings-of-the-same-three-constants-and-why-the-transposition-is-silent-2026-09-12) — Two orderings of the same three constants, and why the transposition is silent (2026-09-12)
 - [§230](#230--a-consistent-wrong-answer-from-five-notes-and-a-fault-that-was-in-the-rig-2026-09-13) — A consistent wrong answer from five notes, and a fault that was in the rig (2026-09-13)
 - [§231](#231--i-withdrew-the-correct-reading-and-an-unrelated-field-read-settled-it-2026-09-13) — I withdrew the correct reading, and an unrelated field read settled it (2026-09-13)
+- [§232](#232--multipart-prname-is-writable-the-lock-was-ours-and-the-probe-lied-twice-first-2026-09-13) — Multipart `PRNAME` is writable; the lock was ours, and the probe lied twice first (2026-09-13)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -22710,3 +22711,62 @@ itself (§229, §230).
 > **Being the second look is not evidence.**
 
 **Nothing was written to the machine.** All of this is reads and notes played.
+
+## §232 — Multipart `PRNAME` is writable; the lock was ours, and the probe lied twice first (2026-09-13)
+
+`s3k/params.py` marks multipart `PRNAME` `readonly=True` with `notes="read-only"`.
+There is no §-reference behind it and no measurement: it is a transcription of
+Akai's own sentence, *"To assign programs to parts it is better to use MIDI
+program change commands."* That is **advice about the better route, not a
+statement that the byte refuses.**
+
+**Measured 2026-09-13: it accepts a write.** A resident program's name written
+to an empty part's `PRNAME` read back byte-exact, and the snapshot restored.
+So the lock is ours alone.
+
+> **What is NOT shown: that the part then plays that program.** §91 records
+> that index and `PRGNUM` are unrelated, and the machine may resolve a part to
+> a program by number at note time — in which case a written name is cosmetic,
+> and a field that accepts a value which changes nothing is *worse* than a
+> locked one. The flag stays until a note on the part's channel says otherwise.
+
+### The probe produced the expected answer twice before it produced a real one
+
+**First run — the wrong structure.** `get_header_bytes` takes `selector` and
+defaults it to **0**. For `multipart`, 0 is the multi **file header**; parts
+are selector **1** (`_REGION_SELECTOR`). The write went through
+`set_parameter`, which computes the selector correctly, so it wrote **part
+14** — while the before/after reads and the restore all addressed the **file
+header**. Before equalled after, and the probe printed *"accepted the message
+and DISCARDED it: read-only in the machine, silently."*
+
+The tell was in the output and nearly went unread: the "part 14 name" decoded
+to `'MULTI FILE'`.
+
+> Same shape as §225's misread `ATTAK1` offset, and the second instance today.
+> **A misread address does not fail. It produces the finding you were looking
+> for** — here, the one the code already asserted, which is the hardest kind to
+> doubt.
+
+**Second run — the wrong value.** With the selector fixed, the probe wrote
+`progs[0]`, which was *exactly the name that part already held*. `changed:
+False` was guaranteed by construction and again read as confirmation. Fixed by
+choosing a name different from the one present, which is a precondition the
+first two versions never stated.
+
+### And the safety net was the part that failed
+
+The first run's snapshot came from the file header while its write went to the
+part, so **the restore could not restore**: it wrote the file header's own
+bytes back onto the file header — harmless — and left part 14 holding a
+program name it never had. Detected only by comparing against a screenshot
+taken minutes earlier, in which part 14 read empty.
+
+Put back by copying the twelve bytes from a **genuinely empty part** rather
+than by inventing what empty ought to be; the machine writes `0x0A` twelve
+times. `MULTINAME` confirmed unchanged at `'MULTI FILE'`.
+
+> **A snapshot taken at a different address than the write is not a snapshot.**
+> The write was correct and the safety net was not, which is the worse way
+> round: every check the probe ran on itself passed, because they all ran at
+> the same wrong address.
