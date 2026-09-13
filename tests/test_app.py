@@ -4647,17 +4647,61 @@ async def test_a_catalog_reload_restores_the_pane_instead_of_relabelling_it():
             assert "multi part" not in title, title
 
 
-async def test_the_programs_pane_cannot_steal_the_view_while_the_multi_is_up():
-    """The complaint this layout exists to answer.
+async def test_no_key_takes_the_pane_off_the_multi_while_the_multi_is_up():
+    """The complaint this layout exists to answer, tested by KEY WALK.
 
-    As a modal, choosing a part left focus back on the programs table -- and
-    that table follows its cursor with NO focus guard, because filling the
-    keygroup pane moves the cursor too. So one arrow key reloaded the program
-    over the multi part the user had just asked for. The fix is not a focus
-    tweak: the two lists are alternatives, so while the multi is up the
-    programs pane is not on screen to steal anything.
+    The first version of this test asserted that focus landed on the multi
+    list after `right` then `left`. It passed, and the feature was broken:
+    `action_enter_params` dispatched with an `else:` meaning "program", so
+    `right` read a PROGRAM at the part's row number while focus was exactly
+    where the test expected. **Asserting focus tested the thing that was
+    right about it.**
+
+    So this asserts what the pane SHOWS, after every key, over a walk that
+    mixes cursor movement with pane changes.
     """
-    from textual.widgets import DataTable
+    from textual.widgets import DataTable, Static
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        # a programs cursor that is NOT row 0, so a stray program load is
+        # distinguishable from "it was already showing program 0"
+        app.query_one("#programs", DataTable).move_cursor(row=1)
+        for _ in range(30):
+            await pilot.pause()
+        await pilot.press("M")
+        for _ in range(30):
+            await pilot.pause()
+
+        for key in ("down", "down", "right", "left", "tab", "up", "right",
+                    "tab", "left", "down", "tab", "tab", "right", "up",
+                    "left", "down"):
+            await pilot.press(key)
+            for _ in range(25):
+                await pilot.pause()
+            region = app._param_context[0]
+            title = str(app.query_one("#param-title", Static).render())
+            assert region in ("multi", "multipart"), (key, region, title)
+            assert "program" not in title, (key, title)
+
+        # and M toggles the program panes back
+        await pilot.press("M")
+        for _ in range(40):
+            await pilot.pause()
+        assert not app._multi_showing
+        assert app.query_one("#programs").display
+        assert not app.query_one("#multi-parts").display
+
+
+async def test_a_hidden_table_does_not_drive_the_parameter_pane():
+    """The programs table follows its cursor with no focus guard -- it has
+    to, because filling the keygroup pane moves that cursor. While the multi
+    is up it is not on screen, and a table nobody can see must not be able to
+    replace what the pane is showing."""
+    from textual.widgets import DataTable, Static
     from s3ked.app import S3kedApp
     from s3ked.demo import DemoBridge
 
@@ -4667,31 +4711,16 @@ async def test_the_programs_pane_cannot_steal_the_view_while_the_multi_is_up():
         await pilot.press("M")
         for _ in range(40):
             await pilot.pause()
-        app.query_one("#multi-parts", DataTable).move_cursor(row=3)
+        app.query_one("#multi-parts", DataTable).move_cursor(row=5)
         for _ in range(40):
             await pilot.pause()
-        assert app._param_context == ("multipart", 2, 0), app._param_context
+        assert app._param_context == ("multipart", 4, 0), app._param_context
 
-        # arrow keys walk the parts; nothing reloads a program over them
-        await pilot.press("down")
+        # move the hidden programs cursor, as a refill or a stray event would
+        app.query_one("#programs", DataTable).move_cursor(row=2)
         for _ in range(40):
             await pilot.pause()
-        assert app._param_context == ("multipart", 3, 0), app._param_context
-
-        # `left` comes back to the multi list, not to the programs list
-        await pilot.press("right")
-        await pilot.pause()
-        await pilot.press("left")
-        await pilot.pause()
-        assert app.focused is not None and app.focused.id == "multi-parts"
-
-        # and M toggles the program panes back
-        await pilot.press("M")
-        for _ in range(40):
-            await pilot.pause()
-        assert not app._multi_showing
-        assert app.query_one("#programs").display
-        assert not app.query_one("#multi-parts").display
+        assert app._param_context == ("multipart", 4, 0), app._param_context
 
 
 async def test_the_multi_chooser_names_the_program_on_each_part():

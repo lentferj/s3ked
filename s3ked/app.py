@@ -2162,6 +2162,18 @@ class S3kedApp(App):
     def _focused_id(self) -> Optional[str]:
         return self.focused.id if self.focused is not None else None
 
+    def _tab_order(self) -> Tuple[str, ...]:
+        """What `Tab` cycles.
+
+        With the multi up there is only one source pane, so cycling the
+        source panes moved focus to the table it was already on and Tab
+        looked broken. The two panes actually on screen are the part list and
+        the parameters, so those are what it moves between.
+        """
+        if self._multi_showing:
+            return ("multi-parts", "parameters")
+        return self._SOURCE_PANES
+
     def _source_panes(self) -> Tuple[str, ...]:
         """Which left-column tables `Tab` cycles and `left` returns to.
 
@@ -2183,7 +2195,7 @@ class S3kedApp(App):
             self.screen.focus_next()
             return
         here = self._focused_id()
-        order = self._source_panes()
+        order = self._tab_order()
         step = (order.index(here) + 1) % len(order) if here in order else 0
         self.query_one(f"#{order[step]}", DataTable).focus()
 
@@ -2204,12 +2216,21 @@ class S3kedApp(App):
             return
         table = self.query_one(f"#{here}", DataTable)
         row = table.cursor_row
-        if here == "keygroups":
-            self._load_keygroup(row)
-        elif here == "samples":
-            self._load_sample_row(row)
-        else:
-            self._load_program(row)
+        # Dispatch on the pane, with NO default. This was an `else:` meaning
+        # "program", so `right` from the multi list read a PROGRAM at the
+        # part's row number and put it in the pane -- the same shape as the
+        # restore path that relabelled instead of restoring. A fallback that
+        # guesses a region is worse than one that does nothing, because
+        # nothing is visible and a wrong region is not.
+        loader = {
+            "keygroups": self._load_keygroup,
+            "samples": self._load_sample_row,
+            "multi-parts": self._load_multi_row,
+            "programs": self._load_program,
+        }.get(here)
+        if loader is None:
+            return
+        loader(row)
         self._param_origin = here
         self.query_one("#parameters", DataTable).focus()
 
@@ -3437,6 +3458,15 @@ class S3kedApp(App):
         opposite of what selecting a program means.
         """
         table = event.data_table
+        # A table that is NOT ON SCREEN must never drive the parameter pane.
+        # The programs table follows its cursor without a focus guard -- it
+        # has to, because filling the keygroup pane moves that cursor -- and
+        # it kept doing so while hidden behind the multi. So pressing `left`
+        # in the multi loaded a PROGRAM over the part being read, from a
+        # table the user could not see. Focus was correct throughout, which
+        # is why a test asserting focus passed while this was broken.
+        if not table.display:
+            return
         if table.id == "multi-parts":
             if not self._multi_refilling:
                 self._load_multi_row(event.cursor_row)
