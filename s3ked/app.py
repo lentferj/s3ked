@@ -815,87 +815,6 @@ class MenuScreen(ModalScreen[Optional[int]]):
 _MULTI_PARTS = 16
 
 
-class MultiScreen(ModalScreen[Optional[Tuple[str, int]]]):
-    """Choose the multi file header, or one of its parts.
-
-    The multi is where effects routing actually lives. `multi` holds
-    `FX1`-`FX4` -- which fx setup is assigned to each fx channel -- and each
-    `multipart` carries its own `PFXCHAN` and `PFXSLEV`. Akai's text documents
-    offset 114 twice and differently: "Not used" in the program header,
-    "Effects send level" here. The program copy is inert and this one is live,
-    so a send level set in EDIT PROGRAM does nothing (§213).
-
-    **The 16 parts are measured, not assumed** (§214). Reads could not have
-    told us: part 16 and above return part 15's buffer byte-for-byte with no
-    error (§11 Finding A), and a multi part cannot be told from a program
-    header by its block identifier, so `multipart` is absent from
-    `BLOCK_IDENT` and that defence does not apply. The *write* path answers —
-    parts 0-15 accept, 16 and beyond return REPLY error code 1 — and it does
-    not alias onto part 15 while refusing.
-    """
-
-    BINDINGS = [
-        Binding("escape", "cancel", "Cancel"),
-        Binding("enter", "choose", "Show"),
-    ]
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="multi-box"):
-            yield Label("[b]Multi[/b]", id="multi-title")
-            table = DataTable(id="multi-list", cursor_type="row")
-            self._cols = table.add_columns("", "section", "program", "ch")
-            table.add_row("", "file header  — MULTINAME, FX1-FX4, FXFILENAME",
-                          "", "", key="header")
-            for part in range(_MULTI_PARTS):
-                table.add_row(str(part), f"part {part}", "…", "",
-                              key=f"part{part}")
-            yield table
-            yield Label(
-                "[dim]16 parts, measured on hardware (§214). A part index past "
-                "the end returns\n  the previous read rather than an error, so "
-                "the count could not be read —\n  the write path refuses it, "
-                "and refuses without touching part 15.[/dim]")
-            yield Label("[b]Enter[/b] show   [b]Esc[/b] cancel")
-
-    def on_mount(self) -> None:
-        self.query_one("#multi-list", DataTable).focus()
-        self.app.scan_multi_parts(self)
-
-    def set_part(self, part: int, name: str, chan: str) -> None:
-        """Fill one part's row as its read lands.
-
-        The rows arrive one at a time rather than after a full scan, because
-        sixteen header reads is several seconds on the wire and a chooser
-        that will not appear until it knows everything is worse than one that
-        fills in. Until a row arrives it shows a placeholder, which is an
-        honest "not read yet" rather than a blank that looks like an empty
-        part.
-        """
-        if not self.is_running:
-            return          # dismissed mid-scan
-        table = self.query_one("#multi-list", DataTable)
-        try:
-            table.update_cell(f"part{part}", self._cols[2], name or "—")
-            table.update_cell(f"part{part}", self._cols[3], chan)
-        except Exception:
-            pass            # the row is gone, which is not worth an error
-
-    def action_choose(self) -> None:
-        table = self.query_one("#multi-list", DataTable)
-        row = table.cursor_row
-        if row <= 0:
-            self.dismiss(("multi", 0))
-        else:
-            self.dismiss(("multipart", row - 1))
-
-    def on_data_table_row_selected(self, event) -> None:
-        event.stop()
-        self.action_choose()
-
-    def action_cancel(self) -> None:
-        self.dismiss(None)
-
-
 class EditValueScreen(ModalScreen[Optional[str]]):
     """Prompt for a new parameter value."""
 
@@ -1246,6 +1165,7 @@ class S3kedApp(App):
     #: The panes Tab cycles, in order. The parameter table is deliberately
     #: NOT among them; it is reached with `right` and left with `left`/Esc.
     _SOURCE_PANES = ("programs", "keygroups", "samples")
+    _MULTI_PANES = ("multi-parts",)
 
     def __init__(self, bridge, *, allow_write: bool = False,
                  config_path: Optional[str] = None) -> None:
@@ -1269,6 +1189,9 @@ class S3kedApp(App):
         self._disk_showing = False
         #: The source pane `right` was pressed in, so Esc/`left` can go back.
         self._param_origin: str = "programs"
+        self._multi_showing = False
+        self._multi_refilling = False
+        self._multi_cols: list = []
         #: (name, PRGNUM) of everything resident before a load, so the
         #: arrivals can be identified afterwards rather than guessed at.
         self._before_load = None
@@ -1326,13 +1249,24 @@ class S3kedApp(App):
         yield Header()
         with Horizontal(id="panes"):
             with Vertical(id="left"):
-                yield Static("Programs", classes="pane-title")
+                yield Static("Programs", classes="pane-title",
+                             id="programs-title")
                 yield DataTable(id="programs", cursor_type="row")
-                yield Static("Keygroups", classes="pane-title")
+                yield Static("Keygroups", classes="pane-title",
+                             id="keygroups-title")
                 yield DataTable(id="keygroups", cursor_type="row")
                 yield Static("Samples used", classes="pane-title",
                              id="progsamples-title")
                 yield DataTable(id="samples", cursor_type="row")
+                # The multi REPLACES the three program-centric panes rather
+                # than sharing the screen with them. They are alternatives:
+                # the programs list is one keypress from reloading itself
+                # over whatever the parameter pane is showing, and it has to
+                # follow its cursor without a focus guard (filling the
+                # keygroup pane moves that cursor too). So while the multi is
+                # up, the pane that would steal the view is not on screen.
+                yield Static("Multi", classes="pane-title", id="multi-title")
+                yield DataTable(id="multi-parts", cursor_type="row")
             # The right column is one pane showing one of two things. The
             # disk browser used to be a quarter of the left column, where a
             # 55-item volume listing had five rows to live in and the four
@@ -1360,9 +1294,11 @@ class S3kedApp(App):
         self.query_one("#disk-title", Static).update("Disk — press [b]d[/b]")
         # The right column starts on Parameters. Both sets of widgets exist
         # from the start so nothing has to be built on the way in.
-        for widget_id in ("disk-title", "volumes"):
+        for widget_id in ("disk-title", "volumes",
+                          "multi-title", "multi-parts"):
             self.query_one(f"#{widget_id}").display = False
         for table_id, columns in (
+            ("multi-parts", ("", "section", "program", "ch")),
             ("programs", ("num", "name")),
             ("keygroups", ("kg", "range")),
             ("samples", ("sample", "status")),
@@ -2226,6 +2162,14 @@ class S3kedApp(App):
     def _focused_id(self) -> Optional[str]:
         return self.focused.id if self.focused is not None else None
 
+    def _source_panes(self) -> Tuple[str, ...]:
+        """Which left-column tables `Tab` cycles and `left` returns to.
+
+        The multi replaces the program panes rather than joining them, so
+        while it is up it is the only source there is.
+        """
+        return self._MULTI_PANES if self._multi_showing else self._SOURCE_PANES
+
     def _in_params(self) -> bool:
         return self._focused_id() == "parameters"
 
@@ -2239,7 +2183,7 @@ class S3kedApp(App):
             self.screen.focus_next()
             return
         here = self._focused_id()
-        order = self._SOURCE_PANES
+        order = self._source_panes()
         step = (order.index(here) + 1) % len(order) if here in order else 0
         self.query_one(f"#{order[step]}", DataTable).focus()
 
@@ -2252,7 +2196,7 @@ class S3kedApp(App):
         cursor in a table showing something else entirely.
         """
         here = self._focused_id()
-        if here not in self._SOURCE_PANES or self._disk_showing:
+        if here not in self._source_panes() or self._disk_showing:
             # Not a source pane: leave the key doing what the widget does.
             scroll = getattr(self.focused, "action_scroll_right", None)
             if scroll is not None:
@@ -2277,8 +2221,8 @@ class S3kedApp(App):
                 scroll()
             return
         origin = self._param_origin
-        if origin not in self._SOURCE_PANES:
-            origin = self._SOURCE_PANES[0]
+        if origin not in self._source_panes():
+            origin = self._source_panes()[0]
         self.query_one(f"#{origin}", DataTable).focus()
 
     #: Extra hints for the disk browser -- keys whose meaning is specific to
@@ -3172,44 +3116,109 @@ class S3kedApp(App):
             f"{len(self._undo)} change(s) — z undoes the last, Z undoes all"))
 
     def action_multi(self) -> None:
-        """Show the multi file header, or one of its parts.
+        """`M`: swap the left column between the programs and the multi.
 
-        Reading only -- edits go through the same gate and the same
-        EditValueScreen as every other region, because `_show_params` and the
-        write path are region-generic. Nothing here needs the write gate; the
-        edit that follows does.
+        A toggle, not a modal. The multi is where effects routing lives --
+        `multi` holds `FX1`-`FX4`, and each `multipart` carries its own
+        `PFXCHAN` and `PFXSLEV`. Akai documents offset 114 twice and
+        differently: "Not used" in the program header, "Effects send level"
+        here. The program copy is inert and this one is live, so a send level
+        set in EDIT PROGRAM does nothing (§213).
+
+        **The 16 parts are measured, not assumed** (§214). Reads could not
+        have told us: part 16 and above return part 15's buffer byte-for-byte
+        with no error (§11 Finding A), and a multi part cannot be told from a
+        program header by its block identifier, so `multipart` is absent from
+        `BLOCK_IDENT` and that defence does not apply. The *write* path
+        answers -- parts 0-15 accept, 16 and beyond return REPLY error code 1
+        -- and it does not alias onto part 15 while refusing.
+
+        Editing needs nothing new: `_show_params` and the write path are
+        region-generic, so the parameter pane, the editor, the gate and the
+        nudge handling all work here unchanged.
         """
-        def chosen(pick: Optional[Tuple[str, int]]) -> None:
-            if pick is None:
-                return
-            region, index = pick
-            self.notify_status(
-                f"reading {region} {index}…" if region == "multipart"
-                else "reading the multi file header…")
-            self._load_multi_worker(region, index, self._claim_param_pane())
+        self._show_multi_pane(not self._multi_showing)
 
-        self.push_screen(MultiScreen(), chosen)
+    def _show_multi_pane(self, showing: bool) -> None:
+        """Swap the left column between the program panes and the multi."""
+        self._multi_showing = showing
+        for widget_id in ("programs-title", "programs", "keygroups-title",
+                          "keygroups", "progsamples-title", "samples"):
+            self.query_one(f"#{widget_id}").display = not showing
+        for widget_id in ("multi-title", "multi-parts"):
+            self.query_one(f"#{widget_id}").display = showing
+        if showing:
+            self._fill_multi_list()
+            self.query_one("#multi-parts", DataTable).focus()
+            self.scan_multi_parts()
+            self._load_multi_row(0)
+        else:
+            table = self.query_one("#programs", DataTable)
+            table.focus()
+            selected = self._selected_program()
+            if selected is not None:
+                self._load_program(selected)
+        self._refresh_key_hints()
+
+    def _fill_multi_list(self) -> None:
+        table = self.query_one("#multi-parts", DataTable)
+        self._multi_cols = list(table.columns)
+        self._multi_refilling = True
+        try:
+            table.clear()
+            table.add_row("", "file header", "MULTINAME, FX1-FX4", "",
+                          key="header")
+            for part in range(_MULTI_PARTS):
+                # "…" is "not read yet", which a blank would not distinguish
+                # from a part with no program on it.
+                table.add_row(str(part), f"part {part}", "…", "",
+                              key=f"part{part}")
+        finally:
+            self._multi_refilling = False
+
+    def set_multi_part(self, part: int, name: str, chan: str) -> None:
+        """Fill one part's row as its read lands.
+
+        Row by row rather than after a full scan: sixteen header reads is
+        several seconds on the wire, and a list that will not appear until it
+        knows everything is worse than one that fills in.
+        """
+        if not self._multi_showing:
+            return
+        table = self.query_one("#multi-parts", DataTable)
+        try:
+            table.update_cell(f"part{part}", self._multi_cols[2], name or "—")
+            table.update_cell(f"part{part}", self._multi_cols[3], chan)
+        except Exception:
+            pass            # the row is gone, which is not worth an error
+
+    def _load_multi_row(self, row: int) -> None:
+        region, index = ("multi", 0) if row <= 0 else ("multipart", row - 1)
+        self.notify_status(
+            f"reading {region} {index}…" if region == "multipart"
+            else "reading the multi file header…")
+        self._load_multi_worker(region, index, self._claim_param_pane())
 
     @work(thread=True)
-    def scan_multi_parts(self, screen) -> None:
-        """Read each part's program and MIDI channel to fill the chooser.
+    def scan_multi_parts(self) -> None:
+        """Read each part's program and MIDI channel to fill the list.
 
-        Without this the chooser was sixteen rows reading "part 0" ... "part
-        15" -- a menu with no information in it, in front of the one
-        structure whose whole point is which program is on which channel.
+        Without this the list was sixteen rows reading "part 0" ... "part 15"
+        -- a menu with no information in it, in front of the one structure
+        whose whole point is which program sits on which MIDI channel.
         """
         for part in range(_MULTI_PARTS):
-            if not screen.is_running:
+            if not self._multi_showing:
                 return
             try:
                 with self._bridge_lock:
                     header = self.bridge.get_header("multipart", part)
             except Exception:
-                self.call_from_thread(screen.set_part, part, "?", "")
+                self.call_from_thread(self.set_multi_part, part, "?", "")
                 continue
             name = str(header.get("PRNAME", "") or "").strip()
-            chan = header.get("PMCHAN", "")
-            self.call_from_thread(screen.set_part, part, name, str(chan))
+            self.call_from_thread(self.set_multi_part, part, name,
+                                  str(header.get("PMCHAN", "")))
 
     @work(thread=True)
     def _load_multi_worker(self, region: str, index: int, token: int) -> None:
@@ -3428,7 +3437,10 @@ class S3kedApp(App):
         opposite of what selecting a program means.
         """
         table = event.data_table
-        if table.id == "programs":
+        if table.id == "multi-parts":
+            if not self._multi_refilling:
+                self._load_multi_row(event.cursor_row)
+        elif table.id == "programs":
             if self._refilling or event.cursor_row == self._loaded_program:
                 return          # our own repopulation, not the user moving
             self._load_program(event.cursor_row)

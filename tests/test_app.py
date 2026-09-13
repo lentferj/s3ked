@@ -4562,19 +4562,18 @@ async def test_multi_screen_reaches_the_file_header_and_its_parts():
     handling need no changes at all.
     """
     from textual.widgets import DataTable, Static
-    from s3ked.app import S3kedApp, MultiScreen
+    from s3ked.app import S3kedApp
     from s3ked.demo import DemoBridge
 
     app = S3kedApp(DemoBridge(), allow_write=False)
     async with app.run_test(size=(130, 44)) as pilot:
         await pilot.pause()
         await pilot.press("M")
-        await pilot.pause()
-        assert isinstance(app.screen_stack[-1], MultiScreen)
-
-        await pilot.press("enter")          # row 0 is the file header
         for _ in range(40):
             await pilot.pause()
+        assert app._multi_showing
+        assert not app.query_one("#programs").display
+        assert app.query_one("#multi-parts").display
         title = str(app.query_one("#param-title", Static).render())
         assert "multi file header" in title
         names = {r.name for r in app._param_rows}
@@ -4587,7 +4586,7 @@ async def test_a_multi_part_exposes_the_send_level_the_program_header_does_not()
     program copy is inert, so a send level set in EDIT PROGRAM does nothing;
     the multi part is where it is live."""
     from textual.widgets import DataTable, Static
-    from s3ked.app import S3kedApp, MultiScreen
+    from s3ked.app import S3kedApp
     from s3ked.demo import DemoBridge
 
     app = S3kedApp(DemoBridge(), allow_write=False)
@@ -4595,10 +4594,7 @@ async def test_a_multi_part_exposes_the_send_level_the_program_header_does_not()
         await pilot.pause()
         await pilot.press("M")
         await pilot.pause()
-        table = app.screen_stack[-1].query_one("#multi-list", DataTable)
-        table.move_cursor(row=1)            # part 0
-        await pilot.pause()
-        await pilot.press("enter")
+        app.query_one("#multi-parts", DataTable).move_cursor(row=1)  # part 0
         for _ in range(40):
             await pilot.pause()
         title = str(app.query_one("#param-title", Static).render())
@@ -4631,9 +4627,7 @@ async def test_a_catalog_reload_restores_the_pane_instead_of_relabelling_it():
         await pilot.pause()
         await pilot.press("M")
         await pilot.pause()
-        app.screen_stack[-1].query_one("#multi-list", DataTable).move_cursor(row=16)
-        await pilot.pause()
-        await pilot.press("enter")
+        app.query_one("#multi-parts", DataTable).move_cursor(row=16)
         for _ in range(40):
             await pilot.pause()
         assert app._param_context == ("multipart", 15, 0), app._param_context
@@ -4653,6 +4647,53 @@ async def test_a_catalog_reload_restores_the_pane_instead_of_relabelling_it():
             assert "multi part" not in title, title
 
 
+async def test_the_programs_pane_cannot_steal_the_view_while_the_multi_is_up():
+    """The complaint this layout exists to answer.
+
+    As a modal, choosing a part left focus back on the programs table -- and
+    that table follows its cursor with NO focus guard, because filling the
+    keygroup pane moves the cursor too. So one arrow key reloaded the program
+    over the multi part the user had just asked for. The fix is not a focus
+    tweak: the two lists are alternatives, so while the multi is up the
+    programs pane is not on screen to steal anything.
+    """
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("M")
+        for _ in range(40):
+            await pilot.pause()
+        app.query_one("#multi-parts", DataTable).move_cursor(row=3)
+        for _ in range(40):
+            await pilot.pause()
+        assert app._param_context == ("multipart", 2, 0), app._param_context
+
+        # arrow keys walk the parts; nothing reloads a program over them
+        await pilot.press("down")
+        for _ in range(40):
+            await pilot.pause()
+        assert app._param_context == ("multipart", 3, 0), app._param_context
+
+        # `left` comes back to the multi list, not to the programs list
+        await pilot.press("right")
+        await pilot.pause()
+        await pilot.press("left")
+        await pilot.pause()
+        assert app.focused is not None and app.focused.id == "multi-parts"
+
+        # and M toggles the program panes back
+        await pilot.press("M")
+        for _ in range(40):
+            await pilot.pause()
+        assert not app._multi_showing
+        assert app.query_one("#programs").display
+        assert not app.query_one("#multi-parts").display
+
+
 async def test_the_multi_chooser_names_the_program_on_each_part():
     """Sixteen rows reading "part 0" ... "part 15" is a menu with no
     information in it, in front of the one structure whose whole point is
@@ -4667,7 +4708,7 @@ async def test_the_multi_chooser_names_the_program_on_each_part():
         await pilot.press("M")
         for _ in range(60):
             await pilot.pause()
-        table = app.screen_stack[-1].query_one("#multi-list", DataTable)
+        table = app.query_one("#multi-parts", DataTable)
         assert table.row_count == 17, table.row_count
         filled = [table.get_row_at(r) for r in range(1, 17)]
         assert all(str(row[2]).strip() not in ("", "…") for row in filled), filled[:3]
