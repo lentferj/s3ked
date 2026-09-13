@@ -4607,6 +4607,73 @@ async def test_a_multi_part_exposes_the_send_level_the_program_header_does_not()
         assert {"PFXCHAN", "PFXSLEV"} <= names, names
 
 
+async def test_a_catalog_reload_restores_the_pane_instead_of_relabelling_it():
+    """The pane must never name a region it is not showing.
+
+    `_apply_program`'s restore branch rendered the PROGRAM's parameters and
+    then set `_param_context` to the displaced region -- so the pane showed
+    one structure and the app believed another. The visible half was the
+    pane bouncing to the program view, which is what `restore` exists to
+    prevent. The dangerous half was that `_param_rows` and `_param_values`
+    were the program's while the context named a multi part, so the next
+    edit would take a program parameter's offset and write it there.
+    Offsets do not agree between regions.
+
+    Reachable by editing a multi part twice: every parameter write ends with
+    a catalog reload.
+    """
+    from textual.widgets import Static
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("M")
+        await pilot.pause()
+        app.screen_stack[-1].query_one("#multi-list", DataTable).move_cursor(row=16)
+        await pilot.pause()
+        await pilot.press("enter")
+        for _ in range(40):
+            await pilot.pause()
+        assert app._param_context == ("multipart", 15, 0), app._param_context
+
+        app._apply_catalog(app._programs, app._samples, announce=False)
+        for _ in range(40):
+            await pilot.pause()
+
+        region = app._param_context[0]
+        shown = {r.name for r in app._param_rows}
+        title = str(app.query_one("#param-title", Static).render())
+        # whatever it settles on, the three must agree with each other
+        if region == "multipart":
+            assert "multi part 15" in title, title
+            assert "PTUNOCM" in shown and "PRIDENT" not in shown, sorted(shown)[:6]
+        else:
+            assert "multi part" not in title, title
+
+
+async def test_the_multi_chooser_names_the_program_on_each_part():
+    """Sixteen rows reading "part 0" ... "part 15" is a menu with no
+    information in it, in front of the one structure whose whole point is
+    which program sits on which MIDI channel."""
+    from textual.widgets import DataTable
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+
+    app = S3kedApp(DemoBridge(), allow_write=False)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("M")
+        for _ in range(60):
+            await pilot.pause()
+        table = app.screen_stack[-1].query_one("#multi-list", DataTable)
+        assert table.row_count == 17, table.row_count
+        filled = [table.get_row_at(r) for r in range(1, 17)]
+        assert all(str(row[2]).strip() not in ("", "…") for row in filled), filled[:3]
+        assert [str(row[3]) for row in filled] == [str(i) for i in range(16)]
+
+
 async def test_a_part_index_past_the_end_reports_instead_of_showing_stale_data():
     """§11 Finding A: an out-of-range extended read returns the PREVIOUS
     read's buffer, and a multi part cannot be told from a program header by

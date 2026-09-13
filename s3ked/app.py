@@ -843,10 +843,12 @@ class MultiScreen(ModalScreen[Optional[Tuple[str, int]]]):
         with Vertical(id="multi-box"):
             yield Label("[b]Multi[/b]", id="multi-title")
             table = DataTable(id="multi-list", cursor_type="row")
-            table.add_columns("", "section")
-            table.add_row("", "file header  — MULTINAME, FX1-FX4, FXFILENAME")
+            self._cols = table.add_columns("", "section", "program", "ch")
+            table.add_row("", "file header  — MULTINAME, FX1-FX4, FXFILENAME",
+                          "", "", key="header")
             for part in range(_MULTI_PARTS):
-                table.add_row(str(part), f"part {part}")
+                table.add_row(str(part), f"part {part}", "…", "",
+                              key=f"part{part}")
             yield table
             yield Label(
                 "[dim]16 parts, measured on hardware (§214). A part index past "
@@ -857,6 +859,26 @@ class MultiScreen(ModalScreen[Optional[Tuple[str, int]]]):
 
     def on_mount(self) -> None:
         self.query_one("#multi-list", DataTable).focus()
+        self.app.scan_multi_parts(self)
+
+    def set_part(self, part: int, name: str, chan: str) -> None:
+        """Fill one part's row as its read lands.
+
+        The rows arrive one at a time rather than after a full scan, because
+        sixteen header reads is several seconds on the wire and a chooser
+        that will not appear until it knows everything is worse than one that
+        fills in. Until a row arrives it shows a placeholder, which is an
+        honest "not read yet" rather than a blank that looks like an empty
+        part.
+        """
+        if not self.is_running:
+            return          # dismissed mid-scan
+        table = self.query_one("#multi-list", DataTable)
+        try:
+            table.update_cell(f"part{part}", self._cols[2], name or "—")
+            table.update_cell(f"part{part}", self._cols[3], chan)
+        except Exception:
+            pass            # the row is gone, which is not worth an error
 
     def action_choose(self) -> None:
         table = self.query_one("#multi-list", DataTable)
@@ -1541,12 +1563,42 @@ class S3kedApp(App):
         self._restore_context = None
         if token and token != self._param_request:
             return
+        self._show_params("program", header, index)
         if restore and restore[0] != "program":
-            region, at, keygroup = restore
-            self._show_params("program", header, index)
-            self._param_context = (region, at, keygroup)
-        else:
-            self._show_params("program", header, index)
+            self._restore_param_context(*restore)
+
+    def _restore_param_context(self, region: str, at: int, keygroup: int) -> None:
+        """Put back the pane a catalog reload displaced, by RE-READING it.
+
+        This used to set `_param_context` to the displaced region while
+        leaving the program's parameters on screen -- so the pane showed one
+        thing and the app believed another. Two consequences, and the second
+        is the dangerous one:
+
+        * the pane visibly bounced to the program view, which is the exact
+          behaviour ``restore`` exists to prevent, and
+        * `_param_rows` and `_param_values` were the PROGRAM's while
+          `_param_context` named a keygroup or a multi part -- so the next
+          edit would take a program parameter's offset and write it into
+          whatever region the context claimed. Offsets do not agree between
+          regions, so that is an arbitrary byte into an unrelated structure.
+
+        Every parameter write ends with a catalog reload, so it was reachable
+        by editing a multi part twice in a row.
+
+        A region we cannot re-read leaves the honest program context standing.
+        Showing the program and saying so is always safe; saying something
+        else never is.
+        """
+        token = self._claim_param_pane()
+        if region == "keygroup":
+            self._load_keygroup_worker(at, keygroup, token)
+        elif region in ("multi", "multipart"):
+            self._load_multi_worker(region, at, token)
+        elif region == "sample":
+            names = self._samples or []
+            if 0 <= at < len(names):
+                self._load_sample_worker(at, names[at], token)
 
     def action_all_samples(self) -> None:
         """Swap the samples pane between this program's and every resident one.
@@ -3137,6 +3189,27 @@ class S3kedApp(App):
             self._load_multi_worker(region, index, self._claim_param_pane())
 
         self.push_screen(MultiScreen(), chosen)
+
+    @work(thread=True)
+    def scan_multi_parts(self, screen) -> None:
+        """Read each part's program and MIDI channel to fill the chooser.
+
+        Without this the chooser was sixteen rows reading "part 0" ... "part
+        15" -- a menu with no information in it, in front of the one
+        structure whose whole point is which program is on which channel.
+        """
+        for part in range(_MULTI_PARTS):
+            if not screen.is_running:
+                return
+            try:
+                with self._bridge_lock:
+                    header = self.bridge.get_header("multipart", part)
+            except Exception:
+                self.call_from_thread(screen.set_part, part, "?", "")
+                continue
+            name = str(header.get("PRNAME", "") or "").strip()
+            chan = header.get("PMCHAN", "")
+            self.call_from_thread(screen.set_part, part, name, str(chan))
 
     @work(thread=True)
     def _load_multi_worker(self, region: str, index: int, token: int) -> None:
