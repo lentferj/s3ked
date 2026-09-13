@@ -271,6 +271,7 @@ silently wrong one.
 - [§228](#228--doubling-the-harmonic-density-changes-nothing-so-the-corner-is-the-problem-not-the-comb-2026-09-11) — Doubling the harmonic density changes nothing, so the corner is the problem, not the comb (2026-09-11)
 - [§229](#229--two-orderings-of-the-same-three-constants-and-why-the-transposition-is-silent-2026-09-12) — Two orderings of the same three constants, and why the transposition is silent (2026-09-12)
 - [§230](#230--a-consistent-wrong-answer-from-five-notes-and-a-fault-that-was-in-the-rig-2026-09-13) — A consistent wrong answer from five notes, and a fault that was in the rig (2026-09-13)
+- [§231](#231--i-withdrew-the-correct-reading-and-an-unrelated-field-read-settled-it-2026-09-13) — I withdrew the correct reading, and an unrelated field read settled it (2026-09-13)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -22539,6 +22540,12 @@ cross-checked against half the strongest partial:
 | 72 | 2 | 523.251 | 413.79 | **−406.3** |
 | 84 | 2 | 1046.502 | 827.59 | **−406.3** |
 
+> **RETRACTED BY §231. The offset is +802 cents, not −400.** The
+> autocorrelation reading below is a virtual pitch from a fifth-interval
+> dyad; the HPS reading this section withdrew was correct, and matches the
+> sample's `SSRATE` of 27777 against 44100 to 0.2 cents. Everything in this
+> section about *where the offset is not* still holds. Read §231.
+
 **−400 cents, constant across all three keygroups and all five octaves.** Not
 growing with distance from a keygroup's centre, so not transposition of
 stretched survivors; and identical in all three keygroups, so not a
@@ -22618,3 +22625,88 @@ sample's content.
 > moved; four semitones apart means the converter re-rooted.
 
 **Nothing was written.** Every step was a read or a note played.
+
+## §231 — I withdrew the correct reading, and an unrelated field read settled it (2026-09-13)
+
+§230 reported a 3-keygroup pad playing **−400 cents** from its declared roots,
+from autocorrelation, after withdrawing a harmonic-product-spectrum reading of
+**+802** as an octave error. **The HPS reading was correct.** The offset is
++802 cents and the cause is a field neither detector could see.
+
+### The field
+
+```
+  program idx 4 (the subject)   kg0 SPITCH 36   SSRATE 27777
+                                kg1 SPITCH 60   SSRATE 27777
+                                kg2 SPITCH 84   SSRATE 27777
+  program idx 3 (control)       five samples,   SSRATE 44100
+```
+
+**`44100 / 27777 = 1.58765 = +802.5 cents`** — exactly eight semitones, and
+exactly the reading that had been withdrawn.
+
+| note | nominal | sounding | cents |
+|---|---|---|---|
+| 36 | 65.406 Hz | 103.82 | **+802.3** |
+| 48 | 130.813 | 208.57 | +810.0 |
+| 60 | 261.626 | 415.28 | **+802.2** |
+| 72 | 523.251 | 840.72 | +823.3 |
+| 84 | 1046.502 | 1681.52 | +823.4 |
+
+**+802.3 measured against +802.5 predicted, on the two cleanest notes.** The
+three affected samples are precisely the three carrying `SSRATE` 27777; the
+control's five at 44100 are unaffected.
+
+### Why the wrong detector won the first argument
+
+§230 justified the withdrawal on the partial series: a companion at **1.5×**
+the lowest strong peak, which for a harmonic series means the fundamental is
+half that peak. Energy measured at each candidate, against the strongest
+partial:
+
+```
+  note 36   51.82 Hz  (autocorrelation's f0)   -37.6 dB   [local floor -37.7]
+           103.82 Hz  (HPS)                     +0.0 dB
+           156.37 Hz  (a fifth above)           -5.0 dB
+```
+
+**There is no fundamental at 51.9 Hz — it is at the noise floor.** The sample
+is a **fifth-interval dyad** at 103.8 + 155.7 Hz, and autocorrelation returned
+their common period: a virtual pitch belonging to neither voice.
+
+And the union of the two voices' harmonics reproduces every partial that was
+used as evidence *against* them:
+
+```
+  103.8 x {1,2,3,4,6,8,9}  u  155.7 x {1,2,3,4}
+    = 103.8  155.7  207.6  311.4  415.2  467.1  622.8  830.4  934.2
+  measured
+      104.00 155.27 207.64 312.74 417.11 466.55 622.19 829.83 934.20
+```
+
+> **The 1.5× ratio was a real second voice, and I read it as a missing
+> fundamental.** Both readings are what you get when a two-note chord is
+> assumed to be one note — which is the assumption every monophonic pitch
+> detector makes, and neither detector can report that it made it.
+
+### The part worth keeping
+
+Two detectors disagreed by exactly an octave. Each had a self-consistent story:
+HPS had the strongest partial, autocorrelation had a complete integer harmonic
+series. **Nothing inside either could break the tie**, and the argument that
+looked decisive — the partial series — was the one that was wrong, because the
+alternative hypothesis it ruled out was never posed.
+
+What broke it was `SSRATE`, read while chasing an unrelated re-rooting
+question. **An independent field agreeing with a retracted measurement to 0.2
+cents outweighs either detector's self-report**, and it is the same move that
+has now closed five of these: compare the instrument to something outside
+itself (§229, §230).
+
+> **The order matters and is uncomfortable.** The first reading was right, the
+> correction was wrong, and the correction was better argued. A correction
+> carries the authority of having examined something twice, and I have now
+> twice attached that authority to the wrong answer (§227's residual, this).
+> **Being the second look is not evidence.**
+
+**Nothing was written to the machine.** All of this is reads and notes played.
