@@ -216,6 +216,47 @@ recorded, and was discovered afterwards by accident.
 **And run the screening before the ladder, not inside it.** A
 material-qualifying test built into the run gets read as a measurement.
 
+### 3b. Run the estimator over a signal whose answer you constructed
+
+Trap 3 carries a known **alongside** the subject. This is the subject itself,
+synthesised: build the signal the hypothesis predicts, in the same conditions
+as the real one — same sample rate, same window, same reference take, same
+noise — and run the *whole* pipeline over it, fit included. **Before reporting
+the real one.** You then know what the method returns when the answer is
+exactly what you are about to claim.
+
+It answers the question a residual cannot: **is this number's third digit
+mine or the machine's?**
+
+Both projects were caught by it the same night, in opposite directions:
+
+- mpc2emu's shape estimator, over a fall that is **linear by construction**,
+  returned 0.258 / 0.507 / 0.759 where it should return 0.25 / 0.50 / 0.75.
+  The excess they had reported as a measured property of the machine was the
+  detector.
+- this project's filter-corner estimator, over a **two-pole lowpass built to
+  §54's own law**, recovered the exponent with a bias that **changes sign with
+  the rung set** — `+1.03 %` over all eight rungs, `−1.44 %` dropping the two
+  nearest the FFT bin floor. A `0.9 %` agreement had already been written down
+  (§246). The finding survived; the third digit did not.
+
+> A residual only tells you the subject and the model disagree. **It cannot
+> tell you whether the method could have resolved the difference** — and a
+> method at its resolution limit produces disagreements whose *sign* depends
+> on which points you kept.
+
+Two things fall out of the same run, and both are worth keeping:
+
+- the **precision floor**, which is the honest number of digits;
+- the estimator's **absolute** bias, which a residual never shows, because it
+  cancels. Here it is `0.640×` a known two-pole corner — not an error, a
+  consequence of a two-pole response being −6 dB at its own pole frequency.
+  Measured, that is a convention; unmeasured, it was an excuse.
+
+**The cost is a few lines**, because the synthesiser is the model you already
+wrote down to have a hypothesis at all. The cost of skipping it is a committed
+figure and a retraction.
+
 ## The procedure
 
 **1. The listener is not told what to expect.** Ask "play this and describe
