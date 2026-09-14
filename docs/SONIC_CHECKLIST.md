@@ -69,6 +69,71 @@ have no field to be wrong in.
 > Use the ear for "which kind of wrong", the meter for "how wrong". Asking
 > either to do the other's job is where both of today's retractions came from.
 
+## Three traps in the measuring half
+
+These belong here because a listener never has to think about them and a meter
+always does. All three were paid for on 2026-09-14, across three projects.
+
+### 1. A detector's window must span a fixed number of **carrier cycles**
+
+Not a fixed number of milliseconds. A note ladder changes the carrier period at
+every rung, so a fixed window measures a different quantity at each — and the
+bias varies with note, which is indistinguishable from a note-effect.
+
+eosed's measurement, on a **synthetic pure tone with nothing modulating**:
+
+```
+    f0 Hz    cycles per 5 ms window    envelope swing
+     10.3            0.052                 20.57 dB
+     41.2            0.206                  8.32
+    164.8            0.824                  1.51
+   1046.5            5.232                  0.26
+```
+
+Below about one cycle the carrier leaks into the envelope and its peaks cross a
+−3 dB threshold early. At 10 Hz, **67 % of windows sit above the −3 dB line
+with no attack in progress at all.** This cost the E4XT a 1.655× note-gradient
+that did not exist, and cost this project a whole `ATTAK1` ladder measured 17–33
+% short through a 5 ms window on a 33 Hz tone — **0.165 cycles**.
+
+> **"Use a clean subject" is not the lesson.** A pure tone at 41 Hz has 8.3 dB
+> of swing. What protected this project's note sweep was that its carrier was
+> 1046 Hz, not that it was a tone. Record **cycles per window** for every row;
+> it is the column that says whether the row is trustworthy, and it cannot be
+> recovered afterwards.
+
+### 2. Every capture already contains a value known before you measured it
+
+The pitch of the note you played. One FFT against equal temperament validates
+sample rate, header, analysis scaling and tuning at once, and costs nothing.
+
+**This is what caught a hardcoded 44100 against a JACK server at 48000** — two
+bugs that had produced five sections of false findings, all of which compared
+one of this project's measurements against another and so were blind to a
+common-mode error in its own analysis (§240).
+
+> **Two measurements agreeing is much weaker than one measurement matching a
+> value that was never measured** — and only the second kind is free.
+
+### 3. Build a comparison whose answer you already know into the run
+
+Not "state the method's uncertainty first" — that requires knowing to, which is
+exactly the discipline an interesting result erodes. Carry a known alongside
+the unknown, and the method's error is measured as a by-product:
+
+- something that **must** read the same as the subject, so any disagreement
+  *is* the error bar;
+- something with **nothing to measure** — a no-attack control, a program that
+  cannot be one-sided — so any reading it gives is known to be artefact.
+
+A method too coarse for the question then announces itself instead of waiting
+to be asked about. eosed's enquiry needed 1.27 dB of separation and their
+method's own spread was 2.61 dB worst case; that was knowable before a note was
+recorded, and was discovered afterwards by accident.
+
+**And run the screening before the ladder, not inside it.** A
+material-qualifying test built into the run gets read as a measurement.
+
 ## The procedure
 
 **1. The listener is not told what to expect.** Ask "play this and describe
