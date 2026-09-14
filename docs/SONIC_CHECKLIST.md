@@ -270,6 +270,24 @@ figure and a retraction.
 > to one** — including reading it against its own numbers before reaching for
 > anything else. The one thing a control cannot check is itself.
 
+And the same night, from the other side: **a control that over-explains is as
+suspect as one that under-explains.** mpc2emu's synthetic ran at a noise floor
+61 dB below peak where the real captures have 108 — 61 was a headroom figure
+from elsewhere in their own analyser output, `peak − 40 − floor`, used as if it
+were peak-to-floor. At 61 dB it predicted a bias *larger* than the effect it
+was explaining. At the captures' actual floor it lands on it almost exactly
+(`+0.006/+0.004/+0.003` against a measured `+0.007/+0.005/+0.003`).
+
+> "Larger than the thing it explains" is a free, arithmetic-only check that
+> needs no second run, and neither of us made it. **Where "it agrees" reads as
+> success, a control agreeing too well reads as success too.**
+
+Both failures took the same form: **the control read the right property under
+the wrong conditions, or the wrong property under the right conditions** — and
+in both cases being the checking apparatus made it feel like the end of the
+chain rather than a new unverified link. That feeling is the thing to distrust,
+because it is exactly what the rest of this section exists to defeat.
+
 ## The procedure
 
 **1. The listener is not told what to expect.** Ask "play this and describe

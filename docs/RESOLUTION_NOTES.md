@@ -24114,6 +24114,12 @@ fitted**, by a different subject (noise, not a sawtooth) and a different design
 The ratio's drift from 1.14 to 1.03 is the exponent difference and nothing
 else. Calling it "this method's convention" was a way of not looking it up.
 
+That matters downstream: mpc2emu's `AKAI_FILTER_LAW` already picks §139 over
+§54, and its comment says why — §139 measures the −3 dB point directly, which
+is what every source format means by "cutoff". **That choice now has a third
+measurement behind it rather than two**, and the third one covers the range the
+other two do not.
+
 **And the 0.640 was the filter I built, not the estimator.** The control used
 `H = 1/(1 + jf/f_c)²` — two cascaded one-poles *each* at `f_c`, which is
 −6.02 dB at `f_c` and whose true −3 dB point is `√(√2−1) = 0.6436` of it. The
