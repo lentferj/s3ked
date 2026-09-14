@@ -838,7 +838,7 @@ _PARAMS: List[Parameter] = [
         -50,
         50,
         unit="semitones",
-        desc="Shift pitch of incoming MIDI Values used to represent Modulation Sources 0: No Source 1: Modwheel 2: Bend 3: Pressure",
+        desc="Shift pitch of incoming MIDI",
         notes="range as written: \"-50 to +50 semitones\"",
     ),
     _p(

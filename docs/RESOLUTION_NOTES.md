@@ -342,6 +342,7 @@ silently wrong one.
 - [§249](#249--the-modwheel-is-unipolar-and-velocity-is-232-stronger-per-depth-unit-2026-09-14) — The modwheel is unipolar, and velocity is 2.32× stronger per depth unit (2026-09-14)
 - [§250](#250--one-of-247s-eight-tables-is-identified-exactly-the-other-six-are-not-2026-09-14) — One of §247's eight tables is identified exactly; the other six are not (2026-09-14)
 - [§251](#251--modvlvol-is-unipolar-too-and-there-is-a-dedicated-mwldep-nobody-was-using-2026-09-14) — `MODVLVOL` is unipolar too, and there is a dedicated `MWLDEP` nobody was using (2026-09-14)
+- [§252](#252--mwldepprsdep-are-two-of-a-contiguous-trio-and-six-dedicated-paths-exist-2026-09-15) — `MWLDEP`/`PRSDEP` are two of a contiguous trio, and six dedicated paths exist (2026-09-15)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -24873,4 +24874,90 @@ earlier count of 24 matrix assignments was not under-reporting, it was
 > broke it, so any program picked off that card would have done the same. A
 > null check at amount zero was the only thing standing between that run and a
 > plausible, monotone, entirely wrong ladder.
+
+## §252 — `MWLDEP`/`PRSDEP` are two of a contiguous trio, and six dedicated paths exist (2026-09-15)
+
+§251 found `MWLDEP` (36) and `PRSDEP` (37) by a failed null check and asked
+whether more dedicated controller→destination paths were sitting unnoticed in
+the parameter table. **They were, and the nearest one is the next byte.**
+
+### `VELDEP`, program offset 38
+
+```
+   MWLDEP   program 36   0..99   LFO1 depth by Modwheel
+   PRSDEP   program 37   0..99   LFO1 depth by Aftertouch
+   VELDEP   program 38   0..99   LFO1 depth by Note-On velocity
+```
+
+**Three consecutive bytes, identical range, one destination.** §251 read two of
+them and did not look at the third — the trio is contiguous, and having found
+36 and 37 the obvious move was to read 38.
+
+> `VELDEP` is `0..99` **unsigned**, where every other velocity-dependence field
+> in the header (`V_ATT1`, `V_REL1`, `V_LOUD`, `V_ENV2` …) is signed `±50`. So
+> it groups with the wheel and aftertouch by **range and address**, and with the
+> velocity family by **description**. The byte layout is the better guide: a
+> sweep that classified by description put it in the wrong group, and the
+> addresses corrected it.
+
+### The full set
+
+Sweeping the 269-parameter table for fields naming a **player-operated**
+controller acting on a destination — a thing the performer moves, as against an
+envelope segment or an LFO's own rate:
+
+| | | |
+|---|---|---|
+| **A — external controller (6)** | `MWLDEP` 36, `PRSDEP` 37 | LFO1 depth |
+| | `B_PTCH` 39, `B_PTCHD` 73 | pitch up / pitch down |
+| | `P_PTCH` 40 | pitch by pressure |
+| | `TRANSPOSE` 75 | *(mis-classified — see below)* |
+| **B — velocity/key, dedicated (17)** | `VELDEP` 38, `V_LOUD` 26, `K_FREQ` 8, `K_FRQ2` 178, `V_ATT1..3`, `V_REL1..3`, `O_REL1..3`, `K_DAR1..3`, `V_ENV2..3` | the §43/§116 family |
+| **C — velocity-zone offsets (24)** | `VTUNO/VLOUD/VFREQ/VPANO` ×4, `VZOUT` ×4, `VSS` ×4 | a different mechanism: zone-selected, not continuous |
+
+**So the assignable matrix is not where this machine does most of its
+modulation.** `MODSLFOL`+`MODVLVOL` is one route to LFO depth; three dedicated
+bytes reach the same destination, and mpc2emu's corpus says the dedicated ones
+are used 213 times to the matrix's once.
+
+### The corpus consequence extends to velocity
+
+§251 recorded that a modwheel count from `MODSLFOL` alone under-reports.
+**The same holds for velocity → LFO depth via `VELDEP` at 38**, and nobody has
+counted that one yet. A converter reading vibrato routing needs offsets 36, 37
+*and* 38.
+
+### A transcription defect found on the way
+
+`TRANSPOSE` (program 75) carried
+
+```
+   "Shift pitch of incoming MIDI Values used to represent Modulation Sources
+    0: No Source 1: Modwheel 2: Bend 3: Pressure"
+```
+
+— the modulation-source enumeration **bled into the description field** during
+transcription from Akai's document, which is why the sweep put it in class A.
+The multipart twin at the same offset reads correctly (`"Shift pitch of
+incoming MIDI"`) and has been copied over it. The enumeration itself is not
+lost: it lives where it belongs, in the `values` mapping on every `MODS*` field.
+
+It was the only one. Four other descriptions exceed 110 characters and all four
+are legitimate multi-sentence notes (`PRGNUM`'s `BTSORT` warning, `GROUPS`'
+`KDATA` note, `KFXCHAN`'s enumeration, `PRNAME`'s advice).
+
+### The sweep's own first pass was wrong, again
+
+It returned **72 dedicated paths**, including `ATTAK1`, `DECAY1` and every
+`ENV3*` segment: *"Attack rate of envelope 1"* matched controller=`envelope`
+and destination=`attack`. **The detector was matching its own vocabulary.**
+Tightening "controller" to things a player moves cut 72 to 47 and made the
+three classes fall out.
+
+> That is the fifth instrument in two days to report its own construction —
+> after §246's control, §246's string sweep, and two in the citation audit.
+> The pattern is not carelessness: each was built to *check* something, and
+> **being the checker is what makes an instrument feel finished**.
+
+Scanner kept at `~/temp/s3ked-logs/ded2.py`.
 
