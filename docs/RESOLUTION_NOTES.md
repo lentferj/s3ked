@@ -42,10 +42,23 @@ grep is the wrong one.*
 ```
 
 `k2kremote §5` could be either. That is this file's own §10 collision one
-level up — two numbering spaces instead of two headings — and it is theirs to
-decide about, recorded here only so a citation from this project says which
-file when the number is 7 or below. Nothing in this tree currently does; the
-only k2kremote citation is §73.
+level up — two numbering spaces instead of two headings.
+
+**The two files collide on every number from 1 to 7**, not merely overlapping
+ranges, and `§6` is *"Name-edit cursor"* in one and *"Object lists — not
+covered"* in the other. mpc2emu found a live instance in their tree, pre-dating
+tonight, and it now reads `k2kremote RESOLUTION_NOTES §6`.
+
+**This tree has none** — grepped, every file type: the only k2kremote citation
+is `§73`, well clear of the collision. *An earlier version of this paragraph
+claimed none in **either** tree, on the strength of grepping one of them.*
+
+> But the same proximity hazard is here in a different form. `s3k/bridge.py`
+> cited `RESOLUTION_NOTES §6` one clause before the words *"k2kremote's 120
+> ms"* — and **both projects have a file of that name with a §6**, ours the
+> send gap and theirs the name-edit cursor. The convention makes it ours, and
+> naming the *file* does not disambiguate when the filename is shared. It now
+> names the project.
 
 This matters because s3ked and eosed number independently, so the same number
 names two different findings. It bit on 2026-09-15: a bare `§139` in a message between projects was

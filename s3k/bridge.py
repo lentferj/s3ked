@@ -34,7 +34,8 @@ Three things here are worth reading before trusting them:
 blocks for its reply. ``WRITE_GAP`` (75 ms) paces *unacknowledged* writes, and
 is the one that matters: the machine consumes writes at ~13.3/s, and a
 fire-and-forget sender faster than that has writes dropped **silently**. Both
-were walked down against an S3000XL -- RESOLUTION_NOTES §6. k2kremote's 120 ms
+were walked down against an S3000XL -- s3ked RESOLUTION_NOTES §6 (both
+projects have a file of that name with a §6). k2kremote's 120 ms
 was RE'd against a Kurzweil K2000 and never applied here.
 
 The practical advice is to leave ``confirm=True``: an acknowledged write is
