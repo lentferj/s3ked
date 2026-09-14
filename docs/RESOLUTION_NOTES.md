@@ -276,6 +276,7 @@ silently wrong one.
 - [§233](#233--writing-a-parts-prname-changes-the-byte-and-nothing-else-2026-09-13) — Writing a part's `PRNAME` changes the byte and nothing else (2026-09-13)
 - [§234](#234--the-attack-law-was-measured-through-a-016-cycle-window-and-225s-confirmation-was-two-errors-cancelling-2026-09-14) — The attack law was measured through a 0.16-cycle window, and §225's confirmation was two errors cancelling (2026-09-14)
 - [§235](#235--the-envelope-rate-table-is-in-the-s3000xls-own-firmware-and-the-model-around-it-is-what-fails-2026-09-14) — The envelope rate table is in the S3000XL's own firmware, and the model around it is what fails (2026-09-14)
+- [§236](#236--the-fast-end-failed-its-own-control-attak1-alone-does-not-determine-the-attack-2026-09-14) — The fast end failed its own control: `ATTAK1` alone does not determine the attack (2026-09-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -23116,3 +23117,72 @@ than the sample rate; the **index mapping** is not `99 − setting`; or the
 attack stage is not a single linear accumulation. **The first would be visible
 in the firmware around 0x06890** — whatever reads this table also knows how
 often it is applied, and that is the next place to look.
+
+## §236 — The fast end failed its own control: `ATTAK1` alone does not determine the attack (2026-09-14)
+
+`ATTAK1` 40 and 50 have never been captured — the ladder starts at 60, and
+every percussive attack in the corpus lands below it. Jan cleared the machine;
+the settings were reached by **RAM writes on a resident program**, snapshotted
+and restored, with no card crossing.
+
+**The run does not extend the ladder, because the control it was given failed.**
+
+### The subject, and why it looked ideal
+
+One keygroup 24–127, `SUSTN1` 99 so it holds at full, `FILFRQ` 99 and
+`LSI2_ON` 0 so no filter moves, and a looped sample giving a **pure tone —
+100 % of the band energy in one partial**, at 961 Hz on probe note 84. That is
+29 × ATKCAL's 33 Hz carrier, so about 92 cycles inside an `ATTAK1` 40 attack
+where ATKCAL would have had half a cycle. `ATTAK1` has no keyboard tracking
+(`K_DAR` is decay/release, `V_ATT` velocity, there is no `K_ATT`), so a higher
+probe note raises the carrier without touching the quantity measured.
+
+### The control, filed before the run
+
+> `ATTAK1` 60 on this subject must reproduce ATKCAL's 0.141 s knee. Different
+> volume, different sample, different carrier — if it does not, the ladder and
+> this run are not comparable and nothing here extends it.
+
+```
+  ATTAK1 60, ATKCAL (33 Hz)      -3 dB 0.101 s    knee 0.141 s    ratio 1.396
+  ATTAK1 60, this subject         -3 dB 0.144      knee 0.187      ratio 1.298
+                                        +43%           +33%
+```
+
+**Both conventions are longer here, so it is not a convention artefact — and
+the ratio differs too, so the SHAPE differs and not only the scale.** 1.4125 is
+what a straight ramp requires; 1.298 is a convex rise. The knee line-fit
+residual is ~50 % on this subject against a few per cent on ATKCAL's good
+rungs, which says the same thing independently.
+
+### What was ruled out, by measurement
+
+| candidate | test | result |
+|---|---|---|
+| carrier too low | spectrum of the plateau | **pure tone at 961 Hz**, 100 % in one partial |
+| `V_LOUD` differs (20 here, 0 on ATKCAL) | set it to 0 and re-measure | knee 0.1881 → 0.1931, **plateau halved, time did not move** |
+| decay pulling the plateau down | envelope 0.5 → 1.7 s | **flat to 0.00 dB**, and `SUSTN1` 99 is the maximum of 0..99 |
+| velocity → attack | read `V_ATT1..3`, `VELDEP` | **all 0** |
+
+### What that leaves
+
+**The same `ATTAK1` byte produces a 33 % different attack, of a different
+shape, on two different programs — and nothing in either program's envelope
+parameters accounts for it.** So `ATTAK1` alone does not determine the attack,
+and §234's law is a law *for ATKCAL's programs*, not yet a law for the machine.
+
+The numbers for 40 and 50 are therefore **not reported as ladder points**. They
+exist (0.096 and 0.103 s knee) and they are not comparable to anything until
+the discrepancy is understood — the whole span 40→60 measures only 1.95×
+against the law's 8.7×, which is its own warning.
+
+> This is what the control was for. Without it the two new rungs would have
+> been published as an extension, and the 1.95× compression would have been
+> read as *"the exponential breaks down at the fast end"* — a plausible,
+> interesting, entirely wrong finding, in the one region nobody has data to
+> contradict.
+
+**What would close it:** capture ATKCAL's own `ATTAK1` 60 again in this
+session, to separate "different program" from "different session or rig". That
+needs a load from ID4, which would clear the currently resident program, so it
+is Jan's to authorise rather than mine to take.
