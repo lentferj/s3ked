@@ -23182,7 +23182,63 @@ against the law's 8.7×, which is its own warning.
 > interesting, entirely wrong finding, in the one region nobody has data to
 > contradict.
 
+### Two more candidates, both tested, both dead
+
+mpc2emu named the two variables the ruled-out list was missing — **the material
+itself** and **the note** — and both tests were free on hardware already
+loaded. The argument for the first was good: 40 and 50 measure 0.096 and 0.103
+where the law says they differ by 3×, and *a floor is what a fixed material
+onset looks like, not what a law breaking down looks like*.
+
+**Material — falsified by the signature it would have to have.** A sample's
+onset is a fixed number of FRAMES, so it must shorten with pitch. Setting
+`ATTAK1` to its floor and capturing at three notes an octave apart:
+
+```
+   note   carrier    t90 at ATTAK1 0    ratio to note 48
+    48     120 Hz       0.05250              1.00
+    72     482          0.05154              0.98
+    96    1927          0.05178              0.99
+
+   a fixed FRAME count predicts   1.00 / 0.25 / 0.0625
+```
+
+**Flat.** The ~51.5 ms floor is real and is not the sample.
+
+**Note — falsified, and tightly.** `ATTAK1` 60 across the same three octaves:
+
+```
+   note 48   t90 0.19659      note 72   0.19666      note 96   0.19757
+```
+
+**0.5 % across three octaves.** No envelope key-scaling.
+
+**And it is not rig latency either.** Sound crosses eight times the pre-note
+noise floor at **0.3 ms** in both takes, so nothing is delaying the onset:
+
+```
+   ATTAK1    first sound     10%       50%       90%
+      0        0.00031     0.05141   0.05160   0.05178
+     60        0.00037     0.07402   0.13549   0.19757
+```
+
+At the floor the voice is audible immediately, stays below a tenth of full for
+51 ms, then reaches full in **0.4 ms**. That shape is reported as observed and
+is not explained here.
+
+> Subtracting 51.5 ms from the `ATTAK1` 60 knee gives 0.136 s against ATKCAL's
+> 0.141 — 3.5 %, which is very tempting. **The onset evidence is against it:**
+> a fixed additive delay would push the start of sound out, and the sound
+> starts at 0.3 ms in both. Recorded as a coincidence worth remembering rather
+> than a correction worth applying.
+
+**So the program-dependence survives both tests.** Material, note, carrier,
+`V_LOUD`, decay, velocity-routing and rig latency are all eliminated by
+measurement. The same byte still gives a 33 % different attack of a different
+shape on two programs of one machine.
+
 **What would close it:** capture ATKCAL's own `ATTAK1` 60 again in this
-session, to separate "different program" from "different session or rig". That
-needs a load from ID4, which would clear the currently resident program, so it
-is Jan's to authorise rather than mine to take.
+session, which separates "different program" from "different session or rig" —
+the one thing the free tests cannot reach. It needs a load from ID4 and clears
+the currently resident program, so it is Jan's to authorise rather than mine to
+take.
