@@ -278,6 +278,7 @@ silently wrong one.
 - [§235](#235--the-envelope-rate-table-is-in-the-s3000xls-own-firmware-and-the-model-around-it-is-what-fails-2026-09-14) — The envelope rate table is in the S3000XL's own firmware, and the model around it is what fails (2026-09-14)
 - [§236](#236--the-fast-end-failed-its-own-control-attak1-alone-does-not-determine-the-attack-2026-09-14) — The fast end failed its own control: `ATTAK1` alone does not determine the attack (2026-09-14)
 - [§237](#237--there-is-no-program-dependence-236-compared-two-capture-paths-2026-09-14) — There is no program-dependence; §236 compared two capture paths (2026-09-14)
+- [§238](#238--the-path-difference-is-neither-additive-nor-multiplicative-and-repeatability-depends-on-the-rung-2026-09-14) — The path difference is neither additive nor multiplicative, and repeatability depends on the rung (2026-09-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -23397,3 +23398,68 @@ published.
 > residuals were 55–66 % against 2.3–4.6 % for the settled takes. Contaminated
 > by the previous note's tail, and it would have been reported as a third
 > value if the repeatability run had not been done.
+
+## §238 — The path difference is neither additive nor multiplicative, and repeatability depends on the rung (2026-09-14)
+
+§237 left one question: the two capture paths differ by 28 % at `ATTAK1` 60,
+and is that a **constant** or a **factor**? mpc2emu supplied the discriminator
+— the two models are indistinguishable at one rung and 32 % apart at a slow
+one, because a fixed offset is 34 % of an `ATTAK1` 60 attack and 0.5 % of a 99.
+Predictions were filed in the probe before the capture.
+
+```
+  ATTAK1 90   additive -> 3.601 s     multiplicative -> 4.774 s    MEASURED 3.878
+  ATTAK1 99   additive -> 9.678       multiplicative -> 12.941     MEASURED 10.509
+```
+
+**Neither.** Both miss, in opposite directions, at both rungs.
+
+### What the path difference actually is
+
+```
+  rung   yesterday    today     ratio    as an offset
+    60     0.1410     0.1895    1.344      +48.5 ms
+    90     3.5520     3.8780    1.092     +326.0 ms
+    99     9.6290    10.5090    1.091     +880.0 ms
+```
+
+**A clean +9.1 % at both slow rungs — agreeing to 0.1 % with each other — and
++34.4 % at the fast one.** Not a constant, not a factor, and not the sum of
+one of each: an additive 36 ms fitted to the fast rung would sit 30 × the
+take-to-take scatter away from the slow ones.
+
+### Which path is wrong
+
+**§141 and §234 are two independent measurements** — three and a half weeks
+apart, different rigs, different methods, one a threshold on a resident sine
+and one a Hilbert knee — and they agree to 2 % at rungs 80, 90 and 99.
+**Today's path is 9.1 % above both.** Two agreeing against one is not proof,
+but it is the way the evidence points, and it points at the path written this
+morning rather than at the ladder.
+
+### And a correction to §237's headline number
+
+§237 reported run-to-run repeatability as **±5 %**. That figure is real and it
+is **specific to `ATTAK1` 60**. Measured at the slow rungs, four takes each:
+
+```
+  ATTAK1 90    3.879  3.878  3.878  3.878     spread 0.03%
+  ATTAK1 99   10.511 10.508 10.507 10.508     spread 0.04%
+```
+
+**Repeatability is rung-dependent by a factor of over a hundred** — 5 % at
+`ATTAK1` 60, 0.03 % at 90. Which makes sense, since a short attack contains
+few envelope steps and the jitter is a larger fraction of it, but it was not
+measured and §237 generalised one rung's spread to the instrument.
+
+> So §237 said *"eliminating nine variables is not evidence that the tenth
+> exists"* and then, in the same section, quoted a spread from one rung as a
+> property of the measurement. **The correction and the error it corrected
+> have the same shape**, four hours apart, which is the third time today that a
+> figure has travelled without its conditions.
+
+**What this leaves:** the 9.1 % slow-rung disagreement is now the sharpest
+open item, and it is cheap to attack — one rung captured through `measure.py`
+and through the jcap sender **in the same session, minutes apart**, removes
+every variable except the code. That is the experiment §237 proposed and it is
+still the right one; this section only narrows what it has to explain.
