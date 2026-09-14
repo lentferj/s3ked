@@ -22986,6 +22986,59 @@ The converter used §223's law, faithfully. §223 was wrong, so the bytes are
 
 Only the third announced itself. The first two produced plausible numbers.
 
+### The ramp, tested directly rather than by ratio — and an open residual closed
+
+The 1.4156 figure confirms linearity *by inference*. It can be tested head-on
+inside a single capture, with no second file, no note-off anywhere near it and
+no cross-capture level matching: at time `t` a linear ramp of total length `T`
+should stand at `t/T` of the plateau, and `T` is the knee already measured from
+that same file.
+
+```
+  ATTAK1   T(knee)     t      measured    linear ramp    error
+    85     2.059 s   1.0 s     0.4840       0.4857       -0.3%
+    85               2.0       0.9720       0.9713       +0.1%
+    90     3.552     1.0       0.2807       0.2815       -0.3%
+    90               2.0       0.5647       0.5631       +0.3%
+    95     6.223     1.0       0.1600       0.1607       -0.4%
+    95               2.0       0.3203       0.3214       -0.3%
+    95               4.0       0.6438       0.6428       +0.2%
+    99     9.629     1.0       0.1033       0.1039       -0.5%
+    99               2.0       0.2063       0.2077       -0.7%
+    99               4.0       0.4150       0.4154       -0.1%
+```
+
+**Linear to better than 0.7 % at every point, across four settings and three
+times.** The attack is a straight amplitude ramp and the knee values are right
+to sub-percent.
+
+That closes the residual mpc2emu put on the table against the restored law. A
+hold-2 versus hold-12 level comparison implies `T` = 7.10 s at `ATTAK1` 94 and
+11.12 s at 99, against 5.52 and 9.49 from timing — 17–29 % apart. The
+within-capture test above says the timing is right to under 1 %, so **the
+disagreement is in the two-capture inference, not in the law.** Which is what
+its weaknesses predict: the hold-2 side puts a note-off *inside the attack*, and
+the comparison needs two captures to be level-matched across files.
+
+> The older "§141 is roughly 2× low against audio" rests on that same inference
+> **and on a single-exponential model**, `tau = t90/ln 10` — a shape this
+> section now rules out at 0.7 %. It also describes §141 as fitted on "`t90`
+> read off the machine's own display", which §141's own method line contradicts:
+> *"Measured on a resident sine with `SUSTN1` 99 … time from note-on to 90 % and
+> 50 % of the plateau"*. That is captured level on steady material. **Two of my
+> own sections disagree about what a third one did, and the one that
+> mis-describes it is the one that overturned it.**
+
+### A note on measuring the fast end
+
+`ATTAK1` has no keyboard-tracking parameter — `K_DAR1..3` track decay and
+release, `V_ATT1..3` are velocity, and there is no `K_ATT`. **So the attack
+time does not depend on the note played**, which means a higher probe note
+raises the carrier without touching the quantity being measured: the same
+subject at note+24 gives four times the cycles inside the attack. The fast end
+of the ladder is limited by the 33 Hz tone, not by the machine, and that limit
+is removable without rebuilding anything.
+
 ## §235 — The envelope rate table is in the S3000XL's own firmware, and the model around it is what fails (2026-09-14)
 
 ConvertWithMoss model attack as `time = accumulator_width / rate[99 − setting]
