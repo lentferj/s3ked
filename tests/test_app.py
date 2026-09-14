@@ -4696,6 +4696,121 @@ async def test_no_key_takes_the_pane_off_the_multi_while_the_multi_is_up():
         assert not app.query_one("#multi-parts").display
 
 
+async def test_every_multi_section_and_parameter_round_trips_through_the_tui():
+    """Drive the Multi screen as a user does: read, write, re-read, leave,
+    come back, re-read -- for the file header and all sixteen parts, every
+    writable parameter.
+
+    The demo bridge stores writes into a real header buffer, so this exercises
+    the whole chain: the pane's region context, the parameter's offset and
+    size, the encoder, the multipart SELECTOR, the decoder and the display
+    mapping. §243 is why the selector matters -- `multipart` is selector 1 and
+    `multi` is selector 0, and a probe that got that wrong read the file header
+    while believing it was reading a part.
+
+    **Each part gets DIFFERENT values**, so a write that landed on the wrong
+    part is caught by the re-read rather than passing because everything was
+    set to the same number.
+
+    Values are typed into the modal's own input and submitted with Enter; the
+    navigation, the gate and the modal lifecycle are all driven by keypresses.
+    """
+    from textual.widgets import DataTable, Input
+    from s3ked.app import S3kedApp
+    from s3ked.demo import DemoBridge
+    import s3k.params as p
+
+    def target_for(prm, section, i, current):
+        if prm.kind == "text":
+            return "SECTION %d" % section
+        span = prm.maximum - prm.minimum
+        v = prm.minimum + (section * 7 + i * 3) % (span + 1)
+        if v == current:
+            v = prm.minimum + ((v - prm.minimum + 1) % (span + 1))
+        return v
+
+    async def settle(pilot, n=20):
+        """Wait for the WORKERS, not for a guessed number of frames.
+
+        The first version spun a fixed count of `pilot.pause()` per step and
+        took four minutes -- most of it waiting when nothing was pending, and
+        still a race on a slower machine. `wait_for_complete()` is both faster
+        and deterministic: the reads and writes here are `@work(thread=True)`,
+        so the thing to wait on is the worker, not the frame count.
+        """
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+    app = S3kedApp(DemoBridge(), allow_write=True)
+    async with app.run_test(size=(140, 46)) as pilot:
+        await settle(pilot)
+        await pilot.press("M")
+        await settle(pilot, 25)
+        rows = app.query_one("#multi-parts", DataTable)
+        ptab = app.query_one("#parameters", DataTable)
+        written = {}
+
+        for section in range(17):          # 0 = file header, 1..16 = parts
+            rows.move_cursor(row=section)
+            await settle(pilot, 25)
+            region = "multi" if section == 0 else "multipart"
+            index = 0 if section == 0 else section - 1
+            assert app._param_context == (region, index, 0), app._param_context
+            await pilot.press("right")
+            await settle(pilot, 4)
+            for i, prm in enumerate(list(app._param_rows)):
+                if not prm.writable:
+                    continue
+                tgt = target_for(prm, section, i, app._param_values.get(prm.name))
+                ptab.move_cursor(row=i)
+                await pilot.press("e")
+                await settle(pilot, 6)
+                app.screen.query_one("#edit-input", Input).value = str(tgt)
+                await pilot.press("enter")
+                await settle(pilot, 20)
+                got = app._param_values.get(prm.name)
+                assert got == tgt, (section, prm.name, tgt, got)
+                shown = str(ptab.get_row_at(i)[2])
+                assert shown == p.describe_value(prm, tgt), (prm.name, shown)
+                written[(section, prm.name)] = tgt
+            await pilot.press("left")
+            await settle(pilot, 4)
+
+        assert len(written) == 17 * 12 - 12 + 6, len(written)
+
+        # LEAVE the multi entirely and come back, rather than moving within it
+        await pilot.press("M")
+        await settle(pilot, 25)
+        assert not app._multi_showing
+        await pilot.press("M")
+        await settle(pilot, 25)
+
+        for section in range(17):
+            rows.move_cursor(row=section)
+            await settle(pilot, 25)
+            for i, prm in enumerate(app._param_rows):
+                if not prm.writable:
+                    continue
+                exp = written[(section, prm.name)]
+                assert app._param_values.get(prm.name) == exp, (
+                    "after leaving and returning", section, prm.name, exp,
+                    app._param_values.get(prm.name))
+
+        # and independently of the app's own cache
+        for section in range(17):
+            region = "multi" if section == 0 else "multipart"
+            index = 0 if section == 0 else section - 1
+            header = app.bridge.get_header(region, index)
+            for prm in p.region_params(region):
+                if not prm.writable:
+                    continue
+                exp = written[(section, prm.name)]
+                assert header.get(prm.name) == exp, (
+                    "bridge disagrees", region, index, prm.name, exp,
+                    header.get(prm.name))
+
+
 async def test_a_hidden_table_does_not_drive_the_parameter_pane():
     """The programs table follows its cursor with no focus guard -- it has
     to, because filling the keygroup pane moves that cursor. While the multi
