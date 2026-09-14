@@ -21,12 +21,31 @@ all.** Counted, not assumed:
    s3ked       §1 .. §252        numbered, § sigil
    eosed       144 sections      numbered, § sigil   -> "eosed's §23"
    mpc2emu     299 sections      NAMED: §KRZCOARSE, §MODWHEEL, §E4BRATE
-   k2kremote   73 sections       numbered "## 73.", no § at all
+   k2kremote   80 sections       numbered "## 73." in headings, § in prose
+                               -- and numbered PER FILE, see below
 ```
 
 So **a number attributed to mpc2emu is always wrong** — they have never had
-one, at any point in their history — and a `§` attached to a k2kremote number is
-this project's sigil, not theirs.
+one, at any point in their history.
+
+**k2kremote does use `§` — in prose, for its own sections** (`RESOLUTION_NOTES
+§24`, `§13`, `§21`, `§9` …), even though its headings read `## 73.`. So
+`k2kremote §73` is their convention and is right. *How a project heads a
+section and how it cites one are two separate facts, and the easier one to
+grep is the wrong one.*
+
+**And their numbering is per-file, which makes their low numbers ambiguous:**
+
+```
+   k2kremote/docs/RESOLUTION_NOTES.md    1 .. 73
+   k2kremote/docs/MAC_FORMAT.md          1 .. 7
+```
+
+`k2kremote §5` could be either. That is this file's own §10 collision one
+level up — two numbering spaces instead of two headings — and it is theirs to
+decide about, recorded here only so a citation from this project says which
+file when the number is 7 or below. Nothing in this tree currently does; the
+only k2kremote citation is §73.
 
 This matters because s3ked and eosed number independently, so the same number
 names two different findings. It bit on 2026-09-15: a bare `§139` in a message between projects was
@@ -76,8 +95,9 @@ version with failures 1 and 2 still in it.
 Its first version offered `mpc2emu's §133` and `k2kremote §73` as **examples of
 correct practice**. mpc2emu has no numbered sections; the citation was dangling,
 and so was a real one further down this file (`"mpc2emu also corrected their own
-§133"`, now describing rather than citing). k2kremote's 73 exists but is written
-`## 73.` with no `§`.
+§133"`, now describing rather than citing). k2kremote's 73 exists, and `§73` turned out to be
+their own prose convention after all — the second half of that claim was wrong
+too, and is corrected above.
 
 > **Written to fix citation hygiene, and wrong about citations.** It was caught
 > only because mpc2emu mentioned in passing that their headings are named — a
