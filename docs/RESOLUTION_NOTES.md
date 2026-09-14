@@ -285,6 +285,7 @@ silently wrong one.
 - [§242](#242--what-reads-the-rate-table-99--setting-confirmed-and-the-accumulator-is-in-silicon-2026-09-14) — What reads the rate table: `99 − setting` confirmed, and the accumulator is in silicon (2026-09-14)
 - [§243](#243--attack-reads-a-different-table-from-every-other-envelope-rate-and-is-halved-2026-09-14) — Attack reads a different table from every other envelope rate, and is halved (2026-09-14)
 - [§244](#244--the-load-base-is-0xc0000-and-the-attack-table-is-in-ram-2026-09-14) — The load base is 0xC0000, and the attack table is in RAM (2026-09-14)
+- [§245](#245--the-attack-table-is-not-located-and-the-attack-law-does-not-need-it-2026-09-14) — The attack table is not located, and the attack law does not need it (2026-09-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -23957,3 +23958,70 @@ Find the boot-time writer of `0x3A60:0x0892`. If it is a formula, that formula
 is the attack law in closed form and settles §234, §235 and the writer's
 inverse at once. If it is a copy from disk, it is in the OS image that ships
 with the machine rather than in the ROM.
+
+## §245 — The attack table is not located, and the attack law does not need it (2026-09-14)
+
+§244 established the attack rate table is in RAM at `0x3A60:0x0892` and is not
+copied verbatim from ROM. The obvious next step was to find the boot-time
+writer. **It was not found, and the search is worth recording because it was
+bounded rather than abandoned.**
+
+### What was looked at
+
+- **Only one immediate `0x0892` exists in the whole image** — the read site
+  itself at `0x29260`. Nothing else names that offset, so the table is written
+  either inside a larger block or through a computed pointer.
+- **Six block copies target segment `0x3A60`** (`mov $0x3a60,%ax` into `ES` or
+  `DS` with a `rep movs` within 40 bytes): `0x16A5A`, `0x270EC`, `0x295B0`,
+  `0x2DF16`, `0x2DF3A`, `0x2DF4E`. Their destinations are `0x33D0`, `0x5060`,
+  `0x91B0` and computed pointers. **None covers `0x892`.**
+- The boot path from `0x241E0` is hardware bring-up — chip selects, wait
+  states, then a RAM test writing `0x0000`/`0xFFFF` patterns. The data-segment
+  initialisation is further on and tracing it linearly is open-ended.
+
+### The law does not depend on finding it
+
+The ROM decay table is a clean geometric series, and the measured attack ladder
+requires a different one:
+
+```
+  ROM (decay) table, log-slope per index
+     idx  0->39   k = 0.09789        idx 39->99   k = 0.09811
+     idx  0->99   k = 0.09802        idx  9->99   k = 0.09764
+
+  attack ladder requirement (t proportional to 1/rate, index 99-setting)
+     settings 60,99   k = 0.10830
+     settings 60,90   k = 0.10755
+     settings 90,99   k = 0.11081
+```
+
+**The decay table runs at 0.0980 per index and attack needs 0.1083** — the
+same geometric form, about **10.6 % steeper**. That is the whole of what
+ConvertWithMoss need: they do not have to find the RAM table, they have to stop
+using the ROM one for attack.
+
+### And the corroboration is not corroboration
+
+§235 recorded, as a pointer with no mechanism, that rescaling the index by
+**1.09** collapsed the implied-width spread from 1.501× to 1.084×. The exponent
+ratio here is **1.1064**. Those agree, and it is tempting to call them two
+routes meeting.
+
+> **They are the same evidence twice.** §235's 1.09 was fitted to flatten the
+> implied width computed *from the same measured ladder* against *the same ROM
+> table*. The exponent ratio is that information rearranged. Nothing has been
+> added, and two numbers derived from one dataset agreeing is arithmetic, not
+> confirmation — which is §240's lesson at a smaller scale, four sections later.
+
+**What is genuinely independent** is the firmware: attack reads a different
+table, in a different segment, and halves the result. That is structural
+evidence from primary source, and it is what turns "the model drifts" into "the
+model uses the wrong table". The exponent is measurement; the reason is
+firmware; neither is the other's witness.
+
+### Where this rests
+
+`ATTAK1`'s law is §234's, refitted from hardware with ±2 % residuals, and it
+stands on its own. The firmware explains why the published model disagrees with
+it. The RAM table's contents and the code that builds it are open, bounded, and
+not on the critical path for anything this project or mpc2emu needs.
