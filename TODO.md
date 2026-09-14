@@ -2404,3 +2404,32 @@ existed to test.
 **Also measured, and a converter hazard:** velocity is **2.32× stronger per
 depth unit** than the wheel (0.002523 vs 0.001088 ln-Hz per depth×source unit).
 A wheel amount computed from a velocity calibration is wrong by that factor.
+
+## `MWLDEP`: a dedicated modwheel→LFO-depth path, and what else it hides (OPEN 2026-09-14 — §251)
+
+**Status:** found by a **failed null check** while measuring something else.
+`MWLDEP` (program 36, unsigned 0..99) and `PRSDEP` (37, aftertouch) reach LFO1
+depth **outside the assignable matrix**, and the resident test program carried
+`MWLDEP = 30` — so the first run's every number was the sum of two paths.
+
+**What is settled (§251):** `MODVLVOL` is unipolar, matching §249's
+`MODVFILT1`, so wheel polarity is a property of the **source**, not the
+destination. Sensitivities agree to 2.2 % across the two destinations (1.914
+vs 1.956 units per amount unit over full travel).
+
+**What this opens:**
+
+1. **A corpus reading is wrong wherever it was done.** `MODSLFOL = 0` does not
+   mean "no wheel vibrato" — `MWLDEP` must be read too. Any count of modwheel
+   routings taken from the assignable matrix alone under-reports.
+2. **Are there other dedicated paths?** `MWLDEP`/`PRSDEP` were in our own
+   parameter table the whole time and nobody had connected them to the
+   modulation question. A sweep of the table for *any* field whose description
+   names a controller and a destination would say whether these two are the
+   only ones. Free, no hardware.
+3. **`MWLDEP`'s own scale is unmeasured.** Leg B was compressive and the
+   compression is probably the corner clipping at `FILFRQ` 99, not the field —
+   so no units-per-`MWLDEP`-unit figure is claimed. A run with a smaller
+   `MODVFILT1` would settle it.
+
+**Blocked on:** nothing for (1) and (2). (3) needs the rig, RAM only.

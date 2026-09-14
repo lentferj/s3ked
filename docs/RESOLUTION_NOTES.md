@@ -291,6 +291,7 @@ silently wrong one.
 - [§248](#248--the-modv-amount-offsets-and-why-the-wheel-is-probably-not-pivoted-at-64-2026-09-14) — The `MODV*` amount offsets, and why the wheel is probably not pivoted at 64 (2026-09-14)
 - [§249](#249--the-modwheel-is-unipolar-and-velocity-is-232-stronger-per-depth-unit-2026-09-14) — The modwheel is unipolar, and velocity is 2.32× stronger per depth unit (2026-09-14)
 - [§250](#250--one-of-247s-eight-tables-is-identified-exactly-the-other-six-are-not-2026-09-14) — One of §247's eight tables is identified exactly; the other six are not (2026-09-14)
+- [§251](#251--modvlvol-is-unipolar-too-and-there-is-a-dedicated-mwldep-nobody-was-using-2026-09-14) — `MODVLVOL` is unipolar too, and there is a dedicated `MWLDEP` nobody was using (2026-09-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -24659,4 +24660,106 @@ not a truncated power of two, and the exponent alone is not enough. 25.40 and
 > look. These six have exponents and nothing to check them against, and that
 > is the difference between a lead and an identification — §247's `0x03AE92`
 > is in the table above for the same reason.
+
+## §251 — `MODVLVOL` is unipolar too, and there is a dedicated `MWLDEP` nobody was using (2026-09-14)
+
+§249 measured the modwheel unipolar on `MODVFILT1` and **explicitly declined to
+infer** that `MODVLVOL` (LFO1 depth) behaved the same. mpc2emu asked for it
+confirmed before implementing. Measured, and the run turned up a field that
+changes the answer to their actual question.
+
+### The confound, found by a null check that failed
+
+mpc2emu proposed LFO → **pitch** via `L_PTCH`. Recon killed that: **no pitched
+program is resident** — `PRGNUM` 0 is silent (peak 2), 50 and 51 are both
+broadband. So LFO1 was routed to the **filter** instead (`MODSFILT1 = 7`),
+which measures the same quantity — LFO *depth* — on the noise program already
+loaded, and needs no disk load.
+
+The first attempt's **null check failed**: at `MODVLVOL = 0` the wheel doubled
+the peak, 5322 → 10319. Something the probe never touched was doing the work:
+
+```
+   MWLDEP   program offset 36   UNSIGNED 0..99
+   "Amount of control of LFO1 depth by Modwheel"
+   PRSDEP   program offset 37   the aftertouch equivalent
+```
+
+**A dedicated modwheel → LFO-depth path, outside the assignable matrix**, and
+the resident program carried `MWLDEP = 30`. Every number in the first run was
+the sum of two paths.
+
+> The null check was the whole of the defence. Without a wheel sweep at
+> **amount zero** the first run would have produced a full ladder, monotone
+> and plausible, describing a field that was contributing perhaps a third of
+> what was being attributed to it.
+
+### The corrected run
+
+Three legs, `LFODEP 50`, `LFORAT 30`, `MODVFILT1 30`, `FILFRQ 60`. Measured
+quantity is the **wobble amplitude of the corner at the LFO rate** — narrowband,
+at a frequency the probe *set* and did not measure.
+
+```
+   CARRIED KNOWN: every LFO-on take wobbles at 3.61 Hz, the rate set by LFORAT.
+   The LFO-off take reads 0.059 at 9.32 Hz -- 20x down and elsewhere: the floor.
+
+   A  MWLDEP 0, no assignable source   wheel 0 -> 1.1957   wheel 127 -> 1.1954
+                                       ratio 1.000 -- THE WHEEL IS INERT
+
+   B  MWLDEP 50, no assignable source  wheel   0   1.000 x baseline
+                                       wheel  32   1.216
+                                       wheel  64   1.353
+                                       wheel  96   1.441
+                                       wheel 127   1.475
+
+   C  MWLDEP 0, MODSLFOL 1, MODVLVOL -16
+                     baseline (amount 0)   1.19574
+                       wheel   0   1.000 x baseline
+                       wheel  32   0.843
+                       wheel  64   0.695
+                       wheel  96   0.549
+                       wheel 127   0.374
+```
+
+**The discriminator: `wobble(wheel 0) / baseline = 1.000`**, where unipolar
+predicts 1.00 and bipolar requires more than 1. `MODVLVOL` is **unipolar**, and
+leg B shows the dedicated path is too — wheel down gives `LFODEP` alone in both.
+
+### The answer mpc2emu asked for
+
+**Polarity is a property of the source, not the destination.** Two destinations
+— filter frequency (§249) and LFO depth (here) — one rule. A writer can treat
+wheel polarity as a source property.
+
+And the **sensitivity agrees as well as the polarity does:**
+
+```
+   filter destination  §249    1.914 FILFRQ units per amount unit, full travel
+   LFO-depth dest.     §251    1.956 LFODEP units per amount unit, full travel
+                               agree to 2.2 %
+```
+
+> **Named assumption:** that figure takes the wobble to be proportional to
+> `LFODEP`. Leg B is visibly compressive (1.216 → 1.475 while the wheel goes
+> 32 → 127), so the wobble-to-depth map is **not** globally linear and 1.956 is
+> a local slope near `LFODEP` 50. Leg B's compression is most likely the corner
+> hitting `FILFRQ` 99 at the top of its swing — leg C moves *away* from that
+> ceiling, which is why leg C's magnitude is usable and leg B's is not.
+
+### For a converter, this is the headline
+
+**Modwheel → LFO depth does not need the assignable matrix at all.** `MWLDEP` is
+one unsigned byte at program offset 36 — no source byte, no keygroup loop, no
+sign convention. The assignable route (`MODSLFOL` + `MODVLVOL`) works and is
+now characterised, but it costs two fields and a signed amount to reach a
+destination the machine already has a dedicated control for.
+
+The corpus reading changes with it: a program showing `MODSLFOL = 0` is **not**
+a program without wheel vibrato. `MWLDEP` must be read too, and this project's
+own resident program is an example — `MODSLFOL 6`, `MWLDEP 30`.
+
+RAM only. Thirteen fields snapshotted, all restored and verified. Probe
+`~/temp/s3ked-logs/lfopol2.py`, analysis `~/temp/matrix/lfofit.py`, captures
+`~/temp/matrix/lfopol2.npz` with the sample rate stored in the file.
 
