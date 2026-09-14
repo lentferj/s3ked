@@ -23227,10 +23227,32 @@ At the floor the voice is audible immediately, stays below a tenth of full for
 is not explained here.
 
 > Subtracting 51.5 ms from the `ATTAK1` 60 knee gives 0.136 s against ATKCAL's
-> 0.141 — 3.5 %, which is very tempting. **The onset evidence is against it:**
-> a fixed additive delay would push the start of sound out, and the sound
-> starts at 0.3 ms in both. Recorded as a coincidence worth remembering rather
-> than a correction worth applying.
+> 0.141 — 3.5 %, which is very tempting, and it is **not** applied.
+>
+> **The reason first recorded here was wrong** and is replaced. It said the
+> onset evidence forbade it: a fixed delay would push the start of sound out,
+> and sound starts at 0.3 ms in both. That does not test additivity — the
+> 51.5 ms is not silence, the voice is audible throughout it and merely below a
+> tenth of full, and **a `t90` crossing does not care whether the early part is
+> quiet or absent.** An audible pedestal would add 51 ms to every rung and
+> leave the onset exactly where it is. The onset measurement rules out a
+> *silent* delay, which was never the candidate. (mpc2emu's correction.)
+>
+> **What rules it out is the arithmetic, across three rungs:**
+>
+> ```
+>   ATTAK1   law      measured   additive   quadrature   max(51.5ms, law)
+>     40    0.01612   0.09600     0.0799      0.0946         0.0515
+>     50    0.04751   0.10300     0.0555      0.0914         0.0515
+>     60    0.14005   0.18700     0.0469      0.1239         0.1401
+> ```
+>
+> Additive needs its column constant and it runs 80 / 56 / 47 ms; quadrature
+> needs its column constant and it runs 95 / 91 / 124; `max()` predicts
+> 51 / 51 / 140 against 96 / 103 / 187. **No floor model of any shape fits.**
+> Nor is the span exponential: the implied exponent is **0.0070 from 40→50 and
+> 0.0596 from 50→60**, an order of magnitude apart within twenty bytes, against
+> ATKCAL's 0.1081.
 
 **So the program-dependence survives both tests.** Material, note, carrier,
 `V_LOUD`, decay, velocity-routing and rig latency are all eliminated by
@@ -23276,8 +23298,23 @@ the one thing the free tests cannot reach. It needs a load from ID4 and clears
 the currently resident program, so it is Jan's to authorise rather than mine to
 take.
 
-> ATKCAL's own features file also records **velocity 80** against this run's
-> 100. `V_ATT1..3` and `VELDEP` read 0 on this subject, so velocity has no
-> route to the attack here — but it is the one remaining difference that has
-> not been separately measured, and it is free to test whenever the machine is
-> next idle.
+**Velocity, the last one, measured rather than read.** ATKCAL used velocity 80
+against this run's 100. `V_ATT1..3` and `VELDEP` read 0, but that is a
+*parameter read*, and the whole of today is the difference between a read and a
+measurement — so it was measured. `ATTAK1` 60, note 84, four velocities:
+
+```
+   vel     plateau      -3 dB       t90      t90 vs v80
+    40       3197      0.16604    0.19590      +0.00%
+    80       7633      0.16841    0.19825       ref
+   100      11793      0.16852    0.19896      +0.36%
+   127      21461      0.16909    0.19900      +0.37%
+```
+
+The plateau moves 16.5 dB across that range and **the attack moves 1.6 %** —
+**0.36 % between ATKCAL's velocity and this run's.** Velocity is eliminated.
+
+> That completes the list of measured eliminations: material, note, plateau
+> level, carrier, `V_LOUD`, decay, velocity routing, rig latency and now
+> velocity itself. **The program-dependence has survived every variable either
+> project could name.**
