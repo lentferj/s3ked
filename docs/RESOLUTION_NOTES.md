@@ -286,6 +286,7 @@ silently wrong one.
 - [§243](#243--attack-reads-a-different-table-from-every-other-envelope-rate-and-is-halved-2026-09-14) — Attack reads a different table from every other envelope rate, and is halved (2026-09-14)
 - [§244](#244--the-load-base-is-0xc0000-and-the-attack-table-is-in-ram-2026-09-14) — The load base is 0xC0000, and the attack table is in RAM (2026-09-14)
 - [§245](#245--the-attack-table-is-not-located-and-the-attack-law-does-not-need-it-2026-09-14) — The attack table is not located, and the attack law does not need it (2026-09-14)
+- [§246](#246--54s-filter-law-holds-to-filfrq-0-forty-four-bytes-below-where-it-was-fitted-2026-09-14) — §54's filter law holds to `FILFRQ` 0, forty-four bytes below where it was fitted (2026-09-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -24041,3 +24042,82 @@ firmware; neither is the other's witness.
 stands on its own. The firmware explains why the published model disagrees with
 it. The RAM table's contents and the code that builds it are open, bounded, and
 not on the critical path for anything this project or mpc2emu needs.
+
+## §246 — §54's filter law holds to `FILFRQ` 0, forty-four bytes below where it was fitted (2026-09-14)
+
+§54 fits `Hz = 6.4597·exp(0.07100·FILFRQ)` over **44..92** and says so. mpc2emu's
+corpus scan puts **17.2 % of real keygroups below 44** — though 110 of those 136
+sit at 39–42, within five bytes of the edge, and the genuinely deep ones below
+35 are about 2.4 %. Below 44 the converter extrapolates, and nobody had
+measured whether the hardware follows.
+
+**It does. The law holds in shape all the way to `FILFRQ` 0.**
+
+```
+   exponent fitted over FILFRQ 0..44   k = 0.07035
+   §54, fitted over 44..92             k = 0.07100      agree to 0.9 %
+```
+
+Eight rungs, entirely outside §54's fitted window, and the exponent lands within
+a percent of it. **No bend, and the filter does not bottom out** — the corner
+keeps moving down to 8.7 Hz at `FILFRQ` 0, and the take's peak level falls
+monotonically across the whole ladder.
+
+| `FILFRQ` | measured | §54 says | ratio |
+|---|---|---|---|
+| 0 | 8.7 Hz | 6.5 | 1.346 |
+| 8 | 14.8 | 11.4 | 1.300 |
+| 16 | 26.7 | 20.1 | 1.328 |
+| 24 | 45.7 | 35.5 | 1.287 |
+| 30 | 70.6 | 54.4 | 1.298 |
+| 35 | 100.0 | 77.5 | 1.290 |
+| 40 | 144.8 | 110.6 | 1.310 |
+| 44 | 190.0 | 146.9 | 1.294 |
+
+> **The 1.307 offset is this method's convention, not a property of the low
+> region.** It is present at `FILFRQ` 44 — *inside* §54's own fitted range — at
+> 1.294, indistinguishable from the rest. A constant that is the same on both
+> sides of the fit boundary says nothing about the boundary. What carries the
+> finding is the **exponent**, and that is the quantity the converter actually
+> extrapolates with.
+
+The stopband slope from the same captures is **~12 dB/octave** (`FILFRQ` 0 reads
+−18.07 dB at 20 Hz and −30.83 at 40), which is what the converter already
+assumes.
+
+### The subject had to change, and that was the whole problem
+
+A corner measurement needs energy at and above the corner. **The resident sine
+has energy at one frequency and a 55 Hz saw has nothing below 55 Hz** — neither
+can see a corner at 35 Hz, and both would have returned numbers anyway. Loaded
+`TC10 NOISE` from partition A: a 4 s looped noise sample, one keygroup, filter 2
+off, no key tracking, no filter modulation.
+
+**One capture per value rather than a keygroup ladder**, so the reference and
+every test share the same key and the same sample. The filter-open reference
+then cancels the source spectrum *and* the rig's own low-frequency response
+exactly — which a ladder spread across keys could not do, because transposing
+the subject changes what is being divided out.
+
+> And the ratio makes the passband **0 dB by construction**: below the corner
+> both takes pass, so there is no plateau to estimate and none of §226/§227's
+> window-position problem arises. The one methodological trap that has cost this
+> project most is simply absent from this design rather than guarded against.
+
+### Controls, and a spurious reading the first pass produced
+
+`FILFRQ` 92 and 44 were measured because they sit **inside** §54's fitted range:
+a method that cannot reproduce §54 where §54 is known is worth nothing below it.
+44 reproduces at the same 1.294 as everything else.
+
+**92 is excluded and it is worth saying why**: its corner is 6.7 kHz against the
+*reference* take's own corner at 7.3 kHz, so the two are not separable there.
+The reference is only open relative to the subject while the subject is well
+below it.
+
+And the first analysis returned **0.7 Hz for `FILFRQ` 8** — a −3 dB crossing
+found in the lowest bins, where the ratio is noise over noise. It came right
+with a 3 Hz search floor. **A low-frequency corner search will find a crossing
+in the mud if you let it**, and the reading it produces is not obviously wrong:
+0.7 Hz for the lowest rung of a descending ladder looks like the filter
+bottoming out, which is exactly the finding the run was looking for.
