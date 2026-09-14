@@ -274,6 +274,8 @@ silently wrong one.
 - [§231](#231--i-withdrew-the-correct-reading-and-an-unrelated-field-read-settled-it-2026-09-13) — I withdrew the correct reading, and an unrelated field read settled it (2026-09-13)
 - [§232](#232--multipart-prname-is-writable-the-lock-was-ours-and-the-probe-lied-twice-first-2026-09-13) — Multipart `PRNAME` is writable; the lock was ours, and the probe lied twice first (2026-09-13)
 - [§233](#233--writing-a-parts-prname-changes-the-byte-and-nothing-else-2026-09-13) — Writing a part's `PRNAME` changes the byte and nothing else (2026-09-13)
+- [§234](#234--the-attack-law-was-measured-through-a-016-cycle-window-and-225s-confirmation-was-two-errors-cancelling-2026-09-14) — The attack law was measured through a 0.16-cycle window, and §225's confirmation was two errors cancelling (2026-09-14)
+- [§235](#235--the-envelope-rate-table-is-in-the-s3000xls-own-firmware-and-the-model-around-it-is-what-fails-2026-09-14) — The envelope rate table is in the S3000XL's own firmware, and the model around it is what fails (2026-09-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -21844,6 +21846,11 @@ the plateau reference taken as the median of the last 2.0 s of the hold.
 
 ```
   attack_s = 0.00015 * exp(0.10545 * ATTAK1)      residuals -3.6% to +6.7%
+
+  SUPERSEDED BY SS234: t = 0.000152 * exp(0.10800 * ATTAK1), residuals +-2%.
+  The times above came from an envelope smoothed with a 5 ms RMS window, which
+  is 0.16 CYCLES of the 33.0 Hz calibration tone -- not an envelope at all. The
+  corrected times are 17-33% longer. SS225's ATKFIX confirmation goes with it.
 ```
 
 ### The control that could have failed
@@ -22005,6 +22012,12 @@ after it.
 meant the refit never reached this path, ~1.8 × long would have meant a
 correction applied twice.
 
+> **WITHDRAWN BY §234.** Re-measured with a windowless envelope the three
+> attacks are **0.602 / 2.484 / 5.395 s**, not 0.495 / 2.005 / 4.350 — so the
+> converter writes attacks that play **20–35 % long**, and this section saw
+> agreement only because the wrong measurement met the wrong law. The
+> wiring claim survives; the numbers do not.
+>
 > **This confirms the wiring, not the law.** The predicted column comes from the
 > same §223 fit the law was refitted against, so the two cannot check each
 > other. A real source's attack surviving parse, convert, write and playback is
@@ -22836,3 +22849,217 @@ which leaves multi editing unable to do the one job it was wired for.
 > to empty would not undo the assignment, and there may be no program-change
 > value meaning "no program". A probe that cannot restore what it changes needs
 > the owner's word first, not afterwards.
+
+## §234 — The attack law was measured through a 0.16-cycle window, and §225's confirmation was two errors cancelling (2026-09-14)
+
+§223 fitted `ATTAK1` from times to −3 dB below the plateau, using an envelope
+smoothed with a **5 ms RMS window**. The ATKCAL calibration tone is **33.0 Hz**.
+
+**5 ms is 0.16 cycles of it.** That is not an envelope — it is the waveform's
+instantaneous magnitude, oscillating with a 30 ms period. And on a *slow* rise
+a fixed wobble in level becomes a large error in **time**, so the fault is
+worst exactly where the law is least checkable by eye.
+
+Re-derived on a **Hilbert envelope** — exact for a single tone, with no window
+to choose:
+
+| `ATTAK1` | §223 law | 5 ms −3 dB | Hilbert −3 dB | change | knee |
+|---|---|---|---|---|---|
+| 60 | 0.084 s | 0.085 | **0.101** | +18.8 % | 0.141 |
+| 70 | 0.241 | 0.248 | **0.291** | +17.3 % | 0.418 |
+| 80 | 0.692 | 0.669 | **0.841** | +25.7 % | 1.192 |
+| 85 | 1.172 | 1.095 | **1.460** | +33.3 % | 2.059 |
+| 90 | 1.985 | 1.960 | **2.501** | +27.6 % | 3.552 |
+| 95 | 3.363 | 3.425 | **4.397** | +28.4 % | 6.223 |
+| 99 | 5.128 | 5.305 | **6.811** | +28.4 % | 9.629 |
+
+```
+  refit, -3 dB       t = 0.000152 * exp(0.10800 * ATTAK1)   residuals -1.8% to +2.2%
+  refit, full swing  t = 0.000213 * exp(0.10811 * ATTAK1)   residuals -1.4% to +2.1%
+  SS223 was          t = 0.00015  * exp(0.10545 * ATTAK1)   residuals -3.6% to +6.7%
+```
+
+Shifted **and tighter**, which is what a removed systematic looks like.
+
+### The two conventions differ by a constant, so neither explains a drift
+
+The exponents agree to 0.0001 and only the prefactors differ: **knee = 1.40 ×
+(−3 dB time)**, flat across the ladder. So "time to −3 dB" versus "time to
+traverse the full swing" is a clean scale factor — and **a scale factor cannot
+produce a drift.**
+
+**And the size of that factor is not arbitrary — it is the ramp shape, which
+makes it a second, independent confirmation that the rise is linear in
+amplitude** (mpc2emu's observation, checked here):
+
+```
+  knee / (-3 dB), per rung:  1.396 1.436 1.417 1.410 1.420 1.415 1.414
+  mean 1.4156, sd 0.0112
+  a LINEAR amplitude ramp predicts 1 / 10^(-3/20) = 1.4125     agreement 0.22%
+```
+
+A −3 dB point sits at 0.708 of full amplitude, so on a straight ramp it sits at
+0.708 of the full time. Seven rungs agree with that to a fifth of a percent.
+The shape is settled from the *ratio of two conventions on the same data*,
+which needs no model of the envelope at all.
+
+That settles ConvertWithMoss' OS rate table without needing the accumulator
+width their documentation says the OS does not state. Tested as **ratios**,
+which no constant can rescue:
+
+```
+  pair       table says   measured (-3 dB)   measured (knee)   table off by
+  60->99         45.50         67.44              68.29           +48.2%
+  80->99          6.50          8.10               8.08           +24.6%
+  90->99          2.50          2.72               2.71            +8.9%
+```
+
+The two convention columns agree to 1 %, exactly as a cancelling constant
+predicts. **The S1000 OS v4.40 table does not describe this S3000XL at the fast
+end** — close at 90, wrong by half at 60. Only four of its hundred rates were
+available here; the full table would say whether the divergence is smooth.
+
+### §225's ATKFIX confirmation is withdrawn
+
+§225 measured a build made from a real SFZ source and reported 0.495 / 2.005 /
+4.350 s against 0.50 / 2.00 / 4.00 asked — agreement, and "the attack fix
+reaches the machine". Re-measured on the same captures with a windowless
+envelope:
+
+| `ATTAK1` | SFZ asks | §225 said | re-measured | new law predicts |
+|---|---|---|---|---|
+| 77 | 0.50 s | 0.495 | **0.602** | 0.622 |
+| 90 | 2.00 | 2.005 | **2.484** | 2.531 |
+| 97 | 4.00 | 4.350 | **5.395** | 5.390 |
+
+**The re-measured column matches the new law to 3 %**, on real source material
+rather than the calibration tone, and at two settings (77 and 97) that were not
+in the fitting set. That tests the law's *form* off its own ladder.
+
+> It is **not** independent of the detector: the same −3 dB rule was used to
+> fit the law and to test it, and a law fitted to a detector will reproduce
+> that detector. mpc2emu's point, and correct. The ratio check above is the
+> stronger evidence, because it uses two conventions against each other.
+
+**And it is longer than the source asked for — by how much depends on what
+`env_attack` means, which is the converter's question and not this project's.**
+
+```
+  if the target is TIME TO -3 dB      measured 0.602 / 2.484 / 5.395 vs 0.50 / 2.00 / 4.00   ->  1.20-1.35x
+  if the target is TIME TO FULL LEVEL knee = 1.4156 x that: 0.852 / 3.517 / 7.637            ->  1.70-1.91x
+```
+
+s3ked measures the time. **Which of those two the writer is supposed to hit is
+a fact about `voice.env_attack`, and the larger figure applies if it means what
+its name says.** Stating only the smaller one would understate a shipped defect
+by a factor of 1.4.
+
+§225 saw agreement because the wrong measurement met the wrong law:
+
+```
+  0.50 s wanted -> old law picks ATTAK1 77   (new law: 75)   converter wrote 77
+  2.00 s wanted -> old law picks ATTAK1 90   (new law: 88)   converter wrote 90
+  4.00 s wanted -> old law picks ATTAK1 97   (new law: 94)   converter wrote 97
+```
+
+The converter used §223's law, faithfully. §223 was wrong, so the bytes are
+2–3 too high and the attacks play long.
+
+> **§223 found two attack laws each ~1.8× wrong and cancelling. §225 then
+> confirmed the fix with a measurement and a law that were both wrong by the
+> same ~25 %.** The same shape twice, four sections apart, in the same
+> parameter — and the second time the section itself warned that "the predicted
+> column comes from the same §223 fit the law was refitted against, so the two
+> cannot check each other." **The caveat was correct, was stated, and did not
+> stop the conclusion being drawn.**
+
+### Three reference windows taken from the wrong region, in one morning
+
+1. A plateau sampled from a **single 5 ms bin**, reported as ±7 dB of envelope
+   movement on a rung whose attack is over in 0.1 s. It was phase.
+2. A knee line fitted to that same 0.16-cycle envelope: 38 % residuals, which
+   read as "the rise is not straight" when the rise is straight and the
+   measurement was not.
+3. The ATKFIX plateau taken as "the median of the last 2 s" of a **16.8 s
+   capture whose note ends at 12.0** — so the reference was silence, the target
+   went with it, and every rung reported an attack of **−0.001 s**.
+
+Only the third announced itself. The first two produced plausible numbers.
+
+## §235 — The envelope rate table is in the S3000XL's own firmware, and the model around it is what fails (2026-09-14)
+
+ConvertWithMoss model attack as `time = accumulator_width / rate[99 − setting]
+/ 44100`, from a 100-entry table they read out of **S1000 OS v4.40**, and are
+explicit that the width is *"the one part the operating system does not state"*.
+§234 measured the ladder disagreeing with that model by **+50 % at the fast
+end**, which left two possibilities: the S1000 table does not describe an
+S3000XL, or the model around it is wrong.
+
+**Jan's suggestion settled it: read the S3000XL's own OS.** Found in
+`S30XLV20.BIN` (OS v2.0, 262144 bytes) by scanning for a 100-long monotone run
+matching CWM's four quoted anchors:
+
+```
+  offset 0x06890, 100 entries, uint16 LITTLE-ENDIAN, monotone 2 .. 32767
+  anchors  [0]=2  [9]=5  [19]=13  [39]=91      all four exact
+  head     2 2 2 3 3 3 4 4 4 5 ...
+  tail     ... 24419 26934 29707 32767
+```
+
+32767 is a signed-16 clamp, which is what the top of a deliberate table looks
+like.
+
+**So the S1000 and the S3000XL ship the same table, and "wrong machine's table"
+is ruled out.** The table is not the problem.
+
+### The model is
+
+With the machine's own table, the implied accumulator width is not constant —
+it drifts smoothly across the ladder, in the same direction and by the same
+size as before:
+
+| `ATTAK1` | index | rate | width from −3 dB | width from knee |
+|---|---|---|---|---|
+| 60 | 39 | 91 | 405 323 | 565 847 |
+| 70 | 29 | 34 | 436 325 | 626 749 |
+| 80 | 19 | 13 | 482 145 | 683 374 |
+| 85 | 14 | 8 | 515 088 | 726 415 |
+| 90 | 9 | 5 | 551 470 | 783 216 |
+| 95 | 4 | 3 | 581 723 | 823 303 |
+| 99 | 0 | 2 | 600 730 | 849 278 |
+
+**Spread 1.48× (−3 dB) and 1.50× (knee)** — and the two conventions agreeing on
+the spread is the constant factor cancelling again, so the convention is not in
+it. As ratios, which need no width at all, the table's error runs **+50.1 % at
+setting 60, +35.5 % at 70, +24.3 % at 80, +16.9 % at 85, +8.4 % at 90, +3.2 %
+at 95.** Monotone, smooth, and vanishing at the slow end.
+
+> **A pointer, and explicitly not a mechanism:** rescaling the index —
+> `round(1.09 × (99 − setting))` instead of `99 − setting` — collapses the
+> spread from 1.501× to **1.084×**. That is **two free parameters fitted to
+> seven points** and its mean width, 828 784, is not a round number or a power
+> of two, which is what a real accumulator width would probably be. It says the
+> fault is plausibly in the *index mapping* rather than in the rate values.
+> It does not say what the mapping is, and nobody should ship it.
+
+### What is being recorded, and what is not
+
+**The full 100 entries are not committed.** They are firmware content, and the
+project's existing practice covers protocol data transcribed from Akai's
+*published* documents, which is different provenance. What is recorded here is
+the **offset, the format, the anchors and the method**, which is enough for
+anyone holding the firmware to reproduce it exactly, and the measured
+comparison, which is this project's own work.
+
+The extracted table is on the host at
+`~/temp/handoff/akai_s3000xl_env_rate_table.txt` for the sibling projects.
+
+### What would close it
+
+The implied width drifting smoothly by 1.5× over a table that is provably the
+machine's own means the envelope is not `width / rate` ticks at 44100. Three
+candidates, none tested: the accumulator is stepped at a **control rate** other
+than the sample rate; the **index mapping** is not `99 − setting`; or the
+attack stage is not a single linear accumulation. **The first would be visible
+in the firmware around 0x06890** — whatever reads this table also knows how
+often it is applied, and that is the next place to look.
