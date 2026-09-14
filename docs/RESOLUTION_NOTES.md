@@ -283,6 +283,7 @@ silently wrong one.
 - [§240](#240--all-of-it-was-one-constant-236-237-238-and-half-of-239-are-withdrawn-2026-09-14) — All of it was one constant: §236, §237, §238 and half of §239 are withdrawn (2026-09-14)
 - [§241](#241--which-of-this-projects-claims-are-single-stranded-2026-09-14) — Which of this project's claims are single-stranded (2026-09-14)
 - [§242](#242--what-reads-the-rate-table-99--setting-confirmed-and-the-accumulator-is-in-silicon-2026-09-14) — What reads the rate table: `99 − setting` confirmed, and the accumulator is in silicon (2026-09-14)
+- [§243](#243--attack-reads-a-different-table-from-every-other-envelope-rate-and-is-halved-2026-09-14) — Attack reads a different table from every other envelope rate, and is halved (2026-09-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -23789,3 +23790,93 @@ needs more than this disassembly — the offsets are stated here as offsets.
 Two further leads, both in the same routine: a 256-entry byte table reached by
 `xlat %ds:(%bx)` translates the level bytes, and several parameters are scaled
 by `(%cl − 0x40)` — a bipolar depth centred on 64 — before use.
+
+## §243 — Attack reads a different table from every other envelope rate, and is halved (2026-09-14)
+
+§242 flagged that the site reading structure offset `0x0d` stores the rate raw,
+and that if that were `ATTAK1` the doubling could not explain §235's drift. **It
+is not `ATTAK1`.** The runtime voice structure mirrors the SysEx keygroup header
+exactly, which makes the whole routine readable.
+
+### The structure is the keygroup header, and it self-checks
+
+| offset | parameter | what the code does with it |
+|---|---|---|
+| `0x0c` | `ATTAK1` | rate lookup |
+| `0x0d` | `DECAY1` | rate lookup |
+| `0x0e` | `SUSTN1` | `xlat` |
+| `0x0f` | `RELSE1` | rate lookup |
+| `0x10` | `V_ATT1` | `xlat`, then scaled by `(0x40 − velocity)` |
+| `0x13` | `K_DAR1` | scaled by `(0x40 − key)` |
+| `0x16` | `SUSTN2` | `xlat` |
+| `0xb8` | `ENV3L3` | `xlat` |
+
+**Every rate goes to a rate table, every level goes through `xlat`, and every
+dependence byte is scaled bipolar around `0x40`.** Three independent
+consistencies across a dozen offsets — the mapping is not a guess.
+
+So `0x0d` is `DECAY1`, and its index is `99 − DECAY1 + K_DAR1·key`, clamped
+0..99. The parameter's own description is *"dependence of decay and release
+rates on key"*, and the code adds a key-derived term to the decay rate's table
+index. **The name and the silicon agree.**
+
+### `ATTAK1` is at `0x0c` and does not use that table
+
+```
+  29227:  mov  %es:0x10(%si),%al   ; V_ATT1
+  2922b:  xlat                     ; through the level table
+  2922e:  sub  -0x7efa,%cl         ; CL = 0x40 - velocity
+  29232:  imul %cl
+  29236:  add  $0x63,%ah           ; 99 + (V_ATT1 scaled by velocity)
+  29248:  sub  %es:0xc(%si),%ah    ; - ATTAK1
+  2924c:  ...  clamp 0..99
+  29259:  push %ds
+  2925a:  mov  $0x3a60,%di
+  2925d:  mov  %di,%ds             ; <<< DS := 0x3A60
+  2925f:  mov  $0x892,%di          ; <<< a DIFFERENT table
+  29266:  add  %ax,%ax
+  2926a:  mov  (%di),%ax
+  2926c:  pop  %ds
+  2926d:  shr  %ax                 ; <<< HALVED
+  2926f:  jne / inc                ; floor at 1
+  29272:  mov  %ax,0x80cd
+```
+
+**The index form is identical** — `99 − setting + modulation`, clamped — with
+the modulation being `V_ATT1` scaled by velocity rather than `K_DAR1` scaled by
+key. Two things are not:
+
+1. **It is the only lookup in the entire envelope region that swaps `DS`.** A
+   scan of `push %ds; mov imm16,%di` over `0x29000`–`0x2B000` returns exactly
+   one hit, this one. Every other rate lookup uses the ambient segment and the
+   table at `0x6890`. There would be no reason to swap the segment for the same
+   table.
+2. **The fetched value is halved**, with a floor of 1 — so for the same byte,
+   attack runs at half the rate of decay, and the fastest attack is bounded at
+   twice the fastest decay.
+
+### What this means for the drift
+
+§235 found the constant-width model failing by +50 % at the fast end and
+falling to +3 % at the slow, using the table at `0x6890`.
+**ConvertWithMoss model attack with the decay table** — and the firmware says
+attack uses neither that table nor that scaling. A systematic,
+setting-dependent error is what that produces.
+
+> **Stated as a limit, not a result:** I cannot resolve segment `0x3A60` to a
+> file offset without the image's load base, so the attack table's *contents*
+> are not read here. There is a monotone 100-entry run at file offset
+> `0x3AE92`, which is what `0x3A60:0x0892` would be if file offset equalled
+> physical address — but that assumption is exactly what a segment swap
+> violates, and its values fit the measured ladder **worse** than the decay
+> table does. **It is a coincidence until the load base says otherwise, and I
+> am not treating it as the attack table.**
+
+### What is now answerable and what is not
+
+Answerable, and cheap: the load base, from the reset vector and whatever sets
+up the segments at boot — which would make the attack table readable and turn
+§235's drift into arithmetic.
+
+Not answerable from this image: whether the halving is the only difference, and
+what the hardware does with a rate once written.
