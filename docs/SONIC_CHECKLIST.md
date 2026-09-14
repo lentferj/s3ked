@@ -257,6 +257,19 @@ Two things fall out of the same run, and both are worth keeping:
 wrote down to have a hypothesis at all. The cost of skipping it is a committed
 figure and a retraction.
 
+> **A control has a known answer only if you know which of its properties you
+> are reading.** The filter-corner control above ran clean and reported the
+> estimator returning `0.640×` a "known corner" — into a commit message and a
+> peer message — before anyone asked what 0.640 was the ratio *of*. It was
+> built as two cascaded one-poles each at `f_c`, whose real −3 dB point is
+> `√(√2−1) = 0.6436` of `f_c`; the estimator had found it to 0.6 %. Re-run
+> against a 2-pole Butterworth, which is −3 dB *at* `f_c` by definition, it
+> returns `0.9985`.
+>
+> **A negative control is an instrument, and inherits every rule that applies
+> to one** — including reading it against its own numbers before reaching for
+> anything else. The one thing a control cannot check is itself.
+
 ## The procedure
 
 **1. The listener is not told what to expect.** Ask "play this and describe

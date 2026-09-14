@@ -24054,11 +24054,14 @@ measured whether the hardware follows.
 **It does. The law holds in shape all the way to `FILFRQ` 0.**
 
 ```
-   exponent fitted over FILFRQ 0..44   k = 0.07035
-   §54, fitted over 44..92             k = 0.07100
+   this run, corner, FILFRQ  0..44   k = 0.07035
+   §54,        peak, FILFRQ 44..92   k = 0.07100
+   §139,     corner, FILFRQ 40..84   k = 0.07245
 ```
 
-Eight rungs, entirely outside §54's fitted window.
+Eight rungs, entirely outside §54's fitted window. This is a **−3 dB corner**
+measurement, so §139 is its peer and §54 its cousin — see below, and §145 for
+why the two published laws differ by a constant in the first place.
 
 > **Do not quote that as 0.9 %.** A negative control run after the fact — the
 > identical analysis over a synthesised **two-pole lowpass at corners built to
@@ -24087,22 +24090,76 @@ monotonically across the whole ladder.
 | 40 | 144.8 | 110.6 | 1.310 |
 | 44 | 190.0 | 146.9 | 1.294 |
 
-> **The estimator's absolute bias is now measured rather than assumed.** On a
-> synthesised two-pole lowpass at a *known* corner it returns **0.640×** it,
-> stable to 3.8 % once the two rungs nearest the bin floor are dropped — because
-> a two-pole response is already −6 dB at its pole frequency, so a −3 dB
-> crossing sits below it. That accounts for the direction of a convention
-> offset but not its size: 0.640 against §54 would predict 0.64×, and the
-> measurement reads 1.307×. **The remaining factor of two is unexplained and is
-> not resolved here.** It does not touch the extrapolation question, which rests
-> on the exponent.
->
-> **The 1.307 offset is this method's convention, not a property of the low
-> region.** It is present at `FILFRQ` 44 — *inside* §54's own fitted range — at
-> 1.294, indistinguishable from the rest. A constant that is the same on both
-> sides of the fit boundary says nothing about the boundary. What carries the
-> finding is the **exponent**, and that is the quantity the converter actually
-> extrapolates with.
+### The 1.307 is §145, and the control's own 0.640 was mine
+
+Both halves of the constant offset were written up as unexplained an hour
+before this section was. Neither is.
+
+**The offset against §54 is §145.** §54 is a **resonance-peak** law; this is a
+**−3 dB corner** measurement, which is §139's quantity. §145 already settled
+that the two are different things — the peak sits at 0.790 of the corner, so a
+corner measurement must read `1/0.790 = 1.266×` §54, and this one reads 1.307.
+Against §139 itself:
+
+| `FILFRQ` | measured | §139 says | ratio |
+|---|---|---|---|
+| 0 | 8.7 Hz | 7.6 | 1.144 |
+| 16 | 26.7 | 24.2 | 1.101 |
+| 30 | 70.6 | 66.9 | 1.056 |
+| 44 | 190.0 | 184.4 | 1.031 |
+
+So this is **§139, independently reproduced forty bytes below where §139 was
+fitted**, by a different subject (noise, not a sawtooth) and a different design
+(one capture per value against a filter-open reference, not a keygroup ladder).
+The ratio's drift from 1.14 to 1.03 is the exponent difference and nothing
+else. Calling it "this method's convention" was a way of not looking it up.
+
+**And the 0.640 was the filter I built, not the estimator.** The control used
+`H = 1/(1 + jf/f_c)²` — two cascaded one-poles *each* at `f_c`, which is
+−6.02 dB at `f_c` and whose true −3 dB point is `√(√2−1) = 0.6436` of it. The
+estimator returned 0.640. **It found the right answer and I compared it to the
+wrong property of my own construction.** Re-run against a 2-pole Butterworth,
+which is −3 dB *at* `f_c` by definition:
+
+```
+   cascade of two one-poles   expected 0.6436   estimator 0.6482   +0.71 %
+   2-pole Butterworth         expected 1.0000   estimator 0.9985   −0.15 %
+```
+
+**The estimator has no absolute bias worth reporting.** The exponent bound
+stands — the same runs recover `k` to −1.52 % and −0.72 % — and that is the
+number §246 rests on.
+
+> **A control has a known answer only if you know which of its properties you
+> are reading.** The first control was correct, ran clean, and produced a
+> figure that went into a commit message and a peer message before anyone
+> asked what `0.640` was the ratio *of*. A negative control is an instrument
+> too, and inherits every rule that applies to one — including §188's: read it
+> against its own numbers before reaching for anything else.
+
+### The offset says nothing about the boundary, either way
+
+Independently of *which* law it belongs to, the offset carries no information
+about the extrapolation question. It is present at `FILFRQ` 44 — *inside* §54's
+own fitted range — at 1.294, indistinguishable from the rest of the ladder. **A
+constant that is the same on both sides of the fit boundary says nothing about
+the boundary.** What carries the finding is the **exponent**, and that is also
+the quantity the converter actually extrapolates with.
+
+Three determinations of it now exist, on one machine, over three ranges:
+
+```
+   §54    peak,   FILFRQ 44..92    k = 0.07100
+   §139   corner, FILFRQ 40..84    k = 0.07245
+   §246   corner, FILFRQ  0..44    k = 0.07035
+```
+
+They span **3.0 %**, against a control-measured resolution of ~1.5 % per fit.
+§246 sits 0.9 % below §54 and 2.9 % below §139 — and §139 sits 2.0 % above §54
+over a range where both were fitted, so the published pair already disagree by
+more than §246 disagrees with either. **The spread is the methods, not the
+machine**, and no part of it trends with `FILFRQ`: the low ladder does not want
+a different exponent from the high one.
 
 The stopband slope from the same captures is **~12 dB/octave** (`FILFRQ` 0 reads
 −18.07 dB at 20 Hz and −30.83 at 40), which is what the converter already
