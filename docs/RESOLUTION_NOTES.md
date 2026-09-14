@@ -277,6 +277,7 @@ silently wrong one.
 - [§234](#234--the-attack-law-was-measured-through-a-016-cycle-window-and-225s-confirmation-was-two-errors-cancelling-2026-09-14) — The attack law was measured through a 0.16-cycle window, and §225's confirmation was two errors cancelling (2026-09-14)
 - [§235](#235--the-envelope-rate-table-is-in-the-s3000xls-own-firmware-and-the-model-around-it-is-what-fails-2026-09-14) — The envelope rate table is in the S3000XL's own firmware, and the model around it is what fails (2026-09-14)
 - [§236](#236--the-fast-end-failed-its-own-control-attak1-alone-does-not-determine-the-attack-2026-09-14) — The fast end failed its own control: `ATTAK1` alone does not determine the attack (2026-09-14)
+- [§237](#237--there-is-no-program-dependence-236-compared-two-capture-paths-2026-09-14) — There is no program-dependence; §236 compared two capture paths (2026-09-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -23120,6 +23121,13 @@ often it is applied, and that is the next place to look.
 
 ## §236 — The fast end failed its own control: `ATTAK1` alone does not determine the attack (2026-09-14)
 
+> **WITHDRAWN BY §237.** The ATKCAL reload shows the same program measured
+> today reads 0.1895 against the "different" program's 0.1872 — 1.2 %
+> apart, inside a 5 % run-to-run spread that had never been measured.
+> There is no program-dependence; this section compared two capture
+> paths. The individual eliminations below are all sound and all
+> eliminated variables from a comparison with no effect in it.
+
 `ATTAK1` 40 and 50 have never been captured — the ladder starts at 60, and
 every percussive attack in the corpus lands below it. Jan cleared the machine;
 the settings were reached by **RAM writes on a resident program**, snapshotted
@@ -23318,3 +23326,74 @@ The plateau moves 16.5 dB across that range and **the attack moves 1.6 %** —
 > level, carrier, `V_LOUD`, decay, velocity routing, rig latency and now
 > velocity itself. **The program-dependence has survived every variable either
 > project could name.**
+
+## §237 — There is no program-dependence; §236 compared two capture paths (2026-09-14)
+
+Jan authorised the ATKCAL reload from ID4, which was the one test §236 named
+and could not run. **It overturns §236's central finding.**
+
+### Repeatability, measured for the first time
+
+Before anything else: eight identical takes of `PRGNUM` 109 (`ATTAK1` 60), one
+note, one velocity, one hold, a settle between each.
+
+```
+  -3 dB   mean 0.1485 s   sd 0.0031   spread 6.5% of mean
+  t90     mean 0.1754     sd 0.0031   spread 5.5%
+  knee    mean 0.1895     sd 0.0031   spread 5.0%
+```
+
+**±5 %, and it had never been measured.** Every figure this project has quoted
+for an attack time was a single take.
+
+### With that in hand, the comparison collapses
+
+```
+  ATKCAL PRGNUM 109, note 24, today   knee 0.1919   (5 takes)
+  ATKCAL PRGNUM 109, note 84, today   knee 0.1895   (8 takes)
+  the OTHER program,  note 84, today  knee 0.1872   (1 take)
+  ATKCAL PRGNUM 109, note 24, 2026-09-13            0.1485
+```
+
+**The three measured today agree to 2.5 %, inside a 5 % spread.** The program
+that was supposed to be different is 1.2 % from ATKCAL. **The odd one out is
+ATKCAL itself, measured yesterday — 28 % low against ATKCAL measured today.**
+
+So §236 did not compare two programs. It compared **yesterday's capture path
+against today's**, with the program riding along as a passenger, because the
+same program was never measured twice.
+
+### §236 is withdrawn, and so is the list that made it convincing
+
+The nine eliminations — material, note, plateau level, carrier, `V_LOUD`,
+decay, velocity routing, rig latency, velocity — were all real and all
+correctly measured. **Every one of them was eliminating a variable from a
+comparison that had no effect to explain.**
+
+> A long list of excluded causes made the conclusion look strong, and the list
+> was the reason nobody asked the cheaper question: *does this measurement
+> repeat?* Eight takes and a settle would have closed it at 10:02 and cost four
+> minutes. **Eliminating nine variables is not evidence that the tenth exists.**
+
+Two further things were also excluded along the way and stand on their own:
+`HOLD` length changes the knee by **0.3 %** across 2 / 6 / 12 s, and the
+harness's assumed `T_ON` anchor is out by **8.5 ms**, not enough to matter.
+
+### What is now open, and it is larger
+
+**The two capture paths disagree by 28 % on the same program.** Yesterday's
+went through the shared `measure.py`; today's through a jcap + rtmidi sender
+written for the fast-end run. §234's refitted law rests **entirely** on the
+first path, and §235's comparison against the firmware rate table rests on
+§234.
+
+Which path is right is not established here. What is established is that they
+differ by five times the run-to-run spread, on identical bytes, and that the
+difference has been sitting under every attack figure this project has
+published.
+
+> An earlier take in this session read 0.210 — 11 % above today's mean — and
+> came from the one run with no settle between captures, whose line-fit
+> residuals were 55–66 % against 2.3–4.6 % for the settled takes. Contaminated
+> by the previous note's tail, and it would have been reported as a third
+> value if the repeatability run had not been done.
