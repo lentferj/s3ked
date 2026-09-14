@@ -289,6 +289,7 @@ silently wrong one.
 - [§246](#246--54s-filter-law-holds-to-filfrq-0-forty-four-bytes-below-where-it-was-fitted-2026-09-14) — §54's filter law holds to `FILFRQ` 0, forty-four bytes below where it was fitted (2026-09-14)
 - [§247](#247--a-candidate-rom-image-for-the-attack-table-and-three-reasons-it-is-not-confirmed-2026-09-14) — A candidate ROM image for the attack table, and three reasons it is not confirmed (2026-09-14)
 - [§248](#248--the-modv-amount-offsets-and-why-the-wheel-is-probably-not-pivoted-at-64-2026-09-14) — The `MODV*` amount offsets, and why the wheel is probably not pivoted at 64 (2026-09-14)
+- [§249](#249--the-modwheel-is-unipolar-and-velocity-is-232-stronger-per-depth-unit-2026-09-14) — The modwheel is unipolar, and velocity is 2.32× stronger per depth unit (2026-09-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -24432,21 +24433,27 @@ rather than LFO depth, because this project can measure a corner and cannot
 easily measure a depth:
 
 ```
-   MODSFILT1 = 1 (modwheel)   MODVFILT1 = -50   FILFRQ mid-range
-   capture at wheel 0, 64, 127
-
-   unipolar  ->  wheel 0 leaves the corner AT FILFRQ, and it falls as the
-                 wheel rises
-   bipolar   ->  wheel 0 puts the corner ABOVE FILFRQ, 64 is neutral, 127 below
+   MODSFILT1 = 1 (modwheel)   MODVFILT1 = -8   FILFRQ 60
+   capture at wheel 0, 32, 64, 96, 127, AND an unmodulated baseline
 ```
 
-**The discriminating rung is wheel 0 with a negative amount**, where the two
-predictions move the corner in opposite directions. A positive amount does not
-discriminate, because a negative excursion may clamp at zero and look like no
-response either way.
+> **Corrected before the run: the ordering does not discriminate.** Both models
+> predict `corner(0) > corner(64) > corner(127)`, so a wheel ladder on its own
+> proves nothing. The discriminator is `corner(wheel 0)` against an
+> **unmodulated baseline** — which the first version of this section did not
+> think to capture.
 
-Needs the rig and two keygroup writes with snapshot-and-restore. Nothing else
-in this section needs hardware.
+```
+   unipolar  ->  corner(wheel 0) == BASELINE, falling as the wheel rises
+   bipolar   ->  corner(wheel 0) ABOVE baseline, 64 neutral, 127 below
+```
+
+And the amount is kept **small on purpose**: §116 gives depth 12 = 26.6 `FILFRQ`
+units over half the source range, so depth 8 is ~17.7 — bipolar reaches 60+17.7
+and unipolar 60, both far inside 0..99. **A large amount would clamp the
+bipolar prediction and manufacture agreement with unipolar.**
+
+**Run on 2026-09-14 and answered: unipolar. See §249.**
 
 ### Provenance
 
@@ -24460,4 +24467,113 @@ mpc2emu's independently held source offsets (`0x4c`–`0x58`, `0x63`–`0x65`, f
 the IB-304F map) agree with this table exactly — 76–88 and 99–101. **Two
 transcriptions from different documents agreeing is worth recording**, though
 it is still two transcriptions.
+
+## §249 — The modwheel is unipolar, and velocity is 2.32× stronger per depth unit (2026-09-14)
+
+§248 argued from the shape of the source enumeration that continuous-controller
+sources should run 0..1 rather than ±½ about 64, against §43/§116's pivot rule
+which was established on velocity and key. Jan authorised the run; mpc2emu had
+the lead. **Measured, and the inference was right.**
+
+### The result
+
+`PRGNUM 51`, one keygroup, looped noise. `MODSFILT1 = 1` (modwheel),
+`MODVFILT1 = −8`, `FILFRQ 60`, `FILQ 0`. Corners by §246's estimator — ratio
+against a `FILFRQ 99` filter-open take, −3 dB crossing, 3 Hz floor — with an
+**unmodulated baseline** captured through the identical path.
+
+```
+   CARRIED KNOWN   baseline corner 591 Hz  vs §139's 588 Hz   1.006x
+   NULL CHECK      amount 0, wheel 127     vs baseline        1.002x
+
+    wheel   corner Hz   /baseline   FILFRQ units
+        0         592       1.001         +0.02
+       32         447       0.756         -3.86
+       64         338       0.572         -7.70
+       96         255       0.432        -11.59
+      127         195       0.331        -15.28
+```
+
+**The discriminator:**
+
+```
+   corner(wheel 0) / baseline  =  1.001x
+      unipolar predicts        =  1.000x
+      bipolar  predicts        =  3.61x
+```
+
+**Unipolar, by a factor of 3.6.** And at wheel 64, where bipolar requires the
+neutral point, the corner is already down 7.70 `FILFRQ` units — there is no
+neutral position anywhere in the wheel's travel.
+
+> This was not a close call, and it is worth saying so explicitly rather than
+> leaning on the 0.1 %: the method's own repeatability here is 0.2–0.6 % (the
+> null check and the carried known), and the rejected hypothesis is off by
+> **261 %**. A result this lopsided does not rest on the estimator being good.
+
+### The response is linear in `FILFRQ` units
+
+```
+   FILFRQ units = -0.12054 * wheel + 0.008      max residual 0.027 units
+```
+
+An intercept of `+0.008` where the model says zero, and five rungs flat to
+0.027 units. **Full wheel travel moves the corner by 1.914 `FILFRQ` units per
+unit of `MODVFILT1`** — so `MODVFILT1 = −8` spans 15.3 units, and the ±50 range
+spans ±96 units, which is essentially the whole 0..99 field.
+
+### Velocity is 2.32× stronger per depth unit, and that will bite a converter
+
+Both §116 and this run express the same quantity — ln-Hz per (depth unit ×
+source unit):
+
+```
+   velocity  §116        0.002523
+   modwheel  this run    0.001088
+   ratio                 2.319
+```
+
+**A wheel amount computed from a velocity calibration is wrong by a factor of
+2.3.** This is measured on one machine, one destination, two sources; no
+mechanism is offered for the 2.32 and **none should be inferred from its being
+close to 7/3** — that is the shape of a coincidence, and §247 is four hours old.
+
+### What this does and does not establish
+
+**Does:** the modwheel enters this modulation matrix unipolar, 0..1, with no
+neutral point, linearly in `FILFRQ` units, at 1.914 units per amount unit over
+full travel.
+
+**Does not:** that `MODVLVOL` behaves the same. This measured **filter
+frequency**, because this project can measure a corner and cannot easily
+measure an LFO depth. Source polarity ought to be a property of the source
+rather than the destination — but that is an inference, and §248 exists because
+an inference of exactly that kind (from velocity to the wheel) was worth
+testing. It is recorded as untested.
+
+**Does not:** touch §43/§116. Velocity and key still pivot at 64; the pivot rule
+was never wrong, it was **being applied past the source types it was
+established on.** Both facts now have a measurement.
+
+### Practical, for a converter
+
+```
+   modwheel -> filter frequency, S3000XL:
+       MODSFILT1 = 1          (11 for an inverted wheel)
+       MODVFILT1 = amount     signed, KEYGROUP offset 151 -- once per keygroup
+       shift at full wheel = 1.914 * amount  FILFRQ units, linear, from FILFRQ
+```
+
+No neutral position means **`FILFRQ` is the wheel-down value**, not the centre
+of a swing. A source asking for "wheel opens the filter" writes the closed
+value into `FILFRQ` and a positive amount — which is a different write from
+what the bipolar reading would have produced, exactly as mpc2emu predicted the
+stakes.
+
+Probe `~/temp/s3ked-logs/wheelpol.py`, analysis `~/temp/matrix/wheelfit.py`,
+captures `~/temp/matrix/wheelpol.npz` — **with the sample rate stored in the
+file**, which is §240's root defect fixed at the point where it was introduced.
+
+RAM only. Snapshot of six fields, all restored and verified:
+`FILFRQ 96`, `MODVFILT1 0`, `ATTAK1 46`, `SUSTN1 96`, `FILQ 0`, `MODSFILT1 5`.
 

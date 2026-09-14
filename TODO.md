@@ -2344,7 +2344,7 @@ ROM decay table for attack", which does not depend on this.
 The eight-table inventory in §247 is the durable part and is reusable for any
 future "where does this curve live" question.
 
-## Is the modwheel pivoted at 64 like velocity, or unipolar? (OPEN 2026-09-14 — §248)
+## Is the modwheel pivoted at 64 like velocity, or unipolar? (CLOSED 2026-09-14 — §249: UNIPOLAR)
 
 **Status:** blocks the shape, not the numbers, of mpc2emu's modwheel → LFO
 depth feature on the AKAI path. The offsets are answered (`MODVLVOL`, program
@@ -2370,6 +2370,24 @@ with a NEGATIVE amount**, where unipolar leaves the corner at `FILFRQ` and
 bipolar puts it above. A positive amount does not discriminate — a negative
 excursion may clamp at zero and look like no response under either model.
 
-**Blocked on:** the rig, plus two keygroup writes with snapshot and verified
-restore. Destination is filter frequency rather than LFO depth because this
-project can measure a corner and cannot easily measure a depth.
+**Closed by §249, measured.** `corner(wheel 0) / baseline = 1.001x` where
+unipolar predicts 1.000 and bipolar 3.61 — and at wheel 64, bipolar's required
+neutral point, the corner is already down 7.70 `FILFRQ` units. There is no
+neutral position anywhere in the wheel's travel.
+
+The response is linear in `FILFRQ` units (max residual 0.027, intercept
++0.008), at **1.914 units per amount unit over full travel**. So `FILFRQ` is
+the **wheel-down** value, not the centre of a swing, and a source asking for
+"wheel opens the filter" writes the closed value with a positive amount.
+
+**§43/§116 are untouched** — velocity and key still pivot at 64. The rule was
+never wrong; it was being applied past the source types it was established on.
+
+**One thing stays open and is flagged in §249:** this measured filter
+frequency, not LFO depth. Source polarity ought to belong to the source rather
+than the destination, but that is an inference of exactly the kind this item
+existed to test.
+
+**Also measured, and a converter hazard:** velocity is **2.32× stronger per
+depth unit** than the wheel (0.002523 vs 0.001088 ln-Hz per depth×source unit).
+A wheel amount computed from a velocity calibration is wrong by that factor.
