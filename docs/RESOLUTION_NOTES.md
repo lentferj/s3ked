@@ -9,6 +9,32 @@ SPDX-FileCopyrightText: Copyright (C) 2026  s3ked contributors
 procedures, and ready-to-apply code. Numbered sections, referenced from code
 comments as "see RESOLUTION_NOTES §N".
 
+## A note on section numbers, and a collision with the sibling projects
+
+**A bare `§N` in this repository means a section of *this* file.** A sibling
+project's section is always written with the project attached — `eosed's §23`,
+`mpc2emu's §133`, `k2kremote §73` — and never bare.
+
+This matters because **eosed, k2kremote, mpc2emu and s3ked number their
+resolution notes independently**, so the same number names four different
+findings. It bit on 2026-09-15: a bare `§139` in a message between projects was
+read here as this file's §139 (the filter corner measured against
+ConvertWithMoss's table) when eosed's §139 was meant (a cord full-scale figure
+asserted "because it was tidy", later retracted). The correction issued was
+wrong, and **the collision it exposed was worth more than the correction would
+have been** — every project has since attributed its bare references.
+
+An audit of this repository found the practice already sound: sibling sections
+are possessive-qualified throughout, and unqualified numbers are all local.
+
+> The first pass of that audit reported **"0 of 3141 references
+> project-qualified"**, which was alarming and false. The detector searched for
+> `eosed §23` while this project writes `eosed's §23`. **A metric that scores
+> the codebase at zero is usually measuring itself** — the same failure as
+> §246's string-start sweep, where a wrong base out-scored the hypothesis.
+
+Scanner kept at `~/temp/s3ked-logs/xref2.py`.
+
 ## A note on the names in these findings
 
 **Program, sample and volume names appearing here are invented.** Where a
