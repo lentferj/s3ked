@@ -279,6 +279,7 @@ silently wrong one.
 - [§236](#236--the-fast-end-failed-its-own-control-attak1-alone-does-not-determine-the-attack-2026-09-14) — The fast end failed its own control: `ATTAK1` alone does not determine the attack (2026-09-14)
 - [§237](#237--there-is-no-program-dependence-236-compared-two-capture-paths-2026-09-14) — There is no program-dependence; §236 compared two capture paths (2026-09-14)
 - [§238](#238--the-path-difference-is-neither-additive-nor-multiplicative-and-repeatability-depends-on-the-rung-2026-09-14) — The path difference is neither additive nor multiplicative, and repeatability depends on the rung (2026-09-14)
+- [§239](#239--the-91--was-sr--44100-written-into-a-script-while-jack-ran-at-48000-2026-09-14) — The 9.1 % was `SR = 44100` written into a script while JACK ran at 48000 (2026-09-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -23330,6 +23331,11 @@ The plateau moves 16.5 dB across that range and **the attack moves 1.6 %** —
 
 ## §237 — There is no program-dependence; §236 compared two capture paths (2026-09-14)
 
+> **Numbers corrected by §239.** Every time in this section measured through
+> the jcap path is 8.8 % long — the scripts assumed 44100 while JACK ran at
+> 48000. The conclusion stands (there is no program-dependence) because it
+> rests on ratios, which the scale cancels in.
+
 Jan authorised the ATKCAL reload from ID4, which was the one test §236 named
 and could not run. **It overturns §236's central finding.**
 
@@ -23463,3 +23469,103 @@ open item, and it is cheap to attack — one rung captured through `measure.py`
 and through the jcap sender **in the same session, minutes apart**, removes
 every variable except the code. That is the experiment §237 proposed and it is
 still the right one; this section only narrows what it has to explain.
+
+## §239 — The 9.1 % was `SR = 44100` written into a script while JACK ran at 48000 (2026-09-14)
+
+§238 left a clean +9.1 % between two capture paths at the slow rungs and could
+not explain it. mpc2emu named a candidate that needed no bench time —
+**48000 / 44100 = 1.0884**, the shape of a capture analysed at one rate while
+the stream is at another — and predicted 0.3 % residuals in the same direction
+at both rungs.
+
+**It is exactly that, and it is a bug in this session's own scripts.**
+
+```
+  jack_samplerate            48000
+  every analysis script      SR, PRE, STEP = 44100, 0.4, 0.0005
+  measure.py                 w.getframerate()      <- reads it from the file
+```
+
+Corrected by 44100/48000 = 0.91875:
+
+| rung | yesterday | today as read | today corrected | vs yesterday |
+|---|---|---|---|---|
+| 90 | 3.5520 s | 3.8780 | **3.5629** | **+0.31 %** |
+| 99 | 9.6290 | 10.5090 | **9.6551** | **+0.27 %** |
+| 60 | 0.1410 | 0.1895 | 0.1741 | +23.48 % |
+
+**The path disagreement at the slow rungs is closed.** §234's ladder is
+confirmed to 0.3 % by an independent path in a different session, §141 and §234
+both stand, and `_AK_ATTAK1_TIME`'s revert was right on the merits.
+
+### The confirmation was already in the file, labelled as something else
+
+Every other check today has been one measurement against another, where being
+wrong twice reads as agreement. **This one is against arithmetic.** mpc2emu
+noticed that the probe notes have *a priori* frequencies: note 84 is C6 and
+note 60 is C4, known from the note number before anything is measured.
+
+```
+  note   measured   corrected (x1.08844)   equal temperament   error
+    60    240.9 Hz       262.20 Hz              261.63          +3.8 cents
+    84    960.9         1045.88                1046.50          -1.0 cents
+```
+
+**Both land on concert pitch to within four cents, two octaves apart**, and the
+factor the two notes independently imply is 1.08603 and 1.08909 against
+48000/44100 = 1.08844. The rate bug is confirmed against a standard rather than
+against another capture.
+
+> **The carrier reading was a calibration standard the whole time and neither
+> of us recognised it** — sitting in the same file as the numbers it would have
+> checked, recorded as "is this subject a pure tone?". Earlier today it was
+> even read as evidence *against* concert pitch: "240.9 Hz at note 60, which is
+> −141 cents from C4". At the true rate it is +3.8 cents. **The data needed to
+> catch a scale error is often already in the capture, tagged as something
+> else.** (mpc2emu's observation.)
+
+### The root defect is not the constant
+
+The captures were saved as raw `.npz` arrays **carrying no sample rate**, and
+the rate was then supplied from memory in a separate script. `measure.py`
+writes WAVs, which carry their rate in the header, which is why the old path
+cannot make this mistake at all.
+
+> **The data and the fact needed to interpret it were stored apart, and the
+> fact was then wrong.** Same shape as §229's two schedule orderings — values
+> kept without the names that give them meaning — and the same fix: the
+> container must carry the interpretation, not the analyst's memory of it.
+
+### Everything from this path today, rescaled
+
+```
+  ATTAK1 0 floor              0.0515 -> 0.0473
+  ATTAK1 40 knee              0.0960 -> 0.0882
+  ATTAK1 50 knee              0.1030 -> 0.0946
+  the other program at 60     0.1872 -> 0.1720
+  note-84 carrier              961 Hz -> 1046 Hz
+```
+
+**Every figure reported as a ratio is unaffected** — repeatability, the
+note-independence sweep, the plateau flatness, the velocity result, and all of
+§236's eliminations. The scale cancels in each. That is luck rather than
+design: the ratios were taken because the questions happened to be comparative.
+
+### The candidate that fit better and was still wrong
+
+mpc2emu named **12/11 = 1.0909** in order to kill it: it fits the observed
+1.0912 to **0.02 %**, against the rate ratio's 0.3 %, and has no mechanism
+behind it.
+
+> **A better-fitting ratio with no mechanism loses to a worse-fitting one with
+> a plausible mechanism.** Two coincidences of this kind had already turned up
+> today. The discipline is to name the seductive one and dispose of it in the
+> same breath, before the person with the data finds it and spends an hour.
+
+### What remains
+
+The fast-end excess is **+23.5 % at `ATTAK1` 60**, not 34, and still
+unexplained. The four-capture design stands — rungs 60 and 90 through both
+paths in one session — because one rung cannot separate a path difference from
+a rung-dependence. With the scale removed it has only the fast-end term left to
+account for.
