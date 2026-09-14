@@ -65,3 +65,14 @@ license-files = ["LICENSE", "COPYING"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# `slow` is excluded by default so the ordinary edit-test cycle stays short.
+# The exhaustive Multi round trip is ~1m50 of an otherwise ~6m30 suite, and a
+# guarantee you run before a release is worth more than one you skip because
+# the suite got tiresome.
+#     .venv/bin/python -m pytest              everything except slow
+#     .venv/bin/python -m pytest -m slow      only the slow ones
+#     .venv/bin/python -m pytest -m ""        everything
+markers = [
+    "slow: exhaustive; excluded by default, run before a release",
+]
+addopts = "-m 'not slow'"
