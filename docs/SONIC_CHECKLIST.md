@@ -102,6 +102,29 @@ that did not exist, and cost this project a whole `ATTAK1` ladder measured 17–
 > it is the column that says whether the row is trustworthy, and it cannot be
 > recovered afterwards.
 
+**And the threshold is not "more than half a cycle".** Reproduced here on a
+synthesised constant-amplitude sine, independently of eosed's run:
+
+```
+  cycles/window   0.05  0.10  0.17  0.25  0.33  0.41  0.50  0.66  0.75  1.00  2.00
+  swing (dB)     14.80  9.03 10.32  0.04  3.91  1.83  0.00  1.79  0.04  0.00  0.00
+```
+
+**The swing collapses to nothing at quarter-cycle ratios and spikes between
+them** — 0.25 and 0.50 and 0.75 are all clean, 0.33 and 0.66 are not. An RMS
+window spanning a whole number of half-periods averages a sine exactly; one
+that does not, does not. So a measurement can land on a lucky ratio and look
+immaculate, and **the cycle count alone does not tell you which happened.**
+
+> The rule that survives is **many whole cycles, with margin** — not "enough"
+> and not "more than half". Below about two, whether a reading is clean is an
+> accident of the fractional part.
+
+The 0.17 row is this project's own `ATTAK1` ladder: a 5 ms window on a 33 Hz
+tone, **10.3 dB of swing against a −3 dB threshold**, which is what produced a
+reading 17–33 % short (§234). Two independent syntheses agree on that number to
+0.02 dB.
+
 ### 2. Every capture already contains a value known before you measured it
 
 The pitch of the note you played. One FFT against equal temperament validates
