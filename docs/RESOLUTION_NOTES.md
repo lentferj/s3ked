@@ -263,7 +263,7 @@ silently wrong one.
 - [§220](#220--the-warning-existed-was-correct-and-was-unreachable-2026-09-11) — The warning existed, was correct, and was unreachable (2026-09-11)
 - [§221](#221--attack-and-decay-measured-across-both-machines-and-three-mismatches-inside-one-shared-tool-2026-09-11) — Attack and decay measured across both machines, and three mismatches inside one shared tool (2026-09-11)
 - [§222](#222--filter-2-costs-4-to-17-db-depending-on-the-note-and-a-two-variable-control-that-looked-like-one-2026-09-11) — Filter 2 costs 4 to 17 dB depending on the note, and a two-variable control that looked like one (2026-09-11)
-- [§223](#223--the-attak1-law-on-steady-material-and-the-two-machines-agree-to-37--2026-09-11) — The `ATTAK1` law on steady material, and the two machines agree to 3.7 % (2026-09-11)
+- [§223](#223--the-attak1-law-on-steady-material-law-superseded-by-234-2026-09-11) — The `ATTAK1` law on steady material (law superseded by §234) (2026-09-11)
 - [§224](#224--filter-1-is-201-poles-the-cascade-is-4-the-pole-branch-is-closed-2026-09-11) — Filter 1 is 2.01 poles; the cascade is ~4; the pole branch is closed (2026-09-11)
 - [§225](#225--first-modvflt23-depth-measurement-value-superseded-by-227-and-the-attack-fix-confirmed-on-hardware-2026-09-11) — First `MODVFLT2_3` depth measurement (value superseded by §227), and the attack fix confirmed on hardware (2026-09-11)
 - [§226](#226--the-depth-field-is-symmetric-and-a-baseline-window-nearly-convicted-the-wrong-table-2026-09-11) — The depth field is symmetric, and a baseline window nearly convicted the wrong table (2026-09-11)
@@ -21841,7 +21841,18 @@ cannot express it.** That is a quantisation limit, not a conversion defect, and
 worth the distinction — a written 0 against a non-zero source value is the shape
 of a dropped field, and here it is not one.
 
-## §223 — The `ATTAK1` law on steady material, and the two machines agree to 3.7 % (2026-09-11)
+## §223 — The `ATTAK1` law on steady material (law superseded by §234) (2026-09-11)
+
+> **SUPERSEDED BY §234.** The law here was fitted to times taken through a
+> 5 ms smoothing window on a 33.0 Hz tone — **0.165 cycles**, which measures
+> the waveform rather than the envelope. Corrected times are 17–33 % longer
+> and the law is `t = 0.000152·exp(0.10800·ATTAK1)`.
+>
+> **The 3.7 % cross-machine agreement in the old heading is withdrawn with
+> it.** The Akai side of that comparison moved by 17–33 %, and whether the
+> E4XT side carries the same detector fault has not been checked — eosed's
+> §121 shows the same class of error on their rig. The figure is not merely
+> stale, it is unverified in both terms.
 
 Measured on `ATKCAL`, a volume built for this: a synthesized constant-amplitude
 sine, so the envelope under test is the *only* contour in the signal.
@@ -22093,6 +22104,11 @@ while the printed table still looks orderly.**
 > for.**
 
 ## §226 — The depth field is symmetric, and a baseline window nearly convicted the wrong table (2026-09-11)
+
+> **Figures corrected by §227.** The 15.3-cent residual below was the best
+> of six unswept window positions; the depth law is **~230 cents/unit ±8**,
+> not ~225; and the `FIL2FR` 55 reading is withdrawn as unmeasurable. The
+> window-artefact finding — the section's main point — stands.
 
 F2DEPTH v3: 13 programs, every rung inside the subject, built by mpc2emu to the
 spec §225 ended with. Captured at note 36 / v80 / HOLD 6.0, all 13 sounded,
