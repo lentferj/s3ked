@@ -24055,11 +24055,24 @@ measured whether the hardware follows.
 
 ```
    exponent fitted over FILFRQ 0..44   k = 0.07035
-   §54, fitted over 44..92             k = 0.07100      agree to 0.9 %
+   §54, fitted over 44..92             k = 0.07100
 ```
 
-Eight rungs, entirely outside §54's fitted window, and the exponent lands within
-a percent of it. **No bend, and the filter does not bottom out** — the corner
+Eight rungs, entirely outside §54's fitted window.
+
+> **Do not quote that as 0.9 %.** A negative control run after the fact — the
+> identical analysis over a synthesised **two-pole lowpass at corners built to
+> §54's own law**, so the answer is known by construction — recovers the
+> exponent with a bias that **changes sign with the rung set**: `+1.03 %` over
+> all eight, `−1.44 %` dropping the two nearest the bin floor. That is not a
+> systematic to correct out, it is scatter at the resolution limit, and it is
+> **larger than the agreement it was being used to claim.**
+>
+> The defensible statement is that the measured exponent agrees with §54's
+> **within the estimator's own ~1.5 % resolution**, over a range where §54 was
+> never fitted. That is the finding; the third digit was mine.
+> (mpc2emu's discipline, applied here after they caught the same fault in
+> their own shape estimator.) **No bend, and the filter does not bottom out** — the corner
 keeps moving down to 8.7 Hz at `FILFRQ` 0, and the take's peak level falls
 monotonically across the whole ladder.
 
@@ -24074,6 +24087,16 @@ monotonically across the whole ladder.
 | 40 | 144.8 | 110.6 | 1.310 |
 | 44 | 190.0 | 146.9 | 1.294 |
 
+> **The estimator's absolute bias is now measured rather than assumed.** On a
+> synthesised two-pole lowpass at a *known* corner it returns **0.640×** it,
+> stable to 3.8 % once the two rungs nearest the bin floor are dropped — because
+> a two-pole response is already −6 dB at its pole frequency, so a −3 dB
+> crossing sits below it. That accounts for the direction of a convention
+> offset but not its size: 0.640 against §54 would predict 0.64×, and the
+> measurement reads 1.307×. **The remaining factor of two is unexplained and is
+> not resolved here.** It does not touch the extrapolation question, which rests
+> on the exponent.
+>
 > **The 1.307 offset is this method's convention, not a property of the low
 > region.** It is present at `FILFRQ` 44 — *inside* §54's own fitted range — at
 > 1.294, indistinguishable from the rest. A constant that is the same on both
