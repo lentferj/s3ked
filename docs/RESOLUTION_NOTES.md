@@ -24,16 +24,40 @@ asserted "because it was tidy", later retracted). The correction issued was
 wrong, and **the collision it exposed was worth more than the correction would
 have been** — every project has since attributed its bare references.
 
-An audit of this repository found the practice already sound: sibling sections
-are possessive-qualified throughout, and unqualified numbers are all local.
+An audit of this repository found the practice sound. **All fifty-two
+unqualified references sitting near a sibling's name were read**, not sampled,
+and every one resolves to a section of this file.
 
-> The first pass of that audit reported **"0 of 3141 references
-> project-qualified"**, which was alarming and false. The detector searched for
-> `eosed §23` while this project writes `eosed's §23`. **A metric that scores
-> the codebase at zero is usually measuring itself** — the same failure as
-> §246's string-start sweep, where a wrong base out-scored the hypothesis.
+**The audit instrument failed three times before it could say that**, which is
+the part worth keeping:
 
-Scanner kept at `~/temp/s3ked-logs/xref2.py`.
+1. The first pass reported **"0 of 3141 references project-qualified"** —
+   alarming and false. It searched for `eosed §23` while this project writes
+   `eosed's §23`.
+2. The second pass **concluded from twelve of the fifty-two**. A corpus claim
+   from a sample is the error §189 exists to name, and it had already been
+   committed before it was checked.
+3. mpc2emu hit a third in their own instrument and it applies here: a range or
+   comma-list carries **one project name and many numbers**, so a per-number
+   test flags the tail of an already-qualified list. (Zero instances in this
+   repo, but the pattern would have demanded `s3ked §249, s3ked §251`.)
+
+And a fourth, found only by reading: **a possessive can cross a line break.**
+`probes/undo_roundtrip.py` says *"The sibling eosed reached the same conclusion
+… Its §18 confirmed the bridge write path with 3340 comparisons"* — qualified
+by an `Its` that a same-line lookback cannot see.
+
+> **That is the one that would have mattered.** This file's §18 is
+> *"RETRACTION: every audio measurement before this was of the wrong
+> program"*. A reader taking that `§18` as local lands not on a harmless
+> mismatch but on a retraction about something else entirely.
+
+**Content is a weak test here and should not be leaned on.** "Does this file
+define that number?" passes trivially — §1..§251 covers almost anything a
+sibling might cite. Only reading settles it.
+
+Scanner kept at `~/temp/s3ked-logs/xref3.py`; `xref2.py` beside it is the
+version with failures 1 and 2 still in it.
 
 ## A note on the names in these findings
 
