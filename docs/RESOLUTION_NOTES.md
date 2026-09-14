@@ -12,12 +12,24 @@ comments as "see RESOLUTION_NOTES §N".
 ## A note on section numbers, and a collision with the sibling projects
 
 **A bare `§N` in this repository means a section of *this* file.** A sibling
-project's section is always written with the project attached — `eosed's §23`,
-`mpc2emu's §133`, `k2kremote §73` — and never bare.
+project's section is always written with the project attached, and never bare.
 
-This matters because **eosed, k2kremote, mpc2emu and s3ked number their
-resolution notes independently**, so the same number names four different
-findings. It bit on 2026-09-15: a bare `§139` in a message between projects was
+**The four projects do not share a scheme, and two of them do not use `§` at
+all.** Counted, not assumed:
+
+```
+   s3ked       §1 .. §252        numbered, § sigil
+   eosed       144 sections      numbered, § sigil   -> "eosed's §23"
+   mpc2emu     299 sections      NAMED: §KRZCOARSE, §MODWHEEL, §E4BRATE
+   k2kremote   73 sections       numbered "## 73.", no § at all
+```
+
+So **a number attributed to mpc2emu is always wrong** — they have never had
+one, at any point in their history — and a `§` attached to a k2kremote number is
+this project's sigil, not theirs.
+
+This matters because s3ked and eosed number independently, so the same number
+names two different findings. It bit on 2026-09-15: a bare `§139` in a message between projects was
 read here as this file's §139 (the filter corner measured against
 ConvertWithMoss's table) when eosed's §139 was meant (a cord full-scale figure
 asserted "because it was tidy", later retracted). The correction issued was
@@ -58,6 +70,23 @@ sibling might cite. Only reading settles it.
 
 Scanner kept at `~/temp/s3ked-logs/xref3.py`; `xref2.py` beside it is the
 version with failures 1 and 2 still in it.
+
+### And then this note cited two sections that do not exist
+
+Its first version offered `mpc2emu's §133` and `k2kremote §73` as **examples of
+correct practice**. mpc2emu has no numbered sections; the citation was dangling,
+and so was a real one further down this file (`"mpc2emu also corrected their own
+§133"`, now describing rather than citing). k2kremote's 73 exists but is written
+`## 73.` with no `§`.
+
+> **Written to fix citation hygiene, and wrong about citations.** It was caught
+> only because mpc2emu mentioned in passing that their headings are named — a
+> fact neither of us had checked in the hour we spent agreeing about
+> attribution. **Qualifying a reference does not make it resolve**; the
+> qualifier and the target are two separate claims and this note checked
+> neither.
+
+The counts above are now read off the four repositories rather than assumed.
 
 ## A note on the names in these findings
 
@@ -12485,7 +12514,7 @@ Unattributed display fields: `on-time 804 mS`, `chan 1`, `unit 1`,
 `input ALL`. `on-time` is not a u16 in any adjacent pair, so it is scaled,
 table-indexed, or elsewhere.
 
-mpc2emu also corrected their own §133 wording: "all nine fields stored
+mpc2emu also corrected their own wording: "all nine fields stored
 verbatim" was true of *file byte == register value*, which is what they
 measured, **and false as anyone would naturally read it** — six display
 verbatim, `V-curve` is off by one, three do not appear at all. A sentence
