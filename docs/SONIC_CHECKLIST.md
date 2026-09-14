@@ -110,11 +110,38 @@ synthesised constant-amplitude sine, independently of eosed's run:
   swing (dB)     14.80  9.03 10.32  0.04  3.91  1.83  0.00  1.79  0.04  0.00  0.00
 ```
 
-**The swing collapses to nothing at quarter-cycle ratios and spikes between
-them** — 0.25 and 0.50 and 0.75 are all clean, 0.33 and 0.66 are not. An RMS
-window spanning a whole number of half-periods averages a sine exactly; one
-that does not, does not. So a measurement can land on a lucky ratio and look
-immaculate, and **the cycle count alone does not tell you which happened.**
+The swing appears to collapse at 0.25, 0.50 and 0.75 alike — **and only two of
+those are real.** The mean of `sin²` over a window `[t0, t0+T]` is
+
+```
+  1/2  -  cos(2*pi*f*(2*t0 + T)) * sin(2*pi*f*T) / (4*pi*f*T)
+```
+
+which vanishes **for every start `t0`** only when `sin(2*pi*f*T) = 0`, i.e. at
+**half-integer** cycles per window. At quarter ratios that factor is at its
+maximum and the term survives; it reads zero above only because tiled windows
+start at `t0 = m*T`, where the cosine happens to vanish for every integer `m`.
+
+**That cancellation is knife-edge and the half-integer one is not:**
+
+```
+  ratio    swing        ratio    swing
+  0.2500    0.04 dB     0.5000    0.00 dB
+  0.2510    6.50        0.5010    0.02
+  0.2550    6.35        0.5050    0.09
+  0.2600    6.12        0.5100    0.17
+  0.3000    4.07        0.5500    0.74
+```
+
+**Four parts in a thousand off 0.25 and the full 6.5 dB is back.** Half an
+octave either side of 0.50 and it is still under a dB. And with a start offset
+that is not tiled from zero, 0.25 ranges 0.04 to 6.54 dB over start phase while
+0.50 stays at 0.00 throughout.
+
+> So a measurement can land on a ratio that looks immaculate and is an artefact
+> of exact tiling, and **the cycle count alone does not tell you which
+> happened.** No real carrier sits on an exact ratio, which is why the only
+> safe reading is a wide one.
 
 > The rule that survives is **many whole cycles, with margin** — not "enough"
 > and not "more than half". Below about two, whether a reading is clean is an
