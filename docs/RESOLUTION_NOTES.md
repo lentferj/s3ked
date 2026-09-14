@@ -280,6 +280,7 @@ silently wrong one.
 - [§237](#237--there-is-no-program-dependence-236-compared-two-capture-paths-2026-09-14) — There is no program-dependence; §236 compared two capture paths (2026-09-14)
 - [§238](#238--the-path-difference-is-neither-additive-nor-multiplicative-and-repeatability-depends-on-the-rung-2026-09-14) — The path difference is neither additive nor multiplicative, and repeatability depends on the rung (2026-09-14)
 - [§239](#239--the-91--was-sr--44100-written-into-a-script-while-jack-ran-at-48000-2026-09-14) — The 9.1 % was `SR = 44100` written into a script while JACK ran at 48000 (2026-09-14)
+- [§240](#240--all-of-it-was-one-constant-236-237-238-and-half-of-239-are-withdrawn-2026-09-14) — All of it was one constant: §236, §237, §238 and half of §239 are withdrawn (2026-09-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -23407,6 +23408,10 @@ published.
 
 ## §238 — The path difference is neither additive nor multiplicative, and repeatability depends on the rung (2026-09-14)
 
+> **WITHDRAWN BY §240.** It is both at once, from one hardcoded sample rate:
+> a +8.8 % scale and a 32.5 ms window offset. The rung-dependent
+> repeatability figures stand; they are ratios.
+
 §237 left one question: the two capture paths differ by 28 % at `ATTAK1` 60,
 and is that a **constant** or a **factor**? mpc2emu supplied the discriminator
 — the two models are indistinguishable at one rung and 32 % apart at a slow
@@ -23569,3 +23574,83 @@ unexplained. The four-capture design stands — rungs 60 and 90 through both
 paths in one session — because one rung cannot separate a path difference from
 a rung-dependence. With the scale removed it has only the fast-end term left to
 account for.
+
+## §240 — All of it was one constant: §236, §237, §238 and half of §239 are withdrawn (2026-09-14)
+
+§239 found `SR = 44100` hardcoded in this session's analysis scripts while JACK
+ran at 48000, and closed the 9.1 % slow-rung gap. It was right and incomplete.
+**The same constant caused a second error**, and between them they account for
+everything.
+
+```
+  1. times scaled by 48000/44100 = +8.8%
+     the decimation step was int(STEP * 44100) samples, then LABELLED STEP seconds
+
+  2. the analysis window opened 32.5 ms BEFORE the note
+     int(0.4 * 44100) = 17640 samples is 0.3675 s at 48000, not 0.4
+```
+
+**The second is 23 % of an `ATTAK1` 60 attack and 0.3 % of a 99.** That is
+precisely the shape §238 measured and could not fit with either a constant or a
+factor — because it was both at once, and the additive part was expressed in
+the reported units rather than real ones.
+
+### Re-measured at the true rate, with the window opened at the note
+
+| rung | source | knee | §234 | difference |
+|---|---|---|---|---|
+| 60 | ATKCAL, 8 takes | 0.1418 s | 0.1410 | **+0.55 %** |
+| 90 | ATKCAL, 4 takes | 3.5234 | 3.5520 | **−0.80 %** |
+| 99 | ATKCAL, 4 takes | 9.6018 | 9.6290 | **−0.28 %** |
+| 60 | the *other* program | 0.1380 | 0.1410 | **−2.09 %** |
+
+**Everything agrees within 2.1 %, including the two programs that started this.**
+
+### What that withdraws
+
+- **§236** — the 33 % program-dependence. Already withdrawn by §237; the
+  residue is −2.09 %, inside that rung's own ±5 % spread.
+- **§237** — the 28 % "two capture paths". There is one path and it was
+  mis-analysed.
+- **§238** — "neither additive nor multiplicative". Both, from one constant.
+- **§239's fast-end term** — the +23.5 % excess at `ATTAK1` 60 is the window
+  offset. §239's rate finding stands; its remainder does not.
+- **The `ATTAK1` 0 floor** is **~11 ms**, not 51.5 — and note-independent
+  (11.1 / 10.4 / 10.8 ms at notes 48 / 72 / 96).
+
+§141, §234 and today's captures are now **three** independent measurements of
+this ladder agreeing to about 1 %.
+
+### The floor is the machine's, not the detector's
+
+eosed proposed that ~47 ms might be a detector floor — their no-attack control
+reports 20–60 ms with nothing to measure — and gave the discriminator: a
+machine's minimum does not care how wide the analysis window is, a detector's
+floor is roughly proportional to it. Swept over the existing captures:
+
+```
+  Hilbert, decimation 0.1 -> 10 ms      13.5  11.9  11.1  10.8  10.6  9.5  9.1 ms
+  RMS window,          0.5 -> 10 ms     10.2  10.0   9.6   9.7   8.8  9.3 ms
+```
+
+**Flat to about 2 ms over a hundredfold change in width, in both detectors.**
+Not a detector floor. It is real and it is ~11 ms.
+
+### What this cost, and the one thing that would have stopped it
+
+Five sections, four hours, nine measured eliminations, two peer projects
+drawn in, and a revert argued over — all downstream of a constant written
+from memory into a script.
+
+> §239 already named the root defect and it is worth repeating with the full
+> bill attached: **the captures were saved as `.npz` arrays carrying no sample
+> rate, and the rate was then supplied separately from memory.**
+> `measure.py` writes WAVs, whose header carries the rate, and the old path
+> was correct throughout. One field in the container would have prevented
+> every section above.
+
+> And the deeper one: **every check today was a comparison between two things I
+> had measured**, so a common-mode error in my own analysis was invisible to
+> all of them. The thing that finally broke it was an *a priori* standard — the
+> probe note's own frequency (§239) — which was sitting in the same file the
+> whole time.
