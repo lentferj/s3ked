@@ -284,6 +284,7 @@ silently wrong one.
 - [§241](#241--which-of-this-projects-claims-are-single-stranded-2026-09-14) — Which of this project's claims are single-stranded (2026-09-14)
 - [§242](#242--what-reads-the-rate-table-99--setting-confirmed-and-the-accumulator-is-in-silicon-2026-09-14) — What reads the rate table: `99 − setting` confirmed, and the accumulator is in silicon (2026-09-14)
 - [§243](#243--attack-reads-a-different-table-from-every-other-envelope-rate-and-is-halved-2026-09-14) — Attack reads a different table from every other envelope rate, and is halved (2026-09-14)
+- [§244](#244--the-load-base-is-0xc0000-and-the-attack-table-is-in-ram-2026-09-14) — The load base is 0xC0000, and the attack table is in RAM (2026-09-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -23880,3 +23881,79 @@ up the segments at boot — which would make the attack table readable and turn
 
 Not answerable from this image: whether the halving is the only difference, and
 what the hardware does with a rate once written.
+
+## §244 — The load base is 0xC0000, and the attack table is in RAM (2026-09-14)
+
+§243 could not resolve segment `0x3A60` to a file offset and left the attack
+table unread. The base is determinable from the image alone.
+
+### Deriving it
+
+```
+  image size                    0x40000 (256 KB)
+  last 16 bytes                 ea 00 00 1e e4  ea ff 00 1e e4  00 00 00 00 00 00
+```
+
+An x86 resets at physical `0xFFFF0` and executes whatever is there. A ROM whose
+final byte sits at `0xFFFFF` therefore begins at `0x100000 − 0x40000` =
+**`0xC0000`**, and `0x3FFF0` in the file is exactly `0xFFFF0`. That is a
+hypothesis, and it is self-checking two ways:
+
+- the far jump there targets `E41E:0000` = physical `0x0E41E0`, which is file
+  offset **`0x241E0` — inside the image.** A wrong base puts the entry point
+  outside it;
+- and the code at `0x241E0` is unmistakably a reset entry: `cli`, `cld`, then
+  `out` to ports `0xFFEA`, `0xFFED`, `0xFFF3`, `0xFFEC` — the NEC V-series
+  internal peripheral block, chip selects and wait states, before anything else
+  runs.
+
+**So `physical = file offset + 0xC0000`**, and the ROM window is
+`0xC0000`–`0xFFFFF`. It also confirms the decay path retroactively: that
+lookup uses the ambient `DS` with offset `0x6890`, which reaches the ROM table
+only if `DS = 0xC000`.
+
+### What that makes the attack table
+
+```
+  0x3A60:0x0892  ->  physical 0x03AE92
+  ROM window     ->  0x0C0000 - 0x0FFFFF
+```
+
+**Far below the ROM. The attack rate table is in RAM.** And `0x3A60` is not an
+exotic segment — **186 sites in the image load it**, all as `mov $0x3a60,%ax;
+mov %ax,%ds`. It is the firmware's main data segment.
+
+So the contrast §243 found is sharper than "a different table": **decay and
+release read a table in ROM; attack reads one in RAM.**
+
+> This also kills the candidate §243 declined to adopt. The monotone run at
+> *file* offset `0x3AE92` was reachable only by assuming file offset equals
+> physical address, which the base now disproves outright. Recorded there as a
+> coincidence, and it was one.
+
+### It is not copied from ROM either
+
+The halving cancels in ratios, so the measured ladder pins the table's shape
+without needing the accumulator width or the base:
+
+```
+  T[39]/T[0]  must be  t(99)/t(60) = 9.6290/0.1410 = 68.29
+  T[ 9]/T[0]  must be  t(99)/t(90) = 9.6290/3.5520 =  2.711
+
+  the ROM decay table gives          45.50  and  2.500   <- the §235 mismatch
+```
+
+Every 100-entry monotone `uint16` run in the image, both byte orders, every
+alignment, tested against both ratios at ±6 %: **zero candidates.**
+
+**So the attack table is built at boot or arrives with the OS — it is not a
+static array in this ROM.** Which is a better explanation than any of the
+model-fitting in §235 for why nobody has found it: ConvertWithMoss looked for a
+table and used the only one there is.
+
+### Next, and it is bounded
+
+Find the boot-time writer of `0x3A60:0x0892`. If it is a formula, that formula
+is the attack law in closed form and settles §234, §235 and the writer's
+inverse at once. If it is a copy from disk, it is in the OS image that ships
+with the machine rather than in the ROM.
