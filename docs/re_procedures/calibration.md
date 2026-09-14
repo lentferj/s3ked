@@ -198,7 +198,7 @@ connected produces a clean, flat, entirely fictitious result.
 
 ## Recording results
 
-Write the fitted curves into `docs/RESOLUTION_NOTES.md` §10, with the raw CSV
+Write the fitted curves into `docs/RESOLUTION_NOTES.md` §253, with the raw CSV
 kept alongside. State the source sample, the test note, the reference band and
 the r2 for every curve — a calibration whose conditions are not recorded
 cannot be checked later, and the first thing anyone will want to know is

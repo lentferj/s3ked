@@ -88,6 +88,40 @@ and so was a real one further down this file (`"mpc2emu also corrected their own
 
 The counts above are now read off the four repositories rather than assumed.
 
+### And counting them found two sections both numbered §10
+
+mpc2emu's count of this file disagreed with mine — 263 against 253 — which is
+only a difference of method (all heading levels against `##` alone). Chasing it
+turned up something that was not method at all: **253 `##` section headings and
+252 distinct numbers.**
+
+```
+   ## §10 — Parameter scales: how to measure what a value means
+   ## §10 — The STAT "software version" field is not the OS version
+```
+
+Two unrelated sections, both indexed, **both actively cited** — seven citations
+across the tree meant the `STAT` one and two meant the procedure. So every
+`§10` in this project resolved to whichever a reader happened to find first.
+The procedure section is now **§253**, renamed in place, and its two citations
+follow it.
+
+**`test_the_resolution_notes_index_matches_the_sections` passed throughout, and
+it was right to.** It checks for duplicate *anchors*; the two headings have
+different titles, so their anchors differ and every link worked. **It was
+guarding the link, which was fine, and not the citation, which was not.** It now
+asserts that a section number is unique, and the guard was checked by injecting
+a duplicate and watching it fail before being trusted.
+
+> **This is the night's own subject, found inside the file that documents it.**
+> We spent hours on citations that name the wrong project, and underneath sat
+> two sections of this file sharing a number — the plainest possible version of
+> the same fault, in the plainest possible place, surviving because the test
+> that looked closest was asking a slightly different question.
+>
+> It surfaced because a sibling's count disagreed with mine. **Seven for seven
+> tonight: every fault found by a neighbour, none by its author.**
+
 ## A note on the names in these findings
 
 **Program, sample and volume names appearing here are invented.** Where a
@@ -128,7 +162,6 @@ silently wrong one.
 - [§7](#7--autodetect-has-no-broadcast-address-to-lean-on-confirmed-on-hardware-2026-08-10) — Autodetect has no broadcast address to lean on (confirmed on hardware, 2026-08-10)
 - [§8](#8--cross-validation-the-multi-part-is-a-program-header-resolved-2026-08-08) — Cross-validation: the multi part IS a program header (resolved, 2026-08-08)
 - [§9](#9--where-the-documents-live-reference) — Where the documents live (reference)
-- [§10](#10--parameter-scales-how-to-measure-what-a-value-means-procedure-no-results-yet) — Parameter scales: how to measure what a value means (procedure, no results yet)
 - [§10](#10--the-stat-software-version-field-is-not-the-os-version-open-first-hardware-contradiction) — The STAT "software version" field is not the OS version (open, first hardware contradiction)
 - [§11](#11--read-only-conformance-sweep-against-hardware-run-2026-08-10) — Read-only conformance sweep against hardware (run 2026-08-10)
 - [§12](#12--full-write-round-trip-sweep-run-2026-08-10) — Full write round-trip sweep (run 2026-08-10)
@@ -372,6 +405,7 @@ silently wrong one.
 - [§250](#250--one-of-247s-eight-tables-is-identified-exactly-the-other-six-are-not-2026-09-14) — One of §247's eight tables is identified exactly; the other six are not (2026-09-14)
 - [§251](#251--modvlvol-is-unipolar-too-and-there-is-a-dedicated-mwldep-nobody-was-using-2026-09-14) — `MODVLVOL` is unipolar too, and there is a dedicated `MWLDEP` nobody was using (2026-09-14)
 - [§252](#252--mwldepprsdep-are-two-of-a-contiguous-trio-and-six-dedicated-paths-exist-2026-09-15) — `MWLDEP`/`PRSDEP` are two of a contiguous trio, and six dedicated paths exist (2026-09-15)
+- [§253](#253--parameter-scales-how-to-measure-what-a-value-means-procedure-no-results-yet) — Parameter scales: how to measure what a value means (procedure, no results yet)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -810,7 +844,9 @@ front panel displays** before assuming it is unknowable.
 
 ---
 
-## §10 — Parameter scales: how to measure what a value means (procedure, no results yet)
+## §253 — Parameter scales: how to measure what a value means (procedure, no results yet)
+
+> **Renumbered from §10 on 2026-09-15.** Two unrelated sections both carried §10 — this one and *"The STAT 'software version' field is not the OS version"* — so every `§10` citation in the tree was ambiguous. The STAT section keeps the number, having seven citations to this one's two. Kept in place rather than moved to the end of the file, so the diff shows the renaming and nothing else.
 
 **Status: tooling built, tested synthetically, never run against a machine.
 No number below is a measurement.**

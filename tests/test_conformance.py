@@ -268,12 +268,20 @@ def _notes_anchor(heading: str) -> str:
 
 
 def test_the_resolution_notes_index_matches_the_sections():
-    """91 sections, referenced from code as `RESOLUTION_NOTES §N`.
+    """Sections are referenced from code as `RESOLUTION_NOTES §N`.
 
     An index that has drifted is worse than none: it sends a reader to a
     section that is not there, and the file is append-only so it drifts on
     every finding. Regenerate with tools/, or add the entry by hand -- but
     this fails first.
+
+    It also enforces that a section NUMBER is unique. It did not until
+    2026-09-15, when two unrelated sections were found both numbered §10 --
+    one cited seven times and one twice, so every `§10` in the tree was
+    ambiguous. The duplicate-anchor check above passed throughout, because
+    the two headings have different titles and therefore different anchors:
+    it was guarding the link, which was fine, and not the citation, which
+    was not. Found by a count disagreeing with a sibling project's.
     """
     import pathlib
     import re
@@ -296,6 +304,12 @@ def test_the_resolution_notes_index_matches_the_sections():
 
     missing = [a for a in linked if a not in set(anchors)]
     assert not missing, f"index links to nothing: {missing[:3]}"
+
+    numbers = [re.match(r"§(\d+[a-z]?)", h).group(1) for h in headings]
+    clashes = [n for n, k in Counter(numbers).items() if k > 1]
+    assert not clashes, (
+        f"two sections share a number, so every citation to it is "
+        f"ambiguous: {clashes}")
 
     absent = [h for h, a in zip(headings, anchors) if a not in set(linked)]
     assert not absent, f"sections missing from the index: {absent[:3]}"
