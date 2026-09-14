@@ -24763,3 +24763,64 @@ RAM only. Thirteen fields snapshotted, all restored and verified. Probe
 `~/temp/s3ked-logs/lfopol2.py`, analysis `~/temp/matrix/lfofit.py`, captures
 `~/temp/matrix/lfopol2.npz` with the sample rate stored in the file.
 
+### `MWLDEP` **adds**, it does not scale — leg B already answered it (2026-09-15)
+
+mpc2emu asked next whether `MWLDEP` scales `LFODEP` or adds to it, calling it
+"the whole conversion". **Leg B is that experiment**, run the night before
+without either of us recognising whose question it was.
+
+```
+   leg A  MWLDEP  0   wheel 0 -> 1.19574      (baseline)
+   leg B  MWLDEP 50   wheel 0 -> 1.19553
+
+   B(wheel 0) / A(wheel 0) = 0.9998
+       ADD   predicts 1.000   -- wheel down leaves LFODEP alone
+       SCALE predicts 0.495   -- LFODEP x (1 - MWLDEP/99)
+```
+
+**Adding, by a factor of two.** `MWLDEP` raises the depth as the wheel rises
+and leaves `LFODEP` untouched at wheel down, so `LFODEP` is the wheel-down
+value on this path exactly as it is on the assignable one.
+
+**The magnitude is not settled and should not be quoted.** Leg B is
+compressive, and its own first rung says so: the slope over wheel 0→32
+extrapolates to `1.855×` at full wheel where the measurement reads `1.475×`.
+
+```
+   per MWLDEP unit, from the clipped ladder    0.476 LFODEP units   LOWER BOUND
+   from the least-clipped rung, extrapolated   ~0.86                consistent
+                                                                    with 1:1
+```
+
+> **`0.86` is consistent with a clean 1:1 rule and that is not a reason to
+> adopt one.** The clipping is almost certainly the corner reaching `FILFRQ`
+> 99 at the top of the LFO swing, which is a property of *this probe's*
+> `MODVFILT1 = 30`, not of the machine. Re-running with a smaller `MODVFILT1`
+> settles it in three minutes — see `TODO.md`, item (3).
+
+**And §251's own 1.956 does not transfer here** (mpc2emu's catch). That was
+measured on `MODVLVOL`, a signed ±50 matrix amount; `MWLDEP` is an unsigned
+0..99 field on a different path. Assuming the scale carries is the same move as
+assuming the polarity carried between destinations — which §249 declined to
+make, and which turned out true **only because it was measured**.
+
+### What the corpus says, and what it retires
+
+mpc2emu's scan of 213 programs, after reading offset 36:
+
+```
+   MWLDEP non-zero    213 of 213   100.0 %      value 30: 202 (94.8 %)
+   PRSDEP non-zero      2          0.9 %
+```
+
+**Every program has wheel → LFO depth live, and 30 is the factory value.** So
+the dedicated route is used 213 times and the assignable one once: their
+earlier count of 24 matrix assignments was not under-reporting, it was
+**counting the wrong mechanism**.
+
+> It also settles whether this project's confounded first run was bad luck.
+> **It was not** — 94.8 % of programs carry exactly the `MWLDEP = 30` that
+> broke it, so any program picked off that card would have done the same. A
+> null check at amount zero was the only thing standing between that run and a
+> plausible, monotone, entirely wrong ladder.
+

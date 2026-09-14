@@ -2432,4 +2432,21 @@ vs 1.956 units per amount unit over full travel).
    so no units-per-`MWLDEP`-unit figure is claimed. A run with a smaller
    `MODVFILT1` would settle it.
 
+**Updated 2026-09-15.** (1) is **answered by mpc2emu's corpus scan**: `MWLDEP`
+is non-zero in **213 of 213** programs, 202 of them at exactly 30, while
+`PRSDEP` is non-zero in 2. The dedicated route is used 213 times and the
+assignable one once, so their earlier 24-assignment count was counting the
+wrong mechanism — and this project's confounded first run was not bad luck,
+since 94.8 % of programs carry the value that broke it.
+
+**Scale-versus-add is also answered, from captures already taken** — §251's
+leg B *was* that experiment. `B(wheel 0)/A(wheel 0) = 0.9998` where adding
+predicts 1.000 and scaling 0.495: **`MWLDEP` adds.**
+
+**(3) is now the only open part, and it is the one a converter needs**: the
+magnitude. The clipped ladder gives a **lower bound** of 0.476 `LFODEP` units
+per `MWLDEP` unit; the least-clipped rung extrapolates to ~0.86, which is
+consistent with a 1:1 rule and is **not** grounds for adopting one. Three
+minutes on the rig with a smaller `MODVFILT1`.
+
 **Blocked on:** nothing for (1) and (2). (3) needs the rig, RAM only.
