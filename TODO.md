@@ -2343,3 +2343,33 @@ ROM decay table for attack", which does not depend on this.
 
 The eight-table inventory in §247 is the durable part and is reusable for any
 future "where does this curve live" question.
+
+## Is the modwheel pivoted at 64 like velocity, or unipolar? (OPEN 2026-09-14 — §248)
+
+**Status:** blocks the shape, not the numbers, of mpc2emu's modwheel → LFO
+depth feature on the AKAI path. The offsets are answered (`MODVLVOL`, program
+95, signed −50..+50; §248 has all sixteen `MODV*`).
+
+§43 and §116 established that this machine references modulation to the
+**middle** of the source's range — pivot solved at 64.56 across `V_LOUD`,
+`V_ATT1`, `K_FREQ` and `MODVFILT1`. All four were driven by **velocity or
+key**, sources with no neutral position. If the rule extends to the modwheel,
+"fully wheel-gated" is not expressible: at wheel down the modulation swings
+negative rather than to zero.
+
+**The source enumeration argues it does not extend.** Exactly the three
+external continuous controllers have inverted twins — `!modwheel` (11),
+`!bend` (12), `!external` (13) — and velocity, key, the LFOs and the envelopes
+do not. With a signed amount an inverted source is redundant for a bipolar
+source and *not* redundant for a unipolar one. That is an inference from a
+table's shape, not a measurement.
+
+**To close this:** `MODSFILT1 = 1`, `MODVFILT1 = −50`, `FILFRQ` mid-range;
+capture the corner at wheel 0, 64 and 127. **The discriminating rung is wheel 0
+with a NEGATIVE amount**, where unipolar leaves the corner at `FILFRQ` and
+bipolar puts it above. A positive amount does not discriminate — a negative
+excursion may clamp at zero and look like no response under either model.
+
+**Blocked on:** the rig, plus two keygroup writes with snapshot and verified
+restore. Destination is filter frequency rather than LFO depth because this
+project can measure a corner and cannot easily measure a depth.

@@ -288,6 +288,7 @@ silently wrong one.
 - [§245](#245--the-attack-table-is-not-located-and-the-attack-law-does-not-need-it-2026-09-14) — The attack table is not located, and the attack law does not need it (2026-09-14)
 - [§246](#246--54s-filter-law-holds-to-filfrq-0-forty-four-bytes-below-where-it-was-fitted-2026-09-14) — §54's filter law holds to `FILFRQ` 0, forty-four bytes below where it was fitted (2026-09-14)
 - [§247](#247--a-candidate-rom-image-for-the-attack-table-and-three-reasons-it-is-not-confirmed-2026-09-14) — A candidate ROM image for the attack table, and three reasons it is not confirmed (2026-09-14)
+- [§248](#248--the-modv-amount-offsets-and-why-the-wheel-is-probably-not-pivoted-at-64-2026-09-14) — The `MODV*` amount offsets, and why the wheel is probably not pivoted at 64 (2026-09-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -24323,4 +24324,140 @@ ROM decay table for attack" is what a converter needs.
 > Three independent reasons, none of which existed while the result was
 > exciting. The first one cost four lines of arithmetic and would have been
 > enough on its own.
+
+## §248 — The `MODV*` amount offsets, and why the wheel is probably not pivoted at 64 (2026-09-14)
+
+mpc2emu asked for the `MODV*` amount offsets so that modwheel → LFO depth can
+be carried across conversion paths in both directions. They had the thirteen
+`MODS*` source offsets and only three amounts (`MODVFLT2_1..3`, keygroup
+174–176), and their own writer's comment names the trap they were about to hit
+from the other side: **an amount without its source is silently inert, and a
+source without its amount is a program that looks routed and does nothing.**
+
+### The answer
+
+The field wanted is **`MODVLVOL`, program offset 95, signed −50..+50.**
+
+> **It is not called `MODVLFOL`.** The source is `MODSLFOL` (program 82) and the
+> amount is `MODVL`**`VOL`**. Searching the parameter table by symmetry with the
+> source name finds nothing, which is very likely why it read as missing.
+
+The LFO trio is the same shape:
+
+```
+   source                          amount
+   MODSLFOT  81  LFO1 speed        MODVLFOR  94  LFO1 speed
+   MODSLFOL  82  LFO1 depth        MODVLVOL  95  LFO1 depth
+   MODSLFOD  83  LFO1 delay        MODVLFOD  96  LFO1 delay
+```
+
+Sixteen `MODV*` fields exist. Eight in the program header:
+
+| off | name | range | destination |
+|---|---|---|---|
+| 89–91 | `MODVPAN1..3` | −50..50 | pan |
+| 92–93 | `MODVAMP1..2` | −50..50 | loudness |
+| 94 | `MODVLFOR` | −50..50 | LFO1 speed |
+| **95** | **`MODVLVOL`** | **−50..50** | **LFO1 depth** |
+| 96 | `MODVLFOD` | −50..50 | LFO1 delay |
+
+and eight in the keygroup header: `MODVFILT1..3` (151–153), `MODVPITCH` (154),
+`MODVAMP3` (155), `MODVFLT2_1..3` (174–176), all −50..+50.
+
+### The trap one level up from theirs
+
+**Five sources live in the program header while their amounts live in the
+keygroup header:**
+
+```
+   MODSFILT1..3  program 84..86   ->   MODVFILT1..3  KEYGROUP 151..153
+   MODSPITCH     program 87       ->   MODVPITCH     KEYGROUP 154
+   MODSAMP3      program 88       ->   MODVAMP3      KEYGROUP 155
+```
+
+So for filter, pitch and keygroup-loudness modulation the **source is written
+once per program and the amount once per keygroup**. A converter that writes
+each half once produces a program routed everywhere and audible only in
+keygroup 0 — the same failure as writing an amount with no source, displaced by
+one level and harder to see, because the program *does* respond.
+
+The LFO trio is not affected: `MODSLFOL` and `MODVLVOL` are both program-level,
+so that pair is a clean two-field write.
+
+### What the amount does, and the part that is an inference
+
+§116 is the only `MODV*` field this project has measured. Its law is
+
+```
+   dest(v, d) = base * exp(k * d * (v - pivot))      pivot solved at 64.56
+```
+
+— multiplicative in the log domain and **referenced to the middle of the
+source's range**, not to zero. §43 found the same pivot for `V_LOUD`, `V_ATT1`
+and `K_FREQ`: four fields, three source types, one rule.
+
+**If that rule covered the modwheel, "fully wheel-gated" would not be
+expressible at all** — at wheel down the modulation would swing *negative*
+rather than to zero. That is worth knowing before writing code, and it is also
+exactly the shape of a mechanism being applied past its range: §43's rule was
+established on **velocity and key**, which are the sources that have no
+neutral position.
+
+**The source enumeration argues the wheel is different.** The `MODS*` value
+table:
+
+```
+   0 no source   1 modwheel   2 bend    3 pressure   4 external
+   5 velocity    6 key        7 LFO1    8 LFO2       9 env1
+  10 env2       11 !modwheel 12 !bend  13 !external 14 env3
+```
+
+**Exactly the three external continuous controllers have inverted twins**
+(`!modwheel`, `!bend`, `!external`). Velocity, key, the LFOs and the envelopes
+do not.
+
+> With a **signed** ±50 amount, an inverted source is redundant for a
+> **bipolar** source — `!x` is just `x` with the amount negated. It is *not*
+> redundant for a **unipolar** one, where `1 − w` cannot be reached by negating
+> an amount. **The existence of `!modwheel` alongside a signed amount is an
+> argument that continuous-controller sources run 0..1, not ±½ about 64.**
+
+That is an inference from a table's shape, not a measurement, and it is
+recorded as one.
+
+### The falsifier, ready to run
+
+One capture settles it, and the destination should be **filter frequency**
+rather than LFO depth, because this project can measure a corner and cannot
+easily measure a depth:
+
+```
+   MODSFILT1 = 1 (modwheel)   MODVFILT1 = -50   FILFRQ mid-range
+   capture at wheel 0, 64, 127
+
+   unipolar  ->  wheel 0 leaves the corner AT FILFRQ, and it falls as the
+                 wheel rises
+   bipolar   ->  wheel 0 puts the corner ABOVE FILFRQ, 64 is neutral, 127 below
+```
+
+**The discriminating rung is wheel 0 with a negative amount**, where the two
+predictions move the corner in opposite directions. A positive amount does not
+discriminate, because a negative excursion may clamp at zero and look like no
+response either way.
+
+Needs the rig and two keygroup writes with snapshot-and-restore. Nothing else
+in this section needs hardware.
+
+### Provenance
+
+The offsets, ranges and the source enumeration are **transcribed from Akai's
+document**, and belong to §241's 136-of-269 untested set. What is *measured* is
+`MODVFILT1`: §109 established it responds, is per-keygroup and clamps at ±50;
+§116 measured its depth and solved its pivot. The ±50 range is therefore
+confirmed for one of the sixteen and transcribed for the other fifteen.
+
+mpc2emu's independently held source offsets (`0x4c`–`0x58`, `0x63`–`0x65`, from
+the IB-304F map) agree with this table exactly — 76–88 and 99–101. **Two
+transcriptions from different documents agreeing is worth recording**, though
+it is still two transcriptions.
 
