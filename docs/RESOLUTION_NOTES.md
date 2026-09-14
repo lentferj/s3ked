@@ -281,6 +281,7 @@ silently wrong one.
 - [§238](#238--the-path-difference-is-neither-additive-nor-multiplicative-and-repeatability-depends-on-the-rung-2026-09-14) — The path difference is neither additive nor multiplicative, and repeatability depends on the rung (2026-09-14)
 - [§239](#239--the-91--was-sr--44100-written-into-a-script-while-jack-ran-at-48000-2026-09-14) — The 9.1 % was `SR = 44100` written into a script while JACK ran at 48000 (2026-09-14)
 - [§240](#240--all-of-it-was-one-constant-236-237-238-and-half-of-239-are-withdrawn-2026-09-14) — All of it was one constant: §236, §237, §238 and half of §239 are withdrawn (2026-09-14)
+- [§241](#241--which-of-this-projects-claims-are-single-stranded-2026-09-14) — Which of this project's claims are single-stranded (2026-09-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -23654,3 +23655,59 @@ from memory into a script.
 > all of them. The thing that finally broke it was an *a priori* standard — the
 > probe note's own frequency (§239) — which was sitting in the same file the
 > whole time.
+
+## §241 — Which of this project's claims are single-stranded (2026-09-14)
+
+VinSamLib audited their own validation after §240 and found `roundtrip_krz_corpus`
+is their own reader agreeing with their own writer — no independent strand, and
+invisible in the pass count. The same question is worth asking here, because
+§240 cost five sections to exactly that shape: **every check compared one of my
+measurements against another.**
+
+### The parameter table
+
+```
+  269 entries
+    24  (9%)  carry a measurement or a § reference
+   109 (41%)  carry a note, but no measurement
+   136 (51%)  no note at all -- transcribed from the document and never tested
+```
+
+The 136 by region: keygroup 73, program 35, sample 17, multipart 9, multi 2.
+
+### And the strand that looks external and is not
+
+`probes/roundtrip.py` writes every safe parameter to the machine and reads it
+back. That is a real external strand for **encoding** — nibbling, sizes, signed
+values, volatile registers, anything where the byte that comes back differs
+from the byte sent.
+
+**It is not a strand for meaning.** Write to offset N, read offset N, and the
+two agree whether or not N is the field the table says it is. A wrong offset
+round-trips perfectly.
+
+What actually validates an offset here:
+
+| strand | what it proves | coverage |
+|---|---|---|
+| two independently transcribed Akai documents | the offset, if they agree | §8: all twelve `multipart` fields match the program header's |
+| a panel read | the offset and the display mapping | §216, `FX1`–`FX4`, read by camera |
+| an audible effect | the offset and the semantics | the filter, envelope and tuning work |
+| `roundtrip.py` | encoding and persistence | every safe parameter |
+| the synthetic suite | s3ked's encoder against s3ked's decoder | everything |
+
+> **The pass count does not distinguish them**, which is VinSamLib's point and
+> the reason this is written down rather than assumed. 968 green tests say the
+> code is self-consistent. They say nothing about whether `PANDEL` is at offset
+> 31.
+
+### Not a call to action
+
+No test is changed and no claim is withdrawn. Most of the 136 will be right —
+they come from Akai's own documents, and where two transcriptions exist they
+agree. The point is that a green suite is **evidence of one kind**, and this
+project has spent a day discovering what it costs to forget which kind.
+
+The cheap improvement, if one is wanted later, is the §216 method: **a panel
+photograph validates an offset and a display mapping at once**, needs no
+automation, and is the only strand here that costs nothing but Jan's time.
