@@ -23237,8 +23237,47 @@ is not explained here.
 measurement. The same byte still gives a 33 % different attack of a different
 shape on two programs of one machine.
 
+### The imported mechanism, and why this machine's own data outranks it
+
+eosed measured a **note-dependence on the E4XT**: 1.25× slower across 55
+semitones, slower at higher pitch — the same direction as this discrepancy,
+since ATKCAL was probed at **note 24** and this subject at 84, **60 semitones
+apart**. That makes it the largest single difference between the two runs and
+the obvious candidate.
+
+**It does not transfer.** The sweep above is this machine's own answer:
+`ATTAK1` 60 varies **0.5 % across 48 semitones**. Scaled to 60 it is under a
+percent, against a 33 % gap. Whatever the E4XT does here, the S3000XL does not.
+
+mpc2emu also proposed a mechanism that would produce "slower at higher pitch"
+with no rate change at all — a **fixed-rate ramp climbing to a note-dependent
+level** — predicting +0.035 dB of plateau per semitone. Measured on the same
+captures:
+
+```
+   ATTAK1   note 48    note 72    note 96
+      0      +0.00      +0.02      -0.02   dB
+     60      +0.00      +0.02      -0.02   dB
+```
+
+**Flat to 0.02 dB over 48 semitones, against a predicted +1.68 dB.** Falsified
+by a factor of eighty, on both the floor and the rung.
+
+> This is the whole of mpc2emu's own caution applied to their own message:
+> *exclude what your instrument is already known to do before importing an
+> explanation from another machine.* Two mechanisms arrived from a sibling
+> project, in the right direction, on a real measured effect — and the local
+> data had already excluded both. **The arriving hypothesis is not evidence
+> about this machine, however well it fits.**
+
 **What would close it:** capture ATKCAL's own `ATTAK1` 60 again in this
 session, which separates "different program" from "different session or rig" —
 the one thing the free tests cannot reach. It needs a load from ID4 and clears
 the currently resident program, so it is Jan's to authorise rather than mine to
 take.
+
+> ATKCAL's own features file also records **velocity 80** against this run's
+> 100. `V_ATT1..3` and `VELDEP` read 0 on this subject, so velocity has no
+> route to the attack here — but it is the one remaining difference that has
+> not been separately measured, and it is free to test whenever the machine is
+> next idle.
