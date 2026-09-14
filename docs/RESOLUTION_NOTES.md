@@ -282,6 +282,7 @@ silently wrong one.
 - [§239](#239--the-91--was-sr--44100-written-into-a-script-while-jack-ran-at-48000-2026-09-14) — The 9.1 % was `SR = 44100` written into a script while JACK ran at 48000 (2026-09-14)
 - [§240](#240--all-of-it-was-one-constant-236-237-238-and-half-of-239-are-withdrawn-2026-09-14) — All of it was one constant: §236, §237, §238 and half of §239 are withdrawn (2026-09-14)
 - [§241](#241--which-of-this-projects-claims-are-single-stranded-2026-09-14) — Which of this project's claims are single-stranded (2026-09-14)
+- [§242](#242--what-reads-the-rate-table-99--setting-confirmed-and-the-accumulator-is-in-silicon-2026-09-14) — What reads the rate table: `99 − setting` confirmed, and the accumulator is in silicon (2026-09-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -23711,3 +23712,80 @@ project has spent a day discovering what it costs to forget which kind.
 The cheap improvement, if one is wanted later, is the §216 method: **a panel
 photograph validates an offset and a display mapping at once**, needs no
 automation, and is the only strand here that costs nothing but Jan's time.
+
+## §242 — What reads the rate table: `99 − setting` confirmed, and the accumulator is in silicon (2026-09-14)
+
+§235 found the envelope rate table in the S3000XL's own OS at `0x06890`,
+showed the constant-width model `time = width / rate[99−setting] / 44100`
+failing by +50 % at the fast end, and named the next place to look: *"whatever
+reads this table also knows how often it is applied."* Disassembled with stock
+`objdump -b binary -m i8086` — the image is x86, not 68k, which its
+`ea 00 00 1e e4` far-jump reset vector confirms.
+
+### The index is exactly what ConvertWithMoss assumed
+
+```
+  29289:  mov  $0x63,%al              ; 99
+  2928b:  sub  %es:0xd(%si),%al       ; 99 - setting
+  2928f:  cbtw
+  29290:  add  %dx,%ax                ; + a modulation term
+  29292:  jns  ...  sub %ax,%ax       ; clamp low at 0
+  29298:  cmp  $0x63,%ax  ...  mov $0x63,%ax   ; clamp high at 99
+  292a0:  mov  $0x6890,%di            ; table base
+  292a3:  add  %ax,%ax                ; uint16 entries
+  292a7:  mov  (%di),%ax
+```
+
+**`rate[99 − setting]` is confirmed from the firmware**, and CWM's indexing was
+right. Two things the model does not carry: the index takes an **additive
+modulation term** before the lookup, and it is **clamped at both ends** — so a
+modulated envelope saturates at rungs 0 and 99 rather than running past them.
+
+### The rate is not used at one scaling
+
+All ten reference sites, and they fall into two classes:
+
+```
+  RAW into a voice register       0x292a1 -> 0x8188    0x29374 -> 0x818E
+                                  0x293b0 -> 0x8198    0x29479 -> 0x819E
+                                  0x294b8 -> 0x81A9
+
+  DOUBLED, saturating at 0x7FFF   0x29332   0x29435   0x2a576   0x2a5bf
+                                    shl %ax / jns / mov $0x7fff
+
+  NEGATED                         0x2a16b    neg %ax
+```
+
+**Five stages take the table value raw, four take it doubled with a saturating
+clamp, and one negates it** — the last being a downward segment.
+
+And the doubling matters at the top: **the table's last entry is 32767**, so
+`shl` on the fastest settings overflows signed 16 bits and is clamped back to
+32767. For those four stages the top of the range is compressed, and no single
+accumulator width can describe them and the raw stages together.
+
+### Why the OS never states the width
+
+The fetched rate is written into a **contiguous hardware register block** —
+`0x8188`, `0x818A`, `0x818E`, `0x8192`, `0x8194`, `0x8198`, `0x819A`, `0x819E`,
+`0x81A3`, `0x81A9`, `0x81F8`, `0x81FA` are all written by one routine — and
+`0x8188` is written **once in the whole image and never read**. It is not a
+variable; it is a port.
+
+> **So the accumulator is in the sound chip, and the OS only supplies rates.**
+> That is exactly why ConvertWithMoss say the width is *"the one part the
+> operating system does not state"* — it is not in the operating system at all.
+> A constant-width model is an emulator's model of the hardware, not a
+> transcription of the machine's own arithmetic, and §235's drift is a property
+> of that model rather than of the table.
+
+### What this does not settle
+
+The site reading structure offset `0x0d` stores **raw**, so if that is `ATTAK1`
+the attack is on the unscaled path and the doubling does not explain §235's
+fast-end drift. Identifying which structure offset carries which parameter
+needs more than this disassembly — the offsets are stated here as offsets.
+
+Two further leads, both in the same routine: a 256-entry byte table reached by
+`xlat %ds:(%bx)` translates the level bytes, and several parameters are scaled
+by `(%cl − 0x40)` — a bipolar depth centred on 64 — before use.
