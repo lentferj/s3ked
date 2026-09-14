@@ -287,6 +287,7 @@ silently wrong one.
 - [§244](#244--the-load-base-is-0xc0000-and-the-attack-table-is-in-ram-2026-09-14) — The load base is 0xC0000, and the attack table is in RAM (2026-09-14)
 - [§245](#245--the-attack-table-is-not-located-and-the-attack-law-does-not-need-it-2026-09-14) — The attack table is not located, and the attack law does not need it (2026-09-14)
 - [§246](#246--54s-filter-law-holds-to-filfrq-0-forty-four-bytes-below-where-it-was-fitted-2026-09-14) — §54's filter law holds to `FILFRQ` 0, forty-four bytes below where it was fitted (2026-09-14)
+- [§247](#247--a-candidate-rom-image-for-the-attack-table-and-three-reasons-it-is-not-confirmed-2026-09-14) — A candidate ROM image for the attack table, and three reasons it is not confirmed (2026-09-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -24207,3 +24208,119 @@ with a 3 Hz search floor. **A low-frequency corner search will find a crossing
 in the mud if you let it**, and the reading it produces is not obviously wrong:
 0.7 Hz for the lowest rung of a descending ladder looks like the filter
 bottoming out, which is exactly the finding the run was looking for.
+
+## §247 — A candidate ROM image for the attack table, and three reasons it is not confirmed (2026-09-14)
+
+§245 left the boot-time writer of the RAM attack table at `0x3A60:0x0892`
+unfound, bounded, and off the critical path. A cheaper question was never
+asked: **is the table's initialiser anywhere in the image at all, findable by
+its contents rather than by the code that copies it?**
+
+### The scan
+
+The decay table is a clean geometric series, so scan the whole 256 KB for
+*any* monotone geometric `uint16` run — no address arithmetic, no assumption
+about where data lives. Eight runs of 24 entries or more:
+
+| file | entries | k / index | first → last |
+|---|---|---|---|
+| `0x0068C4` | 74 | 0.0978 | 26 → 32767 |
+| `0x024588` | 109 | 0.0578 | 43 → 22050 |
+| `0x03ABF2` | 208 | 0.0273 | 115 → 32767 |
+| **`0x03AE92`** | **100** | **0.0552** | **98 → 23170** |
+| `0x03B2B0` | 214 | 0.0272 | 100 → 32767 |
+| `0x03B58E` | 74 | 0.1155 | 14 → 64304 |
+| `0x03D050` | 58 | 0.1144 | 46 → 31250 |
+| `0x03D0D4` | 50 | 0.1133 | 46 → 11840 |
+
+`0x0068C4` is §242's decay table at `0x06890` — the detector skips its head,
+where values of 2 and 3 make the log-slope meaningless. **The inventory itself
+is the durable part of this section**: whatever the attack table turns out to
+be, this is every geometric table the image contains.
+
+`0x03AE92` is the interesting one: **exactly 100 entries**, the same length as
+the decay table, and the read site at `0x02925F` is unambiguous about the
+shape —
+
+```
+   1e            push ds
+   bf 60 3a      mov  di,0x3a60
+   8e df         mov  ds,di
+   bf 92 08      mov  di,0x0892     ; §245: the only 0x0892 in the image
+   8a c4         mov  al,ah         ; setting 0..99
+   2a e4         sub  ah,ah
+   03 c0         add  ax,ax         ; word index
+```
+
+— a 100-entry `uint16` table at `DS:0x0892`. And `0x03AE92 − 0x0892 = 0x03A600`,
+which is the paragraph address of **segment `0x3A60`, offset 0**: exactly what
+an image of that data segment placed at its own segment number would give.
+
+**That is where this section would have stopped yesterday.** It does not.
+
+### Reason 1 — the arithmetic is a coin flip, not a fingerprint
+
+The only constraint on "table offset − `0x0892` is a paragraph address" is
+alignment mod 16. With eight candidate tables the chance that at least one
+aligns is **0.40**, and in fact **two** of the eight do (`0x03ABF2` as well).
+
+> The number looked exact because it was written in hex and ended in `600`.
+> **An exact-looking constant is not evidence until its prior is computed**,
+> and the prior here took four lines.
+
+### Reason 2 — the test designed to confirm it refused
+
+If the image of the data segment starts at `0x03A600`, offsets that code loads
+as pointers should land on the *starts* of strings there. Offset 0 does look
+right — a clean label table, `-18dB`/`-12dB`/…/`+18dB` — and `0x30`, `0x39`,
+`0x47`, `0x55` land on four consecutive fixed-width LCD messages (`OK`,
+`SHORTED ADDR?`, `R/W ERRORS`, `NO CARD ?`), each named by code as an
+immediate.
+
+Counted properly, that is not support. Sweeping the base and counting only
+**exact** string starts (preceded by a non-printable, ≥ 6 characters), across
+1756 distinct referenced immediates:
+
+```
+   0x039E00  20     0x03A600  14   <- hypothesis
+   0x03A000  25     0x03A800   7
+   0x03A200  14     0x03AA00   2
+   0x03A400  15     0x03AC00   2
+```
+
+**A different base scores higher and there is no peak.** A first, looser
+version of this count — any offset landing anywhere inside a string — gave the
+hypothesis 42 and a wrong base 133, which is the same verdict arriving first as
+noise. The strings are dense enough that a metric of this kind measures where
+the string block is, not where the segment starts.
+
+### Reason 3 — the contents are a factor of two out
+
+```
+   table at 0x03AE92           k = 0.05517
+   doubled                       = 0.11034
+   §245's attack requirement     = 0.10830   (segments 0.10755 .. 0.11081)
+```
+
+The doubled exponent lands inside §245's own segment spread — **which is
+exactly why it should be distrusted.** A factor of exactly 2 arriving with no
+mechanism is the shape of an indexing or a units error, not of a discovery, and
+§244's "attack halves the value it reads" is a different halving: of the value,
+which leaves the exponent alone.
+
+### Where this leaves §245
+
+Open, and better bounded than before. There is now a **named candidate** with a
+stated address, stated contents and three stated reasons it is not confirmed,
+where before there was an unfound writer.
+
+**The test that would settle it is a contents test, not an address test**: read
+the live RAM at `0x3A60:0x0892` — which this protocol cannot do — or find the
+copy. Nothing in `ATTAK1`'s usable law depends on the answer; §234's refit
+stands on hardware measurement with ±2 % residuals, and §245's "stop using the
+ROM decay table for attack" is what a converter needs.
+
+> Three independent reasons, none of which existed while the result was
+> exciting. The first one cost four lines of arithmetic and would have been
+> enough on its own.
+

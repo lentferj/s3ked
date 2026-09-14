@@ -2315,3 +2315,31 @@ becoming a general doubt about the table.
 
 **Unpushed commits: run `git rev-list --count @{u}..HEAD`.** §201 onward. Jan
 has not given the word and I have not pushed.
+
+## The attack table's ROM image: a named candidate, not confirmed (OPEN 2026-09-14 — §247)
+
+**Status:** §245 left the boot-time writer of the RAM attack table at
+`0x3A60:0x0892` unfound. A contents-first scan of the whole image — every
+monotone geometric `uint16` run, no address assumptions — found eight tables
+and gives §247 a named candidate at file `0x03AE92`: exactly 100 entries, the
+same length as the decay table, and `0x03AE92 − 0x0892` is the paragraph
+address of segment `0x3A60`.
+
+**Not confirmed, for three reasons, all recorded in §247:**
+
+1. that alignment is a **coin flip** — 0.40 that at least one of eight tables
+   aligns, and two actually do;
+2. the string-offset test built to confirm the base **scores a different base
+   higher**, with no peak;
+3. the contents are a **factor of 1.96 out** in exponent, and a bare factor of
+   two with no mechanism is the shape of an indexing error.
+
+**Blocked on:** a contents test rather than an address test — reading live RAM
+at `0x3A60:0x0892`, which this protocol cannot do, or finding the copy itself.
+
+**Not on anyone's critical path.** `ATTAK1`'s law is §234's, refitted from
+hardware with ±2 % residuals; what a converter needs is §245's "stop using the
+ROM decay table for attack", which does not depend on this.
+
+The eight-table inventory in §247 is the durable part and is reusable for any
+future "where does this curve live" question.
