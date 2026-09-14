@@ -152,6 +152,38 @@ tone, **10.3 dB of swing against a −3 dB threshold**, which is what produced a
 reading 17–33 % short (§234). Two independent syntheses agree on that number to
 0.02 dB.
 
+### 1b. Check the detector against an envelope you already know
+
+Trap 1 is the detector's **window**. This is the detector's **construction**,
+and it fails differently.
+
+An analytic signal must be built with a *complex* inverse transform. Built with
+an inverse **real** transform it comes back real, so taking its magnitude is
+full-wave rectification at **twice the carrier** — not an envelope at all. That
+alias then lands wherever the decimation rate puts it. mpc2emu lost two rungs
+of an AKAI decay ladder to exactly this: at a 1 kHz decimation, a 1247 Hz
+carrier aliased to 494.7 Hz, a hair under Nyquist, and a median filter
+demodulated it into a 5 Hz ripple 28 dB deep. **One key in the ladder, the same
+key in both passes, because it is the pitch — not the value, and not the note's
+position.**
+
+**A decaying sine has an envelope you know before you measure it**, so the
+check costs nothing:
+
+```
+  synthesise exp(-t/tau) * sin(2*pi*f*t) at the carrier you actually use,
+  run the detector, compare against exp(-t/tau) in dB
+```
+
+Run here across the five carriers of a real ladder, the complex construction is
+**exact to 0.10 dB**; the rectifying one is not even monotone.
+
+> This is trap 3 turned on the instrument rather than the subject: **carry a
+> comparison whose answer you already know.** A detector is a measurement
+> device and deserves the same treatment as the thing it measures — and a
+> rectified "envelope" tracks a real one closely enough at most carriers to
+> look fine until it meets the one that breaks it.
+
 ### 2. Every capture already contains a value known before you measured it
 
 The pitch of the note you played. One FFT against equal temperament validates
