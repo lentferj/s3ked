@@ -290,6 +290,7 @@ silently wrong one.
 - [§247](#247--a-candidate-rom-image-for-the-attack-table-and-three-reasons-it-is-not-confirmed-2026-09-14) — A candidate ROM image for the attack table, and three reasons it is not confirmed (2026-09-14)
 - [§248](#248--the-modv-amount-offsets-and-why-the-wheel-is-probably-not-pivoted-at-64-2026-09-14) — The `MODV*` amount offsets, and why the wheel is probably not pivoted at 64 (2026-09-14)
 - [§249](#249--the-modwheel-is-unipolar-and-velocity-is-232-stronger-per-depth-unit-2026-09-14) — The modwheel is unipolar, and velocity is 2.32× stronger per depth unit (2026-09-14)
+- [§250](#250--one-of-247s-eight-tables-is-identified-exactly-the-other-six-are-not-2026-09-14) — One of §247's eight tables is identified exactly; the other six are not (2026-09-14)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -24576,4 +24577,86 @@ file**, which is §240's root defect fixed at the point where it was introduced.
 
 RAM only. Snapshot of six fields, all restored and verified:
 `FILFRQ 96`, `MODVFILT1 0`, `ATTAK1 46`, `SUSTN1 96`, `FILQ 0`, `MODSFILT1 5`.
+
+## §250 — One of §247's eight tables is identified exactly; the other six are not (2026-09-14)
+
+§247 inventoried eight geometric `uint16` tables in the OS image and identified
+one (§242's decay table). This closes a second, **exactly**, and records that
+the remaining six resisted the same method — which is the part worth writing
+down, because the method that cracked one was tried on all of them.
+
+### `0x024562` — 128 entries, `trunc(22050 · 2^((i−127)/12))`
+
+The exponent gave it away before any address arithmetic: `k = 0.057826`
+against **`ln(2)/12 = 0.057762`**, the equal-tempered semitone, 0.11 % apart.
+An exponent is a property of the thing tabulated and does not care where the
+table sits.
+
+**The a-priori test then settled it.** `22050` is §142's low playback rate — a
+value this project measured years of sections ago and did not fit here:
+
+```
+   trunc :  128/128 exact
+   round :   55/128
+   ceil  :    2/128
+```
+
+**Every entry, no exceptions, and the two neighbouring rounding rules fail.**
+The true extent is 128 entries at file `0x024562`–`0x024660`, 256 bytes: one per
+MIDI note, 14 Hz at index 0 to 22050 Hz at index 127, 10.583 octaves.
+§247's scan had reported 109 entries starting at `0x024588`; the detector's
+tolerance had clipped nineteen entries off the bottom, where values of 14 and
+15 make a log-slope meaningless — **the same head-clipping it did to the decay
+table**, and worth knowing about the scanner rather than about the image.
+
+**It is not a concert-pitch table.** A440 is absent, and so are 220 and 880 —
+the first thing checked, and it failed. The anchor is the **sample rate**, not
+concert pitch. Index 69 holds 773 Hz, not 440.
+
+### The truncation, and why it is a curiosity rather than a defect
+
+Integer Hz at 14 Hz is coarse, and the error is real:
+
+```
+   worst -62.9 cents at index 8 (22 Hz)
+   flatter than 25 cents:  10 entries, none above index 25
+   flatter than  5 cents:  42 entries, none above index 53
+   above index 96: under 0.5 cents everywhere
+```
+
+> **The bottom of this table is more than a quarter-tone flat.** It is also
+> seven octaves below unity, which is far beyond any transposition this machine
+> offers, so nothing reaches it. Reporting the −62.9 cents without that second
+> sentence would be manufacturing a defect out of an unreachable index.
+
+It also **cannot explain §220's tuning offsets**. §220 compared 130.37/175.05 Hz
+against 130.83/174.73; the table's error at those frequencies is under one cent
+(index 38 reads −0.7). Whatever §220 saw, it is not this.
+
+### The six that did not yield, stated as a negative
+
+The same treatment — grow the run to its true extent, fit the exponent, test
+`trunc(A · 2^(i/N))` across integer `N` and a spread of anchors — **fails on
+every remaining table:**
+
+| file | entries | k | steps/octave | best exact-form fit |
+|---|---|---|---|---|
+| `0x03ABEA` | 212 | 0.027287 | 25.40 | 13/212 |
+| `0x03AE92` | 100 | 0.055165 | 12.56 | — (§247's candidate) |
+| `0x03B2B0` | 214 | 0.027180 | 25.50 | 12/214 |
+| `0x03B58E` | 74 | 0.115166 | 6.02 | 4/74 |
+| `0x03D050` | 58 | 0.114816 | 6.04 | 5/58 |
+| `0x03D0D4` | 52 | 0.113791 | 6.09 | 4/52 |
+
+**The three at ~6.02 steps per octave sit within 0.5 % of `ln(2)/6`**, one entry
+per whole tone, and it is tempting to call them that. **The exact-form test
+says no** — 4, 5 and 4 hits out of 74, 58 and 52 — so whatever they tabulate is
+not a truncated power of two, and the exponent alone is not enough. 25.40 and
+25.50 steps per octave are not a musical number at all.
+
+> The note table was identified because **its contents matched a formula built
+> from a constant measured elsewhere**. The exponent only pointed at where to
+> look. These six have exponents and nothing to check them against, and that
+> is the difference between a lead and an identification — §247's `0x03AE92`
+> is in the table above for the same reason.
 

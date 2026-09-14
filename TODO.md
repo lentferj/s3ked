@@ -2344,6 +2344,19 @@ ROM decay table for attack", which does not depend on this.
 The eight-table inventory in §247 is the durable part and is reusable for any
 future "where does this curve live" question.
 
+**§250 (2026-09-14) closed one of the eight exactly** and failed on the rest.
+`0x024562` is 128 entries of `trunc(22050 * 2^((i-127)/12))` — one per MIDI
+note, verified 128/128 with `22050` taken a-priori from §142 rather than
+fitted. §247's scan had under-reported it as 109 entries from `0x024588`,
+the detector's tolerance clipping nineteen entries off the head where values
+of 14 and 15 make a log-slope meaningless — **the same clipping it did to the
+decay table, so it is a property of the scanner, not the image.**
+
+The other six resisted the identical treatment; three sit within 0.5 % of
+`ln(2)/6` but the exact-form test gives 4/74, 5/58 and 4/52, so the
+whole-tone reading is not supported. **An exponent is a lead; contents
+matching a constant measured elsewhere is an identification.**
+
 ## Is the modwheel pivoted at 64 like velocity, or unipolar? (CLOSED 2026-09-14 — §249: UNIPOLAR)
 
 **Status:** blocks the shape, not the numbers, of mpc2emu's modwheel → LFO
