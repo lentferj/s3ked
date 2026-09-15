@@ -441,6 +441,7 @@ silently wrong one.
 - [§253](#253--parameter-scales-how-to-measure-what-a-value-means-procedure-no-results-yet) — Parameter scales: how to measure what a value means (procedure, no results yet)
 - [§254](#254--two-more-firmware-tables-solved-exactly-and-the-tidy-constants-are-wrong-2026-09-15) — Two more firmware tables solved exactly, and the tidy constants are wrong (2026-09-15)
 - [§255](#255--mwldep-is-11-shown-by-a-plateau-rather-than-by-a-slope-2026-09-15) — `MWLDEP` is 1:1, shown by a plateau rather than by a slope (2026-09-15)
+- [§256](#256--the-50-rail-is-not-enforced-on-the-byte-offset-write-path-2026-09-15) — The ±50 rail is not enforced on the byte-offset write path (2026-09-15)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -25285,3 +25286,78 @@ linear to 0.57 units when the clamp is not in reach.
 Probe `~/temp/s3ked-logs/mwlmag.py`, analysis `~/temp/matrix/mwlfit.py`,
 captures `~/temp/matrix/mwlmag.npz` with the sample rate stored in the file.
 RAM only; fourteen fields snapshotted, all restored and verified.
+
+## §256 — The ±50 rail is not enforced on the byte-offset write path (2026-09-15)
+
+mpc2emu's corpus scan over 64 images found the program pair `MODVAMP1`/`MODVAMP2`
+(92/93) hitting exactly `−50..+50` across 18,930 slots — 77 on the bound, none
+past it, the clamp signature — while the **keygroup** slot at `+155` ran
+`−116..+127` over 52,398 live slots with 80 beyond the rail. They read that as
+doubt about the *offset*, and asked for a panel resave-diff.
+
+**It is not the offset. The machine does not enforce the rail on this path.**
+
+```
+   keygroup offsets 151..155, raw byte written, byte read back
+
+     151  MODVFILT1    90 ->  90      166 -> 166  (−90)
+     152  MODVFILT2    90 ->  90      166 -> 166
+     153  MODVFILT3    90 ->  90      166 -> 166
+     154  MODVPITCH    90 ->  90      166 -> 166
+     155  MODVAMP3     90 ->  90      166 -> 166
+```
+
+**All five store verbatim.** And 90 at `+155` survives everything that might
+clamp it lazily:
+
+```
+   immediate read            90
+   after 2 s                 90
+   after a program change    90
+   after sounding the voice  90
+   get_parameter reports     90
+```
+
+### This contradicts §109 on the same offset, and both can stand
+
+§109 records, from mpc2emu's own bench work, that `MODVFILT1` is *"clamped to
+±50 by the machine: a write of 90 read back as 50"* — at keygroup 151, which
+above stores 90 verbatim.
+
+**The clamp is path-dependent.** §109 stands for whatever write path it used;
+the **byte-offset** write does not clamp. This project already has that shape
+recorded once: §13a found the delete-on-duplicate-name rule true of the
+whole-structure write and false of the byte-offset write s3ked actually uses.
+Two write paths, two behaviours, and the range is a property of the path rather
+than of the field.
+
+> **I cited §109 to mpc2emu an hour before this run as evidence that the rail
+> was real and the family uniform.** It was their measurement, correctly
+> quoted, and it does not support the conclusion I drew from it — because a
+> measurement of *one write path* says nothing about another. That is the same
+> transfer error as §249→§251's polarity question, which was declined precisely
+> because it was a transfer, and made here anyway inside the same day.
+
+### What it means for the corpus anomaly
+
+Out-of-range values in stored keygroups are **reachable**, so `−116..+127` at
+`+155` needs no offset error to explain it. It does not *prove* `+155` is
+`MODVAMP3` in a disk image — that is a different address space from the SysEx
+keygroup header and remains unchecked — but it removes the argument that the
+range alone convicts the offset.
+
+**The asymmetry between the program pair and the keygroup slot is now the
+interesting part**, not the keygroup slot's range: 18,930 program slots stayed
+inside the rail while 52,398 keygroup slots did not. If both are written by the
+same editor, they should behave alike.
+
+### And a note for this project's own writes
+
+`params.py`'s ranges are **client-side validation only**. The encoder refused
+`90` on these fields — which is why §109's experiment could not be reproduced
+through `set_parameter` at all and needed `set_header_bytes` — but the machine
+accepts whatever the byte path sends. **The range in the table is s3ked's
+promise, not the machine's.**
+
+Probe `~/temp/s3ked-logs/modvamp3b.py` and `modvamp3c.py`. RAM only, five bytes
+of one keygroup, restored and verified after every single write.

@@ -2478,3 +2478,30 @@ consistent with a 1:1 rule and is **not** grounds for adopting one. Three
 minutes on the rig with a smaller `MODVFILT1`.
 
 **Blocked on:** nothing for (1) and (2). (3) needs the rig, RAM only.
+
+## The ±50 rail is path-dependent, and §109 needs its path named (OPEN 2026-09-15 — §256)
+
+**Status:** raw byte writes of 90 and 166 to keygroup offsets 151–155 all store
+**verbatim**, and 90 at `+155` survives two seconds, a program change and
+sounding the voice. The machine does not enforce ±50 on the byte-offset path.
+
+§109 records the opposite at the same offset — `MODVFILT1` *"clamped to ±50 by
+the machine: a write of 90 read back as 50"*. Both can stand: the clamp is a
+property of the **write path**, exactly as §13a found for the
+delete-on-duplicate-name rule.
+
+**To close this:** §109's entry does not say which opcode it used. Ask mpc2emu,
+who measured it, and record the path in §109 — a measurement of one write path
+is not a measurement of the field.
+
+**Also open, and mpc2emu's to answer:** their corpus shows 18,930 *program*
+slots (`MODVAMP1`/`2`, offsets 92/93) staying inside the rail while 52,398
+*keygroup* slots at `+155` do not. If one editor wrote both, they should behave
+alike; the asymmetry is now the interesting part rather than the keygroup
+range, which §256 shows needs no offset error to explain.
+
+**Consequence for this project:** `params.py` ranges are **client-side
+validation only**. The encoder refuses out-of-range values — which is why §109's
+experiment cannot be reproduced through `set_parameter` — but the machine
+accepts whatever `set_header_bytes` sends. The range in the table is s3ked's
+promise, not the machine's, and any doc wording implying otherwise is wrong.
