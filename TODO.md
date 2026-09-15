@@ -2357,6 +2357,26 @@ The other six resisted the identical treatment; three sit within 0.5 % of
 whole-tone reading is not supported. **An exponent is a lead; contents
 matching a constant measured elsewhere is an identification.**
 
+**Updated 2026-09-15 — §254 closes two more, by solving for the anchor instead
+of guessing it.** The "4/74, 5/58, 4/52" above was the *search*, not the data:
+`A` was taken from a short list. Solved as an interval intersection, two tables
+fit exactly, and §247's extents turn out to have been the obstacle:
+
+```
+   §247 said                     actually
+   0x03B2B0  214    ->   0x03B25C  256 entries  round, A = 31.999173, 25.49997 st/oct
+   0x03B58E   74    ->   0x03B55C   99 entries  round, A =  1.615276,  6.02061 st/oct
+```
+
+**The tidy constants fail** — `A = 32` at exactly 25.5 gives 231/256, and
+`A = 2` at exactly 6.0 gives 4/93. Both are so nearly round that the tidy
+version writes itself, and this section's first draft did write it.
+
+**Still open:** four tables with no form at all (`0x03ABEA`, `0x03AE92`,
+`0x03D050`, `0x03D0D4`), and the *meaning* of the two just solved — a form is
+not an identification, since neither carries a constant measured elsewhere the
+way §250's `22050` did.
+
 ## Is the modwheel pivoted at 64 like velocity, or unipolar? (CLOSED 2026-09-14 — §249: UNIPOLAR)
 
 **Status:** blocks the shape, not the numbers, of mpc2emu's modwheel → LFO

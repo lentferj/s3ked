@@ -439,6 +439,7 @@ silently wrong one.
 - [§251](#251--modvlvol-is-unipolar-too-and-there-is-a-dedicated-mwldep-nobody-was-using-2026-09-14) — `MODVLVOL` is unipolar too, and there is a dedicated `MWLDEP` nobody was using (2026-09-14)
 - [§252](#252--mwldepprsdep-are-two-of-a-contiguous-trio-and-six-dedicated-paths-exist-2026-09-15) — `MWLDEP`/`PRSDEP` are two of a contiguous trio, and six dedicated paths exist (2026-09-15)
 - [§253](#253--parameter-scales-how-to-measure-what-a-value-means-procedure-no-results-yet) — Parameter scales: how to measure what a value means (procedure, no results yet)
+- [§254](#254--two-more-firmware-tables-solved-exactly-and-the-tidy-constants-are-wrong-2026-09-15) — Two more firmware tables solved exactly, and the tidy constants are wrong (2026-09-15)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -25059,3 +25060,94 @@ three classes fall out.
 
 Scanner kept at `~/temp/s3ked-logs/ded2.py`.
 
+## §254 — Two more firmware tables solved exactly, and the tidy constants are wrong (2026-09-15)
+
+§247 left six tables unidentified and §250 recorded that the exact-form test
+failed on all of them. **That test was guessing the anchor `A` from a short
+list.** Solving for it instead closes two more, and the two solved constants
+are emphatically not round numbers.
+
+### The method: solve, do not search
+
+If `s[i] == round(A·rⁱ)` for every `i`, then each entry pins `A` to an interval:
+
+```
+   round:  A ∈ [ (s[i]−½)/rⁱ , (s[i]+½)/rⁱ )
+   floor:  A ∈ [  s[i]   /rⁱ , (s[i]+1)/rⁱ )
+```
+
+The form fits a given `r` **iff the intersection over all `i` is non-empty**, and
+emptiness is a proof of non-fit rather than a failed search. Sweep `r`; `A` is
+never searched at all.
+
+**Control: it rediscovers §250's note table** — `r` collapses to 12.0000
+steps/octave and `A` to `[14.3716, 14.3718]`, which is `22050/2^(127/12)`. A
+solver that could not re-derive a table already proved would not be worth
+pointing at the others.
+
+### The extents were the problem, not the tables
+
+The first run reported "no fit" for seven of eight — **including §242's decay
+table**, which is known to be a clean geometric series. An exact interval solve
+fails if even one entry lies outside the table, so §247's tolerance-derived
+extents guaranteed it. §250 had already found that detector clipping nineteen
+entries off the note table's head.
+
+Re-derived by growing outward from a high-valued core while the model predicts
+each neighbour exactly, the extent becomes an output:
+
+```
+   §247 said                        actually
+   0x03B2B0  214 entries    ->   0x03B25C  256 entries   round,  32 .. 32767
+   0x03B58E   74 entries    ->   0x03B55C   99 entries   round,   1 .. 64304
+```
+
+### The two solved forms
+
+```
+   0x03B25C   256/256 exact   A = 31.999173   25.49997 steps/octave
+   0x03B55C    93/93  exact   A =  1.615276    6.02061 steps/octave
+```
+
+`0x03B55C`'s first six entries are `1`, where `round(A·rⁱ) == 1` over a long
+stretch and the model is unconstrained — those are not evidence of extent and
+are excluded from the count.
+
+### **The tidy constants fail, and that is the finding**
+
+`A = 31.999173` at `25.49997` steps/octave is so nearly `32` at exactly `25.5`
+that the tidy version writes itself. It is wrong:
+
+```
+   solved  A = 31.999173, 25.49997 st/oct    256/256
+   tidied  A = 32,        25.5     st/oct    231/256
+
+   solved  A =  1.615276,  6.02061 st/oct     93/93
+   tidied  A =  2,          6.0     st/oct      4/93
+```
+
+> **This section's first draft claimed the tidy form.** It substituted `32` for
+> the solved `31.999173` and "exactly ten octaves" for `25.49997`, and only a
+> verification pass caught the twenty-five missing entries. §166 records the
+> same fault — §108 reasoned from a round number to a designed limit and the
+> hardware refused — and it was committed here again **within an hour of
+> restating the rule**. The moment after being right about the method is when
+> the tidy constant gets written down.
+
+Near-round constants that are not round are what a table **generated** from
+computed quantities looks like, rather than typed. What generated them is not
+established here.
+
+### These are better leads, not identifications
+
+**A form is not an identification.** §250's note table was identified because
+`22050` came from §142 — a constant measured elsewhere, not fitted. These two
+have exact forms and no external constant, so their *meaning* remains open:
+`0x03B25C` is byte-indexed (256 entries, `32..32767`, ten octaves) and
+`0x03B55C` has 99 entries, which is the shape of a `0..99` parameter.
+
+Four of §247's eight now remain without a form at all: `0x03ABEA`, `0x03AE92`
+(§247's attack candidate, which fits over only 57 of its entries), `0x03D050`
+and `0x03D0D4`.
+
+Solver at `~/temp/s3ked-logs/solveC.py`, verification at `verify2.py`.
