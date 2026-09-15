@@ -25151,3 +25151,44 @@ Four of §247's eight now remain without a form at all: `0x03ABEA`, `0x03AE92`
 and `0x03D0D4`.
 
 Solver at `~/temp/s3ked-logs/solveC.py`, verification at `verify2.py`.
+
+### The four that remain, and two hypotheses that died (2026-09-15, 03:06)
+
+**Read before fitting**, which is the only reason anything was learned:
+
+```
+   0x03D054   56 entries   58 .. 31250    k = 0.114750   6.0405 steps/octave
+   0x03D0D8   52 entries   58 .. 16650    k = 0.113017   6.1331 steps/octave
+```
+
+**They begin on the same value and diverge.** Element-wise, the ratio runs
+`1.0000` at index 0, wobbles around `1.004` through the middle — rounding noise
+— and then climbs smoothly to `1.2264` by index 51. Their exponents differ by
+**1.53 %**. So they are two exponential laws sharing a start, not one table and
+a variant of it, and whatever distinguishes them is a 1.5 % change in rate.
+
+Two hypotheses tested and neither survives:
+
+- **Significant-figure rounding.** The digits of `0x03D054` look rounded to
+  three or four figures (`1048, 1176, 1320, 1481 … 25350, 28180, 31250`), which
+  would defeat `round(A·rⁱ)` by construction and explain §254's failure. Best
+  score `22/56`. **Unsupported.**
+- **`0x03ABEA` is the solved `0x03B25C` at an index offset.** Both end exactly
+  at `32767` and both sit near 25.5 steps/octave. No offset in 0..79 reproduces
+  it. **Refuted.**
+
+> **The first control on the sig-fig test was the identity function.** It
+> compared the table against `sorted(permutation(seg))` — and the table is
+> monotone increasing, so that expression returns the input unchanged. It
+> "controlled" by scoring the same data twice and reported the same number,
+> which read as *"the family is too flexible"* when it actually meant nothing
+> at all.
+>
+> That is a **new kind** in this project's collection: not an instrument
+> measuring its own construction, but a control with **no content** — one whose
+> output cannot differ from the thing it checks. It is harder to spot than a
+> loose detector, because a loose detector at least disagrees with something
+> sometimes.
+
+Four tables still have no form: `0x03ABEA`, `0x03AE92`, `0x03D054`, `0x03D0D8`.
+
