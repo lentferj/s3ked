@@ -25421,3 +25421,63 @@ been checked to agree at 151..155. The decisive test needs no disk write —
 **read one real program's keygroup header over SysEx and diff it against the
 same program in the image corpus.** That needs a load and a program present in
 both, not a resave.
+
+### Both arguments above are withdrawn (2026-09-15)
+
+**Mine first.** *"`+155`'s rail is at 127"* is **refuted**, by a test that costs
+one query: a `0..127` field cannot set the high bit, and across the four
+`HIVEL` fields — 209,592 slots, the same keygroups — **0.00 %** do. Offset
+`+155` sets it on **0.49 %** (257 slots). So `+155` is **signed**, which is what
+`MODVAMP3` should be, and it is not a limit field. The geometry refuses it too:
+the velocity zones sit on a 24-byte stride so `HIVEL` lands at 47/71/95/119 and
+a fifth would be **143**, not 155.
+
+**And mpc2emu's shape argument fell to a caveat I wrote and neither of us
+tested.** §256 recorded that *"the rail-pile rate is a usage statistic, not a
+field property"*. Across the eight **program-level** mod amounts:
+
+```
+   MODVPAN1   1,375 non-zero   37.67 % on the rail
+   MODVPAN3      72            18.06 %
+   MODVAMP1     954             8.07 %
+   MODVLVOL     422             5.92 %
+   MODVLFOR     619             3.88 %
+   MODVPAN2   4,345             2.16 %
+   MODVAMP2     392             0.00 %
+   MODVLFOD      23             0.00 %
+```
+
+**`MODVAMP2` is a loudness mod amount whose identity is not in question, with
+392 non-zero values and not one on the rail** — which is `+155`'s behaviour
+exactly. The `4.90–16.69 %` band was an accident of picking four neighbours;
+against the real spread, `0.73 %` is unremarkable. **The 6.4 sd interval above
+was computed against a population that is not one**, and so was mpc2emu's 7×.
+
+> The caveat was written down, agreed to in writing by both of us, and then
+> left untested for two more exchanges while arguments were built on top of it.
+> **Testing it took one query.** That is worse than not having thought of it.
+
+A vendor explanation was tried and rejected as well: excluding all 17 volumes
+contributing an out-of-rail value leaves the rate at 0.45 %, essentially
+unchanged.
+
+**And the provenance was mis-stated to this project.** `151..155` were reported
+as carrying none; mpc2emu's own `AKAI_S3000_FORMAT.md` records them as
+**transcribed from Akai's parameter document**. A sourced offset was attacked
+for two rounds as an unsourced one.
+
+**Nothing convicts the offset.** What remains is consistent with `+155` being
+`MODVAMP3` — the rarest of the five at 2.1 % non-zero, with a few out-of-rail
+stragglers that §256's byte-path result already explains. The SysEx keygroup
+diff is **not needed** and was not run.
+
+### What stands
+
+**The ±50 rail is a panel rail**, confirmed by material piling on the bound at
+six fields, and **a reader must clamp rather than assume** — §256's byte-path
+writes go straight past it.
+
+> **A pile is evidence the rail is there; a missing pile is evidence of
+> nothing.** (mpc2emu's, from their own wreck.) The asymmetry is the whole
+> lesson: the presence of material on a bound identifies a clamp, and its
+> absence identifies only that nobody drove that parameter to its limit.

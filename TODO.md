@@ -2494,11 +2494,19 @@ delete-on-duplicate-name rule.
 who measured it, and record the path in §109 — a measurement of one write path
 is not a measurement of the field.
 
-**Also open, and mpc2emu's to answer:** their corpus shows 18,930 *program*
-slots (`MODVAMP1`/`2`, offsets 92/93) staying inside the rail while 52,398
-*keygroup* slots at `+155` do not. If one editor wrote both, they should behave
-alike; the asymmetry is now the interesting part rather than the keygroup
-range, which §256 shows needs no offset error to explain.
+**CLOSED 2026-09-15: nothing convicts the offset.** Both arguments against
+`+155` fell. mpc2emu's shape comparison died to a caveat this project wrote and
+neither side tested — `MODVAMP2` is a loudness mod amount of unquestioned
+identity with 392 non-zero values and **0.00 %** on the rail, so a missing pile
+means nothing. This project's counter-hypothesis (that `+155`'s rail sits at
+127, making it a `HIVEL`-like limit field) died to the high-bit test: a
+`0..127` field cannot set bit 7 and the four `HIVEL` fields never do across
+209,592 slots, while `+155` does on 0.49 %. It is signed, as `MODVAMP3` should
+be, and the 24-byte zone stride would put a fifth `HIVEL` at 143 anyway.
+
+`+155` is consistent with `MODVAMP3`, transcribed from Akai's own document —
+mpc2emu had mis-stated it as unsourced, which is how it came to be attacked
+twice. The SysEx keygroup diff was offered and is **not needed**.
 
 **Consequence for this project:** `params.py` ranges are **client-side
 validation only**. The encoder refuses out-of-range values — which is why §109's
