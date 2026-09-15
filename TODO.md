@@ -2463,8 +2463,16 @@ since 94.8 % of programs carry the value that broke it.
 leg B *was* that experiment. `B(wheel 0)/A(wheel 0) = 0.9998` where adding
 predicts 1.000 and scaling 0.495: **`MWLDEP` adds.**
 
-**(3) is now the only open part, and it is the one a converter needs**: the
-magnitude. The clipped ladder gives a **lower bound** of 0.476 `LFODEP` units
+**(3) CLOSED 2026-09-15 by §255: `MWLDEP` is 1:1.**
+`depth = min(99, LFODEP + MWLDEP · wheel/127)`. Leg A gives 0.9802 units per
+`MWLDEP` unit with headroom; **the 1:1 is carried by leg B's plateau**, where
+wheel 96 and 127 read identically at 95.3 because the sum clamps at 99. A 0.5
+rule predicts a final 95 — the *values* nearly agree and only the *shape*
+separates them. §251's own explanation of its compression was refuted by its
+own numbers and the cause was the instrument, not the corner clipping.
+
+~~**(3) is the only open part, and it is the one a converter needs**: the
+magnitude.~~ The clipped ladder gives a **lower bound** of 0.476 `LFODEP` units
 per `MWLDEP` unit; the least-clipped rung extrapolates to ~0.86, which is
 consistent with a 1:1 rule and is **not** grounds for adopting one. Three
 minutes on the rig with a smaller `MODVFILT1`.

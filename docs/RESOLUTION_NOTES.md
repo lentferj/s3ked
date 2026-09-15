@@ -440,6 +440,7 @@ silently wrong one.
 - [§252](#252--mwldepprsdep-are-two-of-a-contiguous-trio-and-six-dedicated-paths-exist-2026-09-15) — `MWLDEP`/`PRSDEP` are two of a contiguous trio, and six dedicated paths exist (2026-09-15)
 - [§253](#253--parameter-scales-how-to-measure-what-a-value-means-procedure-no-results-yet) — Parameter scales: how to measure what a value means (procedure, no results yet)
 - [§254](#254--two-more-firmware-tables-solved-exactly-and-the-tidy-constants-are-wrong-2026-09-15) — Two more firmware tables solved exactly, and the tidy constants are wrong (2026-09-15)
+- [§255](#255--mwldep-is-11-shown-by-a-plateau-rather-than-by-a-slope-2026-09-15) — `MWLDEP` is 1:1, shown by a plateau rather than by a slope (2026-09-15)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -24893,9 +24894,16 @@ And the **sensitivity agrees as well as the polarity does:**
 > **Named assumption:** that figure takes the wobble to be proportional to
 > `LFODEP`. Leg B is visibly compressive (1.216 → 1.475 while the wheel goes
 > 32 → 127), so the wobble-to-depth map is **not** globally linear and 1.956 is
-> a local slope near `LFODEP` 50. Leg B's compression is most likely the corner
-> hitting `FILFRQ` 99 at the top of its swing — leg C moves *away* from that
-> ceiling, which is why leg C's magnitude is usable and leg B's is not.
+> a local slope near `LFODEP` 50.
+>
+> **Corrected by §255 (2026-09-15).** This section blamed that compression on
+> the corner clipping at `FILFRQ` 99. **Both mechanisms it offered are refuted
+> by its own numbers** — the excursion was `60 ± 8.3`, nowhere near 99, and an
+> `LFODEP` clamp would have shown `1.98×` rather than the measured `1.475×`.
+> The compression was **the instrument**: the log-centroid proxy carries the
+> LFO-off floor as an offset, which reads as 16 % compression through the
+> origin and calibrates out to 2.2 % as an affine fit. §255 calibrates it
+> before asking the machine anything, and the magnitude comes out **1:1**.
 
 ### For a converter, this is the headline
 
@@ -25192,3 +25200,88 @@ Two hypotheses tested and neither survives:
 
 Four tables still have no form: `0x03ABEA`, `0x03AE92`, `0x03D054`, `0x03D0D8`.
 
+## §255 — `MWLDEP` is 1:1, shown by a plateau rather than by a slope (2026-09-15)
+
+§251 left `MWLDEP`'s magnitude as a lower bound of `0.476` `LFODEP` units per
+`MWLDEP` unit, with `~0.86` extrapolated from the least-clipped rung, and
+recorded explicitly that **`0.86` being consistent with a clean 1:1 rule was not
+a reason to adopt one**. Jan asked for the run; mpc2emu had the lead.
+
+**It is 1:1. `depth = min(99, LFODEP + MWLDEP · wheel/127)`.**
+
+### §251's explanation of its own compression was wrong
+
+§251 blamed leg B's compression on the corner clipping at `FILFRQ` 99. Checked
+against §251's own numbers — which is the §188 rule and cost nothing:
+
+```
+   excursion at baseline      60 ± 8.3    ->  51.7 .. 68.3
+   at leg B's full wheel      60 ± 12.2   ->  47.8 .. 72.2
+```
+
+**Nowhere near 99.** An `LFODEP` clamp does not fit either: 1:1 would have taken
+`LFODEP` 50 to 100, clamped at 99, showing `1.98×` baseline, and the measurement
+was `1.475×`. **Both mechanisms §251 offered are refuted by §251's own data.**
+
+The remaining suspect was the instrument, so this run calibrated it first.
+
+### Leg 0 — the instrument, before anything is asked of the machine
+
+`LFODEP` laddered with the wheel out of the experiment entirely:
+
+```
+   wobble = 0.015286 · LFODEP + 0.05141      max residual 2.2 % of full scale
+```
+
+The intercept is the LFO-off floor (`0.059`) leaking into the estimate. Taken
+as a ratio through the origin the response looks 16 % compressive, which is
+what §251 saw and misattributed; **as an affine calibration it is good to
+2.2 %**, and every number below is read through its inverse.
+
+### Leg A — the magnitude, with headroom
+
+`LFODEP 30`, `MWLDEP 50`, so 1:1 reaches 80 and never touches the clamp:
+
+```
+   wheel     0    32    64    96   127
+   LFODEP  30.5  43.2  56.1  68.3  79.3
+
+   fit: LFODEP = 0.38590 · wheel + 30.86      max residual 0.57 units
+   full-wheel rise 49.01 for MWLDEP 50   ->   0.9802 units per MWLDEP unit
+```
+
+### Leg B — the §166 plateau test, which is what actually settles it
+
+`LFODEP 70`, `MWLDEP 50`. 1:1 predicts `120`, clamped at 99, so the ladder
+**must flatten**. A rule near 0.5 reaches 95 and must stay straight.
+
+```
+   rise over wheel-0        +0.0  +11.1  +19.3  +22.6  +22.6
+   1:1 with clamp at 99     +0.0  +12.6  +25.2  +26.3  +26.3
+   0.5x, no clamp           +0.0   +6.3  +12.6  +18.9  +25.0
+```
+
+**Wheel 96 and 127 read identically — 95.3 and 95.3.** No linear rule can put
+two equal points at the top of a ladder, and leg A shows the same wheel range is
+linear to 0.57 units when the clamp is not in reach.
+
+> **The endpoint alone would not have settled it.** A 0.5 rule predicts a final
+> `95`, and the plateau sits at `95.3` — the *values* agree almost exactly. Only
+> the **shape** separates them. §166's line is the whole of why this run was
+> designed with two `LFODEP` bases instead of one: *a designed limit shows up as
+> a plateau in the hardware, not as a tidy figure in a document.*
+
+### For a converter
+
+```
+   read :  wheel-down depth = LFODEP
+           wheel-up   depth = min(99, LFODEP + MWLDEP)
+   write:  LFODEP = D·(1 − Kw)      MWLDEP = D·Kw      (clamp the sum at 99)
+```
+
+`0.9802` against a true `1.0` is 2 %, which is the calibration's own accuracy —
+**the 1:1 is carried by leg B's plateau, not by leg A's third digit.**
+
+Probe `~/temp/s3ked-logs/mwlmag.py`, analysis `~/temp/matrix/mwlfit.py`,
+captures `~/temp/matrix/mwlmag.npz` with the sample rate stored in the file.
+RAM only; fourteen fields snapshotted, all restored and verified.
