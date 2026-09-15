@@ -25361,3 +25361,63 @@ promise, not the machine's.**
 
 Probe `~/temp/s3ked-logs/modvamp3b.py` and `modvamp3c.py`. RAM only, five bytes
 of one keygroup, restored and verified after every single write.
+
+### The shape comparison, and what it actually says (2026-09-15)
+
+mpc2emu withdrew the range argument and replaced it with a **shape** one, using
+four controls that share `+155`'s address space, editor and clamp. Same 64
+images, 52,398 keygroups the parser reads:
+
+```
+   off  field        non-zero   at ±50   rail-pile rate
+   151  MODVFILT1      32,432     1,590     4.90 %
+   152  MODVFILT2      14,910       928     6.22 %
+   153  MODVFILT3      24,663     3,259    13.21 %
+   154  MODVPITCH       2,888       482    16.69 %
+   155  ?               1,102         8     0.73 %
+```
+
+**That confirms the ±50 rail on six fields rather than two** — 151–154 all carry
+the pile-up signature, so the family is uniform. It is a **panel** rail, not a
+stored-value invariant: §256 shows the byte path writing straight past it, which
+is why every field has stragglers.
+
+On the odd one out, at `+155`'s own n the controls' band predicts 54–184 slots
+on the rail against 8 observed — **6.4 sd below even the weakest control**, and
+155 sits further from that control than the four controls sit from each other
+(6.8× against 3.4×).
+
+> **But the rate is a usage statistic, not a field property.** The four controls
+> differ 3.4× among themselves purely in how often a player pushes *that*
+> parameter to its limit, and a fifth field can be low for musical reasons. The
+> count alone is suggestive.
+
+### The stronger reading is in the same numbers: `+155` piles somewhere else
+
+```
+   +155's own mass          value  127 :  42 slots = 3.81 % of non-zero
+                            value -116 :  14        = 1.27 %
+                            value   60 :  16        = 1.45 %
+
+   siblings at their rail   4.90 % .. 16.69 %
+```
+
+**`3.81 %` at `+127` is the same order as `4.90 %` at `±50`.** So the finding is
+not *"`+155` has no rail"* — it is ***"`+155`'s rail is at 127"***. A field
+piling at its own bound is the signature the siblings show; `+155` shows it too,
+at a different bound. That is a positive identification of a *kind* of field
+rather than a failure to match one.
+
+**Candidate class, from this project's own keygroup layout:** the fields that
+naturally pile at 127 are range upper limits — `HINOTE` (4, `21..127`) and
+`HIVEL1..4` (47/71/95/119, `0..127`) — because a top zone's upper limit *is* 127
+in ordinary material. And `−116` read unsigned is `140`, which no `0..127` field
+reaches but every `0..255` one does (`LVXF`/`HVXF` crossfade factors, `KGMUTE`
+at 160).
+
+**None of this identifies the byte**, and the address-space gap is still
+unclosed: a disk image's keygroup block and the SysEx keygroup header have never
+been checked to agree at 151..155. The decisive test needs no disk write —
+**read one real program's keygroup header over SysEx and diff it against the
+same program in the image corpus.** That needs a load and a program present in
+both, not a resave.
