@@ -2490,9 +2490,14 @@ the machine: a write of 90 read back as 50"*. Both can stand: the clamp is a
 property of the **write path**, exactly as §13a found for the
 delete-on-duplicate-name rule.
 
-**To close this:** §109's entry does not say which opcode it used. Ask mpc2emu,
-who measured it, and record the path in §109 — a measurement of one write path
-is not a measurement of the field.
+**CLOSED 2026-09-15: there was no opcode.** mpc2emu has no AKAI
+parameter-SysEx path at all — every AKAI measurement of theirs goes through a
+generated disk image, loaded by Jan, played and captured. So §109 was
+`disk image → load → panel read` and §256 is `byte-offset SysEx write →
+read back`. **The clamp lives on the load/panel path and is absent from the
+byte path**, which is §13a's shape for the third time on this family. Both
+sections were always right about different things, and the path is now recorded
+in §109 beside the measurement.
 
 **CLOSED 2026-09-15: nothing convicts the offset.** Both arguments against
 `+155` fell. mpc2emu's shape comparison died to a caveat this project wrote and

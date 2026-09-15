@@ -9782,6 +9782,28 @@ FILFRQ 48   byte151  0  ->  v30 -68.7 dBFS   v120 -45.2
   the base already sits near open. Worth knowing before treating it as a
   brightness control.
 
+### The write path, recorded 2026-09-15 — and it is not a SysEx one
+
+§256 found the same offset storing 90 and 166 **verbatim** over a byte-offset
+SysEx write, which read as a conflict with the clamp above until the path was
+named. It is not a conflict: **mpc2emu has no AKAI parameter-SysEx path at
+all.** Every AKAI measurement of theirs goes through a generated disk image —
+built by `tests/re_banks/gen_akai_*_disc.py`, loaded by Jan, played and
+captured. So this measurement was:
+
+```
+   §109   disk image -> load -> panel read       90 clamps to 50
+   §256   byte-offset SysEx write -> read back   90 and 166 verbatim
+```
+
+**The clamp is enforced on the disk-load/panel path and absent from the byte
+path** — §13a's shape again, and the third time this family of machines has
+split behaviour by write path rather than by field.
+
+> Recorded here because the section above read as a property of `MODVFILT1` for
+> a month, and was cited as one by both projects — including by this one, to
+> mpc2emu, as evidence about a field it says nothing about.
+
 ### The route is not part of the finding
 
 Byte 151 is `MODVFILT1`, *"amount of control of filter frequency by
@@ -25325,7 +25347,19 @@ clamp it lazily:
 above stores 90 verbatim.
 
 **The clamp is path-dependent.** §109 stands for whatever write path it used;
-the **byte-offset** write does not clamp. This project already has that shape
+the **byte-offset** write does not clamp.
+**Path named 2026-09-15, and the conflict dissolves.** §109 used **no opcode at
+all**: mpc2emu has no AKAI parameter-SysEx path, so that measurement went disk
+image → load → panel read. The clamp lives on the **load/panel** path and is
+absent from the **byte** path. Both measurements were always right about
+different things.
+
+**What that means for this project specifically:** s3ked writes exclusively
+through the byte path, so **s3ked can put values into RAM that the panel would
+refuse**. `params.py`'s ranges are the only guard, and they are client-side.
+Whether such a value survives a save-and-reload — §109 implies it would be
+clamped on load — is **untested here and stays untested**, because testing it
+needs a write to the sampler's disk. This project already has that shape
 recorded once: §13a found the delete-on-duplicate-name rule true of the
 whole-structure write and false of the byte-offset write s3ked actually uses.
 Two write paths, two behaviours, and the range is a property of the path rather
