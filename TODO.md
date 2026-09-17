@@ -2518,3 +2518,28 @@ validation only**. The encoder refuses out-of-range values — which is why §10
 experiment cannot be reproduced through `set_parameter` — but the machine
 accepts whatever `set_header_bytes` sends. The range in the table is s3ked's
 promise, not the machine's, and any doc wording implying otherwise is wrong.
+
+## LFO2's rate law, and `MODVPAN1`'s depth law (CLOSED 2026-09-17 — §257)
+
+**Status: measured, both.** mpc2emu asked for a pan-depth calibration after
+their E4XT conversion swung 39.21 dB where the MPC original had 5.11.
+
+**Rate:** `rate = 0.11840 · PANRAT + 0.0108 Hz`, fitted over six rungs. That is
+**LFO1's law to 0.1 %** and **half** the 0.23708 Hz/unit mpc2emu's writer uses
+— so every program it has emitted sweeps its pan at twice the intended rate.
+Their source comment records replacing LFO1's law with a doubled one and
+checking it against a note; **the correction went the wrong way.** §255's LFO1
+figure cross-checks it to 1.3 %: the two LFOs share one rate law.
+
+**Depth:** ~**1.0 dB peak-to-peak per `MODVPAN1` unit** at the low end, rising
+to 1.26 dB/unit by byte 20. Not linear, not interpolatable. Null taken twice
+(first and last) at exactly 0.00 dB with a 0.000 off-LFO floor, on a mono
+source with L−R correlation +1.0000.
+
+**Saturation shows in the residual, not the swing:** off-LFO rms 0.167 → 0.482
+→ 2.522 → 24.317 dB at bytes 2, 6, 20, 50. Byte 50's `166.68 dB` is a near-zero
+denominator, not a measurement.
+
+**Open, and mpc2emu's:** whether their writer's fraction-of-rail convention
+(`round(depth × 50)`) is replaced by something anchored on these numbers. A
+source wanting 5.11 dB needs `MODVPAN1 ≈ 5`; the writer emits 32.

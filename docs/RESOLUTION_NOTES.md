@@ -442,6 +442,7 @@ silently wrong one.
 - [§254](#254--two-more-firmware-tables-solved-exactly-and-the-tidy-constants-are-wrong-2026-09-15) — Two more firmware tables solved exactly, and the tidy constants are wrong (2026-09-15)
 - [§255](#255--mwldep-is-11-shown-by-a-plateau-rather-than-by-a-slope-2026-09-15) — `MWLDEP` is 1:1, shown by a plateau rather than by a slope (2026-09-15)
 - [§256](#256--the-50-rail-is-not-enforced-on-the-byte-offset-write-path-2026-09-15) — The ±50 rail is not enforced on the byte-offset write path (2026-09-15)
+- [§257](#257--lfo2s-rate-law-is-lfo1s-and-modvpan1-is-1-db-per-unit-2026-09-17) — LFO2's rate law is LFO1's, and `MODVPAN1` is ~1 dB per unit (2026-09-17)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -25515,3 +25516,98 @@ writes go straight past it.
 > nothing.** (mpc2emu's, from their own wreck.) The asymmetry is the whole
 > lesson: the presence of material on a bound identifies a clamp, and its
 > absence identifies only that nobody drove that parameter to its limit.
+
+## §257 — LFO2's rate law is LFO1's, and `MODVPAN1` is ~1 dB per unit (2026-09-17)
+
+mpc2emu asked for a pan-depth calibration after their E4XT conversion measured
+**39.21 dB** of L/R swing where the MPC original had **5.11**. Their AKAI writer
+carries the same unmeasured convention — `p[0x59] = round(depth * 50)` — so the
+Akai side had nothing behind it either. Two findings; the first was not asked
+for.
+
+### The rate law: their writer sweeps every converted pan at twice the rate
+
+Their source comments:
+
+> **THE RATE IS LFO2's LAW, NOT LFO1's.** `PANRAT` is 0.23708 Hz/unit, twice
+> LFO1's, reaching 23.47 Hz at 99. Using LFO1's law here puts the sweep at half
+> speed and looks plausible while doing it — which is exactly the mistake made
+> while writing this, caught against the note at :1536.
+
+Measured over a `PANRAT` ladder, `MODVPAN1` held at 6 so the balance is not
+saturated:
+
+```
+   PANRAT   measured Hz   0.23708*n   ratio
+        1        0.1378      0.2371   0.581
+        2        0.2312      0.4742   0.488
+        5        0.6027      1.1854   0.508
+       10        1.2090      2.3708   0.510
+       20        2.3727      4.7416   0.500
+       40        4.7470      9.4832   0.501
+
+   fit:  rate = 0.11840 * PANRAT + 0.0108 Hz
+         -50.1 % against their law;  -0.1 % against LFO1's 0.11854
+```
+
+**Five of six rungs land on exactly 0.50.** `PANRAT` 1 reads 0.581 only because
+the `+0.0108 Hz` intercept is 8 % of it there — **which is why a single point
+could not have settled this**, and a single point near the bottom is the worst
+place to test a slope.
+
+Cross-check against this project's own LFO1 measurement: §255 had `LFORAT 30 →
+3.61 Hz` (0.1203/unit); the LFO2 fit predicts 3.563 Hz at 30, **1.3 % apart**.
+**The two LFOs share one rate law**, which is precisely what the comment denies.
+
+> The comment records a correction being applied — LFO1's law replaced by a
+> doubled one, checked against a note. **The correction went the wrong way**,
+> and the implementation it replaced was right. Fifth instance in this
+> collaboration of a correction introducing the next fault.
+
+### `MODVPAN1`: the depth law, and where it stops meaning anything
+
+`PRGNUM 0`, one keygroup, **mono source** — L−R correlation `+1.0000`, constant
+offset at rest, so the balance is purely the pan law and nothing else. Sustains
+25 s at −1.4 dB. `PANDEP 99`, `PANRAT 1`, `MODSPAN1 = 8` (LFO2) — which is what
+mpc2emu's writer emits, so only `MODVPAN1` moved.
+
+```
+   byte   p5..p95 dB   at-LFO pp dB   off-LFO rms
+      0         0.00           0.00        0.000     <- null
+      2         2.28           2.00        0.167
+      4         4.81           4.18        0.317
+      6         7.38           6.37        0.482
+     10        13.29          11.44        0.879
+     20        30.80          25.20        2.522
+     50       179.06         166.68       24.317     <- saturated
+      0         0.00           0.00        0.000     <- null, repeated
+```
+
+**Roughly 1.0 dB peak-to-peak per unit at the low end**, rising: 1.00, 1.045,
+1.062, 1.144, 1.26 dB/unit at bytes 2, 4, 6, 10, 20. **Not linear, and not
+interpolatable** — mpc2emu found the same on the E4XT, where three adjacent
+settings each repeatable to 0.01 dB gave steps of +0.64 then +1.75 dB.
+
+**The null is exactly 0.00, twice.** Taken first and last, so it brackets the
+run: no drift, and the off-LFO floor is `0.000` rather than the 0.3–0.5 dB their
+stereo pad carried. A mono source is worth more here than any amount of
+averaging.
+
+**Saturation is visible in the residual, not the swing.** Off-LFO rms runs
+0.167 → 0.482 → 2.522 → 24.317: at byte 20 it is already the same order as the
+2.76 dB mpc2emu called distorted on the E4XT, and at 50 the balance log blows up
+because one channel is effectively silent. **`166.68 dB` is not a measurement**;
+it is a near-zero denominator, and byte 50 maps the saturation rather than
+anchoring anything.
+
+### What it means for the converter
+
+A source asking for the MPC original's **5.11 dB** wants `MODVPAN1 ≈ 5`. Their
+writer emits `round(0.6398 × 50) = 32` for that same program — deep into the
+region where the residual says the law has stopped being a law. **The 8.3×
+error they measured on the E4XT has the same shape here**, and the fraction-of-
+rail convention is what produces it on both machines.
+
+Captures at `~/temp/matrix/pansweep.npz` and `panrate2.npz`, sample rate stored
+in each. Probes `~/temp/s3ked-logs/panverify.py`, `panrate2.py`, `pansweep.py`.
+RAM only; five fields snapshotted, all restored and verified.
