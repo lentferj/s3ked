@@ -25559,10 +25559,62 @@ Cross-check against this project's own LFO1 measurement: §255 had `LFORAT 30 �
 3.61 Hz` (0.1203/unit); the LFO2 fit predicts 3.563 Hz at 30, **1.3 % apart**.
 **The two LFOs share one rate law**, which is precisely what the comment denies.
 
-> The comment records a correction being applied — LFO1's law replaced by a
-> doubled one, checked against a note. **The correction went the wrong way**,
-> and the implementation it replaced was right. Fifth instance in this
-> collaboration of a correction introducing the next fault.
+> **CORRECTED the same evening, and the correction is mine.** The paragraph
+> above read a **stale comment** as if it were the code. mpc2emu's live
+> constant is `AKAI_LFO2_RATE_HZ_PER_UNIT = 0.11913`, in use since
+> **2026-09-06** — `0.6 %` from this fit, by two independent routes — and
+> `0.23708` appears in **no code path**, only in comments, now struck through.
+>
+> **The direction was inverted too.** `akai_lfo2_rate_byte` is
+> `round(hz / rate_per_unit)`: a *larger* divisor gives a *smaller* byte and a
+> *slower* sweep. Their own section on this is titled *"LFO2 does not run at
+> twice LFO1; **every AKAI pan program is at half rate**"* — so had the old law
+> ever been live it would have halved the rate, not doubled it.
+>
+> **This was §188's failure — read the report against its own numbers — with
+> the numbers one grep away.** The constant was in the file the comment
+> pointed at. Reading the comment instead of the constant is the same move as
+> citing §109 as a field property: taking a *description* of a measurement for
+> the measurement.
+>
+> It is also not another "a correction introduced the next fault", and the
+> distinction is mpc2emu's: **no correction was applied to working code.** The
+> constant was fixed in one file and its description left behind in another.
+> That is **drift**, which has a mechanism and therefore a guard, rather than a
+> bad judgement call.
+
+**What the measurement is worth, with the attribution removed:** a **third**
+independent arrival at LFO2's law. Their 09-06 figure came from nine points over
+`PANRAT` 10..99; this is six points over 1..40, through **pan** rather than
+through the filter, and it cross-checks §255's LFO1 measurement to 1.3 %. The
+three do not share a detector — which matters, because the refuted `0.23708`
+came from measuring LFO2 **through the filter**, where a bipolar sweep shows a
+magnitude detector *two* brightness excursions per cycle and "exactly twice
+LFO1" is the detector counting half-cycles.
+
+### A fourth stale comment, on the function itself
+
+Their new guard fails a build if a refuted *value* appears without a refutation
+marker within twelve lines. `models/common.py` still carries this, and the guard
+cannot see it:
+
+```
+   def akai_lfo2_rate_byte(hz: float) -> int:
+       """... LFO2 runs at twice the rate for the same byte and has no offset
+       term. Reaches 23.47 Hz at byte 99."""
+```
+
+**`23.47` is `0.23708 × 99`.** The live law gives `11.79`, which the writer's own
+comment states correctly twenty lines away. So the refuted claim survives *in
+prose and in a derived figure*, with the refuted constant nowhere in sight — on
+the docstring of the function that does the conversion, which is the worst place
+for it.
+
+> **A guard that greps for the refuted number cannot catch the refuted
+> consequence.** `0.23708` is searchable; "twice the rate" and `23.47` are the
+> same claim wearing different clothes. This is the vacuous-guard family again —
+> the check is real, it fires, and its scope sits one step to the side of the
+> failure.
 
 ### `MODVPAN1`: the depth law, and where it stops meaning anything
 

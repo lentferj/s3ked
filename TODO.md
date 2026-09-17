@@ -2524,12 +2524,19 @@ promise, not the machine's, and any doc wording implying otherwise is wrong.
 **Status: measured, both.** mpc2emu asked for a pan-depth calibration after
 their E4XT conversion swung 39.21 dB where the MPC original had 5.11.
 
-**Rate:** `rate = 0.11840 · PANRAT + 0.0108 Hz`, fitted over six rungs. That is
-**LFO1's law to 0.1 %** and **half** the 0.23708 Hz/unit mpc2emu's writer uses
-— so every program it has emitted sweeps its pan at twice the intended rate.
-Their source comment records replacing LFO1's law with a doubled one and
-checking it against a note; **the correction went the wrong way.** §255's LFO1
-figure cross-checks it to 1.3 %: the two LFOs share one rate law.
+**Rate:** `rate = 0.11840 · PANRAT + 0.0108 Hz`, fitted over six rungs, which
+is **LFO1's law to 0.1 %** — the two LFOs share one rate law, cross-checked
+against §255's LFO1 figure to 1.3 %.
+
+**Corrected the same evening:** this entry first said mpc2emu's writer emitted
+double-rate programs. **It does not.** Their live constant is `0.11913`, in use
+since 2026-09-06 and 0.6 % from this fit; `0.23708` survives only in comments.
+The direction was inverted as well — the conversion divides, so the old law
+would have *halved* the rate. **A stale comment was read as the code, with the
+constant one grep away** (§188's failure). This measurement's worth is as a
+**third independent arrival** at the same law, through pan rather than the
+filter, where the refuted figure came from a magnitude detector counting
+half-cycles of a bipolar sweep.
 
 **Depth:** ~**1.0 dB peak-to-peak per `MODVPAN1` unit** at the low end, rising
 to 1.26 dB/unit by byte 20. Not linear, not interpolatable. Null taken twice
