@@ -72,7 +72,9 @@ have no field to be wrong in.
 ## Four traps in the measuring half
 
 These belong here because a listener never has to think about them and a meter
-always does. All three were paid for on 2026-09-14, across three projects.
+always does. The first three were paid for on 2026-09-14 across three projects;
+the fourth on 2026-09-18, when a field measured correctly by two people on two
+subjects disagreed by 1.53x.
 
 ### 1. A detector's window must span a fixed number of **carrier cycles**
 
