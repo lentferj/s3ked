@@ -179,3 +179,28 @@ def test_start_resets_the_counters(monkeypatch):
         cap.xruns = 7; cap.overflows = 3
         cap.start()
         assert cap.xruns == 0 and cap.overflows == 0
+
+def test_the_earliest_failure_of_all_tears_down_without_masking_itself(monkeypatch):
+    """`jack.Client()` itself raising -- the server is not running.
+
+    `self.client` is never assigned, and `close()` still runs from the failure
+    path. If teardown touched an attribute that does not exist yet it would
+    raise an AttributeError *over* the real error, abandoning the client and
+    hiding the cause. k2kremote hit exactly this shape and guarded it; this
+    asserts the original exception survives intact.
+    """
+    fake = types.ModuleType("jack")
+
+    def _boom(name, no_start_server=False):
+        raise RuntimeError("server not running")
+
+    fake.Client = _boom
+    monkeypatch.setitem(sys.modules, "jack", fake)
+    sys.path.insert(0, "probes")
+    try:
+        mod = importlib.import_module("jcap")
+        importlib.reload(mod)
+    finally:
+        sys.path.pop(0)
+    with pytest.raises(RuntimeError, match="server not running"):
+        mod.Capture()

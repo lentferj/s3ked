@@ -33,6 +33,22 @@ They are counted now and :meth:`stop_channels` reports them.
 **The queue was unbounded.** A capture nobody drains grew until memory ran out,
 and the RT callback kept enqueueing regardless. It is bounded by a stated
 duration, and overflow is recorded rather than silently dropped.
+
+WHY THIS CLASS HIDES, from three siblings who each found it in their own rig
+on the same evening:
+
+* **An asymmetric teardown is harder to spot than none at all** (eosed). The
+  module they share registers an ``atexit`` hook for the MIDI port and none for
+  the recorder, so MIDI was released cleanly every single time while the audio
+  client leaked. *Nobody goes looking for a missing hook next to one that is
+  plainly present and working.*
+* **The error you will actually meet IS an ``Exception``** (k2kremote). Their
+  connect path raises ``JackErrorCode``, which ``except Exception`` catches
+  perfectly -- so the guard looks correct forever and fails only on the
+  timeout or the Ctrl-C, which is the case that matters.
+* **A shell ``timeout`` is not a deadline, it is the kill that leaks.** Fifteen
+  scripts and about forty captures ran under one that evening; the in-process
+  teardown never ran once.
 """
 import queue, threading, warnings
 import numpy as np
