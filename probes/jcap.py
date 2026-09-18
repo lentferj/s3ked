@@ -49,6 +49,25 @@ on the same evening:
 * **A shell ``timeout`` is not a deadline, it is the kill that leaks.** Fifteen
   scripts and about forty captures ran under one that evening; the in-process
   teardown never ran once.
+
+AND THERE IS NO RECOVERY ONCE A CLIENT IS ORPHANED -- only a server restart.
+Worth stating because it is the obvious thing to reach for and it cannot be
+built. eosed wrote an orphan-recovery path, described it as working, and
+withdrew it; both halves are refuted by the binding itself, with no server
+needed to see it:
+
+* ``jack.Client(name)`` defaults to ``use_exact_name=False``, and the docstring
+  says the server "will modify this name to create a unique variant, if
+  needed". Reconnecting by an orphan's name therefore registers ``name-01``,
+  closes *that*, and leaves the orphan untouched -- raising nothing, returning
+  normally, looking like it worked.
+* ``close(ignore_errors=True)`` and ``deactivate(ignore_errors=True)`` take no
+  argument naming another client, and the API has no call that closes a foreign
+  registration at all.
+
+So the teardown in this file is the only defence there is: if it does not run,
+nothing later can clean up after it. That is the whole reason it catches
+``BaseException``.
 """
 import queue, threading, warnings
 import numpy as np
