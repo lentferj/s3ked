@@ -171,9 +171,14 @@ carried no information the finding needed.
 
 Names that are **not** placeholders are ones this project or its siblings
 invented outright — `RSCTRL`, `RSPROBE`, `STPAIR-L`, `PKSP0`, `BNDTONE`,
-`RSTONE` — synthetic probe files built to answer a question, with no library
-material behind them. `TEST PROGRAM`, `SINE`, `SQUARE`, `SAWTOOTH` and
-`PULSE` are the machine's own.
+`RSTONE`, `TC10 NOISE` — synthetic probe files built to answer a question,
+with no library material behind them. `TEST PROGRAM`, `SINE`, `SQUARE`,
+`SAWTOOTH` and `PULSE` are the machine's own.
+
+`TC10 NOISE` is listed explicitly because it was the one name in this file that
+belonged to neither list, and a reader auditing for library material would have
+had to ask. It is a 4 s looped noise sample made for calibration here; §246 and
+the filter-corner work run on it.
 
 See `CLAUDE.md`: what a finding needs is the *shape* of the data, never
 whose program it was.
