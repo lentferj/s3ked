@@ -15358,6 +15358,49 @@ measuring something that is not the envelope: at those settings the release is
 over in a millisecond or two and what survives above the floor is the rig's
 own tail. The law may well hold down there — its shape is clean and there is
 no hint of a knee — but this rig cannot say so.
+### Challenged 2026-09-18, and held — two statistics, one envelope
+
+mpc2emu measured a release **1.38× slower than this law** at `RELSE1` 81 and 88
+on a converted pad, called `_AK_RELSE1_RATE` wrong above byte 70, and was about
+to refit it. §158's own rows say otherwise at the same settings — `RELSE1` 80 at
+`−0.9 %`, 85 at `−1.2 %`, 90 at `+0.3 %` — so two measurements of one field on
+one machine disagreed by **1.53×** while the law sat within 1 % of one of them.
+
+**The velocity and key modifiers were the obvious confound and they were not
+it.** §158 zeroed `V_REL1`, `O_REL1` and `K_DAR1` before fitting; their program
+reads `0` for all three across all sixteen keygroups, with `SUSTN1` 99 in both.
+
+**The metric was.** §158 fits a **slope in dB/s** over whatever span clears the
+noise floor; they timed **note-off to −30 dB**. Those agree exactly for a
+release that is straight in dB — 30 dB at 9.449 dB/s *is* 3.17 s — so a
+divergence means the fall is not straight. Per-decade rates from their captures:
+
+```
+                      0..-10   -10..-20   -20..-30    straight part   vs law
+   RELSE1 63            47.6       40.0       62.5        51.2         1.04
+   RELSE1 81             3.7        9.0        9.6         9.3         1.09
+   RELSE1 88             1.9        4.4        4.9         4.6         1.07
+```
+
+**Measured on the straight portion the law is accurate at every setting.** The
+opening decade is slow and is not the release rate; a note-off-to-−30 dB timing
+swallows it, and §158's span-fit excluded it.
+
+> **The law needed no change, and a metric mismatch nearly refitted a correct
+> constant.** §158's own per-point `r² 0.9995` over ~37 dB was the thing that
+> made the disagreement diagnosable: a fit that good says the *fitted span* is
+> straight, which is what forced the question of what lay outside it.
+>
+> **The lesson is naming.** `_AK_RELSE1_RATE` is a *straight-part slope*, and
+> nothing in its name or use says so. A constant that does not carry the
+> statistic it represents invites exactly this: two people measuring the same
+> envelope, both correctly, and disagreeing by half again.
+
+The opening decade is **not** material alone — it moves with the setting
+(`RELSE1` 81 → 2.69 s, 78 → 1.42 s), so it is envelope and material
+interacting. That matters for anyone matching a source by *audible* fall
+rather than by rate: the audible figure is a property of the pairing, and it
+does not generalise to a program whose opening differs.
 
 **An identical number across settings is a floor**, and here it is the floor of
 the measurement rather than of the machine. The same rule that caught a
