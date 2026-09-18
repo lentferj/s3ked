@@ -69,7 +69,7 @@ have no field to be wrong in.
 > Use the ear for "which kind of wrong", the meter for "how wrong". Asking
 > either to do the other's job is where both of today's retractions came from.
 
-## Three traps in the measuring half
+## Four traps in the measuring half
 
 These belong here because a listener never has to think about them and a meter
 always does. All three were paid for on 2026-09-14, across three projects.
@@ -287,6 +287,37 @@ the wrong conditions, or the wrong property under the right conditions** — and
 in both cases being the checking apparatus made it feel like the end of the
 chain rather than a new unverified link. That feeling is the thing to distrust,
 because it is exactly what the rest of this section exists to defeat.
+
+### 4. Measure the machine on a featureless source, not on material
+
+A pad that swells for ten seconds, a sample with its own decay inside the fall,
+a filter envelope louder than the sustain — each of these is *in* the quantity
+being measured and none of them is the machine. **Use white noise, or a tone,
+and keep the material for the listening pass.**
+
+Paid for twice here, both times by choosing the dull source deliberately:
+
+- **§158** fitted `RELSE1` on looped white noise. On 2026-09-18 a sibling
+  measured the same field on a converted pad, got `1.38×`, and concluded §158's
+  constant was wrong above byte 70. It was not: the pad's slow opening decade
+  sat inside their window and is not the release rate. **§158 was the one
+  release figure of three machines that survived the day**, and the subject is
+  why.
+- **§246** rejected the resident sine and a 55 Hz sawtooth before measuring a
+  filter corner at 35 Hz — *"a sine has energy at one frequency and a 55 Hz saw
+  has nothing below 55 Hz"*. Neither could see the corner, and both would have
+  returned numbers anyway.
+
+> **The failure mode is that material always yields a number.** Nothing errors,
+> nothing looks empty; the reading is simply part machine and part programme,
+> in an unknown ratio. A featureless source is not a convenience, it is what
+> makes the reading attributable.
+
+And the corollary, from the same day: **when two measurements of one field
+disagree, compare their subjects before their arithmetic.** §158 against the
+pad differed 1.53× with both parties measuring correctly — noise against
+material, and a slope-fit against a time-to-threshold. Neither was wrong; they
+were not the same quantity.
 
 ## The procedure
 
