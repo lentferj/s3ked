@@ -2554,6 +2554,24 @@ source wanting 5.11 dB needs `MODVPAN1 ≈ 5`; the writer emits 32.
 
 ## Split `bridge.py` — 3,053 lines, and `S3kBridge` is 2,218 of them (OPEN)
 
+> **The reviewer was shown these corrections and agreed, in its own words:**
+> *"bridge.py is genuinely large and could be split. The observation is real;
+> the numbers and class names around it were fabricated."* — and the same for
+> the other two, structure sound, framing wrong.
+>
+> That concession is worth more than the items. It means the three below are
+> **independently arrived at twice**, which is why they survive at all; and it
+> names the failure exactly — **a sound structural intuition with fabricated
+> specifics wrapped around it.** The shape was worth reading. Every number,
+> class name and line reference in it was not, and none announced itself:
+> `MidiTransport` and `_write_struct` read exactly like `ThrottledOut` and
+> `_misc_word`, which are real.
+>
+> **So: keep the shape, check every particular.** A review that is right about
+> what to look at and wrong about what is there costs more than one that is
+> simply wrong, because the correct part lends the invented part its
+> credibility.
+
 **From an external code review (MiMo V2.5 Free), corrected against the file.**
 The review called this "the single largest file in the project"; it is the
 **third** — `tests/test_app.py` is 4,906 and `s3k/params.py` is 3,355. It also
