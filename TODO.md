@@ -2550,3 +2550,99 @@ denominator, not a measurement.
 **Open, and mpc2emu's:** whether their writer's fraction-of-rail convention
 (`round(depth × 50)`) is replaced by something anchored on these numbers. A
 source wanting 5.11 dB needs `MODVPAN1 ≈ 5`; the writer emits 32.
+---
+
+## Split `bridge.py` — 3,053 lines, and `S3kBridge` is 2,218 of them (OPEN)
+
+**From an external code review (MiMo V2.5 Free), corrected against the file.**
+The review called this "the single largest file in the project"; it is the
+**third** — `tests/test_app.py` is 4,906 and `s3k/params.py` is 3,355. It also
+proposed extracting a class called `MidiTransport`, which does not exist here.
+
+The underlying observation survives both corrections. `S3kBridge` alone runs
+from line 835 to the end — **2,218 lines and 68 methods** — carrying transport,
+config, disk browsing, load/save, renumber, undo and multi.
+
+**The boundary that actually exists**, and it is already clean:
+
+```
+   ThrottledOut      408    the paced output port
+   MultiIn           464    the reassembling input
+   _enum_in/_enum_out/list_ports/bidirectional_ports   359..380
+```
+
+Those three touch nothing above them. A `s3k/transport.py` holding them is a
+move, not a redesign.
+
+> The config readers and writers (`_read_config` … `save_exclusive_channel`,
+> 205..326) look like they belong with the transport because they sit beside
+> it, and do not — they persist *choices about* ports, not the ports. Splitting
+> on the file's layout rather than its dependencies would take them along.
+
+**Blocked on:** nothing. All 979 tests should pass unchanged, and a split that
+needs a test edited is a split that moved a behaviour.
+
+---
+
+## Three `MISCDATA` writes bypass the helpers that exist for them (OPEN)
+
+**From the same review, and it is right for none of the reasons it gave.** It
+asked for a `_write_misc` helper "because the pattern repeats"; three such
+helpers already exist — `_misc_word` (1454), `_misc_byte` (1563) and
+`_misc_write_verify` (2043) — and the `_write_struct` it says they dispatch
+through is not in the codebase.
+
+**The duplication is real, in the callers that skip all three:**
+
+```
+   1771   trigger_load
+   1946   rename_volume
+   1967   _fire
+```
+
+each building the identical shape by hand:
+
+```python
+   frame = m.HeaderData(
+       command=m.Command.MISCDATA, index=..., selector=..., offset=0,
+       data=..., exclusive_channel=self.exclusive_channel,
+   ).encode()
+   self._drain()
+   self._send(frame, write=True)
+```
+
+**The `_drain()` is the part that matters.** It is not decoration — it clears
+the input before a write so a stale reply cannot be read as this write's
+acknowledgement. A fourth caller written by copying one of these three will
+work; one written from scratch may omit it and fail only under timing.
+
+**Blocked on:** nothing. Internal, no public API change.
+
+---
+
+## Replace the lambda signal handler with a plain function (OPEN)
+
+**From the same review; the conclusion is right and the reason it gives is
+wrong.** It cites the `signal` documentation on lambdas not being picklable
+under `multiprocessing`. **Signal handlers are never pickled** — `fork` inherits
+them and `spawn` re-imports the module and installs its own. That warning is
+about named lambdas generally, and does not apply here.
+
+The readability argument stands on its own. `bridge.py:557` installs:
+
+```python
+   lambda signum, _frame: (_ for _ in ()).throw(SystemExit(128 + signum))
+```
+
+`(_ for _ in ()).throw(...)` is a generator-expression trick for raising inside
+an expression, because a lambda cannot contain a `raise`. A four-line `def`
+says the same thing plainly, and the `128 + signum` convention deserves a
+comment rather than being buried in an idiom.
+
+**Blocked on:** nothing. No behaviour change — same exception, same code.
+
+**Not to be lost in the rewrite:** the surrounding function is careful in a way
+that is easy to undo. It installs only where `getsignal` returns `SIG_DFL`,
+leaving any handler the host application already owns; and it tolerates
+`ValueError`/`OSError`, because `signal()` only works on the main thread of the
+main interpreter. Both are deliberate.
