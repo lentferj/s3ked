@@ -2891,9 +2891,33 @@ so only 0x1A-0x1C are misplaced.
 0..0), so only `V_LOUD` is reachable in practice. A test pins entry counts per
 region but nothing pins group membership, so this changes no test.
 
-**Worth checking at the same time:** whether any other group boundary was
-drawn by offset. This one was only noticed because an outside question made
-someone read the block in offset order.
+**Checked 2026-09-20, and it does NOT generalise — `V_LOUD` stands alone.**
+Every parameter in every region was scanned for a description naming a concept
+its group contradicts. Restricted to the groups that are **kind**-based, three
+candidates came back and two are not defects:
+
+- **`SPFILT` 0x40 in `program.output`** — not an error. `SPLOUD` (0x3E),
+  `SPATT` (0x3F) and `SPFILT` (0x40) are the three soft-pedal parameters and
+  are grouped together as one functional set. Keeping a loudness, an attack
+  and a filter control together is the right call for a feature; only the
+  group's *name* is imperfect. Deliberate, not a boundary drawn by offset.
+- **`multipart.PANPOS` 0x18 in `multipart.output`**, against
+  `program.PANPOS` 0x18 in `program.pan` — same name, offset and range, two
+  different groups. But the multipart region has **no `pan` group at all**
+  (only general/midi/output/pitch across 13 parameters), so this is a coarser
+  scheme rather than a misplacement; a `multipart.pan` group would be a page
+  with one control on it. Worth knowing only because someone who finds
+  `PANPOS` on the Pan page for a program will look for a Pan page for a
+  multipart and not find one.
+
+**The check itself needed fixing before its output meant anything**, which is
+the reusable part: the first pass returned **69 rows**, almost all noise,
+because it took the group's last dot-component as the kind — making
+`keygroup.env.1` read as kind `1` — and because `zone.N` and `env.N` are
+indexed by *which*, not by *what kind*, so they legitimately hold tuning,
+loudness and filter offsets side by side. Excluding the index-based groups and
+matching on the full path took it from 69 to 3. A check that emits rows it
+cannot interpret is worse than no check; this one emitted 69.
 
 ## External code review — GLM-5.3-Flash, 2026-09-20 (OPEN — triaged against the files)
 
