@@ -2552,6 +2552,32 @@ denominator, not a measurement.
 source wanting 5.11 dB needs `MODVPAN1 ≈ 5`; the writer emits 32.
 ---
 
+## Is the 255-sample ceiling real, or did the pool check fire first? (OPEN 2026-09-20 — §258)
+
+**Status:** the mechanism is solved from the firmware; the *attribution* of
+Jan's observed failure is not, and cannot be from that observation.
+
+`ds:0x72F6` is the resident **sample** count (one writer, `0x3521D`, counting
+type-3 entries in the 1006 x 192-byte directory at linear `0x90000`). Six
+sites compare its low byte against `0xFF`, and the one at `0x17DFF` gates the
+path that stamps a type-3 entry — so the machine appears to refuse a 256th
+resident sample, a ceiling the 1006-entry pool does not model. Keygroups
+(type 2) have no counter at all and so cannot be capped separately; mpc2emu's
+`es:[0x2A]` is `GROUPS`, program-header offset 42, in an ordinary pool check.
+
+The volume that failed needed 13 + 395 + 271 = **679** entries against **533**
+free. That alone explains the refusal, so the failure is consistent with both
+guards and evidence for neither.
+
+**Blocked on:** Jan, and the rig. The falsifier is one variable — a volume of
+1 program, 1 keygroup and **260 samples** (262 entries, well under 533 free).
+Refused → the ceiling is confirmed and s3ked and mpc2emu should both refuse to
+build such a volume. Loaded → §258 is wrong.
+
+**Also open, smaller:** whether the six guarded sites are the only paths that
+create a type-3 entry. If one is not, the byte compare on a word counter wraps
+at 256 and reopens until 511. Static, no hardware needed.
+
 ## Split `bridge.py` — 3,053 lines, and `S3kBridge` is 2,218 of them (OPEN)
 
 > **The reviewer was shown these corrections and agreed, in its own words:**
