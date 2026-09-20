@@ -2552,31 +2552,41 @@ denominator, not a measurement.
 source wanting 5.11 dB needs `MODVPAN1 ≈ 5`; the writer emits 32.
 ---
 
-## Is the 255-sample ceiling real, or did the pool check fire first? (OPEN 2026-09-20 — §258)
+## Two resident-object ceilings, 255 samples and 254 programs (OPEN 2026-09-20 — §258)
 
-**Status:** the mechanism is solved from the firmware; the *attribution* of
-Jan's observed failure is not, and cannot be from that observation.
+**Status:** mechanism solved from the firmware, and Jan's observed failure now
+attributes to it. What remains is a live confirmation and one static question.
 
-`ds:0x72F6` is the resident **sample** count (one writer, `0x3521D`, counting
-type-3 entries in the 1006 x 192-byte directory at linear `0x90000`). Six
-sites compare its low byte against `0xFF`, and the one at `0x17DFF` gates the
-path that stamps a type-3 entry — so the machine appears to refuse a 256th
-resident sample, a ceiling the 1006-entry pool does not model. Keygroups
-(type 2) have no counter at all and so cannot be capped separately; mpc2emu's
-`es:[0x2A]` is `GROUPS`, program-header offset 42, in an ordinary pool check.
+`0x72F6` counts resident **samples** and `0x72F4` resident **programs**, in a
+1006 x 192-byte directory at linear `0x90000`. Six sites cap samples at
+**255** (`cmp byte [0x72F6],0xFF`), four cap programs at **254**
+(`cmp byte [0x72F4],0xFE`), and two are the ordinary `GROUPS`+1 pool check.
+Every other comparison on either counter is against 0. Keygroups (type 2)
+have no counter and no ceiling of their own.
 
-The volume that failed needed 13 + 395 + 271 = **679** entries against **533**
-free. That alone explains the refusal, so the failure is consistent with both
-guards and evidence for neither.
+The volume that failed needs 13 + 205 + 271 = **489** entries against **533**
+free — the pool had 44 spare and its check passes. 13 programs is far under
+254. **Only the 255-sample guard fires**, so the refusal attributes to it.
+(The first write-up used 395 keygroups and concluded the opposite; that number
+was mpc2emu's parser counting velocity zones, corrected to 205 the same day.)
 
-**Blocked on:** Jan, and the rig. The falsifier is one variable — a volume of
-1 program, 1 keygroup and **260 samples** (262 entries, well under 533 free).
-Refused → the ceiling is confirmed and s3ked and mpc2emu should both refuse to
-build such a volume. Loaded → §258 is wrong.
+**Blocked on:** Jan, and the rig — a live confirmation, one variable. Either a
+built volume of 1 program / 1 keygroup / **260 samples** (262 entries against
+533 free, crossing cleanly), or mpc2emu's zero-build version using the card
+already in the machine: cumulative distinct samples cross 255 between the 11th
+and 12th program (252 -> 263), so load eleven then add the twelfth. The
+zero-build form crosses *inside* the twelfth program's sample set and so
+leaves it partially loaded on refusal; the built volume does not.
 
-**Also open, smaller:** whether the six guarded sites are the only paths that
-create a type-3 entry. If one is not, the byte compare on a word counter wraps
-at 256 and reopens until 511. Static, no hardware needed.
+**Also open, static, no hardware:** whether those six sites are the only paths
+that create a type-3 entry. `cmp byte` on a *word* counter is sound only while
+nothing can reach 256; a seventh unguarded path would wrap the low byte to
+`0x00` and reopen the guard until 511. Same question for the four program
+sites at 254.
+
+**Neither project models either ceiling.** s3ked does not build volumes, but
+mpc2emu's writer should refuse >255 samples or >254 programs rather than let
+the machine discover it.
 
 ## Split `bridge.py` — 3,053 lines, and `S3kBridge` is 2,218 of them (OPEN)
 

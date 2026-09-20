@@ -25811,32 +25811,70 @@ The type-1 → type-2 relationship is written out at `0x1B0C7`: stamp a head
 entry type 1, read `es:[0x2A]`, then walk the link at `es:[1]` that many times
 stamping type 2.
 
-### What the observed failure does and does not show
+### What the observed failure shows (amended 2026-09-20)
 
-The volume needs 13 + 395 + 271 = **679** entries and the LCD showed **533**
-free. **679 > 533 on its own fully explains the refusal.** The observation
-therefore does *not* discriminate between the pool check and the sample
-ceiling — both conditions were true, and site B's guard is the cheaper one.
-271 > 255 fits, and now fits the right variable, but it is not evidence yet.
+**As first written this section said the observation could not discriminate,
+on the arithmetic 13 + 395 + 271 = 679 against 533 free. The 395 was wrong,
+and it was not ours.** mpc2emu's parser counted **velocity zones** as
+keygroups; an AKAI keygroup holds up to four. The real count is **205**,
+agreed on all thirteen programs by two independent routes — VinSamLib reading
+byte `0x2A` off each program file, and their own link-walk. The largest
+program has 77 keygroups, comfortably inside `GROUPS`' documented 1–99, so the
+range concern in the corrections below resolves in the spec's favour.
 
-### The single-variable falsifier
+With the real count: **13 + 205 + 271 = 489 entries against 533 free — 44
+spare.** The pool check passes. It does not explain the refusal.
 
-Build a volume whose **sample count exceeds 255** while its **total entry
-count stays well under the free pool** — e.g. 1 program, 1 keygroup, 260
-samples: 262 entries against 533 free. Load it.
+So I went back and identified **all eight** message-load sites rather than the
+two in the incoming report, and censused every ceiling comparison on both
+counters. Three guard families exist, and only three:
 
-- refused → the 255 sample ceiling is confirmed, and both projects' writers
-  should refuse to build such a volume rather than let the machine find it;
-- loaded → this reading is wrong and §258 needs redoing.
+| guard | sites | this volume | fires? |
+|---|---|---|---|
+| samples vs `0xFF` (255) | `0x12FBB` `0x13582` `0x1752F` `0x17DFF` `0x1A7C4` `0x1AA55` | 271 | **yes** |
+| programs vs `0xFE` (254) | `0x12E77` `0x17C51` `0x1AFE1` `0x1B46D` | 13 | no |
+| `GROUPS`+1 vs free capacity | `0x12E96` `0x1353D` | 489 of 533 | no |
 
-### Caveat worth stating rather than hiding
+Every other comparison on either counter is against **0** — an emptiness test,
+never a ceiling. Keygroups have no counter and therefore no ceiling of their
+own; they are bounded only by the shared 1006 pool and by `GROUPS`' 1–99.
 
-`cmp byte [0x72F6],0xFF` tests only the **low byte** of a word counter. It is
-sound only while the count can never pass 255 — which the guard enforces, *if*
-every creation path is guarded. Should any path reach 256, the low byte wraps
-to `0x00` and the guard opens again until 511. I have not proved the six
-guarded sites are the only creation paths, so this is a shape to be aware of,
-not a claimed defect.
+**Exactly one guard fires, and the observation discriminates after all.**
+Jan's refused load is evidence *for* the 255-sample ceiling, not merely
+consistent with it. The eight message sites map: `0x12EA3` and `0x1353D` to
+the pool check, `0x13030` `0x13592` `0x1A7CB` `0x1AA5C` to the sample ceiling,
+`0x1AFE8` and `0x1B474` to the program ceiling.
+
+**A second ceiling falls out: 254 resident programs.** Four sites, all
+`cmp byte [0x72F4],0xFE`. Neither project models it.
+
+**And the LCD corroborates the taxonomy.** mpc2emu's original report noted in
+passing that the screen shows `progs 13  samps 271` — **P and S, not K**. That
+is exactly what the firmware has: a counter for type 1 and a counter for
+type 3, and nothing for type 2. The display was showing us the variable list
+before either of us disassembled it. The `13` and `271` are therefore read off
+the machine's own arithmetic; only the `205` comes from file parsing.
+
+**Margins, stated as properties of this one capture.** 44 entries spare, and
+271 over by 16. Both are single-capture numbers and neither is a corpus
+property.
+
+### The falsifier is still worth running
+
+The discrimination rests on `533` and `271` being what the LCD meant, and on
+the census being complete. One variable settles it with nothing to argue
+about. Two forms, Jan's choice:
+
+- **built volume** — 1 program, 1 keygroup, 260 samples: 262 entries against
+  533 free, crossing 255 cleanly with the pool untouched;
+- **zero-build, from the card already in the machine** (mpc2emu's) —
+  cumulative distinct samples cross 255 between the 11th and 12th program
+  (252 → 263). Load eleven, then add the twelfth. No new media.
+
+The zero-build form has one wrinkle worth knowing before it is run: the
+crossing happens **inside** the twelfth program's sample set, so a refusal
+leaves that program partially loaded. The built volume crosses between loads
+and leaves nothing half-resident.
 
 ### Corrections to the incoming report
 
@@ -25844,6 +25882,7 @@ not a claimed defect.
   `0x13592`, `0x1A7CB`, `0x1AA5C`, `0x1AFE8`, `0x1B474` — mpc2emu's list is
   uniformly **+1**. The sites themselves are all real.
 - A program with **128 keygroups** is outside `GROUPS`' documented 1–99 range.
-  The field is a byte so 128 is representable, but either the S3000XL exceeds
-  its own spec here or that count came from a parser, not the header. Worth
-  checking on their side before the number is used again.
+  **Resolved the same day:** their parser was counting velocity zones. The
+  real maximum across the thirteen is 77 and the total is 205, not 395. See
+  the amended section above — the correction is what made the observation
+  discriminate.
