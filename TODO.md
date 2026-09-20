@@ -2752,9 +2752,24 @@ Incidental: `0x3548C` is a third independent sighting of the 1006 x 192 model,
 and it identifies `0x354AD`/`0x354B5` — two of the fourteen unstamped copies —
 as this routine writing the default program and keygroup into `ES = 0xBFE8`.
 
-**Remaining on this item:** `0x1B46D`, the fourth `0xFE` guard, is unexamined;
-and `0x177B6`'s type is still undetermined (needs `DS` resolved or a live
-read).
+**All four `0xFE` sites accounted for 2026-09-21, none a defect.** `0x1B46D`
+is the same idiom as `0x1AFE1` down to the far call: `lcall 0x3449:0x05f8` /
+`je` / guard / `call 0x12D95` (free) / rejoin. That far call (`0x34A88`)
+**searches the resident programs for a matching 12-byte name at offset 3 —
+`PRNAME` — and on a hit points the cursor at it** so `0x12D95` frees it. A
+twin at `0x34A9A` does the same over `0x72F6` / cursor `0x74C7` for `SHNAME`.
+
+**This is the firmware behind the rule CLAUDE.md states and §13a tested.** The
+spec says a program written with a matching name deletes the existing one
+first; §13a established on hardware (2026-08-10) that this does **not** extend
+to the byte-offset write. Exactly what the code predicts — the name search
+sits only on the whole-structure creation paths. Three things now agree: the
+published rule, the hardware test, and the instructions. The hardware test is
+the only one of the three that could have falsified the others.
+
+**Remaining on this item:** `0x177B6`'s type (needs `DS` resolved or a live
+read), and three of the fourteen unstamped copies — `0x32837`, `0x33879`,
+`0x33C23` — are still unidentified.
 
 Also corrected: `0x177AA` has **three** entries, not one — a call from
 `0x177A1` plus jumps from `0x1D88F` and `0x1DA16`. The first scan omitted

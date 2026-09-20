@@ -26212,7 +26212,66 @@ independent sighting of the **1006 × 192 at `0x9000`** model — `mov cx,0x3EE`
 identified: they are this routine writing the default program and keygroup
 into `ES = 0xBFE8`, a staging area above the directory's top at `0xBF280`.
 
-`0x1B46D`, the fourth guard, has not been examined.
+#### The fourth guard, and the firmware behind §13a (2026-09-21)
+
+`0x1B46D` turns out to be the *same idiom* as `0x1AFE1`, down to the far call:
+
+```
+1AFDA  lcall 0x3449:0x05f8        1B466  lcall 0x3449:0x05f8
+1AFDF  je   0x1afed               1B46B  je   0x1b479
+1AFE1  cmpb $0xFE,[0x72F4]        1B46D  cmpb $0xFE,[0x72F4]
+1AFE6  jb   0x1aff0               1B472  jb   0x1b47c
+1AFED  call 0x12d95  (free)       1B479  call 0x12d95  (free)
+       falls through to 0x1AFF0          falls through to 0x1B47C
+```
+
+So both program guards carry a bypass, both bypasses free first, and both are
+gated on the same far call. **What that call tests is the interesting part.**
+`0x3449:0x05f8` is file `0x34A88`:
+
+```
+34a88  mov dl,[0x72F4]       ; how many programs are resident
+34a8f  call 0x34AB2          ; search them
+34a93  jne  .notfound
+34a95  mov  [0x74C3],dh      ; FOUND: point the program cursor at it
+34a99  lret                  ; ZF set
+
+34ab2  or   dl,dl / je       ; none resident -> not found
+34ab6  add  bx,0xB1B0        ; the collected-segment table
+34abc  mov  es,[bx]          ; candidate program
+34abe  mov  di,3             ; offset 3 ...
+34ac1  mov  si,0x7D7A        ; ... against the name being written
+34ac4  mov  cx,0x0C          ; ... 12 bytes
+34ac7  repz cmpsb
+34ac9  je   .found
+34acb  add  bx,2 / inc dh / dec dl / jne   ; next program
+```
+
+**Offset 3, twelve bytes, is `PRNAME`** — program offset 3, size 12, per
+`s3k/params.py`. There is a twin at `0x34A9A` doing the same over `0x72F6`
+with cursor `0x74C7`, i.e. the sample-side search against `SHNAME`, also
+offset 3 size 12.
+
+So the whole sequence is: **search the resident programs for one whose name
+matches the name being written; if found, point the cursor at it, free it and
+its keygroup chain, then create the new one — skipping the ceiling check
+because it is a replacement.**
+
+**This is the firmware behind the rule CLAUDE.md states and §13a tested.** The
+specification says writing a program whose name matches an existing one
+deletes that program first. §13a established on hardware (2026-08-10) that the
+rule is specific to the whole-structure write and does **not** extend to the
+byte-offset write — two programs were made to share a name via `PHEADER` and
+neither was deleted. That is exactly what this code predicts: the name search
+sits on the whole-structure creation paths behind `0x1AFE1` and `0x1B46D`, and
+nothing on the byte-offset write path goes near it.
+
+Three independent things now agree: the published rule, a hardware test from
+six weeks ago, and the instruction sequence that implements it. The hardware
+test came first and remains the only one of the three that could have
+falsified the other two.
+
+**All four `0xFE` sites are now accounted for**, and none is a defect.
 
 ### Corrections to the incoming report
 
