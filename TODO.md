@@ -2712,10 +2712,27 @@ cannot drift — a low-byte wrap needs 256 genuinely resident programs, which
 the 1006-entry pool could hold (256 programs at one keygroup each is 512
 entries). Unusual, not impossible.
 
-**Still open:** dominance for `0x12EC7` (guard `0x12E77`, 80 bytes, 2 candidate
-entries), `0x17C7E` (`0x17C51`, 45 bytes, 6) and `0x1B0C7` (`0x1AFE1`, 230
-bytes, 9). Those counts are raw scan output and are expected to be mostly
-operand bytes, as the `0x7C` candidates were.
+**Dominance resolved 2026-09-20 for all three, and one fails.** Every
+candidate disassembled, not judged by appearance:
+
+- `0x12EC7` **dominated** by `0x12E77` — its two candidates were the guard's
+  own refusal branch and the `0x77` inside `mov %ax,0x7769`.
+- `0x17C7E` **dominated** by `0x17C51` — one candidate was the guard's own
+  `jb`, the other five were `0x7C`/`0x72` address-operand bytes.
+- `0x1B0C7` **NOT dominated.** `0x1AFDF` is a real `je 0x1afed` that jumps
+  **past** the guard at `0x1AFE1`; `0x1AFED` calls `0x12D95` and falls through
+  to `0x1AFF0`, which is exactly where the guard's own "proceed" branch lands.
+  With ZF set from the far call at `0x1AFDA`, the 254 ceiling is never tested.
+
+**Blocked on nothing — the next step is two far calls.** `0x12D95` is
+`lcall 0x24d1:0x104f`, `lcall 0x3520:0x0581`, `ret`. If either frees a
+directory entry the bypass is correct (a replacement adds nothing net); if
+neither does, it is a conditional bypass of the program ceiling. **Do not
+assume from the address**: `0x12DA8`, a few bytes later, *is* a free routine —
+it stamps type 0 on program entries whose `es:[0x86]` is zero — and `0x12D95`
+does not call it.
+
+`0x1B46D`, the fourth guard, is unexamined.
 
 Also corrected: `0x177AA` has **three** entries, not one — a call from
 `0x177A1` plus jumps from `0x1D88F` and `0x1DA16`. The first scan omitted

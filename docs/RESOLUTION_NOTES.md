@@ -26095,11 +26095,49 @@ genuinely resident programs, and the pool could hold that (256 programs with
 one keygroup each is 512 of 1006 entries). That moves the wrap from
 arithmetically impossible to merely requiring an unusual machine.
 
-Left open: dominance for `0x12EC7` (nearest guard `0x12E77`, 80 bytes, 2
-candidate entries), `0x17C7E` (`0x17C51`, 45 bytes, 6 candidates) and
-`0x1B0C7` (`0x1AFE1`, 230 bytes, 9 candidates). Each candidate list needs
-disassembling the way the `0x7C` operand bytes did — the counts above are raw
-scan output and are expected to be mostly false positives.
+**Dominance resolved for all three, and one of them fails.** Every candidate
+was disassembled rather than judged by appearance, and the expectation that
+most would be operand bytes held — but not all of them.
+
+- **`0x12EC7` is dominated** by `0x12E77`. Its two candidates were the guard's
+  own refusal branch (`0x12E7C jae 0x12EA3`) and `0x12F27`, which is the last
+  byte of `mov %ax,0x7769` — the `0x77` of an address operand.
+- **`0x17C7E` is dominated** by `0x17C51`. Of six candidates, one was the
+  guard's own `jb`, and the other five were operand bytes inside
+  `movw $imm,0x7Cxx` and `mov cl,[0x72F4]` — `0x7C` and `0x72` again.
+- **`0x1B0C7` is NOT dominated.** Eight of nine candidates were noise
+  (`0x1A22A` is the `0xE8` inside `mov bx,0x3E8`; `0x1AFC9` is inside
+  `mov bh,[di+0x70]`; `0x1AFE6` is the guard's own `jb`). **The ninth is
+  real:**
+
+```
+1afda  lcall 0x3449:0x05f8
+1afdf  je   0x1afed        <-- jumps PAST the guard
+1afe1  cmpb $0xFE,[0x72F4] <-- the guard
+1afe6  jb   0x1aff0        ; proceed
+1afe8  mov  bx,0x1649      ; refuse
+1afeb  jmp  0x1b014
+1afed  call 0x12d95        <-- the je target
+1aff0  ...                 ; both paths converge here
+```
+
+`0x1AFED` calls `0x12D95` and then **falls through to `0x1AFF0`**, which is
+precisely where the guard's own "proceed" branch lands. So when the far call
+at `0x1AFDA` returns with ZF set, the 254 ceiling is never tested and the path
+continues into the type-1 creation at `0x1B0C7` regardless.
+
+**Whether that is a defect turns on `0x12D95`, and it is not determined here.**
+The routine is three instructions — `lcall 0x24d1:0x104f`, `lcall
+0x3520:0x0581`, `ret` — and neither target has been followed. If one of them
+frees a directory entry, the skip is deliberate and correct: a replacement
+makes no net addition and needs no ceiling check. If neither does, this is a
+conditional bypass of the program ceiling. **Note the near miss next door:**
+`0x12DA8`, a different entry point a few bytes later, walks the program list
+and stamps type 0 on entries whose `es:[0x86]` is zero — a free routine. It
+would be easy to assume `0x12D95` does the same because of the address, and it
+does not call it.
+
+`0x1B46D`, the fourth guard, has not been examined.
 
 ### Corrections to the incoming report
 
