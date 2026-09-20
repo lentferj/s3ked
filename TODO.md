@@ -2767,9 +2767,29 @@ sits only on the whole-structure creation paths. Three things now agree: the
 published rule, the hardware test, and the instructions. The hardware test is
 the only one of the three that could have falsified the others.
 
-**Remaining on this item:** `0x177B6`'s type (needs `DS` resolved or a live
-read), and three of the fourteen unstamped copies — `0x32837`, `0x33879`,
-`0x33C23` — are still unidentified.
+**The fourteen are now fully identified (2026-09-21).** `0x32837` and
+`0x33C23` set `DS = CS` before copying, so they lift 192-byte templates out of
+ROM into RAM buffers — not directory writes. **`0x33879` does write a slot**,
+and finding it corrected an earlier claim: it allocates through an *indirect*
+call, so the allocator census (which looked for direct `lcall`s) never saw it.
+
+**The indirect-dispatch caveat was too pessimistic.** This firmware's
+mechanism is a thunk — `0xff6:0xfc4a` is `call *%bp` / `lret` — and all **29**
+of its call sites are preceded by `mov bp,imm16`, so it resolves statically.
+`0x1B140`, reached only that way, is a thin wrapper round the allocator.
+`0x12873` is reached through the thunk 6 more times than the direct census
+showed.
+
+**So `0x33879` joins `0x177B6` as a creation path with no ceiling guard**
+within 0x400 bytes. It has a check at `0x33865` (`jae`, via a second thunk
+call to `0x1B14A` querying `0x24d1:0x0eaa`) whose semantics I could **not**
+read reliably — `bp` is both the thunk's function pointer and an operand of
+the `cmp bp,ax` inside the callee. Left unresolved rather than guessed: a
+capacity check that always passes and one that works look identical from the
+disassembly.
+
+**Remaining on this item:** `0x177B6`'s type and `0x33879`'s guard semantics,
+both needing `DS`/register state resolved or a live read.
 
 Also corrected: `0x177AA` has **three** entries, not one — a call from
 `0x177A1` plus jumps from `0x1D88F` and `0x1DA16`. The first scan omitted

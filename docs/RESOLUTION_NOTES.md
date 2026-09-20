@@ -25931,6 +25931,29 @@ at file `0x35200`. (A property of the image. It sits oddly beside the
 chunks of itself — `0x35155` copies 0x1C90 bytes to `0x3A60:0x33D0` — so the
 two are not necessarily in conflict. Not resolved here.)
 
+#### The last three copies (2026-09-21)
+
+- **`0x32837` and `0x33C23` are identical, and neither touches the
+  directory.** Both do `mov ax,ds / mov es,ax` then `mov ax,cs / mov ds,ax`
+  before the copy — the **source is the code segment**, so they lift a
+  192-byte template out of ROM into a caller's RAM buffer. Template loaders.
+- **`0x33879` does write a directory slot**, and it is the miss described
+  above. `ES` is set to `0x9000`, `bp` to `0xB1E0`, and the thunk dispatches to
+  `0x1B140`, which allocates; the 192-byte copy then lands in the new slot
+  **without restamping byte 0**, so it inherits its source's type. **No `0xFF`
+  or `0xFE` guard exists within 0x400 bytes of it.**
+
+  There *is* a check at `0x33865` — `jae`, gated on a second thunk call to
+  `0x1B14A`, which queries `0x24d1:0x0eaa` and compares. **I could not read
+  its semantics reliably**: `bp` serves as both the thunk's function pointer
+  and an operand of the `cmp bp,ax` inside the callee, and I cannot tell from
+  the disassembly alone which value is live. Recorded as unresolved rather
+  than guessed, because a capacity check that always passes and one that
+  works look identical here.
+
+So `0x33879` joins `0x177B6` as a creation path with no ceiling guard. Both
+have a check of some kind in front of them and neither check is the ceiling.
+
 **What is still open, now as 14 named sites instead of a worry.** A record can
 also acquire a type without any store, by being copied whole. Fourteen
 `mov cx,0xC0 / rep movsb` sites copy 192 bytes — one full record — and do
@@ -26059,6 +26082,25 @@ live read — it is no longer a pure disassembly question.
 **Two transfer classes remain unscanned**, and they are the honest limit of
 this: indirect `jmp`/`call` through a register or memory (`ff /4`, `ff /5`),
 which no byte scan can resolve, and anything reached through a dispatch table.
+
+> **NARROWED 2026-09-21, and it found a miss.** The sentence above is right in
+> general and was too pessimistic here. This firmware's indirect dispatch is a
+> **thunk**: `0xff6:0xfc4a` (file `0x1FBAA`) is literally `call *%bp` / `lret`,
+> and every one of its **29 call sites** is preceded within a few bytes by
+> `mov bp,imm16`. So it resolves statically after all:
+>
+> ```
+> 0x12873  6 sites   the combined catalogue refresh
+> 0x151E9  5         0x12B9C  5         0x12A5D  4
+> 0x12DA2  2         0x1B74F  2         0x1D5E8  1
+> 0x12D11  1         0x12E42  1         0x1B14A  1         0x1B140  1
+> ```
+>
+> **The miss:** `0x1B140` is `lcall 0x24d1:0x0e96` / `mov [0x7F6C],es` / `ret`
+> — a thin wrapper round the allocator. It is reached only through the thunk,
+> so the allocator census above, which looked for direct `lcall`s, did not see
+> it. That census's "seven of the fourteen call no allocator" is therefore
+> **incomplete as stated**; see the three copies resolved below.
 
 #### The `0xFE` program ceiling: one sound finding, and it is not from the recount
 
