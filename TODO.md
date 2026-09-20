@@ -2592,8 +2592,19 @@ are not, and an entry whose source cannot be recovered must say so explicitly
 rather than be left blank — a blank reads as "nobody needed one", which is
 how this happened. mpc2emu's `provenance_gap: true` is the right shape.
 
+**A second field of the same shape: residual spread.** Every `Scale` carries
+an `r2` and none carries the worst per-point residual. eosed found their own
+law quoted at r2 0.998042 concealing a -16.1% point; the same challenge
+applied to §259's fresh 25..99 fit found **r2 0.99989 concealing +7.45%** at
+byte 96 (p5..p95 -2.36%..+3.48%, rms 2.36%). An aggregate r2 over a dozen
+points in log space cannot show a bad one, which is the same reason §30
+insists on per-curve fit quality rather than an average. A converter reading
+`r2=0.99989` and sizing a tolerance from it would be wrong by an order of
+magnitude.
+
 **Not started — this is a change to a shipped dataclass and 36 entries, and
-it wants Jan's word before it is made.**
+it wants Jan's word before it is made.** Two fields now, `measured_on` and a
+residual summary; both are the same edit and should land together.
 
 ## §118's other two re-measures are unconfirmed, and two peers were quoting it (OPEN 2026-09-20 — §259)
 

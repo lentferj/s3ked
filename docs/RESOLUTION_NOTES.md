@@ -26024,6 +26024,73 @@ exhibit the condition. **A no-op plant is indistinguishable from a working
 probe**, and the same is true of a control that is never run at all: the
 tidy explanation for byte 20 survived exactly as long as nothing tested it.
 
+### The control was aimed one step off the hypothesis (added the same evening)
+
+The control above synthesised each point at its **measured** rate and asked
+"would the estimator report this?". The resolution hypothesis says something
+else: *the machine is on the law at 3329.72 dB/s and the estimator
+under-reports it as 2370*. **That proposition was never tested** — the first
+control tested one adjacent to it. eosed made the mirror of this error the
+same evening, interpolating a bias at 880 dB/s for a rung that measures 1250.
+
+Re-run at the **law-predicted** rate:
+
+```
+byte 20   fed 3329.72  ->  estimator returns 3313.87   (-0.48%, r2 0.99917, 26 windows)
+byte 96   fed    1.98  ->  estimator returns    1.98   (+0.21%, r2 0.99953)
+```
+
+It does not return 2370. **The refutation stands and is now aimed at the
+hypothesis as stated** rather than next to it.
+
+One flaw in that check worth recording because it is the same class: the
+verdict logic also reported "reproduces the observation" for bytes 25 and 99,
+where the law and the measurement agree to 0.4% anyway. **A check that cannot
+come out the other way for those rows has no content there** — only bytes 20
+and 96 carry any.
+
+### eosed's sign test, which is free and which would not have caught mine
+
+From their own ladder: *a time-resolution limit smears a decay and can only
+report it **slower** than truth.* So the instrument explanation is killable by
+arithmetic before any synthesis, wherever a point reads **faster**.
+
+Applied here:
+
+```
+byte 20   measured 2370.32 vs law 3329.72  ->  reads SLOWER  -- sign is CONSISTENT with smearing
+byte 96   measured    2.19 vs law    1.98  ->  reads FASTER  -- smearing RULED OUT for free
+```
+
+**For byte 96 this settles the instrument question at no cost.** For byte 20
+it does not: the sign is exactly what a smearing artefact would produce, which
+is why the tidy explanation was so easy to believe and why only the synthesis
+could refute it. Worth stating both ways round — the cheap test is decisive on
+one point and silent on the other, and a rule that is silent is not a rule
+that agrees.
+
+### The residual spread, which the r² hides
+
+eosed found their own law quoted at r² 0.998042 with a worst per-point
+residual of −16.1%, log-space r² over 12 points having concealed it. The same
+challenge applied to §259's own number:
+
+```
+25..99, 16 points, |b| 0.09728, r2 0.99989
+    worst residual   +7.45%  at byte 96
+    p5..p95          -2.36% .. +3.48%
+    rms               2.36%
+
+25..90 only:  |b| 0.09745,  worst +1.90% at byte 30,  rms 0.98%
+```
+
+**r² 0.99989 was hiding a 7.45% point.** The fit is genuinely tight across
+25..90 and frays at both top-end points — which is the same boundary the
+recommended range already draws, now supported by the residuals rather than
+only by `obs/§30`. Every law in `scales.py` carries an r² and none carries a
+residual spread; that is recorded in TODO as the same shape of gap as the
+missing source field.
+
 ### Why noise is admissible here when §118 says it is not
 
 §118 concluded "a sustained tone is the right instrument; noise is right for
