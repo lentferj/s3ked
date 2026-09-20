@@ -363,10 +363,14 @@ SCALES: Dict[Tuple[str, str], Scale] = {
                "true of the window that was used, not of the field: a 0.67 ms\n"
                "window gives 71 windows at byte 30. The limit was the\n"
                "estimator's resolution and it moved when the estimator did.\n"
-               "Byte 20 still fails (r2 0.948, 61.8 dB in ~18 ms, 42 windows)\n"
-               "and is where the real floor sits. Above 90 is extrapolation:\n"
-               "96 came in 10.8% high on the run's best per-curve r2 and is\n"
-               "unexplained.",
+               "Byte 20 still fails (r2 0.948, -28.8%) and is where the real\n"
+               "floor sits -- but NOT because the estimator runs out of room:\n"
+               "run over a constructed 2370 dB/s decay it returns -0.67% at\n"
+               "r2 0.99906, and -0.77% with a 6 ms attack overlapping the\n"
+               "fit. The departure is in the machine, not the instrument, and\n"
+               "is unexplained. Above 90 is extrapolation: 96 came in 10.8%\n"
+               "high on the run's best per-curve r2, also not an estimator\n"
+               "artefact (the control returns +0.16% there), also unexplained.",
         note="A RATE, not a duration. The stage slews at this many decibels\n"
              "per second, so it takes span/rate seconds to cross whatever\n"
              "distance it is given -- divide the distance by this to convert\n"

@@ -25975,13 +25975,54 @@ vary with the exponent's own variable is not an exponent disagreement.*
 
 ### One point excluded, and it excluded itself
 
-**Byte 20**: r² 0.948, the only fit below 0.99, `obs/§30` 0.712. 61.8 dB
-passes in ~18 ms — 42 windows even at 0.67 ms. That is the estimator running
-out of room. It is reported rather than dropped because **per-curve r² is what
-makes a bad point declare itself**, which is §30's own methodological content.
+**Byte 20**: r² 0.948, the only fit below 0.99, `obs/§30` 0.712. It is
+reported rather than dropped because **per-curve r² is what makes a bad point
+declare itself**, which is §30's own methodological content.
 
-Byte 96 is the one I cannot explain: 10.8% high on the run's *best* per-curve
-r² (0.99954, 1106 windows). Not smoothed over. Above 90 stays extrapolation.
+> **CORRECTED the same evening.** This section first read: *"61.8 dB passes in
+> ~18 ms — 42 windows even at 0.67 ms. That is the estimator running out of
+> room."* **That explanation is refuted, by the control below that I should
+> have run before writing it.** The estimator recovers a clean 2370 dB/s decay
+> to **−0.67% at r² 0.99906 on 37 windows** — it does not run out of room.
+> Adding a linear attack of up to 6 ms, which at this rate overlaps the fitted
+> region, still gives **−0.77% at r² 0.99860**. The real point is −28.8% at
+> r² 0.948. **Neither resolution nor attack overlap accounts for it**, so the
+> departure is in the machine or the signal and not in the instrument. That
+> makes byte 20 a measured anomaly rather than an artefact, which is more
+> interesting than the tidy explanation it replaces. Cause unknown; the
+> candidates (the envelope departing from exponential at the fast end, the
+> sample's own onset, the voice's amplitude path) are not distinguished by
+> anything measured here.
+
+Byte 96 is the other one I cannot explain: 10.8% high on the run's *best*
+per-curve r² (0.99954, 1106 windows). The control returns **+0.16%** at that
+rate, so this is not an estimator artefact either. Not smoothed over. Above 90
+stays extrapolation.
+
+### The estimator, run over a constructed signal
+
+§259 first validated its fitter by reproducing §30's exponent to 0.49%. **That
+is agreement between two measurements, not agreement with ground truth** — a
+bias shared by both would be invisible to it, and `SONIC_CHECKLIST` trap 3b
+exists to say so. The control was skipped and is now run: white noise with an
+exact exponential envelope at each rate the machine produced, through the
+identical window/floor/fit path.
+
+```
+estimator error across the ladder:  median 0.12%   max 1.17%
+points distorted by more than 2%:   none
+```
+
+So the fitter is unbiased from 1.46 to 2370 dB/s, and §259's agreement with
+§30 is two independent routes to the same number rather than one route twice.
+**Everything except bytes 20 and 96 is now backed by ground truth as well as
+by §30.**
+
+Prompted by mpc2emu, who planted a violation to test a newly written check,
+watched it pass, and found the plant had been made on an entry that could not
+exhibit the condition. **A no-op plant is indistinguishable from a working
+probe**, and the same is true of a control that is never run at all: the
+tidy explanation for byte 20 survived exactly as long as nothing tested it.
 
 ### Why noise is admissible here when §118 says it is not
 
