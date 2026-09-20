@@ -449,6 +449,7 @@ silently wrong one.
 - [§256](#256--the-50-rail-is-not-enforced-on-the-byte-offset-write-path-2026-09-15) — The ±50 rail is not enforced on the byte-offset write path (2026-09-15)
 - [§257](#257--lfo2s-rate-law-is-lfo1s-and-modvpan1-is-1-db-per-unit-2026-09-17) — LFO2's rate law is LFO1's, and `MODVPAN1` is ~1 dB per unit (2026-09-17)
 - [§258](#258--the-resident-object-directory-and-a-255-sample-ceiling-the-pool-does-not-model-2026-09-20) — The resident-object directory, and a 255-sample ceiling the pool does not model (2026-09-20)
+- [§259](#259--decay1-across-2099-in-one-sweep-30-confirmed-118s-re-measure-refuted-2026-09-20) — `DECAY1` across 20..99 in one sweep: §30 confirmed, §118's re-measure refuted (2026-09-20)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -11078,6 +11079,17 @@ ATTAK1     0.10844         0.10862        40..99   0.99901      0.17%
 DECAY1     0.09776         0.08781        40..99   0.99681      10%
 RELSE1     0.09683         0.09226        20..70   0.99941      4.7%
 ```
+
+> **CORRECTED 2026-09-20 (§259). `DECAY1`'s row is wrong and this conclusion
+> was too generous.** A 10% exponent disagreement is not a reproduction, and
+> it sat on the worst r2 of the three, next to `ATTAK1`'s genuine 0.17%. A
+> single-estimator sweep over 20..99 returned 0.09728 — 0.49% from the
+> standing 0.09776 and 10.8% from the 0.08781 below — and the discriminating
+> evidence is that the residual has **no slope against the byte**, which an
+> exponent error must have. **The standing value stands; the sine re-measure
+> of `DECAY1` does not.** `ATTAK1` and `RELSE1` here are untouched by that and
+> remain unconfirmed either way. §118's estimator lesson holds; its
+> replacement numbers should not be quoted.
 
 All three reproduce, on a different source in a different session. Nothing
 in `scales.py` needed changing — which is the outcome a re-measurement
@@ -25886,3 +25898,117 @@ and leaves nothing half-resident.
   real maximum across the thirteen is 77 and the total is 205, not 395. See
   the amended section above — the correction is what made the observation
   discriminate.
+
+## §259 — `DECAY1` across 20..99 in one sweep: §30 confirmed, §118's re-measure refuted (2026-09-20)
+
+mpc2emu asked for the `DECAY1` fit to be extended below byte 45, because 42%
+of the keygroups on a real S3000 library disc carry **byte 30** — fifteen
+below where §30's fit starts, so most real material was being read by
+extrapolation.
+
+It should not have been an extension. **s3ked held two `DECAY1` exponents and
+declared them agreeing:**
+
+| | exponent | range | r² | |
+|---|---|---|---|---|
+| §30 | 0.09776 | 45..85 | 0.99998 | shipped, and mpc2emu depends on it |
+| §118 | 0.08781 | 40..99 | 0.99681 | "all three laws reproduce" |
+
+A 10% difference on the worst r² of the three, called a reproduction beside
+`ATTAK1`'s genuine 0.17%. Extending §30 downward would have taken one side of
+an unreconciled conflict as given, into the region where its rival was fitted.
+So: **20..99 in one sweep, one source, one estimator.**
+
+### Result
+
+Looped white noise, `ATTAK1` 0, `SUSTN1` 0, dB-slope fit, 2 repeats per point.
+
+```
+byte   rate dB/s      r2    windows  obs/§30      byte   rate dB/s      r2    windows  obs/§30
+  20     2370.32  0.94801     42      0.712         60       67.41  0.99818    158      1.011
+  25     2034.76  0.99662     45      0.996         65       41.45  0.99835    256      1.013
+  30     1278.74  0.99709     71      1.021         70       25.12  0.99823    424      1.001
+  35      767.77  0.99759    117      0.999         75       15.50  0.99831    688      1.007
+  40      479.22  0.99750     89      1.017         80        9.61  0.99811    276      1.018
+  45      287.08  0.99932    163      0.993         85        5.91  0.99839    451      1.020
+  50      177.73  0.99687    242      1.002         90        3.69  0.99839    721      1.040
+  55      109.79  0.99733    390      1.010         96        2.19  0.99954   1106      1.108
+                                                    99        1.46  0.99914   1077      0.988
+
+fitted 25..99   |b| = 0.09728   A = 23172   r2 0.99989   16 points
+   vs §30  0.09776  ->  0.49% apart
+   vs §118 0.08781  -> 10.79% apart
+```
+
+### What discriminates, and it is not the closeness of the fit
+
+An exponent error is not a scale error: it must show as a **drift against the
+byte**. If §118 were right, `obs/§30` would have to run
+
+```
+byte 30: 1.382    45: 1.190    62.5: 1.000    85: 0.799    90: 0.761
+```
+
+Measured across 25..90 it is **flat — median 1.0101, min 0.9931, max
+1.0396**. No slope, so not an exponent. **§30's law stands; §118's re-measure
+is wrong.**
+
+The test is mpc2emu's, taken from their own work the same evening: they killed
+a hypothesis of mine by showing a claimed 10% exponent error produced no trend
+across 1306 voices. It is the cheap falsifier for this whole class of claim
+and it wants writing down as one — *an exponent disagreement that does not
+vary with the exponent's own variable is not an exponent disagreement.*
+
+### What changed and what deliberately did not
+
+- **`scales.py` range: `(45, 85)` → `(25, 90)`.** Byte 30 is now measured, at
+  `obs/§30` 1.021 on 71 windows.
+- **The constants are unchanged.** 0.09728/23172 against 23525.6/0.09776 is
+  0.49%, inside the scatter. A shipped constant that reproduced does not get
+  churned for a difference the measurement cannot resolve.
+- **The old bound's stated reason was wrong.** It read "below 45 the fall
+  crosses in too few analysis windows to time … a limit of the rig, not of the
+  machine". True of the window that was used: at 0.67 ms resolution byte 30
+  gives 71 windows. **The limit was the estimator's resolution, and it moved
+  when the estimator did.** A bound recorded as physical when it is an
+  artefact of the instrument is the kind that never gets retested.
+
+### One point excluded, and it excluded itself
+
+**Byte 20**: r² 0.948, the only fit below 0.99, `obs/§30` 0.712. 61.8 dB
+passes in ~18 ms — 42 windows even at 0.67 ms. That is the estimator running
+out of room. It is reported rather than dropped because **per-curve r² is what
+makes a bad point declare itself**, which is §30's own methodological content.
+
+Byte 96 is the one I cannot explain: 10.8% high on the run's *best* per-curve
+r² (0.99954, 1106 windows). Not smoothed over. Above 90 stays extrapolation.
+
+### Why noise is admissible here when §118 says it is not
+
+§118 concluded "a sustained tone is the right instrument; noise is right for
+spectra and wrong for envelopes". That is too broad, and the narrower version
+is the useful one:
+
+- §118 measured **times to a threshold crossing**. A noise source's amplitude
+  fluctuates by design, so the crossing inherits that fluctuation directly.
+- This measured a **dB slope over hundreds of windows**, which averages it out.
+
+Source characterised before anything was fitted — the step §118 omitted:
+**76.1 dB usable span, 1.25 dB wobble p5–p95, 0.37 dB per window.** Per-curve
+r² came out 0.9966–0.9995, below §30's 0.999–1.000, which is that wobble
+showing and is still far above what a crossing survives on the same material.
+
+**So: noise plus a slope fit is sound; noise plus a crossing time is not.**
+eosed had been reporting first-crossing drop times on noise all week,
+including in a circulated release comparison, on the reasoning that a crossing
+cannot be dragged by a flat tail — true of a tonal pad, and wrong on noise
+where the fluctuation is inside the level being tested.
+
+### §30's source is not established
+
+While checking this I could not confirm what §30 measured on. The section does
+not name it, and its one remark about it — failures "where **the sample's own
+slow decay** competes with the envelope" — describes something that is *not*
+flat noise. Two sibling sessions were relying on a second-hand claim that §30
+used noise. It may have; §30 does not say so, and nothing here should rest on
+it. Tonight's run establishes noise-plus-slope directly instead.

@@ -355,11 +355,18 @@ SCALES: Dict[Tuple[str, str], Scale] = {
         endpoints={0: "fastest"},
     ),
     ("keygroup", "DECAY1"): Scale(
-        "keygroup", "DECAY1", "dB/s", "exp", 23525.6, -0.09776, (45, 85),
+        "keygroup", "DECAY1", "dB/s", "exp", 23525.6, -0.09776, (25, 90),
         0.99998,
-        bounds="swept 45..85 at a fixed ~48 dB span. Below 45 the fall crosses\n"
-               "in too few analysis windows to time; above 85 it outlasts the\n"
-               "capture. Both are limits of the rig, not of the machine.",
+        bounds="swept 25..90, re-measured 2026-09-20 (§259) on looped white\n"
+               "noise at 60+ dB of span per point. The old 45..85 said the\n"
+               "fall below 45 'crosses in too few analysis windows to time' --\n"
+               "true of the window that was used, not of the field: a 0.67 ms\n"
+               "window gives 71 windows at byte 30. The limit was the\n"
+               "estimator's resolution and it moved when the estimator did.\n"
+               "Byte 20 still fails (r2 0.948, 61.8 dB in ~18 ms, 42 windows)\n"
+               "and is where the real floor sits. Above 90 is extrapolation:\n"
+               "96 came in 10.8% high on the run's best per-curve r2 and is\n"
+               "unexplained.",
         note="A RATE, not a duration. The stage slews at this many decibels\n"
              "per second, so it takes span/rate seconds to cross whatever\n"
              "distance it is given -- divide the distance by this to convert\n"
@@ -367,7 +374,16 @@ SCALES: Dict[Tuple[str, str], Scale] = {
              "dB at r2 0.999 to 1.000, so the ramp model is confirmed value\n"
              "by value rather than on average, which is exactly what the\n"
              "retracted exponential model never managed: it sat at 0.945\n"
-             "everywhere, and flat mediocrity is bias rather than noise.",
+             "everywhere, and flat mediocrity is bias rather than noise.\n"
+             "Per-curve r2 is source-dependent: 0.999-1.000 on §30's source,\n"
+             "0.9966-0.9995 on white noise (§259), which is the source's own\n"
+             "1.25 dB wobble showing and is still far above what a threshold\n"
+             "crossing survives on the same material.\n"
+             "The CONSTANTS ARE §30'S AND ARE DELIBERATELY UNCHANGED: §259\n"
+             "re-fitted them at 0.09728/23172 over 25..99, 0.49% away, which\n"
+             "is inside the scatter. Churning a shipped constant that\n"
+             "reproduced is a cost with no measured gain -- mpc2emu depends\n"
+             "on this one. What changed is the RANGE, which was wrong.",
         endpoints={0: "fastest"},
     ),
     ("keygroup", "RELSE1"): Scale(

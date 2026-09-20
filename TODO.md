@@ -2552,6 +2552,81 @@ denominator, not a measurement.
 source wanting 5.11 dB needs `MODVPAN1 ≈ 5`; the writer emits 32.
 ---
 
+## `Scale` records why a range stops but not what it was measured on (OPEN 2026-09-20 — §259)
+
+**Status:** found by generalising a gap mpc2emu found in their own
+`docs/calibration.json`, where `_AK_DECAY1_RATE` carried
+`provenance_gap: true` with `method`, `subject`, `date` and `detector` all
+null. s3ked has the same hole, structurally rather than by oversight.
+
+`Scale` has `region, param, unit, kind, a, b, fitted, r2, provisional, note,
+bounds, endpoints`. **There is no field for the instrument the law was
+measured on.** Surveying all 36 measured laws:
+
+    name a section (§n)      23 / 36   (64%)
+    name what was measured   17 / 36   (47%)
+    have no bounds text       0 / 36
+
+**The contrast is the finding.** `bounds` is 100% complete because the
+dataclass documents it as required, with mpc2emu's own `DECAY1 0..99` as the
+cautionary tale attached. Source is 47% complete because nothing ever asked
+for it. A requirement written into the class got obeyed 36 times out of 36;
+the one that was never written got skipped on half.
+
+**What it cost, concretely:** §30 does not name its source. Its only remark
+about it — "the sample's own slow decay competes with the envelope" —
+describes something that is *not* flat noise, and two sibling sessions spent
+this week relying on a second-hand claim that it was noise. §259 no longer
+depends on that, but it depended on noticing.
+
+The 19 with no source: `program.PRLOUD`, `program.LFORAT`, `keygroup.RELSE1`,
+`keygroup.ATTAK2`, `keygroup.DECAY2`, `keygroup.K_DAR3`, `keygroup.V_REL3`,
+`keygroup.O_REL3`, `keygroup.V_ATT3`, `keygroup.VLOUD1`, `keygroup.FILQ`,
+`keygroup.ENV3R2`, `keygroup.ENV3R4`, `keygroup.ENV3R3`, `program.V_LOUD`,
+`program.MWLDEP`, `program.PRSDEP`, `program.LFODEL`, `program.PANPOS`.
+
+**Blocked on:** nothing for the mechanism — add a `measured_on` field and a
+test that requires it, exactly as `bounds` is required. **Backfilling is the
+part that needs judgement:** some are recoverable from their sections, some
+are not, and an entry whose source cannot be recovered must say so explicitly
+rather than be left blank — a blank reads as "nobody needed one", which is
+how this happened. mpc2emu's `provenance_gap: true` is the right shape.
+
+**Not started — this is a change to a shipped dataclass and 36 entries, and
+it wants Jan's word before it is made.**
+
+## §118's other two re-measures are unconfirmed, and two peers were quoting it (OPEN 2026-09-20 — §259)
+
+**Status:** §259 refuted §118's `DECAY1` sine re-measure (0.08781 against a
+standing 0.09776; a fresh 20..99 sweep returned 0.09728, and the residual has
+no slope against the byte, which an exponent error must have). §118's
+conclusion was **"all three reproduce"**, so the other two rows inherit the
+same doubt and neither has been retested:
+
+    ATTAK1   0.10844 -> 0.10862   40..99   r2 0.99901   0.17%   plausible
+    RELSE1   0.09683 -> 0.09226   20..70   r2 0.99941   4.7%    UNCONFIRMED
+
+`ATTAK1` at 0.17% is a genuine reproduction and needs nothing. **`RELSE1` at
+4.7% is the one to check** — too large to be scatter, too small to have been
+caught by the same eye that let 10% through.
+
+**Why it matters beyond s3ked:** mpc2emu and eosed have both been reading
+§118 at second hand this week. Both have been told to treat its numbers as
+unconfirmed, and that instruction needs discharging rather than standing
+forever.
+
+**Blocked on:** the rig, and it is the same sweep — `RELSE1` 20..99, one
+source, one dB-slope estimator, per-curve r2 reported. §259's rig time was
+about seven minutes of capture; this is the same shape. Note `RELSE1`'s span
+is not a property of its value (§30): a release starts wherever the note had
+got to, so the probe must set a known level before note-off.
+
+**Also open, cheap, no rig:** §30 does not name the source it measured on, and
+its one remark about it ("the sample's own slow decay competes with the
+envelope") describes something that is not flat noise. Two sessions were
+relying on a second-hand claim that §30 used noise. §259 no longer depends on
+it, but the section should say what it measured.
+
 ## Two resident-object ceilings, 255 samples and 254 programs (OPEN 2026-09-20 — §258)
 
 **Status:** mechanism solved from the firmware, and Jan's observed failure now
