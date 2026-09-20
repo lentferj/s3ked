@@ -448,6 +448,7 @@ silently wrong one.
 - [§255](#255--mwldep-is-11-shown-by-a-plateau-rather-than-by-a-slope-2026-09-15) — `MWLDEP` is 1:1, shown by a plateau rather than by a slope (2026-09-15)
 - [§256](#256--the-50-rail-is-not-enforced-on-the-byte-offset-write-path-2026-09-15) — The ±50 rail is not enforced on the byte-offset write path (2026-09-15)
 - [§257](#257--lfo2s-rate-law-is-lfo1s-and-modvpan1-is-1-db-per-unit-2026-09-17) — LFO2's rate law is LFO1's, and `MODVPAN1` is ~1 dB per unit (2026-09-17)
+- [§258](#258--the-resident-object-directory-and-a-255-sample-ceiling-the-pool-does-not-model-2026-09-20) — The resident-object directory, and a 255-sample ceiling the pool does not model (2026-09-20)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -25711,3 +25712,138 @@ rail convention is what produces it on both machines.
 Captures at `~/temp/matrix/pansweep.npz` and `panrate2.npz`, sample rate stored
 in each. Probes `~/temp/s3ked-logs/panverify.py`, `panrate2.py`, `pansweep.py`.
 RAM only; five fields snapshotted, all restored and verified.
+
+## §258 — The resident-object directory, and a 255-sample ceiling the pool does not model (2026-09-20)
+
+mpc2emu asked what `ds:0x72F6` is in `S30XLV20.BIN`, after Jan's S3000XL
+refused an ENTIRE VOLUME load with `!! TOO MANY PROGS./KEYGROUPS/SAMPLES !!`
+while the LCD still showed **533 free P/K/S**. They had found eight sites
+loading that message and two guard shapes, and proposed that a byte compare
+against `0xFF` implied a **255-keygroup** ceiling.
+
+The ceiling is real. It is not on keygroups.
+
+### The directory
+
+One routine builds all three counters, and it names the pool:
+
+```
+35200:  be 00 90        mov  si,0x9000
+35203:  b9 ee 03        mov  cx,0x3EE          ; 1006 entries
+35206:  2b c0           sub  ax,ax
+35208:  8e c6           mov  es,si             ; ES = SI  -> SI steps PARAGRAPHS
+3520a:  26 80 3e 00 00 03   cmpb $3,es:[0]     ; type code in byte 0
+35210:  75 06           jne  .next
+35212:  40              inc  ax
+35213:  89 35           mov  [di],si           ; collect the segment
+35215:  83 c7 02        add  di,2
+35218:  83 c6 0c  .next add  si,0x0C           ; 12 paragraphs = 192 bytes
+3521b:  e2 eb           loop .
+3521d:  a3 f6 72        mov  [0x72F6],ax
+```
+
+`add si,0x0C` with `mov es,si` steps **twelve paragraphs**, so the stride is
+**192 bytes** — `HEADER_SIZE`. The directory is **1006 entries × 192 bytes at
+linear `0x90000`**, running to `0xBF280`, immediately below the ROM's load
+base `0xC0000` (§235). This is the pool mpc2emu models as
+`--akai-max-objects 1006`; the number is now read off the firmware rather than
+assumed.
+
+Byte 0 of each entry is the **block identifier** s3ked already reads over
+SysEx — program `0x01`, keygroup `0x02` (`KGIDENT`), sample `0x03`
+(`SHIDENT`), established from hardware on 2026-08-10 (§14) and carried in
+`s3k/params.py` at offset 0 of each region. Type `0` is a free entry. Two
+independent routes to the same three numbers.
+
+Word at offset 1 is the forward link (`mov es,es:[1]`), matching `KGRP1@`,
+"block address of first keygroup".
+
+### The three counters
+
+Each has **exactly one writer** in the whole 256 KB image:
+
+| addr | writer | counts | meaning |
+|---|---|---|---|
+| `0x72F4` | `0x12895` | type 1 | **resident programs** |
+| `0x72F6` | `0x3521D` | type 3 | **resident samples** |
+| `0x72F8` | `0x35229` | — | `= [0x72F4] + [0x72F6] + 4`, a combined selector length |
+
+**Type 2 — keygroups — has no global counter at all.** Keygroups consume
+directory entries like everything else, but nothing counts them separately, so
+nothing can cap them separately. The `0x72F4`/`0x72F6`/`0x72F8` trio is named
+as a unit in the variable tables at `0x000544`, `0x000A7C` and `0x03A968`,
+each paired with a cursor word at `0x74C3`/`0x74C7`/`0x74C9`.
+
+### The ceiling, and which object it is on
+
+Six sites compare the **low byte** of `0x72F6` against `0xFF` — three `jb`
+(proceed), three `jae` (raise). One of them gates sample creation directly:
+
+```
+17dff:  80 3e f6 72 ff  cmpb $0xFF,[0x72F6]
+17e04:  72 03           jb   .ok
+17e06:  e9 29 05        jmp  0x18332           ; refuse
+...
+17e2d:  b9 c0 00  .ok   mov  cx,0xC0           ; 192 bytes
+17e30:  f3 a4           rep  movsb
+17e32:  26 c6 06 00 00 03   movb $3,es:[0]     ; stamp SAMPLE
+```
+
+So the machine refuses to create sample entry number 256. **A resident-sample
+ceiling of 255**, independent of the 1006 pool and invisible to it.
+
+Site B is a different guard and not a ceiling at all:
+
+```
+12e96:  26 8a 16 2a 00  mov  dl,es:[0x2A]      ; GROUPS
+12e9b:  2a f6           sub  dh,dh
+12e9d:  42              inc  dx                ; program + its keygroups
+12e9e:  3b ea           cmp  bp,dx
+12ea0:  73 11           jae  .ok               ; enough free entries
+```
+
+`es:[0x2A]` is **`GROUPS`**, program-header offset 42, "number of keygroups",
+documented 1–99 and read-only. `bp` is free capacity. This is the ordinary
+pool check — "room for this program and all its keygroups" — and it is the one
+that models what mpc2emu already models.
+
+The type-1 → type-2 relationship is written out at `0x1B0C7`: stamp a head
+entry type 1, read `es:[0x2A]`, then walk the link at `es:[1]` that many times
+stamping type 2.
+
+### What the observed failure does and does not show
+
+The volume needs 13 + 395 + 271 = **679** entries and the LCD showed **533**
+free. **679 > 533 on its own fully explains the refusal.** The observation
+therefore does *not* discriminate between the pool check and the sample
+ceiling — both conditions were true, and site B's guard is the cheaper one.
+271 > 255 fits, and now fits the right variable, but it is not evidence yet.
+
+### The single-variable falsifier
+
+Build a volume whose **sample count exceeds 255** while its **total entry
+count stays well under the free pool** — e.g. 1 program, 1 keygroup, 260
+samples: 262 entries against 533 free. Load it.
+
+- refused → the 255 sample ceiling is confirmed, and both projects' writers
+  should refuse to build such a volume rather than let the machine find it;
+- loaded → this reading is wrong and §258 needs redoing.
+
+### Caveat worth stating rather than hiding
+
+`cmp byte [0x72F6],0xFF` tests only the **low byte** of a word counter. It is
+sound only while the count can never pass 255 — which the guard enforces, *if*
+every creation path is guarded. Should any path reach 256, the low byte wraps
+to `0x00` and the guard opens again until 511. I have not proved the six
+guarded sites are the only creation paths, so this is a shape to be aware of,
+not a claimed defect.
+
+### Corrections to the incoming report
+
+- The eight `BB 49 16` sites are at `0x12EA3`, `0x13030`, `0x1353D`,
+  `0x13592`, `0x1A7CB`, `0x1AA5C`, `0x1AFE8`, `0x1B474` — mpc2emu's list is
+  uniformly **+1**. The sites themselves are all real.
+- A program with **128 keygroups** is outside `GROUPS`' documented 1–99 range.
+  The field is a byte so 128 is representable, but either the S3000XL exceeds
+  its own spec here or that count came from a parser, not the header. Worth
+  checking on their side before the number is used again.
