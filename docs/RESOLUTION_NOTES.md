@@ -25945,12 +25945,64 @@ type:
 (The three that *do* restamp are `0x17C79` → type 1, `0x17D59` → type 2,
 `0x17E2D` → type 3, the last being the guarded path above.)
 
-Whether any of those fourteen writes into a **directory slot** rather than a
-work buffer is not determined here, and that is the remaining way a type-3
-entry could appear without passing a guard. The cheap next step is to resolve
-each one's `ES` source: a copy whose `ES` comes from the collected-segment
-tables at `0xA1B0`/`0xB1B0`, or from the `0x9000 + 12k` walk, is writing to a
-slot; one loading `ES` from anywhere else is not.
+**Resolved 2026-09-20, and it comes down to one site.** Tracing `ES` fourteen
+times was the wrong instrument; the structural question is *which copies
+allocate a slot*. A record is created where the allocator is called, and the
+allocator has two entry points — `0x24d1:0x0e96` (file `0x25BA6`, 13 callers)
+and `0x24d1:0x0ec5` (file `0x25BD5`, 6 callers).
+
+**Seven of the fourteen have no allocator within 0x60** and are not creating
+records at all: `0x1374B`, `0x13755`, `0x32837`, `0x33879`, `0x33C23`,
+`0x354AD`, `0x354B5`. `0x1374B` is representative — it loads `si,0x13B1` and
+`di,0xA1B0` and fills the 192-byte **staging buffer**, not a slot.
+
+**Six of the remaining seven are guarded, and by the right guard.**
+`0x12EC7`/`0x12EE0` and `0x13555`/`0x1356E` are *program duplication*: the
+source program is put in `DS`, a slot is allocated per record, and the source's
+keygroup chain is walked with a 192-byte copy and a link fixup each time —
+
+```
+12eb4  mov ax,es / mov ds,ax      ; DS = source program record
+12eb8  mov ax,0x9000 / mov es,ax
+12ebd  lcall 0x24d1:0x0e96        ; allocate a slot
+12eca  rep movsb (192)            ; copy, type byte and all
+12ecf  mov ds,[si+1]              ; follow the source's link
+12eda  mov [si+1],es              ; fix up the new chain
+12ee6  jne  (loop over keygroups)
+```
+
+so the types propagated are the source's — **1 and 2, never 3**, because a
+program's chain is keygroups. Site B's `GROUPS`+1 pool check is exactly the
+right guard for a routine that allocates `GROUPS`+1 records. `0x12FDD` and
+`0x135AA` sit directly behind the sample guards at `0x12FBB` and `0x13582`,
+and the allocator at `0x17537` sits directly behind the one at `0x1752F`.
+
+**The seventh is not guarded.**
+
+```
+177aa  andb $0xf8,0x7ca0
+177af  testb $0x20,0x7ca0
+177b4  jne  0x177d8               ; a FLAG test, not a count check
+177b6  lcall 0x24d1:0x0ec5        ; allocate a slot
+177bc  mov si,0xa1b0              ; the shared staging buffer
+177bf  mov cx,0xC0
+177c2  rep movsb                  ; copy 192 bytes -- byte 0 included
+                                  ; and NOT restamped afterwards
+```
+
+`0x177B6` allocates a directory slot with **no `cmp byte [0x72F6],0xFF` in
+front of it**, and fills it from the same `0xA1B0` staging buffer that the
+guarded type-3 path at `0x17E13` uses as *its* source — inheriting whatever
+byte 0 that buffer happens to hold. The three stamping sites (`0x17C79`→1,
+`0x17D59`→2, `0x17E2D`→3) all overwrite byte 0 after copying, which suggests
+the buffer's own type byte is not trusted; this one does not.
+
+**So the open question is narrowed from fourteen sites to one, and sharpened:
+can the `0xA1B0` staging buffer hold a type-3 header at the moment `0x177AA`
+runs?** If it can, this is a path that creates a sample entry without passing
+the 255 ceiling, and the byte-compare wrap described above becomes reachable
+rather than theoretical. Not determined here — it needs the callers of
+`0x177AA` (reached from `0x177A1`) and what last wrote the buffer.
 
 **Two transfer classes remain unscanned**, and they are the honest limit of
 this: indirect `jmp`/`call` through a register or memory (`ff /4`, `ff /5`),

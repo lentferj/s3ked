@@ -2670,15 +2670,30 @@ stamps type 3 (`0x17E32`), and the guard at `0x17DFF` dominates it — no
 every candidate (six were the byte `0x7C` inside `movw $imm,0x7Cxx` operands,
 not branches).
 
-**What remains, as 14 named sites rather than a worry:** fourteen
-`mov cx,0xC0 / rep movsb` whole-record copies do not restamp byte 0, so the
-destination inherits the source's type — `0x12EC7 0x12EE0 0x12FDD 0x13555
-0x1356E 0x135AA 0x1374B 0x13755 0x177BF 0x32837 0x33879 0x33C23 0x354AD
-0x354B5`. **Blocked on nothing; the next step is to resolve each one's `ES`
-source** — from the segment tables at `0xA1B0`/`0xB1B0` or the `0x9000 + 12k`
-walk means a directory slot, anything else means a work buffer. Also unscanned
-and unscannable by byte pattern: indirect `jmp`/`call` (`ff /4`, `ff /5`) and
-dispatch tables. Same question unchanged for the four program sites at `0xFE`.
+**Narrowed from fourteen sites to ONE, 2026-09-20.** The structural question
+was not where `ES` points but which copies **allocate** a slot; the allocator
+has two entry points, `0x24d1:0x0e96` (file `0x25BA6`) and `0x24d1:0x0ec5`
+(`0x25BD5`). Seven of the fourteen call no allocator and create nothing. Six
+more are guarded correctly — `0x12EC7`/`0x12EE0` and `0x13555`/`0x1356E` are
+program duplication that walks the source's keygroup chain and so propagates
+types 1 and 2 only, and `0x12FDD`/`0x135AA` sit directly behind the sample
+guards at `0x12FBB`/`0x13582`.
+
+**`0x177B6` is not guarded.** It allocates a slot behind only a flag test
+(`testb $0x20,0x7ca0`), then copies the shared `0xA1B0` staging buffer into it
+with no restamp of byte 0, inheriting whatever type that buffer holds. The
+three stamping sites all overwrite byte 0 after copying, which implies the
+buffer's own type byte is not trusted; this path does not.
+
+**The question, now precise: can the `0xA1B0` staging buffer hold a type-3
+header when `0x177AA` runs?** If yes, this creates a sample entry without
+passing the 255 ceiling, and the low-byte wrap becomes reachable rather than
+theoretical. **Blocked on nothing** — it needs the callers of `0x177AA`
+(reached from `0x177A1`) and whatever last wrote the buffer.
+
+Still unscanned and unscannable by byte pattern: indirect `jmp`/`call`
+(`ff /4`, `ff /5`) and dispatch tables. Same question unexamined for the four
+program sites at `0xFE`.
 
 **Neither project models either ceiling.** s3ked does not build volumes, but
 mpc2emu's writer should refuse >255 samples or >254 programs rather than let
