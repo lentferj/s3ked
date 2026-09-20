@@ -2829,6 +2829,33 @@ main interpreter. Both are deliberate.
 
 ---
 
+## Three loudness fields are grouped under `program.pan` (OPEN 2026-09-20)
+
+**Status:** found sideways, answering eosed's request to name fourteen AKAI
+program-common offsets for their EOS importer. Cosmetic, real, and it does not
+touch offsets, ranges or encoding.
+
+`program.pan` holds `V_LOUD` (0x1A, "Note-on velocity dependence of
+loudness"), `K_LOUD` (0x1B) and `P_LOUD` (0x1C) alongside the genuine pan
+fields. `PRLOUD` (0x19), the loudness those three modify, is in
+`program.output`. `group` drives editor page selection (`group_params`,
+`params.py:3152`) and the param label (`app.py:836`), so **in the TUI the
+velocity-to-loudness control appears on the Pan page, away from the loudness
+it acts on.**
+
+Likely cause: the boundary was drawn by offset rather than by meaning —
+`PRLOUD` at 0x19 is output, `PANRAT` at 0x1D is pan, and 0x1A-0x1C fell to the
+pan side. `PANRAT`/`PANDEP`/`PANDEL` genuinely are pan (LFO2 is the pan LFO),
+so only 0x1A-0x1C are misplaced.
+
+**Blocked on:** nothing. Two of the three are documented "Not used" (range
+0..0), so only `V_LOUD` is reachable in practice. A test pins entry counts per
+region but nothing pins group membership, so this changes no test.
+
+**Worth checking at the same time:** whether any other group boundary was
+drawn by offset. This one was only noticed because an outside question made
+someone read the block in offset order.
+
 ## External code review — GLM-5.3-Flash, 2026-09-20 (OPEN — triaged against the files)
 
 **Status:** every finding below was re-checked against the code on
