@@ -2685,11 +2685,26 @@ with no restamp of byte 0, inheriting whatever type that buffer holds. The
 three stamping sites all overwrite byte 0 after copying, which implies the
 buffer's own type byte is not trusted; this path does not.
 
-**The question, now precise: can the `0xA1B0` staging buffer hold a type-3
-header when `0x177AA` runs?** If yes, this creates a sample entry without
-passing the 255 ceiling, and the low-byte wrap becomes reachable rather than
-theoretical. **Blocked on nothing** — it needs the callers of `0x177AA`
-(reached from `0x177A1`) and whatever last wrote the buffer.
+**The ceiling at risk is 254 PROGRAMS, not 255 samples — corrected the same
+evening.** The discriminator is what each creation site calls next: `0x17E2D`
+(the real sample path) calls `0x3449:0x0c71`, which only sets a flag bit and
+computes one field, no recount; `0x177BF` calls **`0x12873`**, the routine
+that counts type-1 entries into `0x72F4` — the **program** recount. So the
+record it creates is most likely a program, inheriting type 1 from a buffer
+already holding a program header, which is why it needs no stamp. `0x177B6` is
+unguarded either way: the program guards sit at `0x12E77`, `0x17C51`,
+`0x1AFE1`, `0x1B46D`, none in `0x177xx`.
+
+Also corrected: `0x177AA` has **three** entries, not one — a call from
+`0x177A1` plus jumps from `0x1D88F` and `0x1DA16`. The first scan omitted
+`jmp rel16`.
+
+**No longer a pure disassembly question.** The buffer is genuinely shared —
+`0x17C5B` reads `GROUPS` from it, `0x17E13` reads sample fields from it, eight
+sites write it and thirteen read it. Settling it needs the template at
+`DS:0x1531` versus whatever fills the buffer on the `0x17786` path, and `DS`
+is not resolvable statically here. **Blocked on** either resolving the data
+segment or a live read.
 
 Still unscanned and unscannable by byte pattern: indirect `jmp`/`call`
 (`ff /4`, `ff /5`) and dispatch tables. Same question unexamined for the four

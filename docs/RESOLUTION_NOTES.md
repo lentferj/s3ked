@@ -25997,12 +25997,46 @@ byte 0 that buffer happens to hold. The three stamping sites (`0x17C79`→1,
 `0x17D59`→2, `0x17E2D`→3) all overwrite byte 0 after copying, which suggests
 the buffer's own type byte is not trusted; this one does not.
 
-**So the open question is narrowed from fourteen sites to one, and sharpened:
-can the `0xA1B0` staging buffer hold a type-3 header at the moment `0x177AA`
-runs?** If it can, this is a path that creates a sample entry without passing
-the 255 ceiling, and the byte-compare wrap described above becomes reachable
-rather than theoretical. Not determined here — it needs the callers of
-`0x177AA` (reached from `0x177A1`) and what last wrote the buffer.
+#### Which ceiling it threatens — corrected 2026-09-20
+
+I first framed this as a possible **type-3** bypass and told mpc2emu the open
+question was whether `0xA1B0` could hold a sample header. **The evidence points
+the other way**, and the discriminator is what each creation site calls next:
+
+```
+0x17C79  stamps 1, then allocates again and stamps 2   (program + first keygroup)
+0x17D59  stamps 2, then calls 0x12B70 / 0x12B79 / 0x12BC2
+0x17E2D  stamps 3, then lcall 0x3449:0x0c71 -> 0x35101, which only sets
+         bit 0x80 of es:[bx+0xF] and computes es:[bx+0x8A].  No recount.
+0x177BF  stamps NOTHING, then  call 0x12873
+```
+
+`0x12873` is the routine that walks all 1006 entries counting **type 1** and
+stores the result in `0x72F4` — the **program** recount. Nothing on this path
+touches the sample counter. So the record `0x177B6` creates is most likely a
+**program**, inheriting type 1 from a buffer already holding a program header,
+which is also why it needs no stamp.
+
+**That makes the ceiling at risk 254 programs, not 255 samples** — and
+`0x177B6` is equally unguarded either way: the program guards are at
+`0x12E77`, `0x17C51`, `0x1AFE1` and `0x1B46D`, none of them in `0x177xx`.
+
+**Still not proven**, and the reason is that the buffer is genuinely shared:
+`0x17C5B` reads `[si+0x2A]` from it — `GROUPS`, a program field — while
+`0x17DB7` and `0x17E13` read `[si+0x1A]`/`[si+0x1C]`, sample fields. Eight
+sites write the buffer and thirteen read it. A recount is strong evidence of
+intent, not proof of the byte that was copied.
+
+Also corrected: `0x177AA` has **three** entries, not one — a `call` from
+`0x177A1` (itself reached from `jne` at `0x17786`, on `testb $0x2,0x7ca0`) and
+`jmp`s from `0x1D88F` and `0x1DA16`. My first scan omitted `jmp rel16`, the
+same class of omission as reading the `0x7C` operand bytes as branches.
+
+**What would settle it:** the content of the template at `DS:0x1531`, which
+`0x17577` copies into the buffer behind the `0xFF` guard, versus whatever
+fills it on the path through `0x17786`. Both are `DS`-relative and `DS` is not
+known statically here, so this needs either the data segment resolved or a
+live read — it is no longer a pure disassembly question.
 
 **Two transfer classes remain unscanned**, and they are the honest limit of
 this: indirect `jmp`/`call` through a register or memory (`ff /4`, `ff /5`),
