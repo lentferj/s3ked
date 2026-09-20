@@ -26126,16 +26126,44 @@ precisely where the guard's own "proceed" branch lands. So when the far call
 at `0x1AFDA` returns with ZF set, the 254 ceiling is never tested and the path
 continues into the type-1 creation at `0x1B0C7` regardless.
 
-**Whether that is a defect turns on `0x12D95`, and it is not determined here.**
-The routine is three instructions — `lcall 0x24d1:0x104f`, `lcall
-0x3520:0x0581`, `ret` — and neither target has been followed. If one of them
-frees a directory entry, the skip is deliberate and correct: a replacement
-makes no net addition and needs no ceiling check. If neither does, this is a
-conditional bypass of the program ceiling. **Note the near miss next door:**
-`0x12DA8`, a different entry point a few bytes later, walks the program list
-and stamps type 0 on entries whose `es:[0x86]` is zero — a free routine. It
-would be easy to assume `0x12D95` does the same because of the address, and it
-does not call it.
+**Followed, and the bypass is correct — this is a negative result.**
+`0x12D95`'s two far calls resolve to file `0x25D5F` and `0x35781`:
+
+```
+25d5f  mov  bl,[0x74C3]      ; the PROGRAM CURSOR -- the variable this section's
+25d63  sub  bh,bh            ; tables pair with 0x72F4
+25d65  call 0x25d90          ; resolve that index into ES
+25d68  lret
+
+35781  mov  dh,0             ; 0 = the FREE type code
+35783  mov  es:[0],dh        ; free the head record
+35788  mov  cl,es:[0x2a]     ; GROUPS
+35792  mov  es,es:[1]        ; walk the keygroup chain
+35797  mov  es:[0],dh        ; free each keygroup
+```
+
+So `0x12D95` is **select the currently-selected program, then free it and its
+whole keygroup chain** — the exact inverse of the type-1/type-2 stamping loop
+at `0x1B0C7`/`0x1B0D9`. The `je` path therefore frees a program *before*
+creating one: a **replacement**, no net addition, and the 254 ceiling check is
+correctly skipped.
+
+**`0x1B0C7` is genuinely not dominated, and that turns out not to matter.** The
+control-flow fact stands; its significance is nil. Recorded rather than
+deleted because "guard not dominated" looked like a defect for about an hour
+and the reason it is not is the kind of thing a later reader will re-derive
+from scratch otherwise.
+
+**The near miss is still worth stating:** `0x12DA8`, a different entry a few
+bytes after `0x12D95`, *also* frees — it walks the program list stamping type
+0 on entries whose `es:[0x86]` is zero. Concluding "`0x12D95` frees, because
+`0x12DA8` does" would have reached the right answer by the wrong route, and
+the same reasoning would have been wrong for `0x12873`, whose neighbours say
+nothing about its second half.
+
+**This does not settle `0x13533`**, which has no `0xFE` guard within 1758
+bytes and no free routine found before it. Whether *its* caller frees
+something first is the same question and is unexamined.
 
 `0x1B46D`, the fourth guard, has not been examined.
 

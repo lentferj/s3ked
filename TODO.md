@@ -2724,13 +2724,22 @@ candidate disassembled, not judged by appearance:
   to `0x1AFF0`, which is exactly where the guard's own "proceed" branch lands.
   With ZF set from the far call at `0x1AFDA`, the 254 ceiling is never tested.
 
-**Blocked on nothing — the next step is two far calls.** `0x12D95` is
-`lcall 0x24d1:0x104f`, `lcall 0x3520:0x0581`, `ret`. If either frees a
-directory entry the bypass is correct (a replacement adds nothing net); if
-neither does, it is a conditional bypass of the program ceiling. **Do not
-assume from the address**: `0x12DA8`, a few bytes later, *is* a free routine —
-it stamps type 0 on program entries whose `es:[0x86]` is zero — and `0x12D95`
-does not call it.
+**RESOLVED 2026-09-20 — the bypass is correct, a negative result.** Following
+`0x12D95`'s two far calls: `0x25D5F` reads the **program cursor** at `0x74C3`
+(the variable §258's tables pair with `0x72F4`) and resolves it into `ES`;
+`0x35781` then does `mov dh,0` / `mov es:[0],dh`, reads `GROUPS`, walks the
+`es:[1]` chain and stamps **type 0** on every keygroup. So `0x12D95` selects
+the current program and frees it and its chain. The `je` path is a
+**replacement** — no net addition, so skipping the 254 check is right.
+
+`0x1B0C7` remains genuinely undominated and it does not matter. Kept in the
+notes rather than deleted, because it looked like a defect for an hour and the
+reason it is not would otherwise be re-derived from scratch.
+
+**Still open, and a different question:** `0x13533` has no `0xFE` guard within
+1758 bytes *and* no free routine found before it. Whether its caller frees
+something first is unexamined — that is the parallel question and the one that
+could still be a real gap.
 
 `0x1B46D`, the fourth guard, is unexamined.
 
