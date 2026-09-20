@@ -26161,9 +26161,56 @@ bytes after `0x12D95`, *also* frees — it walks the program list stamping type
 the same reasoning would have been wrong for `0x12873`, whose neighbours say
 nothing about its second half.
 
-**This does not settle `0x13533`**, which has no `0xFE` guard within 1758
-bytes and no free routine found before it. Whether *its* caller frees
-something first is the same question and is unexamined.
+**`0x13533` closed the same way, 2026-09-21 — also not a defect, and for a
+better reason than a free.** Its entry points resolve to exactly one call,
+from `0x1376D`, after four candidates turned out to be `0x73`/`0x79` operand
+bytes inside `mov ax,[0x733D]`, `[0x733F]`, `add ax,[0x7974]` and
+`adc dx,[0x7976]`.
+
+The caller at `0x13744` builds a program in the staging buffer from ROM
+templates and links one keygroup to it:
+
+```
+13745  mov si,0x13B1 / mov di,0xA1B0 / rep movsb 192   ; program template
+13752  mov si,0x1471 / rep movsb 192                   ; keygroup template
+1375A  mov si,0x15F1 / mov di,bx+0x22 / rep movsb 12   ; its name
+1376A  mov [si+1],bx                                   ; link them
+1376D  call 0x1352E                                    ; into the directory
+```
+
+No free anywhere. **But `0x13744` has exactly two callers and both run with
+the program count at zero:**
+
+```
+12895  mov [0x72F4],ax     ; ax = the count just tallied
+12898  testb $0x1,0x7381 / jne   ; flag set -> skip
+1289F  or ax,ax / jne             ; count NONZERO -> skip
+128A4  call 0x13744               ; reached only when the count is ZERO
+```
+
+and
+
+```
+12867  lcall 0x3520:0x028c -> 0x3548C   ; see below
+1286C  call 0x13744
+```
+
+where `0x3548C` walks all 1006 entries at the 12-paragraph stride stamping
+**type 0** on every one — clear-all-memory — before the default program is
+built. So one caller creates a program because there are none, and the other
+because it has just destroyed them all. **You cannot be at 254 when you are at
+0, so the missing `0xFE` guard is unnecessary by construction.**
+
+Two negatives in a row on the program ceiling, reached by different routes:
+`0x1AFDF`'s bypass is safe because it frees first, `0x13533` because it only
+runs from empty. Neither would have been visible from the guard sites alone.
+
+**Incidental confirmations from the same routine.** `0x3548C` is a third
+independent sighting of the **1006 × 192 at `0x9000`** model — `mov cx,0x3EE`,
+`add ax,0x0c` on a segment — after the two counting loops. And `0x354AD` and
+`0x354B5`, two of the fourteen unstamped whole-record copies listed above, are
+identified: they are this routine writing the default program and keygroup
+into `ES = 0xBFE8`, a staging area above the directory's top at `0xBF280`.
 
 `0x1B46D`, the fourth guard, has not been examined.
 
