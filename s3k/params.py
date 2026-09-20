@@ -36,9 +36,15 @@ region       entries  addressed by
 ``sample``        35  sample number
 ===========  =======  ====================================================
 
-**Nothing in this table has been verified against hardware.** It is a
+**Almost nothing in this table has been verified against hardware.** It is a
 transcription of a transcription -- see :mod:`s3k` docs and DISCLAIMER.md --
-and a wrong offset here writes to the wrong parameter on a real machine. The
+and a wrong offset here writes to the wrong parameter on a real machine.
+The exceptions carry it in their own ``notes`` and are, at present, only:
+``PRIDENT``/``KGIDENT``/``SHIDENT`` (read off an S3000XL, §14) and
+``PRNAME``/``SHNAME`` (confirmed against the firmware's own name search,
+§258). **Treat every other entry as unverified** -- the point of naming the
+exceptions is that a blanket warning makes everything equally suspect, which
+is its own way of being useless. The
 one guard that exists is structural, in ``tests/test_params.py``: no two
 spans in a region may overlap, and none may run past the end of its header.
 That catches transposition slips; it cannot catch a span that is wrong in the
@@ -334,6 +340,12 @@ _PARAMS: List[Parameter] = [
         0,
         kind="text",
         desc="Name of program",
+        notes="Offset and width CONFIRMED against the machine's own firmware "
+              "2026-09-21 (§258): the delete-on-duplicate-name search at "
+              "0x34ABC does mov di,3 / mov cx,0x0C / repz cmpsb over each "
+              "resident program. The firmware is not a document, so this is "
+              "independent of the transcription rather than another reading "
+              "of it.",
     ),
     _p(
         "program",
@@ -2663,6 +2675,10 @@ _PARAMS: List[Parameter] = [
         0,
         kind="text",
         desc="Sample name",
+        notes="Offset and width CONFIRMED against the machine's own firmware "
+              "2026-09-21 (§258), by the sample-side twin of the program name "
+              "search -- 0x34A9A over 0x72F6 and cursor 0x74C7, same "
+              "12-byte compare at offset 3.",
     ),
     _p(
         "sample",
