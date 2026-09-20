@@ -2829,6 +2829,45 @@ main interpreter. Both are deliberate.
 
 ---
 
+## Cross-project: eosed and mpc2emu contradict each other on EOS envelopes (OPEN 2026-09-20)
+
+**Status:** surfaced from here because both sent their findings to this
+session within a few hours. Not s3ked's to adjudicate, but s3ked should not
+cite either until it resolves.
+
+- **mpc2emu**, from 1161 matched voices: the implied EOS decay span is
+  **29.99 dB**, stable while their own span varied a hundredfold across
+  sustain buckets. Written up mechanistically — *"EOS computes them over a
+  fixed reference of about 29-30 dB"* — and flagged as suggestively close to
+  E4B's `_ENV_SHAPE_KNEE_DB = 29.0`.
+- **eosed**, from decompiling EOS 4.70's importer: it does **no time
+  arithmetic** on envelopes. Attack is a 100-entry table at `0x303d0`, decay a
+  table at `0x30434`, release the *same* table as decay, sustain a plain
+  `round(clamp(v,0,99)*127/99)`, with `Dcy1 rate = 0` and `Dcy1 level = 127`
+  hardcoded.
+
+**Both can describe the same table; only one describes the importer.** If the
+conversion is a byte-to-byte lookup, ~30 dB is an emergent property of the
+table's *contents* — plausibly because its generator assumed 30 dB, which
+would make mpc2emu's figure a correct inference about the table's **origin**
+and a wrong one about the importer's **behaviour**. The sustain sweep itself
+is unaffected: a denominator moving 100x with a stable quotient still says the
+effective span is ~30 dB whatever produces it. Only the mechanism clause is in
+question, and mechanism clauses are what other projects build on.
+
+**The discriminator, no rig, belongs to whoever holds the files:** index the
+decay table at `0x30434` with the AKAI decay bytes from a sample of the 1161
+voices and compare against the EOS values those voices actually carry. Exact
+match means the table is the whole mechanism; a mismatch means something
+computes after it.
+
+**Relevance to s3ked:** none of our constants depend on this. It matters only
+if §259's `DECAY1` law is ever cited alongside an EOS comparison — and it is a
+live instance of the rule that a fit to a non-existent quantity still returns
+a number (eosed's phrasing).
+
+**Blocked on:** eosed and mpc2emu. Both notified 2026-09-20 21:30.
+
 ## Three loudness fields are grouped under `program.pan` (OPEN 2026-09-20)
 
 **Status:** found sideways, answering eosed's request to name fourteen AKAI
