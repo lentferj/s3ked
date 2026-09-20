@@ -2685,15 +2685,37 @@ with no restamp of byte 0, inheriting whatever type that buffer holds. The
 three stamping sites all overwrite byte 0 after copying, which implies the
 buffer's own type byte is not trusted; this path does not.
 
-**The ceiling at risk is 254 PROGRAMS, not 255 samples — corrected the same
-evening.** The discriminator is what each creation site calls next: `0x17E2D`
-(the real sample path) calls `0x3449:0x0c71`, which only sets a flag bit and
-computes one field, no recount; `0x177BF` calls **`0x12873`**, the routine
-that counts type-1 entries into `0x72F4` — the **program** recount. So the
-record it creates is most likely a program, inheriting type 1 from a buffer
-already holding a program header, which is why it needs no stamp. `0x177B6` is
-unguarded either way: the program guards sit at `0x12E77`, `0x17C51`,
-`0x1AFE1`, `0x1B46D`, none in `0x177xx`.
+**`0x177B6`'s type is UNDETERMINED — two attributions attempted, both
+withdrawn.** First type-3, then type-1 on the grounds that it calls `0x12873`,
+"the program recount". **`0x12873` is not a program recount**: it counts type 1
+into `0x72F4` and then, at `0x128A9`, calls `0x3520:0x0000` — the sample
+counter — and reads `0x72F6`. A combined catalogue refresh tells you nothing
+about which type was created, and `0x135AA` proves it by sitting behind the
+*sample* guard and calling `0x12873` too. Checked by reading the first twenty
+bytes of the routine and not the next twenty.
+
+What survives both corrections: **`0x177B6` is unguarded against BOTH
+ceilings** — no program guard (`0x12E77`, `0x17C51`, `0x1AFE1`, `0x1B46D`) and
+no sample guard (`0x12FBB`, `0x13582`, `0x1752F`, `0x17DFF`, `0x1A7C4`,
+`0x1AA55`) is anywhere in `0x177xx`.
+
+**A separate, SOUND finding from the same pass:** the program-duplication
+routine at **`0x13533`** checks the pool (`GROUPS`+1 against free capacity,
+refusing at `0x1353D`) and **never checks the 254-program ceiling** — nearest
+`0xFE` guard is 1758 bytes away in an unrelated routine. This rests on
+structure, not on the withdrawn discriminator: it reads `GROUPS` to size the
+allocation and walks the `[si+1]` keygroup chain, which is what a program
+duplicator does whatever it calls afterwards.
+
+Note `0x12873` **recounts from scratch** rather than incrementing, so `0x72F4`
+cannot drift — a low-byte wrap needs 256 genuinely resident programs, which
+the 1006-entry pool could hold (256 programs at one keygroup each is 512
+entries). Unusual, not impossible.
+
+**Still open:** dominance for `0x12EC7` (guard `0x12E77`, 80 bytes, 2 candidate
+entries), `0x17C7E` (`0x17C51`, 45 bytes, 6) and `0x1B0C7` (`0x1AFE1`, 230
+bytes, 9). Those counts are raw scan output and are expected to be mostly
+operand bytes, as the `0x7C` candidates were.
 
 Also corrected: `0x177AA` has **three** entries, not one — a call from
 `0x177A1` plus jumps from `0x1D88F` and `0x1DA16`. The first scan omitted

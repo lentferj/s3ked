@@ -25997,11 +25997,14 @@ byte 0 that buffer happens to hold. The three stamping sites (`0x17C79`→1,
 `0x17D59`→2, `0x17E2D`→3) all overwrite byte 0 after copying, which suggests
 the buffer's own type byte is not trusted; this one does not.
 
-#### Which ceiling it threatens — corrected 2026-09-20
+#### Which ceiling it threatens — asked twice, still unanswered
 
-I first framed this as a possible **type-3** bypass and told mpc2emu the open
-question was whether `0xA1B0` could hold a sample header. **The evidence points
-the other way**, and the discriminator is what each creation site calls next:
+I first framed this as a possible **type-3** bypass. I then argued it was a
+program, on a discriminator that turned out to be invalid — **both attempts
+are below, in the order they were made, because the second is a better
+cautionary example than the first.**
+
+The attempt, which was to ask what each creation site calls next:
 
 ```
 0x17C79  stamps 1, then allocates again and stamps 2   (program + first keygroup)
@@ -26011,15 +26014,30 @@ the other way**, and the discriminator is what each creation site calls next:
 0x177BF  stamps NOTHING, then  call 0x12873
 ```
 
-`0x12873` is the routine that walks all 1006 entries counting **type 1** and
-stores the result in `0x72F4` — the **program** recount. Nothing on this path
-touches the sample counter. So the record `0x177B6` creates is most likely a
-**program**, inheriting type 1 from a buffer already holding a program header,
-which is also why it needs no stamp.
+> **WITHDRAWN 2026-09-20, the same evening, and this is the second correction
+> to this attribution.** The sentence above read: *"`0x12873` is the routine
+> that walks all 1006 entries counting type 1 and stores the result in
+> `0x72F4` — the program recount. **Nothing on this path touches the sample
+> counter.** So the record `0x177B6` creates is most likely a program."*
+> **The clause in bold is false.** `0x12873` counts type 1 into `0x72F4` and
+> then, at `0x128A9`, executes `lcall 0x3520:0x0000` — the sample counter at
+> `0x35200` — and reads `0x72F6` immediately after. **It is a combined
+> catalogue refresh, not a program recount**, so calling it after a creation
+> says nothing about which type was created. The discriminator was invalid and
+> everything resting on it is withdrawn: **`0x177B6`'s type is undetermined
+> again.** It was checked by reading the first twenty bytes of `0x12873` and
+> not the next twenty.
 
-**That makes the ceiling at risk 254 programs, not 255 samples** — and
-`0x177B6` is equally unguarded either way: the program guards are at
-`0x12E77`, `0x17C51`, `0x1AFE1` and `0x1B46D`, none of them in `0x177xx`.
+The routine at `0x135AA` makes the failure visible: it sits directly behind
+the **sample** guard at `0x13582` and calls `0x12873` too. A discriminator
+that returns "program" for a path gated on the sample ceiling is not
+discriminating anything.
+
+**Which ceiling `0x177B6` threatens is therefore unknown** — but it is
+unguarded against *both*: the program guards are at `0x12E77`, `0x17C51`,
+`0x1AFE1` and `0x1B46D`, none in `0x177xx`, and the sample guards are at
+`0x12FBB`, `0x13582`, `0x1752F`, `0x17DFF`, `0x1A7C4` and `0x1AA55`, likewise
+none. That is the one thing about it that has survived two corrections.
 
 **Still not proven**, and the reason is that the buffer is genuinely shared:
 `0x17C5B` reads `[si+0x2A]` from it — `GROUPS`, a program field — while
@@ -26041,8 +26059,47 @@ live read — it is no longer a pure disassembly question.
 **Two transfer classes remain unscanned**, and they are the honest limit of
 this: indirect `jmp`/`call` through a register or memory (`ff /4`, `ff /5`),
 which no byte scan can resolve, and anything reached through a dispatch table.
-The same question applies unchanged to the four program-ceiling sites at
-`0xFE`.
+
+#### The `0xFE` program ceiling: one sound finding, and it is not from the recount
+
+Applying the same treatment to the four program guards (`0x12E77`, `0x17C51`,
+`0x1AFE1`, `0x1B46D`) is unfinished — three of the creation points have
+several candidate entries into their spans that still need disassembling
+apart. **One result does not depend on any of that, and does not depend on the
+withdrawn recount discriminator either.**
+
+The routine at **`0x13533`** is program duplication, and the evidence is
+structural:
+
+```
+13533  mov dl,[si+0x2A]      ; GROUPS
+13538  inc dx                ; program + its keygroups
+13539  cmp bp,dx / jae       ; the POOL check -- refuses at 0x1353D
+13549  lcall 0x24d1:0x0e96   ; allocate
+13555  rep movsb (192)       ; copy the program record
+1355D  mov bp,[si+1]         ; follow the keygroup chain
+1356E  rep movsb (192)       ; copy each keygroup
+13574  jne (loop)
+```
+
+Reading `GROUPS` to size the allocation and then walking the `[si+1]` chain is
+what a program duplicator does, whatever it calls afterwards. **Its nearest
+`0xFE` guard is 1758 bytes away, in an unrelated routine.** So this path
+checks that the *pool* has room for `GROUPS`+1 entries and never checks the
+**254-program ceiling** at all.
+
+Whether that is reachable enough to matter is not established here. Note
+though that `0x12873` **recounts from scratch** over all 1006 entries rather
+than incrementing, so `0x72F4` cannot drift — the low-byte wrap needs 256
+genuinely resident programs, and the pool could hold that (256 programs with
+one keygroup each is 512 of 1006 entries). That moves the wrap from
+arithmetically impossible to merely requiring an unusual machine.
+
+Left open: dominance for `0x12EC7` (nearest guard `0x12E77`, 80 bytes, 2
+candidate entries), `0x17C7E` (`0x17C51`, 45 bytes, 6 candidates) and
+`0x1B0C7` (`0x1AFE1`, 230 bytes, 9 candidates). Each candidate list needs
+disassembling the way the `0x7C` operand bytes did — the counts above are raw
+scan output and are expected to be mostly false positives.
 
 ### Corrections to the incoming report
 
