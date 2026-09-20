@@ -2700,3 +2700,198 @@ that is easy to undo. It installs only where `getsignal` returns `SIG_DFL`,
 leaving any handler the host application already owns; and it tolerates
 `ValueError`/`OSError`, because `signal()` only works on the main thread of the
 main interpreter. Both are deliberate.
+
+---
+
+## External code review — GLM-5.3-Flash, 2026-09-20 (OPEN — triaged against the files)
+
+**Status:** every finding below was re-checked against the code on
+2026-09-20, not taken from the reviewer's line numbers. **The line numbers
+were accurate throughout** — unlike the MiMo review, nothing here was
+fabricated. Four findings are sharpened, one is demoted, one has its severity
+lowered, and one was understated by the reviewer. Nothing had to be dropped.
+
+Convention compliance passed independently: arm-then-fire gating present,
+`--demo` never constructs a bridge, GPL headers, no commercial-library names.
+
+### Sample delete deletes a different sample (CRITICAL — CONFIRMED, fix ready)
+
+`_confirm_destructive` (3346–3350) takes `#samples`.`cursor_row` and hands it
+to `bridge.delete_sample(target)` as a **resident index**. In
+`_fill_program_samples` the pane rows are `missing + present` — the selected
+program's *used* names in usage order — which has no relation to
+`self._samples` order.
+
+Sharpened against the file, three ways the reviewer did not state:
+
+1. **The diverging scope is the default.** `self._samples_scope = "program"`
+   at 1230. The pane agrees with the resident list only in `"all"` scope,
+   which the user must press `a` to reach.
+2. **The file already documents the trap.** `action_usage`'s docstring (1822)
+   says in as many words: *"That list and this pane were the same thing until
+   the pane became program-centric; indexing one by the other's cursor now
+   picks a different sample entirely, and would do it silently."* The delete
+   path is the case that was missed when that was written.
+3. **The guard is the wrong guard.** `if not self._samples` tests the
+   *resident* list, not the pane. A program that references nothing leaves the
+   pane empty while the test passes, and `cursor_row` then names a resident
+   sample nobody selected.
+
+`self._samples[target]` in the dialog text also raises `IndexError` on the UI
+thread whenever the used-list is longer than the resident list — which is the
+MISSING-heavy case, i.e. exactly when it matters.
+
+**Fix, and it exists twice in the file already:** resolve by name off the row,
+as 1822 and 3544 do. One addition both of those can afford and this cannot —
+3544 says *"showing the first"* when a name matches several resident samples.
+**A delete must refuse instead**, per CLAUDE.md's rule that the machine
+enforces no name uniqueness and objects are addressed by index.
+
+**Blocked on:** nothing. Synthetic — `DemoBridge` plus a scoped pane
+reproduces it. Regression test must assert the *resident index*, not the row.
+
+### `bridge.status()` on the UI thread, outside the lock (MAJOR — CONFIRMED)
+
+`_show_volumes` (2779) calls `self.bridge.status()`. Its **only** caller is
+`call_from_thread` at 1737, so it always runs on the event loop. Every other
+bridge call in the file is in a worker under `_bridge_lock` — this is the sole
+exception, and 1732 shows the calling worker taking and releasing the lock
+immediately before, so the unlocked call can interleave with the next worker.
+
+**Blocked on:** nothing.
+
+### Destructive ops reachable against hidden panes (MAJOR — CONFIRMED)
+
+`Binding("m", "master", ...)` (1125) is global. `_show_multi_pane` (3163) sets
+`display = False` on `programs`, `keygroups` and `samples`.
+`_confirm_destructive` then reads `cursor_row` from hidden tables. The dialog
+names a target, but the target is off-screen. Compounds the critical finding.
+
+**Blocked on:** nothing.
+
+### `DemoBridge.clear_memory` leaves header stores untrimmed (MAJOR — CONFIRMED)
+
+`s3ked/demo.py` (333–339) empties `_samples` and truncates `_programs`, but
+`_program_headers` (128), `_keygroup_counts` (126) and `_keygroup_headers`
+(129) are untouched. A header read for a cleared program returns stale data
+where the machine errors — and the demo's whole contract is that its answers
+match the machine's.
+
+**Blocked on:** nothing.
+
+### Sharpened beyond what the reviewer claimed
+
+- **`SHIDENT` is a three-way inconsistency, not a two-way one, and §258
+  raises the stakes.** `PRIDENT` is `1..1` readonly; `KGIDENT` is `2..2` but
+  **writable**; `SHIDENT` is `0..255` and writable — pinned, half-pinned, not
+  pinned. And §258 (2026-09-20) established that byte 0 of each header **is
+  the firmware's directory type code**: the counting loops at `0x12873` and
+  `0x35200` dispatch on it, and the ceilings at `0x72F4`/`0x72F6` count what
+  it says. A write to offset 0 of a resident header would mis-type the entry
+  in the machine's own directory. Whether the machine accepts such a write is
+  untested and needs the rig; pinning all three costs nothing either way.
+- **The `params.py` module docstring is staler than reported.** Counts are
+  84/132/35 against an actual 85/130/35 (`tests/test_params.py` pins 85 and
+  130, with the 85 explained as `PRIDENT` from hardware, §14). It also says
+  **"Three regions exist"** — there are five; `multi` (6) and `multipart` (13)
+  are missing from the table entirely.
+- **`Postpone.RECALC` deserves more than minor.** `header_data` (2547) and
+  the second write API (2653) pass `postpone` straight into the frame (2578,
+  2669) with no guard, warning or clearing follow-up. Its own docstring (2561)
+  says `RECALC` "must never be left set", and **CLAUDE.md names it as one of
+  the two protocol facts that shape this code** — bit 12 leaves the machine in
+  an undetermined state until a later write clears it. Nothing in-repo sets it
+  today, so this is a latent API hazard, not a live bug.
+- **The `demo.py` rtmidi reach-through is eight sites, not two.**
+  `s3k.bridge` does `import rtmidi` at module scope (bridge.py:71).
+  `s3ked/demo.py` imports it inside functions at **236, 270, 507, 595, 596,
+  689, 716 and 736**, against its own comment at 315 ("not import s3k.bridge,
+  which pulls in rtmidi"). Three of those reach private API — `_Volume`,
+  `_DirectoryEntry`, `_selector_for`.
+
+### Confirmed as written
+
+- `s3k/analysis.py` 519–521: the `continue` on an unread program skips
+  `progress(index + 1, len(names))` at 545. Confirmed.
+- `s3k/analysis.py` 532–535: per-zone `except Exception: continue` with no
+  `audit.unread` counterpart, where the program-level path at 520 does record
+  one. A transient timeout undercounts references and can report a sample as
+  an **orphan**, which is this module's one job.
+- `s3k/params.py` `STUNO` (sample, offset 20): `0..65535` where every sibling
+  2-byte tuning field (`PTUNO`, `KGTUNO`, `VTUNO1-4`) is `-12800..12800`.
+- `s3k/params.py` `models`: no reader anywhere outside `params.py` — grep over
+  `s3k/`, `s3ked/` and `tests/` returns nothing, while `requires` is
+  bridge-enforced. Advisory in fact; the docstring should say so.
+- `s3k/bridge.py` 1225: the *wait* correctly uses
+  `self.timeout if timeout is None else timeout`, so `timeout=0` means 0 — but
+  the message says `{timeout or self.timeout}` and reports the default. The
+  code is right and only the error lies.
+- `s3k/bridge.py` `refresh_media`: docstring promises the volume is "clamped
+  to what the new medium actually has"; the code does `if wanted < available`
+  and otherwise leaves it at 0. Falling back to 0 is arguably the safer
+  behaviour — **fix the docstring, not the code**.
+- `s3ked/app.py` `_remove_leftover_worker`: `if not marked: break` means
+  *already gone*, and falls through to the branch reporting
+  `"<marker> is still resident … delete it from the Master screen"`. The
+  comment above it says "Never claim it went when it did not"; the code
+  claims it did not go when it did.
+- `s3ked/app.py` `_nudging`: cleared only in `_after_write` (3014), and
+  `_write_param_worker`'s `except Exception: notify; return` (2945) never
+  reaches it. A failed write leaves the nudge set for the next edit.
+- `s3ked/app.py` undo: `action_undo` pops at 3062 **before** calling
+  `_write_param_worker` at 3064, so a failed write loses the entry silently;
+  `_undo_all_worker` reads `[-1]` at 3089 and pops at 3100 **after**. The two
+  disagree, and the all-path is the correct one.
+- `s3ked/app.py` `_select_source_worker` (2021): defined, never called. Live
+  path is `_source_change_worker` (1956, called at 1953).
+- `int(x, 0)` at `s3ked/cli.py` 260 and `s3ked/app.py` 2987: confirmed by
+  language semantics — `int("010", 0)` raises, `int("10", 0)` is 10. A
+  zero-padded decimal is refused as "not a number".
+- `s3ked/cli.py` `_build_bridge` (406): `--demo` silently ignores
+  `--port`/`--exclusive-channel`/`--timeout`. Not re-read line by line; the
+  reviewer's other numbers all held.
+- `s3k/scales.py` `stacked()` (288–297): greedy join may over-merge through an
+  OMNI bridge. Not re-checked; conservative direction for §135's purpose.
+
+### Severity lowered
+
+- `s3k/scales.py` `from_physical` (1043): the docstring promises "rounded
+  **and clamped** to the parameter's own limits" and the code only rounds —
+  `from_physical("keygroup", "KGTUNO", 1e9)` returns **2560000000**.
+  Confirmed. **But `encode_field` refuses out-of-range** (`KGTUNO: 2560000000
+  is outside -12800..12800`), so the cost is a confusing error, never a bad
+  write, and the returned `within` flag is already `False`. Doc bug, not a
+  hazard. Clamp or fix the docstring.
+
+### Demoted to a nit — the one finding that did not hold up
+
+- `s3k/params.py` `lookup()`: the reviewer claimed dead code at 3118 shadowed
+  at 3121, and a multi-region fallback "contradicting its own docstring".
+  **Both halves are wrong.** Nothing at 3118 is shadowed — `matches` is read
+  at 3119 and 3123. And the docstring says a bare name resolves "only when it
+  is unambiguous", which a multi-only name *is*; it is the inline comment's
+  word "opt-in" that overstates `candidates = primary or matches`. The seven
+  multi-only bare names are `FX1`–`FX4`, `FXFILENAME`, `MULTINAME` and
+  `PTUNOCM` — none collides with a primary-region name, so the "silent
+  wrong-structure read/write path" has **no instance**. Reword the comment.
+
+### Nits (unchecked, recorded as given)
+
+`s3k/params.py`: unused `Iterable` (57), vacuous `param.key[0:2]` guard
+(3331), `Parameter.key` docstring describes the retired flat-id scheme.
+`s3k/scales.py`: `exact` from the unrounded float (1055), endpoint
+early-return bypasses the provisional `!` (1113, dormant), dead `"u/s"` branch
+(1142). `s3ked/app.py`: wrong return annotation on `LoadOptionsScreen` (113),
+redundant local `import time` (1993, 2520), `b` possibly unbound (3684).
+`s3ked/demo.py`: class-level mutable `boards: set = set()` (320), dead
+`keygroup_count`/`_loaded`/`SourceScreen.changed`.
+
+### Verified sound by the reviewer (recorded, not re-checked)
+
+`s3k/messages.py` codec round-trips and fail-loud/fail-soft rules;
+`s3k/params.py` encode/decode core; `s3k/bridge.py` reply-pairing arithmetic,
+autodetect sweep teardown, stale-reply accept-set, write-gap labelling;
+`s3k/scales.py` all 23 hardware anchors reproducing from table coefficients.
+
+**Blocked on:** nothing — all code work, no hardware. The critical finding
+first; it is the only one that can destroy a user's sample.
