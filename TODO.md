@@ -2664,11 +2664,21 @@ and 12th program (252 -> 263), so load eleven then add the twelfth. The
 zero-build form crosses *inside* the twelfth program's sample set and so
 leaves it partially loaded on refusal; the built volume does not.
 
-**Also open, static, no hardware:** whether those six sites are the only paths
-that create a type-3 entry. `cmp byte` on a *word* counter is sound only while
-nothing can reach 256; a seventh unguarded path would wrap the low byte to
-`0x00` and reopen the guard until 511. Same question for the four program
-sites at 254.
+**Mostly closed 2026-09-20, static:** exactly one instruction in the image
+stamps type 3 (`0x17E32`), and the guard at `0x17DFF` dominates it — no
+`rel8`, `rel16` or far transfer enters the span, verified by disassembling
+every candidate (six were the byte `0x7C` inside `movw $imm,0x7Cxx` operands,
+not branches).
+
+**What remains, as 14 named sites rather than a worry:** fourteen
+`mov cx,0xC0 / rep movsb` whole-record copies do not restamp byte 0, so the
+destination inherits the source's type — `0x12EC7 0x12EE0 0x12FDD 0x13555
+0x1356E 0x135AA 0x1374B 0x13755 0x177BF 0x32837 0x33879 0x33C23 0x354AD
+0x354B5`. **Blocked on nothing; the next step is to resolve each one's `ES`
+source** — from the segment tables at `0xA1B0`/`0xB1B0` or the `0x9000 + 12k`
+walk means a directory slot, anything else means a work buffer. Also unscanned
+and unscannable by byte pattern: indirect `jmp`/`call` (`ff /4`, `ff /5`) and
+dispatch tables. Same question unchanged for the four program sites at `0xFE`.
 
 **Neither project models either ceiling.** s3ked does not build volumes, but
 mpc2emu's writer should refuse >255 samples or >254 programs rather than let

@@ -25888,6 +25888,76 @@ crossing happens **inside** the twelfth program's sample set, so a refusal
 leaves that program partially loaded. The built volume crosses between loads
 and leaves nothing half-resident.
 
+### Caveat worth stating rather than hiding
+
+`cmp byte [0x72F6],0xFF` tests only the **low byte** of a word counter. It is
+sound only while the count can never pass 255 — which the guard enforces, *if*
+every creation path is guarded. Should any path reach 256, the low byte wraps
+to `0x00` and the guard opens again until 511.
+
+> **This section was deleted by my own amendment of 2026-09-20 and restored
+> the same evening.** The amendment replaced a span running from "What the
+> observed failure does and does not show" to "Corrections to the incoming
+> report", and this section sat inside it. I then told mpc2emu the caveat had
+> been "kept loud" in §258 — **a claim that was false at the time I made it**,
+> about a document I had just edited. An edit verified at its anchor is not an
+> edit verified in what it swallowed.
+
+### The "if every creation path is guarded" clause, narrowed
+
+That clause was unbounded when written. It is now mostly closed, and what is
+left is named.
+
+**Exactly one instruction in the image stamps type 3.** Searching every
+immediate-form byte write to a record's offset 0 — direct, `[bx]`, `[di]`,
+`[si]`, and the `+0` displacement variants — returns 12 sites, of which one
+writes 3: `0x17E32`. No word write covers byte 0 anywhere. (Register-source
+stores through a pointer were also enumerated and are *not* evidence:
+`mov es:[si],al` and friends are every byte store in the firmware, and reading
+them as record writes would be a search with no content.)
+
+**The guard dominates it.** Scanning the whole image for any `rel8`, `rel16`
+or far transfer landing between the guard at `0x17DFF` and the store at
+`0x17E32` returns, after disassembling each candidate, only branches internal
+to the block. Six apparent hits were the byte `0x7C` inside `movw $imm,0x7Cxx`
+operands — the high byte of a variable address, not a `jl`. The block decodes
+continuously from guard to store, and every branch inside it either exits to
+the refusal at `0x18332` or to `0x17C3E`, or falls forward.
+
+Segment resolution used here: **file offset = `seg*16 + off`**, verified
+against `call 0x3520:0x0000` landing exactly on this section's counter routine
+at file `0x35200`. (A property of the image. It sits oddly beside the
+`0xC0000` load base recorded in §235, and the firmware demonstrably relocates
+chunks of itself — `0x35155` copies 0x1C90 bytes to `0x3A60:0x33D0` — so the
+two are not necessarily in conflict. Not resolved here.)
+
+**What is still open, now as 14 named sites instead of a worry.** A record can
+also acquire a type without any store, by being copied whole. Fourteen
+`mov cx,0xC0 / rep movsb` sites copy 192 bytes — one full record — and do
+**not** restamp byte 0 afterwards, so the destination inherits the source's
+type:
+
+```
+0x12EC7  0x12EE0  0x12FDD  0x13555  0x1356E  0x135AA  0x1374B
+0x13755  0x177BF  0x32837  0x33879  0x33C23  0x354AD  0x354B5
+```
+
+(The three that *do* restamp are `0x17C79` → type 1, `0x17D59` → type 2,
+`0x17E2D` → type 3, the last being the guarded path above.)
+
+Whether any of those fourteen writes into a **directory slot** rather than a
+work buffer is not determined here, and that is the remaining way a type-3
+entry could appear without passing a guard. The cheap next step is to resolve
+each one's `ES` source: a copy whose `ES` comes from the collected-segment
+tables at `0xA1B0`/`0xB1B0`, or from the `0x9000 + 12k` walk, is writing to a
+slot; one loading `ES` from anywhere else is not.
+
+**Two transfer classes remain unscanned**, and they are the honest limit of
+this: indirect `jmp`/`call` through a register or memory (`ff /4`, `ff /5`),
+which no byte scan can resolve, and anything reached through a dispatch table.
+The same question applies unchanged to the four program-ceiling sites at
+`0xFE`.
+
 ### Corrections to the incoming report
 
 - The eight `BB 49 16` sites are at `0x12EA3`, `0x13030`, `0x1353D`,
