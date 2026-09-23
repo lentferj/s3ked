@@ -799,21 +799,36 @@ def test_the_v_prefix_on_zone_fields_means_zone_not_velocity():
     assert "velocity ZONE the field belongs to" in note
 
 
-def test_lfo2_runs_at_twice_lfo1():
-    """0.23708 against 0.11867 Hz per unit -- a ratio of 1.998."""
+def test_lfo2_runs_at_lfo1s_rate():
+    """The two LFOs share one rate law -- §257, and §260 for why this is here.
+
+    THIS TEST PREVIOUSLY ASSERTED THE OPPOSITE, pinning §52's refuted
+    `LFO2 = 2 x LFO1` at a ratio of 1.998. The constant it guarded shipped at
+    2.002x the truth for seventeen days after this project's own §257 refuted
+    it and after mpc2emu had applied the correction. A test that pins a number
+    is only as good as the section it was written from, so the ratio is
+    asserted in BOTH directions now: near one, and nowhere near two.
+    """
     lfo2 = scales.SCALES[("program", "PANRAT")].a
     lfo1 = scales.SCALES[("program", "LFORAT")].a
-    assert abs(lfo2 / lfo1 - 2.0) < 0.02
+    assert abs(lfo2 / lfo1 - 1.0) < 0.02, "LFO2 must run at LFO1's rate"
+    assert abs(lfo2 / lfo1 - 2.0) > 0.5, "the refuted 2x law must not come back"
 
 
-def test_panrat_is_lfo2_not_a_pan_only_control():
-    """§39 called it inert by testing it against pan, which is the dead route.
+def test_panrat_does_not_reassert_the_dead_pan_route():
+    """§39 said the pan LFO is inert; §52 halved that; §181 retracted the rest.
 
-    Routed to the filter as matrix source 8, LFO2 and all five of its fields
-    work. Pinned because the retraction is easy to lose.
+    LFO2 DOES reach pan -- through the matrix, sources at MODSPAN1/2/3 and
+    amounts at MODVPAN1/2/3. §39 swept PANDEP, which is LFO2's own output
+    depth, so the matrix amount was never set.
+
+    The previous version of this test asserted the retracted claim was
+    PRESENT in the note, and passed for seventeen days after §181 withdrew it.
     """
     note = " ".join(scales.SCALES[("program", "PANRAT")].note.split())
-    assert "Only its route to PAN is inert" in note
+    assert "Only its route to PAN is inert" not in note
+    assert "DOES REACH PAN" in note
+    assert "MODVPAN1" in note
 
 
 def test_zero_lfo2_rate_at_zero():

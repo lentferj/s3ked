@@ -2925,6 +2925,31 @@ main interpreter. Both are deliberate.
 
 ---
 
+## Audit every shipped scale constant against its own section (OPEN 2026-09-23 — §260)
+
+**Status:** raised by `PANRAT`, which shipped at **2.002x** the measured slope
+for seventeen days after this project's own §257 refuted it, and after
+mpc2emu had already applied the corrected `0.11913` on 2026-09-06. Fixed in
+§260. The question is whether it is the only one.
+
+**What made it survive:** §257 corrected the *prose*. Nothing corrected the
+*code*. The repository simultaneously held a measurement saying `0.11840`, a
+section explaining why `0.23708` was a filter-side detector artefact, and a
+shipped `0.23708`. The notes read as closed, and they were — in the only place
+that does not execute.
+
+**Partial audit already done (§260), all negative:** `ATTAK2`, `DECAY2` and
+`RELSE2` are identical to six digits against mpc2emu's `AKAI_ENV2_*`;
+`FILFRQ`'s difference is the documented §54 peak / §139 corner distinction and
+§145 already carries its spread (`0.790 sd 0.039`).
+
+**Blocked on nothing.** The check is mechanical and worth automating: for each
+of the 36 laws in `scales.py`, find the section its `note` cites and confirm
+the shipped coefficients match the section's own final numbers. A test could
+pin it, which is the durable fix — the same shape as the `measured_on` and
+residual-spread fields already open below. **A law whose section has been
+superseded should fail the suite, not sit quietly.**
+
 ## Cross-project: eosed and mpc2emu contradict each other on EOS envelopes (OPEN 2026-09-20)
 
 **Status:** surfaced from here because both sent their findings to this

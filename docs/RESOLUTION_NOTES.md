@@ -450,6 +450,7 @@ silently wrong one.
 - [§257](#257--lfo2s-rate-law-is-lfo1s-and-modvpan1-is-1-db-per-unit-2026-09-17) — LFO2's rate law is LFO1's, and `MODVPAN1` is ~1 dB per unit (2026-09-17)
 - [§258](#258--the-resident-object-directory-and-a-255-sample-ceiling-the-pool-does-not-model-2026-09-20) — The resident-object directory, and a 255-sample ceiling the pool does not model (2026-09-20)
 - [§259](#259--decay1-across-2099-in-one-sweep-30-confirmed-118s-re-measure-refuted-2026-09-20) — `DECAY1` across 20..99 in one sweep: §30 confirmed, §118's re-measure refuted (2026-09-20)
+- [§260](#260--panrat-shipped-at-2002x-the-truth-for-seventeen-days-after-we-ourselves-refuted-it-2026-09-23) — `PANRAT` shipped at 2.002x the truth for seventeen days after we ourselves refuted it (2026-09-23)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -26547,3 +26548,131 @@ slow decay** competes with the envelope" — describes something that is *not*
 flat noise. Two sibling sessions were relying on a second-hand claim that §30
 used noise. It may have; §30 does not say so, and nothing here should rest on
 it. Tonight's run establishes noise-plus-slope directly instead.
+
+## §260 — `PANRAT` shipped at 2.002x the truth for seventeen days after we ourselves refuted it (2026-09-23)
+
+Jan asked whether the sibling projects' firmware work on AKAI formats teaches
+s3ked anything. It does, but not by supplying a new fact. **It shows that a
+constant this project originated, then refuted with its own hardware, has been
+wrong in `scales.py` the whole time.**
+
+### The constant
+
+`scales.py` shipped `("program","PANRAT"): 0.23708 Hz/unit`. Measured:
+
+```
+s3ked  §257          2026-09-17   0.11840*v + 0.0108   6 pts, 1..40    r2 0.999963 (refit)
+mpc2emu §AKAILFO2RATE 2026-09-06   0.11913*v            9 pts, 10..99   r2 0.999984
+s3ked  LFORAT (LFO1)              0.11867*v - 0.04     10..99          r2 0.99950
+
+shipped 0.23708  =  2.002x the measured slope
+```
+
+Three routes within **0.6 %** of each other. mpc2emu applied theirs on
+**2026-09-06**; s3ked's own §257 re-derived it on **2026-09-17**; the entry was
+still wrong on **2026-09-23**.
+
+### The evidence was already inside the entry, labelled as noise
+
+The old `bounds` text read:
+
+> "Above 80 the measured rate collapses to exactly **HALF** the extrapolation
+> (ratios 0.502, 0.501, 0.500, 0.504), which is a **detector artefact** rather
+> than a machine behaviour — the fold MOVED when the analysis window shortened
+> … the mechanism is not understood and no correction is applied."
+
+**Those four readings were the honest ones.** The doubling was the artefact,
+not the halving. §52 measured LFO2 **through the filter**, and a bipolar sweep
+presents *two* brightness excursions per cycle to a detector responding to
+magnitude rather than sign — so a filter-side measurement reads double.
+Measured through **pan**, where balance is signed, the rate is LFO1's.
+
+That is the same family as the centroid trap: a detector that moves plausibly
+and measures something other than what its name says. What makes this one
+worth a section is that the contradicting data was **recorded, quantified to
+three decimals, and explained away in the same breath** — and the explanation
+("mechanism not understood") was itself an admission that it had not been.
+
+mpc2emu's falsification is the stronger form and deserves quoting: at
+`PANRAT` 37 the old law predicts 8.77 Hz, which sits **40.7 dB below** the
+4.67 Hz peak actually present. **Absence of predicted energy beats presence of
+unexpected energy** — a subharmonic artefact would leave the fundamental there.
+
+### A fourth route, structural, from E-mu's engineers
+
+EOS's AKAI importer converts **both** AKAI LFO rate bytes — `0x21` (`LFORAT`)
+and `0x1D` (`PANRAT`) — through **one** table, `0x48b24` (eosed,
+`docs/AKAI_IMPORT.md`; the second use is via `%a3` and a literal-reference scan
+misses it). **One table cannot serve two scales differing by a factor of two.**
+Independent of both hardware measurements, since it is neither.
+
+**It does not corroborate the *value*, only the shared scale**, and the
+distinction matters. eosed noted the table was "directly comparable to a Hz
+curve as data, a question that can be settled offline". Settled here, in the
+negative: feeding the table through mpc2emu's measured E4XT law
+`Hz = exp(-0.000300578b² + 0.0808242b - 2.52573)` gives an implied AKAI curve
+with local slopes **0.152 / 0.188 / 0.137** Hz/unit across 10..40 / 40..70 /
+70..99 — **not linear**, where the AKAI is linear at r² 0.9995. Its linear fit
+returns r² 0.99629 while hiding a **+78 %** worst residual. **EOS's table is a
+musical mapping, not a physical one**, and cannot adjudicate the law.
+
+### What else the cross-check turned up — three negatives worth keeping
+
+- **`ATTAK2`, `DECAY2`, `RELSE2` are identical to six digits** between s3ked
+  and mpc2emu's `AKAI_ENV2_*`. No divergence.
+- **`FILFRQ` differs** (s3ked `6.45970/0.07100`, mpc2emu `7.60732/0.07245`) and
+  that is the documented §54 resonance-**peak** against §139 −3 dB **corner**
+  distinction, not a disagreement. The peak/corner ratio is *not* constant —
+  0.797 at 44 down to 0.743 at 92, since the exponents differ by 2 % — but
+  **§145 already records it as `0.790 sd 0.039`**, a mean with its spread, so
+  the discipline was working and there is nothing to fix.
+- **39 of the 40 AKAI program-common offsets EOS's importer reads are in
+  s3ked's table**, on a base confirmed independently (`%fp@(-193)` is AKAI byte
+  3 = `PRNAME`). The one exception, `0xC2` = 194, is **two bytes past the
+  192-byte header** and is almost certainly an extraction artefact: if the read
+  filled 192 bytes from `%fp@(-196)`, the frame's last four bytes are separate
+  locals, not AKAI data. eosed flagged that table as raw; this is an instance.
+  **Reported to them rather than treated as a finding about the AKAI.**
+
+Note the 39/40 agreement is **not** independent corroboration of s3ked's
+table: whoever wrote EOS's importer learned the layout from somewhere, and the
+obvious somewhere is the same Akai document s3ked transcribed. Two artefacts of
+different kinds can share one provenance.
+
+### The same entry carried a SECOND refuted claim, and a test pinned it
+
+Fixing the constant made the suite fail three times, which is the guard
+working — pointed at the wrong values.
+
+- `test_lfo2_runs_at_twice_lfo1` asserted `abs(lfo2/lfo1 - 2.0) < 0.02`. It
+  pinned §52's refuted law directly. Rewritten as
+  `test_lfo2_runs_at_lfo1s_rate`, asserting the ratio in **both** directions —
+  near one, and nowhere near two — so the old law cannot quietly return.
+- `test_panrat_is_lfo2_not_a_pan_only_control` asserted the note **contains**
+  the string *"Only its route to PAN is inert"*. **That claim was retracted by
+  §181 on 2026-09-06** — "LFO2 does reach pan; the matrix amount was never
+  set". Pan has a modulation matrix neither §39 nor §52 touched: sources at
+  `MODSPAN1/2/3` (76/77/78), amounts at `MODVPAN1/2/3` (89/90/91). §39 swept
+  `PANDEP`, which is LFO2's own output **depth**, not the matrix amount. The
+  test now asserts the retracted string is **absent**.
+- `test_zero_lfo2_rate_at_zero` failed on the intercept. Resolved by fitting
+  **through the origin** — zero rate at zero is definitional, and the free
+  fits' intercepts (+0.0108 here, -0.0055 at mpc2emu) have opposite signs and
+  are both within noise of zero. Shipped: `0.11880 * PANRAT`, r² 0.999939,
+  0.11 % from LFO1 and 0.28 % from mpc2emu. It costs accuracy at `PANRAT` 1
+  (worst residual +13.8 %) to buy a correct value at zero, and that trade is
+  now stated in `bounds` rather than left for a reader to discover.
+
+So **one entry carried two claims refuted around the same date, and two tests
+pinned the refuted versions of both.** The tests were not neglected; they were
+written faithfully from sections that were later superseded, and nothing
+connects a test to the section it was derived from.
+
+### The lesson, which is about us and not about the AKAI
+
+**A constant can be refuted in the notes and still ship.** §257 corrected the
+prose; nothing corrected the code. The repository held, simultaneously, a
+measurement saying `0.11840`, a section explaining why `0.23708` was an
+artefact, and a shipped `0.23708`. Nobody looked, because the notes read as
+though the matter was closed — **and it was, in the only place that does not
+execute.**
