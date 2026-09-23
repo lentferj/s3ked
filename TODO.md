@@ -2925,6 +2925,72 @@ main interpreter. Both are deliberate.
 
 ---
 
+## The suite had no findable bounded path, and one file is 86% of it (2026-09-23)
+
+**Status:** the documentation half is FIXED; the runtime half is open.
+
+A cross-project review (GLM-5.3-Flash, via mpc2emu) reported s3ked as the only
+one of five projects whose suite it could not run — `timeout 240` twice with no
+output line. **Checked against this tree rather than accepted**, because the
+same review was stale on eosed and mpc2emu and wrong on a k2kremote item it had
+read correctly.
+
+Its three claims separate cleanly:
+
+- *"The invocation did not terminate in 240 s"* — **TRUE**, and first-hand. The
+  suite is 402 s; it was killed 40 % through. It also self-reports that its
+  `--ignore=tests/test_hardware.py` was a guess, and **no such file exists** —
+  so it did not run the command anyone here would run.
+- *"There is no documented offline subset"* — **TRUE**, and the real finding.
+  README offered only the full run and said **893 tests** when there are 980.
+- *"s3ked cannot be verified from this machine in bounded time"* — **FALSE**,
+  an inference from the first two.
+
+Measured:
+
+```
+full suite                                   980 tests   ~6m45
+--ignore=tests/test_app.py                   801 tests    60.2 s
+  + the three bench files as well            576 tests     2.9 s
+tests/test_app.py alone                      179 tests   344.4 s
+```
+
+**One file is 86 % of the runtime for 18 % of the tests**, and nothing in it
+touches hardware — the cost is Textual's event loop. The slowest 14 individual
+tests are all TUI or bench, 5-19 s each.
+
+**Fixed:** README now carries both invocations with their real counts and
+times, and says which to use for a bounded review.
+
+**Open:** whether 344 s for 179 TUI tests is worth reducing. Several wait on
+real timeouts (`test_the_leftover_cleanup_outlasts_a_slow_load` at 8.5 s,
+`test_the_multi_round_trips_on_the_first_and_last_part` at 19.4 s). Not a
+defect, and the `slow` marker already exists as the mechanism if it is wanted.
+
+**The lesson is about the docs, not the suite.** *Unfindable is not the same as
+broken, and only the reader can tell them apart.* Everyone here knew the suite
+was fine; nobody had written down how to run part of it.
+
+## Give every test that asserts a numeric law a `pinned_section=` (OPEN 2026-09-23)
+
+From the same review, and **its evidence is this project's own commit message
+rather than its reading of the code**, so it does not inherit that review's
+reliability problem.
+
+§260 found two tests pinning refuted sections — `test_lfo2_runs_at_twice_lfo1`
+asserting §52's withdrawn `2 x` law, and a test asserting a string §181 had
+retracted **seventeen days earlier**. Both were written faithfully from
+sections later superseded, and **nothing links a test to the section it came
+from**, so a retraction cannot find its dependants.
+
+The proposal: a `pinned_section=` field (or marker) on every test asserting a
+measured law, so `grep §181` returns its tests. That is the durable form of
+what §260 only half-fixed by widening a regex — the regex catches a *section*
+that contradicts `scales.py`, and this would catch a *test* that outlives its
+section.
+
+**Blocked on:** a decision. It touches every law-asserting test.
+
 ## The documented dev venv cannot catch an undeclared dependency (OPEN 2026-09-23)
 
 **Status:** found after a push reddened all seven CI jobs. The instance is
