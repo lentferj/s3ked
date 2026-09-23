@@ -346,14 +346,43 @@ def test_a_section_whose_law_was_refitted_says_so_in_its_heading():
     law = re.compile(
         r"\b([A-Z][A-Z0-9_]{3,9})\b[^\n]{0,60}?=\s*"
         r"([0-9]*\.?[0-9]+(?:e-?\d+)?)\s*\*\s*exp\(\s*(-?[0-9]*\.?[0-9]+)")
+    # LINEAR laws were invisible to the exponential pattern above until
+    # 2026-09-23, and that is exactly how PANRAT shipped at 2.002x the truth
+    # for seventeen days (§260): §257 stated `rate = 0.11840 * PANRAT` while
+    # scales.py held 0.23708, and this test could not see either number.
+    # Matches "0.11840 * PANRAT" and "rate = 0.11840 * PANRAT + 0.0108 Hz".
+    # SINGLE-FACTOR ONLY. "0.009474 * V_LOUD * (knee - velocity)" is a
+    # coefficient in a two-factor law, not a slope, and matching it reported
+    # V_LOUD and K_FREQ as stale against unrelated numbers. A guard that
+    # emits rows it cannot interpret gets silenced.
+    linear = re.compile(
+        r"=\s*([0-9]*\.?[0-9]+(?:e-?\d+)?)\s*[*x]\s*"
+        r"\b([A-Z][A-Z0-9_]{3,9})\b(?!\s*[*x(])")
     # a newer section may quote the law it supersedes; those lines say so
     quoting = re.compile(r"previous|earlier|withdraw|supersed|retract|was\b",
                          re.I)
 
+    # A REVIEWED BASELINE, not a mute button. Each entry means someone read
+    # the section and confirmed it states a DIFFERENT QUANTITY, not a stale
+    # law. Adding one is a claim; leaving one that no longer applies is a
+    # silent hole, so each carries its reason. (mpc2emu's shape, 2026-09-23.)
+    reviewed = {
+        # §171 fits the FULL SWING v1->v127; scales.py holds the per-side
+        # deviation, which is half of it. 1.19557 / 0.596862 = 2.003 --
+        # the factor of two IS the parameterisation, not a disagreement.
+        ("§171", "V_LOUD"),
+    }
     stale = []
     for i, (start, head) in enumerate(heads):
         end = heads[i + 1][0] if i + 1 < len(heads) else len(notes)
-        if "SUPERSEDED" in head:
+        # CASE-SENSITIVE, and the vocabulary this project actually uses.
+        # These notes write a status marker in capitals and the same word in
+        # lower case as prose -- "§X — ... and a withdrawn 19 %" is a LIVE
+        # section describing a struck sub-claim. A case-insensitive match
+        # silences the guard on live sections, which is worse than no guard.
+        # (mpc2emu hit this building the same check on 2026-09-23.)
+        if any(k in head for k in ("SUPERSEDED", "RETRACTED", "RETRACTION",
+                                   "WITHDRAWN", "REFUTED")):
             continue
         for line in notes[start:end].splitlines():
             if quoting.search(line):
@@ -369,6 +398,18 @@ def test_a_section_whose_law_was_refitted_says_so_in_its_heading():
                     stale.append(f"{head.split(' — ')[0]} states {param} = "
                                  f"{a:g}*exp({b:g}) but scales.py holds "
                                  f"{ta:g}*exp({tb:g})")
+            for m in linear.finditer(line):
+                a, param = float(m.group(1)), m.group(2)
+                sc = scales.SCALES.get(("program", param)) or \
+                    scales.SCALES.get(("keygroup", param))
+                if sc is None or sc.kind != "linear":
+                    continue
+                sec = head.split(' — ')[0].replace('## ', '')
+                if (sec, param) in reviewed:
+                    continue
+                if abs(a - sc.a) / max(abs(sc.a), 1e-12) > 0.02:
+                    stale.append(f"{head.split(' — ')[0]} states {param} "
+                                 f"slope {a:g} but scales.py holds {sc.a:g}")
     assert not stale, (
         "section states a superseded law without a marker in its heading:\n  "
         + "\n  ".join(stale[:6]))

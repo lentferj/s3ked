@@ -212,9 +212,9 @@ silently wrong one.
 - [§19](#19--the-filter-works-filfrq-measured-with-isolation-verified-2026-08-11) — The filter works. `FILFRQ` measured, with isolation verified (2026-08-11)
 - [§20](#20--superseded-by-54-the-filfrq-law-only-the-fold-still-stands--filfrq-calibrated-the-map-from-an-integer-to-hertz-2026-08-11) — SUPERSEDED by §54 (the FILFRQ law only; the fold still stands) — `FILFRQ` calibrated: the map from an integer to hertz (2026-08-11)
 - [§21](#21--kgtuno-is-1256-of-a-semitone-not-cents--and-the-estimator-could-not-see-it-2026-08-11) — `KGTUNO` is 1/256 of a semitone, not cents — and the estimator could not see it (2026-08-11)
-- [§22](#22--the-remaining-sweeps-five-more-curves-one-real-pan-law-one-bug-2026-08-11) — The remaining sweeps: five more curves, one real pan law, one bug (2026-08-11)
+- [§22](#22--prlouds-slope-superseded-by-37-061872-the-remaining-sweeps-five-more-curves-one-real-pan-law-one-bug-2026-08-11) — `PRLOUD`'s slope SUPERSEDED by §37 (0.61872). The remaining sweeps: five more curves, one real pan law, one bug (2026-08-11)
 - [§23](#23--ptuno-shares-kgtunos-scale-stuno-stores-and-does-nothing-2026-08-11) — PTUNO shares KGTUNO's scale; STUNO stores and does nothing (2026-08-11)
-- [§24](#24--lforat-measured-and-all-eight-sweeps-are-done-2026-08-11) — `LFORAT` measured, and all eight sweeps are done (2026-08-11)
+- [§24](#24--prlouds-slope-superseded-by-37-061872-lforat-measured-and-all-eight-sweeps-are-done-2026-08-11) — `PRLOUD`'s slope SUPERSEDED by §37 (0.61872). `LFORAT` measured, and all eight sweeps are done (2026-08-11)
 - [§25](#25--lfo1-drives-pitch-measured-not-inferred-2026-08-11) — LFO1 drives pitch. Measured, not inferred (2026-08-11)
 - [§26](#26--constants-superseded-the-attak1attak2-laws-only-the-sustn1-db-linearity-and-the-detector-finding-stand--sustn1-is-db-linear-attak2-has-its-own-law-and-one-detector-was-never-measuring-2026-08-11) — CONSTANTS SUPERSEDED (the `ATTAK1`/`ATTAK2` laws only; the `SUSTN1` dB-linearity and the detector finding stand) — `SUSTN1` is dB-linear, `ATTAK2` has its own law, and one detector was never measuring (2026-08-11)
 - [§27](#27--the-measured-laws-become-a-feature-units-in-and-out-2026-08-11) — The measured laws become a feature: units in and out (2026-08-11)
@@ -2235,7 +2235,7 @@ harness -- recorded in TODO rather than fixed here.
 
 ---
 
-## §22 — The remaining sweeps: five more curves, one real pan law, one bug (2026-08-11)
+## §22 — `PRLOUD`'s slope SUPERSEDED by §37 (0.61872). The remaining sweeps: five more curves, one real pan law, one bug (2026-08-11)
 
 Run with program 0 isolated on its own MIDI channel and `verify_isolation`
 confirming ~63 dB each time.
@@ -2374,7 +2374,7 @@ self-consistent.
 
 ---
 
-## §24 — `LFORAT` measured, and all eight sweeps are done (2026-08-11)
+## §24 — `PRLOUD`'s slope SUPERSEDED by §37 (0.61872). `LFORAT` measured, and all eight sweeps are done (2026-08-11)
 
 ```
 Hz = 0.11867 * LFORAT - 0.04        r2 0.99948    LINEAR
@@ -26667,6 +26667,97 @@ So **one entry carried two claims refuted around the same date, and two tests
 pinned the refuted versions of both.** The tests were not neglected; they were
 written faithfully from sections that were later superseded, and nothing
 connects a test to the section it was derived from.
+
+### A second instance, found by the same question, in our own code
+
+eosed traced the `0xC2` row further the same evening: `%fp@(-2)` is not AKAI
+data at all but an **out-parameter** from `0x30e24(handle, &out)`, stored with
+`movew` where every genuine byte row is `moveb`. Their diagnosis of the class:
+*"my extraction kept the addressing mode's operand and threw away its size."*
+
+**We had an instance of exactly that, in safety-critical tooling.**
+`probes/restorecheck.py::field_map` keyed each parameter by its start offset
+and discarded `param.size`, so a byte differing anywhere inside a multi-byte
+field reported `(unnamed)`:
+
+```
+region      bytes   named   BLIND (interior)
+program       192      85         30
+keygroup      192     130         62
+sample        192      35         74      <- blind outnumber named 74:35
+multi          32       6         22
+multipart     192      13         11
+                            total 199
+```
+
+The sample header is the worst because it is mostly 4- and 6-byte loop and
+address fields — `SLOCAT`, `SLNGTH`, `LOOPAT1-4`, `LLNGTH1-4`, `SLXY1-4`. A
+restore that failed inside any of them reported that it failed **without
+naming what it had left wrong**, which is the one thing that probe exists to
+do, and it guards every RAM parameter write CLAUDE.md permits.
+
+Fixed by mapping `offset..offset+size-1`, labelling interiors `NAME+k` so a
+report still separates "the field changed" from "byte 4 of it changed" — the
+fix must not blur the distinction it exists to sharpen. It was listed in the
+external code review as a minor note (*"`field_map` ignores `param.size`"*) and
+sat unquantified; **the number is what makes it not minor.**
+
+### The guard already existed. It could not see linear laws.
+
+`test_a_section_whose_law_was_refitted_says_so_in_its_heading` has been in
+`tests/test_conformance.py` for weeks, written for exactly this failure — its
+own docstring says *"a refitted constant leaves the earlier section correct as
+written … so nothing marks it and nothing ever will unless the heading does."*
+
+Its pattern matched only `NAME = a * exp(b`. **`PANRAT` is linear.** Had the
+pattern covered linear laws, §257 stating `0.11840 * PANRAT` against a shipped
+`0.23708` would have **failed the suite on 2026-09-17**, the day §257 was
+written. The guard was right, present, and blind in one direction.
+
+Extended 2026-09-23. It immediately found **three** unmarked sections:
+
+| section | states | `scales.py` holds |
+|---|---|---|
+| §52 | `PANRAT` 0.23708 | 0.11880 |
+| §22 | `PRLOUD` 0.642719 | 0.61872 |
+| §24 | `PRLOUD` 0.642719 | 0.61872 |
+
+§37 had re-measured `PRLOUD` — *"0.61872 dB/unit, r² 0.99965, superseding
+0.642719 at r² 0.9933"* — and §22 and §24 went on stating the old slope with
+no marker. Both headings now carry one.
+
+### Three ways the extended guard was wrong first
+
+**A two-factor coefficient is not a slope.** `0.009474 * V_LOUD * (knee -
+velocity)` and `0.002075 * SUSTN2 * MODVFILT1` were reported as stale against
+unrelated numbers. Restricted to single-factor laws.
+
+**The lookahead was defeated by backtracking.** `\b(NAME)\b\s*(?![*x(])`
+looks correct and does nothing: `\s*` matches zero characters, so the lookahead
+inspects the space rather than the `*` behind it. It has to be
+`\b(NAME)\b(?!\s*[*x(])` — the whitespace belongs **inside** the lookahead.
+A regex that reads as a restriction and imposes none is the same shape as a
+check that emits rows it cannot interpret.
+
+**A factor of two can be a parameterisation.** §171 states `1.19557 * V_LOUD`
+against `scales.py`'s `0.596862` — a ratio of 2.003, which is the **full swing
+v1→v127 against the per-side deviation**. Not a disagreement. Handled with a
+**reviewed baseline** carrying its reason, mpc2emu's shape: an entry means
+someone read the section and confirmed it states a different quantity. A mute
+button with no reason attached would have hidden the `PRLOUD` rows equally
+well.
+
+### Two lessons taken from mpc2emu, who built the same guard the same day
+
+**The marker match must be case-SENSITIVE.** These notes write a status marker
+in capitals and the same word as ordinary prose in lower case, so a section
+*describing* a withdrawn sub-claim is live. A case-insensitive match silences
+the guard on live sections — **and a guard that fires on live sections gets
+silenced, which is worse than no guard.**
+
+**Citing a retraction is correct usage.** The guard cannot simply ban
+references to struck sections; pointing *at* one is often the point. That is
+what makes the reviewed baseline necessary rather than lazy.
 
 ### The lesson, which is about us and not about the AKAI
 

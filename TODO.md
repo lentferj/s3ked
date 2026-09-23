@@ -2943,12 +2943,38 @@ that does not execute.
 `FILFRQ`'s difference is the documented §54 peak / §139 corner distinction and
 §145 already carries its spread (`0.790 sd 0.039`).
 
-**Blocked on nothing.** The check is mechanical and worth automating: for each
-of the 36 laws in `scales.py`, find the section its `note` cites and confirm
-the shipped coefficients match the section's own final numbers. A test could
-pin it, which is the durable fix — the same shape as the `measured_on` and
-residual-spread fields already open below. **A law whose section has been
-superseded should fail the suite, not sit quietly.**
+**PARTLY MECHANISED 2026-09-23.** The guard already existed —
+`test_a_section_whose_law_was_refitted_says_so_in_its_heading` — and matched
+only `NAME = a * exp(b`. **`PANRAT` is linear, so it was invisible.** Had the
+pattern covered linear laws, §257 stating `0.11840` against a shipped
+`0.23708` would have failed the suite on **2026-09-17**, the day §257 was
+written.
+
+Extended to linear laws, it found three unmarked sections on the first run:
+§52 (`PANRAT` 0.23708), §22 and §24 (`PRLOUD` 0.642719, superseded by §37's
+0.61872). All three headings now carry markers.
+
+The extension needed three corrections of its own, all worth knowing:
+single-factor only (`0.009474 * V_LOUD * (knee - velocity)` is a coefficient,
+not a slope); the whitespace must live **inside** the negative lookahead or
+backtracking defeats it silently; and a reviewed baseline with reasons for
+cases like §171, whose `1.19557` is the full swing against `scales.py`'s
+per-side `0.596862` — a factor of two that is the parameterisation, not a
+disagreement.
+
+**What is still NOT covered**, and is the remaining work here:
+
+- **Laws of other shapes.** Only `a*exp(b*v)` and `a*v` are matched. `pan`,
+  `reso` and `pole` kinds, and any law written in prose rather than as an
+  equation, are still invisible.
+- **The `note`/section link itself.** Nothing checks that the section a
+  `note` cites still exists, still concerns that parameter, or is not struck.
+  mpc2emu shut this on their side the same day: a heading gaining
+  `REFUTED`/`RETRACTED`/`WITHDRAWN`/`SUPERSEDED` now fails every citer not on
+  a reviewed list, verified by striking a live cited section synthetically
+  (8 passed became 2 failed, naming the dependants).
+- **`params.py` has no equivalent at all.** Its ranges and sizes cite sections
+  and nothing links them.
 
 ## Cross-project: eosed and mpc2emu contradict each other on EOS envelopes (OPEN 2026-09-20)
 
@@ -3039,6 +3065,43 @@ indexed by *which*, not by *what kind*, so they legitimately hold tuning,
 loudness and filter offsets side by side. Excluding the index-based groups and
 matching on the full path took it from 69 to 3. A check that emits rows it
 cannot interpret is worse than no check; this one emitted 69.
+
+## `probes/restorecheck.py` `field_map` ignored `param.size` — FIXED 2026-09-23 (§260)
+
+It keyed each parameter by its **start offset** and discarded the size, so a
+byte differing anywhere inside a multi-byte field reported `(unnamed)`:
+
+    region      bytes   named   BLIND (interior)
+    program       192      85         30
+    keygroup      192     130         62
+    sample        192      35         74     <- blind outnumber named 74:35
+    multi          32       6         22
+    multipart     192      13         11
+                                total 199
+
+The sample header is worst because it is mostly 4- and 6-byte loop and address
+fields. **A restore that failed inside `SHNAME`, `SLOCAT` or a loop point said
+so without naming what it had left wrong** — the one thing the probe exists to
+do, and it guards every RAM parameter write CLAUDE.md permits.
+
+Fixed by mapping `offset..offset+size-1`; interiors are labelled `NAME+k` so a
+report still separates "the field changed" from "byte 4 of it changed".
+
+**Found by asking Jan's question** — what the siblings' firmware work teaches
+us. eosed hit the identical defect class the same day in their EOS
+decompilation (*"my extraction kept the addressing mode's operand and threw
+away its size"*), which is what made it recognisable here.
+
+**Two things still open around it.** The other half of the original finding —
+`restorecheck` promising a stale-fetch guard its signature lacks — is
+untouched. And **nothing in `tests/` covers `probes/` at all**: this fix was
+verified by measurement, not by a test, and would not have been caught by the
+suite.
+
+**Note on where findings live.** The eleven `probes/` code-review items were
+never written into this file; they survived only in session state and peer
+messages, which is why this one sat unquantified for days. A finding that is
+not in `TODO.md` is not tracked, however often it is mentioned.
 
 ## External code review — GLM-5.3-Flash, 2026-09-20 (OPEN — triaged against the files)
 

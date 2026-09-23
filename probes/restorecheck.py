@@ -40,9 +40,34 @@ def diff_report(before, after, region, names=None, label=""):
         len(d), len(before), region, "; ".join(lines))
 
 def field_map(params, region):
+    """Every byte of *region* mapped to the field that owns it, interiors too.
+
+    THIS KEPT ONLY THE START OFFSET UNTIL 2026-09-23 and threw the size away,
+    so a differing byte inside any multi-byte field reported "(unnamed)".
+    That is 199 bytes across the five regions, and in the SAMPLE header the
+    blind bytes outnumbered the named ones 74 to 35 -- its layout is mostly
+    4- and 6-byte loop and address fields. A restore that failed inside
+    SHNAME, SLOCAT or a loop point said so without naming what it had left
+    wrong, which is the one thing this probe exists to tell you.
+
+    Found by eosed the same day in their own EOS decompilation -- an offset
+    table that kept the addressing mode's operand and discarded its size, so
+    a `movew` row was read as a byte row. Same defect, different language:
+    a span recorded by where it starts and not by how far it reaches.
+
+    Interior bytes are labelled ``NAME+k`` rather than ``NAME`` so a report
+    still distinguishes "the field changed" from "byte 7 of the field
+    changed" -- the fix must not blur what it is there to sharpen.
+    """
     m = {}
     for k in params.PARAMETERS_BY_NAME:
-        if isinstance(k, tuple) and k[0] == region:
-            try: m.setdefault(params.lookup(k).offset, []).append(k[1])
-            except Exception: pass
+        if not (isinstance(k, tuple) and k[0] == region):
+            continue
+        try:
+            par = params.lookup(k)
+        except Exception:
+            continue
+        for i in range(max(1, par.size)):
+            m.setdefault(par.offset + i,
+                         []).append(k[1] if i == 0 else "%s+%d" % (k[1], i))
     return m
