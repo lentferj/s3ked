@@ -26759,6 +26759,60 @@ silenced, which is worse than no guard.**
 references to struck sections; pointing *at* one is often the point. That is
 what makes the reviewed baseline necessary rather than lazy.
 
+### Pinning it, and the sweep that caught this section
+
+mpc2emu verified both of their own lookaheads **behaviourally rather than by
+reading them**, on the grounds that the two forms are indistinguishable on
+sight. Done here too, and the difference is stark:
+
+```
+                                                      correct   buggy
+rate = 0.11840 * PANRAT + 0.0108 Hz                      match   match
+dB = 0.642719 * PRLOUD - 87.63                           match   match
+attenuation = 0.009474 * V_LOUD * (knee - velocity)     reject   MATCH
+octaves = 0.002075 * SUSTN2 * MODVFILT1                 reject   MATCH
+shift = 0.06386 * K_FREQ * (note - 64)                  reject   MATCH
+```
+
+**Identical on every single-factor case**, which is the whole reason the bug
+is invisible: a filter that silently passes everything looks exactly like one
+with nothing to reject.
+
+The pattern is now a module-level constant so the pin exercises the **live**
+one rather than a copy that can drift, and the test asserts the known-bad form
+**still accepts** what it should reject — without that, the test goes vacuous
+the day the cases stop being two-factor and nobody learns. That second
+assertion is mpc2emu's, and its justification is the general one: *a sweep
+that matches nothing is indistinguishable from a clean tree.*
+
+Verified by regression: swapping the live pattern back to the buggy form in a
+scratch copy fails **both** the pin and the law guard it protects.
+
+**A tree-wide sweep for the shape `\s*(?!` found exactly one hit — this
+section, quoting the bad pattern in its own explanation.** No live instance in
+code. mpc2emu hit the identical self-reference building the same sweep, and
+their handling is the right one: exclude the file and **name the exclusion**,
+because a guard with an unnamed blind spot is this section's own failure over
+again. **The guard cannot check its own source.**
+
+**And then the law guard caught this section too**, one paragraph after that
+was written. The table above quotes `dB = 0.642719 * PRLOUD - 87.63` as a
+worked example, which is a single-factor statement of a superseded slope in a
+section whose heading carries no marker — precisely what the guard exists to
+find. It was right to fire.
+
+Handled by naming `("§260", "PRLOUD")` in the reviewed baseline **rather than
+widening the `quoting` regex**, and the distinction matters: a number appearing
+in prose that never says "superseded" is exactly the case that must keep
+failing elsewhere. **§22 and §24 read that way too** — that is how they
+survived since August. Loosening the detector to spare this section would have
+re-opened the hole it documents.
+
+Three self-references in one evening, then: the shape sweep matching its own
+explanation, the law guard matching its own worked example, and — the one that
+started all this — a guard whose existence stopped anyone checking the thing
+it did not cover.
+
 ### The lesson, which is about us and not about the AKAI
 
 **A constant can be refuted in the notes and still ship.** §257 corrected the

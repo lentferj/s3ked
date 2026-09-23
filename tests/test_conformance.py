@@ -15,6 +15,7 @@ hardware: two's complement re-reading, the S1000-layer frame layout, and the
 range check actually firing on a value the machine should never report.
 """
 
+import re
 import sys
 from pathlib import Path
 
@@ -315,6 +316,50 @@ def test_the_resolution_notes_index_matches_the_sections():
     assert not absent, f"sections missing from the index: {absent[:3]}"
 
 
+#: A LINEAR law stated in the notes: "= 0.11840 * PANRAT". SINGLE-FACTOR
+#: ONLY -- "0.009474 * V_LOUD * (knee - velocity)" is a coefficient in a
+#: two-factor law, not a slope, and matching it reported V_LOUD, K_FREQ and
+#: SUSTN2 as stale against unrelated numbers.
+#:
+#: THE WHITESPACE BELONGS INSIDE THE LOOKAHEAD. `\b(NAME)\b\s*(?![*x(])`
+#: reads as the same restriction and imposes none: `\s*` matches zero
+#: characters, so the lookahead inspects the space rather than the `*` behind
+#: it. The two forms are identical on single-factor input, which is why the
+#: bug is invisible -- see test_the_single_factor_lookahead_actually_rejects.
+LINEAR_LAW = re.compile(
+    r"=\s*([0-9]*\.?[0-9]+(?:e-?\d+)?)\s*[*x]\s*"
+    r"\b([A-Z][A-Z0-9_]{3,9})\b(?!\s*[*x(])")
+
+
+def test_the_single_factor_lookahead_actually_rejects():
+    """A filter that silently passes everything looks like one with nothing to reject.
+
+    This pins the LIVE pattern, not a copy, so a later tidy-up that makes it
+    inert fails here instead of passing quietly. The second half asserts the
+    KNOWN-BAD form still accepts what it should reject -- without that, this
+    test could go vacuous the day the cases stop being two-factor and nobody
+    would know. (mpc2emu's shape, 2026-09-23: assert against a synthetic bad
+    pattern as well as the correct one, or a sweep that matches nothing is
+    indistinguishable from a clean tree.)
+    """
+    buggy = re.compile(
+        r"=\s*([0-9]*\.?[0-9]+(?:e-?\d+)?)\s*[*x]\s*"
+        r"\b([A-Z][A-Z0-9_]{3,9})\b\s*(?![*x(])")
+    single = ["rate = 0.11840 * PANRAT + 0.0108 Hz",
+              "dB = 0.642719 * PRLOUD - 87.63"]
+    double = ["attenuation = 0.009474 * V_LOUD * (knee - velocity)",
+              "octaves = 0.002075 * SUSTN2 * MODVFILT1",
+              "shift = 0.06386 * K_FREQ * (note - 64)"]
+    for t in single:
+        assert LINEAR_LAW.search(t), f"must match a single-factor law: {t}"
+    for t in double:
+        assert not LINEAR_LAW.search(t), f"must reject a two-factor law: {t}"
+    # and the trap is real: the buggy form rejects none of them
+    assert all(buggy.search(t) for t in double), (
+        "the known-bad pattern no longer accepts the two-factor cases, so "
+        "this test no longer demonstrates the difference it exists to pin")
+
+
 def test_a_section_whose_law_was_refitted_says_so_in_its_heading():
     """Refinement is invisible where retraction is visible.
 
@@ -351,13 +396,7 @@ def test_a_section_whose_law_was_refitted_says_so_in_its_heading():
     # for seventeen days (§260): §257 stated `rate = 0.11840 * PANRAT` while
     # scales.py held 0.23708, and this test could not see either number.
     # Matches "0.11840 * PANRAT" and "rate = 0.11840 * PANRAT + 0.0108 Hz".
-    # SINGLE-FACTOR ONLY. "0.009474 * V_LOUD * (knee - velocity)" is a
-    # coefficient in a two-factor law, not a slope, and matching it reported
-    # V_LOUD and K_FREQ as stale against unrelated numbers. A guard that
-    # emits rows it cannot interpret gets silenced.
-    linear = re.compile(
-        r"=\s*([0-9]*\.?[0-9]+(?:e-?\d+)?)\s*[*x]\s*"
-        r"\b([A-Z][A-Z0-9_]{3,9})\b(?!\s*[*x(])")
+    linear = LINEAR_LAW
     # a newer section may quote the law it supersedes; those lines say so
     quoting = re.compile(r"previous|earlier|withdraw|supersed|retract|was\b",
                          re.I)
@@ -371,6 +410,14 @@ def test_a_section_whose_law_was_refitted_says_so_in_its_heading():
         # deviation, which is half of it. 1.19557 / 0.596862 = 2.003 --
         # the factor of two IS the parameterisation, not a disagreement.
         ("§171", "V_LOUD"),
+        # §260 is the section ABOUT superseded laws. It quotes the stale
+        # PRLOUD slope as a worked example of what this guard catches, in a
+        # table demonstrating that the correct and buggy lookaheads agree on
+        # single-factor input. Naming the exclusion rather than widening the
+        # `quoting` regex, because "0.642719" appearing in prose that never
+        # says "superseded" is exactly the case the guard must keep catching
+        # elsewhere -- §22 and §24 read that way too.
+        ("§260", "PRLOUD"),
     }
     stale = []
     for i, (start, head) in enumerate(heads):
