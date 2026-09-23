@@ -2791,7 +2791,19 @@ _PARAMS: List[Parameter] = [
         0,
         4294967295,
         desc="Position in sample of first loop point",
-        notes="range as written: \"Number of data points from start of sample\"",
+        notes="range as written: \"Number of data points from start of sample\". "
+              "THIS IS THE LOOP'S **END**, NOT ITS START -- §136, confirmed on "
+              "hardware at correlation 1.000000 over 352800 frames. LLNGTH1 "
+              "measures BACKWARDS from it, so the loop is "
+              "[LOOPAT1 - LLNGTH1, LOOPAT1]. The desc above, and the source "
+              "document's own wording, both read naturally as the start; "
+              "getting it backwards is what produced silent and degraded "
+              "loops in a sibling project, which wrote the intended start "
+              "here and asked for a negative region on 100% of its output. "
+              "Recorded here 2026-09-23 after AKAISDS -- a downstream "
+              "consumer of this table -- reported that reading params.py "
+              "alone gives the wrong answer. The finding was ours and "
+              "hardware-verified; it had simply never reached the data.",
     ),
     _p(
         "sample",
@@ -2802,6 +2814,20 @@ _PARAMS: List[Parameter] = [
         0,
         281474976710655,
         desc="First loop length",
+        notes="**32.16 FIXED POINT, not a plain frame count.** Confirmed on "
+              "hardware 2026-09-23 (§261): the six bytes are little-endian "
+              "[16-bit fraction][32-bit frames], so raw = frames * 65536 + "
+              "fraction. A ROM SINE of SLNGTH 256 reads df 8f a8 00 00 00 = "
+              "11046879 raw = 168 frames + 0.5620. Read as a plain count that "
+              "is 43000x the whole sample. The fraction is load-bearing: a "
+              "single-cycle waveform needs sub-frame loop precision to hold "
+              "pitch, which is why the field carries 16 bits of it -- and why "
+              "it is 6 bytes where SLOCAT, SLNGTH, SSTART, SMPEND and LOOPAT1 "
+              "are all 4. §136 cites this field at 0x2c while it starts at "
+              "0x2a: 0x2c is where the 32-bit frame count begins, and §136's "
+              "quoted \'LLNGTH 44100\' was that decoded frame count, not the "
+              "raw field. Writing a plain frame count here gives a loop 65536x "
+              "too short -- AKAISDS hit exactly that and reported it.",
     ),
     _p(
         "sample",
@@ -2836,6 +2862,7 @@ _PARAMS: List[Parameter] = [
         0,
         281474976710655,
         desc="Second loop length",
+        notes="32.16 fixed point, as LLNGTH1 -- see its notes and §261. raw = frames * 65536 + fraction.",
     ),
     _p(
         "sample",
@@ -2870,6 +2897,7 @@ _PARAMS: List[Parameter] = [
         0,
         281474976710655,
         desc="Third loop length",
+        notes="32.16 fixed point, as LLNGTH1 -- see its notes and §261. raw = frames * 65536 + fraction.",
     ),
     _p(
         "sample",
@@ -2904,6 +2932,7 @@ _PARAMS: List[Parameter] = [
         0,
         281474976710655,
         desc="Fourth loop length",
+        notes="32.16 fixed point, as LLNGTH1 -- see its notes and §261. raw = frames * 65536 + fraction.",
     ),
     _p(
         "sample",

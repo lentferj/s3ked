@@ -2925,6 +2925,91 @@ main interpreter. Both are deliberate.
 
 ---
 
+## AKAISDS, a downstream consumer, disagrees with us on three fields (OPEN 2026-09-23)
+
+`~/git-repos/AKAISDS` pins `s3ked` as a git dependency and uses `s3k.params`,
+`encode_field`/`decode_field` and `s3ked.demo.DemoBridge`. It is the only
+consumer of this table that is not us, and it has an SDS implementation and a
+sample editor — neither of which s3ked has. **Its agreement with us proves
+nothing (we are its source); its DISAGREEMENTS are the whole value.**
+
+Four items. **Exactly one was safe to act on.**
+
+### DONE — `LOOPAT1`'s `notes=` never said it is the loop END
+
+Their report: *"`s3k.params`' own `notes=` for `LOOPAT1` does NOT mention this
+— reading only that file, the natural (wrong) assumption is that `LOOPAT1` is
+where the loop starts."* Correct, and the `desc` ("Position in sample of first
+loop point") reads that way too. **The finding was ours** — §136, hardware-
+verified at correlation 1.000000 — and had simply never reached the data.
+Propagated. Same disease as `PANRAT` in §260: known in the prose, absent from
+what ships.
+
+### NOT DONE — `LLNGTH1` as 32.16 fixed point CONTRADICTS our own §136
+
+They hold `LLNGTH1` raw = `frames * 65536`, sourced to `s3000editor`'s
+`writeFixed32_16` and akaiutil, and record a real regression from getting it
+wrong ("the hardware read back a few milliseconds, not the intended few
+hundred frames").
+
+**Structural support, from our own table:** every position/length field in the
+sample region is **4 bytes** — `SLOCAT`, `SLNGTH`, `SSTART`, `SMPEND`,
+`LOOPAT1`, `LOOPAT2` — and **only the two `LLNGTH` fields are 6**. A loop
+length cannot exceed the sample length, so the extra width is not range;
+4 + 2 is exactly 32.16. Second corroboration: §136 cites `LLNGTH1` at `0x2c`
+while the field starts at `0x2a`, and a 16-bit fraction first puts the frame
+count at exactly `0x2a + 2`.
+
+**But §136's hardware run reads against it.** Its verified loop region was
+`[176400, 220500]` — 44100 frames — with `LLNGTH 44100` quoted. Under 32.16 a
+raw 44100 is **0.67 frames** and that test could not have matched. §136 does
+not record whether it quoted raw or decoded values, and no probe survives that
+shows the raw bytes. **Nothing here can settle it, so nothing here asserts it.**
+
+**SETTLED 2026-09-23 — they are right, §261.** Four routes: the structural
+width argument above; a read-only hardware read (a ROM `SINE` of `SLNGTH` 256
+holds `df 8f a8 00 00 00` = 168 frames + 0.5620); mpc2emu's corpus (6209
+looped samples, plain-48 fits within `SLNGTH` 11/6209, 32.16 fits 6209/6209);
+and **the firmware's own arithmetic at `0x15BA2`**, which reads `0x2C` as a
+32-bit integer handled exactly like `LOOPAT1`, reads `0x2A` as a separate
+16-bit word, and **carries that word's overflow into the frame count with
+`add`/`adc`** — the signature of fixed point, and the only one of the four
+that shows the machine's *meaning* rather than its bytes.
+
+§136 is not impugned: its `0x2c` citation was right and its quoted
+`LLNGTH 44100` was the decoded frame count. Recorded in `LLNGTH1..4`'s own
+`notes=`.
+
+### NOT DONE — `STUNO`: they assume a scale §23 says we cannot confirm
+
+They declare `STUNO` signed 1/256-semitone, range ±50.00st, and carry manual
+sign-extension **because our table declares it `0..65535`** and `encode_field`
+rejects negatives. Their ±50.00st × 256 = 12800 matches every sibling tuning
+field exactly, and an external code review flagged the same asymmetry.
+
+**§23 measured it: `STUNO` stores and does nothing over SysEx.** Values 32, 64,
+256 and 1000 written and read back exactly, pitch moving 0.000× the 1/256
+scale — and §23 states outright that *"nothing here can confirm the scale it
+should use"*, the disc-load path being outside SysEx's reach. Their "confirmed
+on hardware" attaches to a display-cache bug of theirs, **not** to the scale.
+
+So three lines point at ±12800 and one measurement says the field is inert.
+**Changing a shipped range on a downstream assumption would be adopting their
+guess as our fact.** Needs the disc path, which is mpc2emu's boundary, not
+ours.
+
+### NOT DONE — two smaller ones
+
+- **`PRGNUM` displays raw + 1** on the panel, they say ("raw 8 shows as program
+  9"). `s3k` has a `display_offset` mechanism and `PRGNUM` uses 0, so s3ked's
+  own TUI would be showing it one low. Unverified here; changing a displayed
+  value on their word is the same error as the `STUNO` one.
+- **`DELS` has no `count() > 1` guard** where program delete does, and they
+  matched us without knowing whether that is deliberate. **A question, not a
+  claim** — does the machine ignore deleting the *last* sample the way it
+  ignores deleting the last program? One hardware run under the arm-then-fire
+  rule settles it.
+
 ## Audit every shipped scale constant against its own section (OPEN 2026-09-23 — §260)
 
 **Status:** raised by `PANRAT`, which shipped at **2.002x** the measured slope

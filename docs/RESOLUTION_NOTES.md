@@ -451,6 +451,7 @@ silently wrong one.
 - [§258](#258--the-resident-object-directory-and-a-255-sample-ceiling-the-pool-does-not-model-2026-09-20) — The resident-object directory, and a 255-sample ceiling the pool does not model (2026-09-20)
 - [§259](#259--decay1-across-2099-in-one-sweep-30-confirmed-118s-re-measure-refuted-2026-09-20) — `DECAY1` across 20..99 in one sweep: §30 confirmed, §118's re-measure refuted (2026-09-20)
 - [§260](#260--panrat-shipped-at-2002x-the-truth-for-seventeen-days-after-we-ourselves-refuted-it-2026-09-23) — `PANRAT` shipped at 2.002x the truth for seventeen days after we ourselves refuted it (2026-09-23)
+- [§261](#261--llngth-is-3216-fixed-point-settled-four-ways-including-the-firmwares-own-arithmetic-2026-09-23) — `LLNGTH` is 32.16 fixed point, settled four ways including the firmware's own arithmetic (2026-09-23)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -26821,3 +26822,116 @@ measurement saying `0.11840`, a section explaining why `0.23708` was an
 artefact, and a shipped `0.23708`. Nobody looked, because the notes read as
 though the matter was closed — **and it was, in the only place that does not
 execute.**
+
+## §261 — `LLNGTH` is 32.16 fixed point, settled four ways including the firmware's own arithmetic (2026-09-23)
+
+`AKAISDS` — a downstream consumer that pins `s3ked` as a git dependency and
+uses `s3k.params` — holds `LLNGTH1` raw = `frames * 65536`, sourced to
+`s3000editor`'s `writeFixed32_16` and to akaiutil, and records a real
+regression from getting it wrong. **s3ked's table said nothing about it**
+(`notes=None`), and §136 appeared to contradict it. Four independent routes
+now agree, and they are given weakest-first because the last one is a
+different kind of evidence from the others.
+
+### 1. Structural, from our own table
+
+Every position/length field in the sample region is **4 bytes** — `SLOCAT`,
+`SLNGTH`, `SSTART`, `SMPEND`, `LOOPAT1`, `LOOPAT2`. **Only the two `LLNGTH`
+fields are 6.** A loop cannot exceed its own sample, so the extra width is not
+range. 4 + 2 is exactly 32.16. This was sitting unexplained in the table.
+
+### 2. The machine, read directly
+
+A ROM `SINE` of `SLNGTH` 256, read read-only over SysEx:
+
+```
+LLNGTH1 raw bytes   df 8f a8 00 00 00      (offset 0x2A, 6 bytes)
+  as one 48-bit LE  11046879               <- 43000x the whole sample
+  low  16 (0x2A)    36831  -> 0.5620 frame
+  high 32 (0x2C)    168    frames
+LOOPAT1 192, so the loop is [23.438, 192] -- inside a 256-frame sample.
+```
+
+**The fraction is load-bearing, not noise.** A single-cycle ROM waveform needs
+sub-frame loop precision to hold pitch; a plain integer frame count cannot
+express 168.5620, which is why the field carries 16 bits of fraction.
+
+### 3. mpc2emu's corpus, measured before seeing this
+
+6209 looped samples across six discs, decoded both ways and tested only on
+whether a loop can fit inside its own sample:
+
+```
+read as plain 48-bit LE   within SLNGTH:    11 / 6209
+read as 32.16             within SLNGTH:  6209 / 6209
+```
+
+### 4. The firmware's own arithmetic — which shows the MEANING, not the value
+
+`0x15BA2`, walking sample headers:
+
+```
+15ba2  mov cx,es:[bx+0x26]    ; LOOPAT1 low 16
+15ba6  mov bp,es:[bx+0x28]    ; LOOPAT1 high 16      -> ONE 32-bit quantity
+15baa  lcall 0x24d1:0x1a4a    ; scale it
+15baf  mov [si+0x26],cx / mov [si+0x28],bp
+
+15bb5  mov cx,es:[bx+0x2c]    ; LLNGTH1 low 16
+15bb9  mov bp,es:[bx+0x2e]    ; LLNGTH1 high 16      -> ONE 32-bit quantity,
+15bbd  lcall 0x24d1:0x1a4a    ;    handled identically to LOOPAT1
+15bc2  mov [si+0x2c],cx / mov [si+0x2e],bp
+
+15bc8  xor bp,bp              ; BP = 0
+15bca  mov cx,es:[bx+0x2a]    ; the FRACTION, 16 bits alone
+15bce  lcall 0x24d1:0x1a4a    ; same scaling
+15bd3  mov [si+0x2a],cx
+15bd6  add [si+0x2c],bp       ; CARRY the fraction's overflow into the frames
+15bd9  adcw $0x0,[si+0x2e]    ; with propagation into the high word
+```
+
+`0x2C` is a 32-bit integer treated exactly as `LOOPAT1` is. `0x2A` is a
+separate 16-bit word **whose overflow is added into it with carry
+propagation**. That carry is the signature of fixed-point arithmetic and it
+cannot be read any other way: the machine scales all three quantities by one
+factor, and when the fraction scales past 1.0 the integer part increments.
+
+**This is a different kind of evidence from the other three.** Structure,
+a reading and a corpus all establish *what the bytes are*; only the firmware
+establishes *what the machine does with them*.
+
+### §136 is not impugned, and this explains its `0x2c`
+
+§136 cites `LLNGTH1` at `0x2c` while the field starts at `0x2a` — correct, and
+now explained: `0x2c` is where the frame count begins. Its quoted
+`LLNGTH 44100` was that **decoded** frame count, which is what any reader
+taking a `u32` at `0x2c` returns. Two readers can both say "44100" while
+disagreeing about what the six bytes hold. The apparent contradiction was a
+different-quantities-same-number trap, not an error in §136.
+
+### The risk direction, which is easy to state backwards
+
+mpc2emu read the hazard as *"a writer emitting a plain frame count into a
+32.16 field writes a loop 65536x too LONG"*. **By arithmetic it is too
+short**, and the distinction matters to anyone auditing a writer:
+
+```
+A  plain frame count written as the whole 48-bit field at 0x2A
+     raw 44100 -> frames = 44100>>16 = 0, fraction = 44100
+     loop = 0.6729 frames instead of 44100      -> 65536x TOO SHORT
+B  frames as u32 at 0x2C with 0 at 0x2A  (mpc2emu's writer)
+     frames = 44100, fraction = 0                -> CORRECT
+C  "too long" needs the field to BE plain-48 and the writer to place
+     frames at 0x2C -- a counterfactual, since it is not plain-48.
+```
+
+A is exactly what AKAISDS hit: *"the hardware read back a few milliseconds,
+not the intended few hundred frames."*
+
+### What this cost us, and why a consumer found it
+
+`params.py` carried `notes=None` on a 6-byte field whose width was its own
+evidence. **The only reason it surfaced is that someone outside this project
+read the table without the sections beside it** — which is the condition every
+downstream consumer works under, and the one this project never tests. §260
+found the same disease in a shipped constant; this is the same disease in a
+shipped *silence*.
