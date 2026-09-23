@@ -23,8 +23,15 @@ Synthetic throughout -- a fake `jack` module is installed before import, so no
 server is needed and the failure paths can be provoked on demand.
 """
 import importlib, sys, types, warnings
-import numpy as np
+
 import pytest
+
+# `probes/` is bench tooling and is not in the wheel; `dev` deliberately does
+# not pull numpy in, so this suite must SKIP without it rather than fail at
+# collection. test_measure.py and test_calibrate.py both do exactly this at
+# their own line 30 -- a bare `import numpy` here reddened every CI job on
+# every platform the first time these tests reached a runner.
+np = pytest.importorskip("numpy", reason="jcap is bench tooling")
 
 
 class _FakePort:
