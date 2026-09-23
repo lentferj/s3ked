@@ -2925,6 +2925,50 @@ main interpreter. Both are deliberate.
 
 ---
 
+## The documented dev venv cannot catch an undeclared dependency (OPEN 2026-09-23)
+
+**Status:** found after a push reddened all seven CI jobs. The instance is
+fixed; the class is not, and the cause is in this project's own instructions.
+
+`tests/test_jcap.py` imported numpy at module scope. The `dev` extra
+deliberately excludes numpy — `pyproject.toml` says so in a comment and the
+two existing bench suites guard with `pytest.importorskip`. CI installs
+`.[dev]`, so collection raised `ModuleNotFoundError` and **a collection error
+aborts the entire run**: every job died after 2 tests having run nothing.
+pytest gives no partial credit there, so one bad module-scope import costs the
+whole matrix (k2kremote's framing, and the sharper statement of the hazard).
+
+**Why a local run could never have caught it.** CLAUDE.md line 142 specifies
+the dev venv as `--system-site-packages`, to reuse system python-rtmidi. So:
+
+```
+.venv/pyvenv.cfg   include-system-site-packages = true
+numpy resolves to  /usr/lib/python3/dist-packages/numpy/__init__.py
+in the venv?       No.
+```
+
+numpy was **never installed into the venv**. It leaked in from the system, and
+every local run read a package the manifest does not declare and CI cannot
+have. This is not an oversight in how the suite was run — **the documented
+setup builds the blind spot in by default.** k2kremote has the identical
+instruction and confirmed the same exposure; their manifest happens to cover
+it because numpy is a core dependency there, but nothing guaranteed that.
+
+**What would close the class**, in rising order of cost:
+
+- **A clean-venv run before anything release-shaped.** `python3 -m venv` with
+  no `--system-site-packages`, `pip install -e ".[dev]"`, run the suite. Four
+  minutes; it is what settled this one (756 passed, 3 skipped).
+- **A test that mechanises it:** every module-scope import in `tests/` must be
+  stdlib, a declared dependency of an extra CI installs, or behind
+  `pytest.importorskip`. That is checkable by AST without running anything,
+  and it is the durable form — `test_nothing_that_ships_imports_numpy` already
+  exists for the *distribution* and passes here, because `probes/` is not
+  shipped. **A guard covering the package but not the suite that exercises
+  it.**
+
+**Blocked on:** a decision about the second item. The first needs nobody.
+
 ## AKAISDS, a downstream consumer, disagrees with us on three fields (OPEN 2026-09-23)
 
 `~/git-repos/AKAISDS` pins `s3ked` as a git dependency and uses `s3k.params`,
