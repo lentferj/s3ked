@@ -630,7 +630,7 @@ GPL-2.0-or-later. Full text in [COPYING](COPYING); attributions in
 | component | source | license |
 |---|---|---|
 | `s3k/messages.py`, `s3k/params.py` | Frame layout, operation codes, header offsets/ranges transcribed as data from Akai's *S1000 MIDI Exclusive Communication*, *S2800/S3000/S3200 MIDI System Exclusive Extensions* and *S2000/S3000XL/S3200XL MIDI System Exclusive Extensions*. Not redistributed. | protocol facts used as data |
-| `s3k/bridge.py` | Throttled output, `MultiIn`, the ALSA-client leak fix and port enumeration ported from the sibling [eosed](https://github.com/lentferj/eosed), which ports them from [k2kremote](https://github.com/lentferj/k2kremote) and mpc2emu | GPL-2.0-or-later |
+| `s3k/bridge.py` | Throttled output, `MultiIn`, the ALSA-client leak fix and port enumeration ported from the sibling [eosed](https://github.com/lentferj/eosed), which ports them from [k2kremote](https://github.com/lentferj/k2kremote) and [mpc2emu](https://github.com/lentferj/mpc2emu) | GPL-2.0-or-later |
 | `s3ked/app.py` | `wrap_blocks` and the folding key legend (`KeyHints`) ported from [eosed](https://github.com/lentferj/eosed), which ports `wrap_blocks` from [k2kremote](https://github.com/lentferj/k2kremote) | GPL-2.0-or-later |
 | everything else | original work | GPL-2.0-or-later |
 
