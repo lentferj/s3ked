@@ -3298,6 +3298,34 @@ never written into this file; they survived only in session state and peer
 messages, which is why this one sat unquantified for days. A finding that is
 not in `TODO.md` is not tracked, however often it is mentioned.
 
+## The pre-release name scan needs a term list, and it cannot live here (OPEN 2026-09-24 — §262)
+
+`probes/relscan.py` now does the scan CLAUDE.md requires before a push, with
+the three guards that tonight's two failed ad-hoc scans each lacked: it counts
+the files it opened, asserts a positive control, and prints every hit for
+reading. Unsound runs exit 2 and cannot exit 0.
+
+**Status:** the tool is written, tested and mutation-tested (six of six guards
+caught). What it does not have is its input.
+
+**Blocked on:** a path to the commercial-name term list. It cannot be a file
+in this repository — a committed list of library names is the exact thing the
+rule forbids, and `relscan.py` refuses a `--terms` path that `git ls-files`
+knows. mpc2emu builds theirs from a local id→name map; either that map's path
+is reusable here, or Jan says where s3ked's copy should live. Until then every
+release scan is still ad hoc, which is what produced `HIT '<name>' x0`
+fifteen times over.
+
+Two smaller things left open by §262:
+
+- The scan is not wired to anything. It is deliberately not a pre-push hook
+  yet: a hook that exits 2 because a terms file is missing would train
+  everyone to pass `--no-verify`. Wire it once the list exists.
+- `--control` defaults to `keygroup`, which is a fine control for s3ked and
+  meaningless for a tree that never mentions keygroups. If this is ever lifted
+  into the sibling projects, the control has to be chosen per tree, not
+  inherited.
+
 ## External code review — GLM-5.3-Flash, 2026-09-20 (OPEN — triaged against the files)
 
 **Status:** every finding below was re-checked against the code on

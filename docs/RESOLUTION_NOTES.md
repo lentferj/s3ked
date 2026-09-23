@@ -452,6 +452,7 @@ silently wrong one.
 - [§259](#259--decay1-across-2099-in-one-sweep-30-confirmed-118s-re-measure-refuted-2026-09-20) — `DECAY1` across 20..99 in one sweep: §30 confirmed, §118's re-measure refuted (2026-09-20)
 - [§260](#260--panrat-shipped-at-2002x-the-truth-for-seventeen-days-after-we-ourselves-refuted-it-2026-09-23) — `PANRAT` shipped at 2.002x the truth for seventeen days after we ourselves refuted it (2026-09-23)
 - [§261](#261--llngth-is-3216-fixed-point-settled-four-ways-including-the-firmwares-own-arithmetic-2026-09-23) — `LLNGTH` is 32.16 fixed point, settled four ways including the firmware's own arithmetic (2026-09-23)
+- [§262](#262--the-pre-release-name-scan-and-why-it-had-to-become-a-program-2026-09-24) — The pre-release name scan, and why it had to become a program (2026-09-24)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -26935,3 +26936,102 @@ read the table without the sections beside it** — which is the condition every
 downstream consumer works under, and the one this project never tests. §260
 found the same disease in a shipped constant; this is the same disease in a
 shipped *silence*.
+
+## §262 — The pre-release name scan, and why it had to become a program (2026-09-24)
+
+CLAUDE.md forbids committing the name of any program, sample or bank from a
+commercial library. Checking that before a push has always been a two-line
+`grep`. On 2026-09-23 two sessions ran that two-line grep against their own
+trees within an hour of each other, and **both were wrong, in three different
+ways, and every one of them printed a result that read as clean.**
+
+### The three failures
+
+**1. The file scope was not what it appeared to be.** `grep` on this box is a
+shell function wrapping `ugrep --ignore-files`, so a recursive scan silently
+skips every gitignored path. Six files were never opened — `.claude/`, the
+three `HW_*.md` hardware notes, `config.toml`, and **`CLAUDE.md` itself, the
+file that states the rule.** The conclusion survived, because gitignored files
+cannot be pushed and tracked-only is the right scope for a release question;
+but that scope was reached by the shape of the tooling, not by choosing it.
+The peer reports the identical accident from the other side: their `tests/`
+and `.claude/` are gitignored, so `git ls-files` was automatically right for
+them too. Two sessions, two correct scopes, neither one decided.
+
+**2. The re-check was broken in the same breath as the check.** It used
+`grep -c "$name" ... || echo 0`. `grep` exits 1 on zero matches, so both sides
+of the `||` fired and the count became `"0\n0"` — every one of fifteen terms
+printed as `HIT '<name>' x0`. Nonsense formatted as a finding, produced by the
+code written to verify the code.
+
+**3. The pattern hit everything.** The peer's scan returned **816 hits, then
+11, then 3**, across three runs of one unchanged tree — all artefacts of the
+pattern itself: `ROM)` split out of a parenthesised CD-ROM mention, `VEL SAMP`
+matching `leVEL SAMPlevolume`. Their positive control passed on every run,
+because the machinery was fine and the pattern was wrong.
+
+### What that costs, and the leg neither session had
+
+No single guard catches all three. Counting files catches (1). A positive
+control catches a decoder or pattern that can never hit. Neither catches (3),
+and for a release scan (3) is not the minor case: **a false positive reads as
+"commercial names found the night before a push", which does not fail safe.**
+The third leg is to *print every hit and read it*. A count cannot be read.
+
+So the rule is three-legged, and it is now `probes/relscan.py` rather than a
+paragraph, because a documented procedure can be mis-executed in exactly the
+three ways above:
+
+- **count the bytes opened**, and refuse if any tracked file was not read;
+- **assert a positive control** that must hit;
+- **print every hit in context** — file, line, which term, the matched text.
+
+An unsound run — including one that refuses to start — exits **2** and can
+never exit 0. Hits exit 1. Only a sound, hit-free run exits 0.
+
+### The constraint that shapes its interface
+
+**The term list cannot live in this repository.** A checked-in list of
+commercial library names is itself a checked-in list of commercial library
+names — the scanner would become the largest single violation of the rule it
+enforces. `--terms` therefore takes a path, and `relscan.py` **refuses a path
+that `git ls-files` knows**, which is the one case where the tool has to
+distrust its own operator. Keep the list beside the id→name map, outside the
+tree or gitignored.
+
+It scans **bytes**, not decoded text, over `git ls-files` plus the commit
+messages in a revision range: CLAUDE.md's rule that a captured binary embeds
+names in its payload means a scrubbed filename scrubs nothing, and a name can
+sit in a commit message having never reached a file. (All 76 tracked files are
+text today. That is not a durable property and is not relied on.)
+
+### The tests, and the two that were inert
+
+`tests/test_relscan.py` is one test per failure mode above plus the two
+CLAUDE.md rules a naive grep gets wrong. Every fixture name is invented —
+necessarily, for the same reason the term list is external.
+
+Nine tests passed on first run. **Mutation-testing them found two of the nine
+proved nothing**, and both were the word-boundary test, the one standing in
+for failure (3):
+
+- deleting the *leading* `\b` left all nine passing, because the fixture
+  string `levelsamplevolume` had **no space in it**, and a two-word term
+  (`vel samp`) cannot match it on any setting. The fixture for the peer's
+  actual artefact did not reproduce the peer's actual artefact.
+- with that fixed to `vel samplevolume`, deleting the *trailing* `\b` still
+  left all nine passing: one string cannot isolate two edges. It takes
+  ` vel samplevolume` (only the boundary *after* excludes it) **and**
+  `supervel samp ` (only the boundary *before* does).
+
+Six of six mutations are now caught: unopened-file guard, control guard,
+commit-message scan, binary-file scan, and each `\b` independently.
+
+**The generalisation is the night's, not this section's.** A check is the
+unverified end of the work, and tonight it was the broken component five or
+six times over — the `pgrep` self-match, the span replacement that ate a
+section, the heading diff blind to same-session deletions, the estimator
+control aimed one step off its own hypothesis, the `grep -c` above, and these
+two tests. Every one produced a confident clean result. A test that has never
+been made to fail is a comment; a scan that has never been made to cry wolf is
+an opinion.
