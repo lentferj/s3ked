@@ -36,6 +36,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # DELIBERATELY `latest` rather than a pinned image. GitHub migrates
+        # this label to Ubuntu 26 from 2026-10-19, and that is a change this
+        # matrix exists to be told about rather than insulated from -- the
+        # 3.13 job builds python-rtmidi from source there, so a toolchain or
+        # libasound change shows up here and nowhere else. If a red build
+        # appears around that date with no local cause, look at the runner
+        # image before looking at the diff.
         os: [ubuntu-latest]
         python-version: ["3.11", "3.12", "3.13"]
         include:
@@ -49,9 +56,19 @@ jobs:
             python-version: "3.13"
 
     steps:
-      - uses: actions/checkout@v4
+      # v7 on both. checkout@v4 and setup-python@v5 target Node 20, which
+      # GitHub deprecated on 2025-09-19 and now force-runs on Node 24 with
+      # an annotation on every job. checkout@v5 and setup-python@v6 are
+      # where Node 24 landed; v7 is taken for the longer runway. Neither
+      # major touches what this workflow uses -- checkout is called with no
+      # inputs at all, and setup-python only with `python-version` and
+      # `cache`, both unchanged. v7 of setup-python drops the `pip-install`
+      # input, which is not used here; v7 of checkout blocks fork checkout
+      # for `pull_request_target` and `workflow_run`, neither of which this
+      # workflow triggers on.
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
