@@ -453,6 +453,7 @@ silently wrong one.
 - [§260](#260--panrat-shipped-at-2002x-the-truth-for-seventeen-days-after-we-ourselves-refuted-it-2026-09-23) — `PANRAT` shipped at 2.002x the truth for seventeen days after we ourselves refuted it (2026-09-23)
 - [§261](#261--llngth-is-3216-fixed-point-settled-four-ways-including-the-firmwares-own-arithmetic-2026-09-23) — `LLNGTH` is 32.16 fixed point, settled four ways including the firmware's own arithmetic (2026-09-23)
 - [§262](#262--the-pre-release-name-scan-and-why-it-had-to-become-a-program-2026-09-24) — The pre-release name scan, and why it had to become a program (2026-09-24)
+- [§263](#263--two-sessions-read-the-same-bytes-through-a-model-of-their-neighbour-2026-09-24) — §263 — Two sessions read the same bytes through a model of their neighbour (2026-09-24)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -27035,3 +27036,190 @@ control aimed one step off its own hypothesis, the `grep -c` above, and these
 two tests. Every one produced a confident clean result. A test that has never
 been made to fail is a comment; a scan that has never been made to cry wolf is
 an opinion.
+
+## §263 — Two sessions read the same bytes through a model of their neighbour (2026-09-24)
+
+**THE PREMISE OF THIS SECTION COLLAPSED THE SAME NIGHT, IN TWO STAGES, AND
+BOTH FAILURES WERE THE SAME ONE.** Read the banner before anything below it.
+
+A sibling session traced the eleven "located but unmodelled" cords in EOS's
+AKAI program importer (the function at `0x4647c`) and asked what eight program
+common-block offsets are in our table. I answered all eight. The answers are
+correct **as lookups of our own table** and describe nothing about EOS,
+because the eight numbers are not program-file offsets: they are `%a5`
+displacements into a parsed, reordered structure, and the peer withdrew them
+(their `585b9df`).
+
+Their own module held the refutation twenty lines above the paragraph that
+made the claim — a seven-slot table mapping `%a5@(33)→raw[92]`,
+`%a5@(38)→raw[89]`, `%a5@(50)→raw[94]` and so on, with shifts of +59, +51 and
++44. A copied buffer gives **one** shift; three means staging, which their
+note had said before they traced it away. Their corpus agrees: across 3,456
+programs the bytes my wrong reading landed on (50, 51, 53, 54) are **zero on
+100% of them**.
+
+So two retractions sit in this section, an hour apart, on the same bytes:
+
+- **Mine.** I read EOS's `src 11 / dst 64` as *key / pan* because our byte 32
+  is named `K_PANP`, without opening their enum. They are `Vel~` / `AmpVol`.
+- **Theirs.** They read `%a5` displacements as file offsets because a
+  *neighbouring register* in the *caller* decoded as pan/loudness/vel-loudness,
+  without checking that the callee's base was the same object.
+
+Both of us checked a component against a **model of the thing next to it**.
+Both refutations were locally available and unasked-for: their enum sat in
+`E4B_FORMAT.md`, their shift sat in their own module. The rule this project
+already had — *never check a real component against a MODEL of its neighbour*
+— is quoted elsewhere in this very document.
+
+**What survives is below, and it is less than the original section claimed:**
+one genuine structural fact about our own block (zero holes), and two lessons
+about checking. Everything framed as a finding *about EOS* is void.
+
+### The base is fixed, but not by the check that looked like it fixed it
+
+The peer's anchor is `%a5@(24/25/26)`, which their parser decodes as pan /
+loudness / velocity-loudness. Ours has `PANPOS` / `PRLOUD` / `V_LOUD` at
+exactly 24/25/26. Two independently built tables agreeing on three consecutive
+bytes fixes the shift at zero, and sweeping −16..+32 leaves zero as the only
+shift preserving it.
+
+**The instrument that nearly said otherwise is worth recording, because it is
+the §189 disease in a new place.** Alongside the anchor I scored each candidate
+shift by how many of the eight offsets landed on a *field start* — and eleven
+different shifts scored 8 of 8. That metric has no discriminating power here:
+85 of the block's 115 offsets are field starts (74%), the whole block contains
+only five multi-byte fields, and 8/8 arises by chance about 9% of the time. It
+was reporting the table's density, not an alignment. Quantifying a check's
+baseline *before* believing it is the same move as §186's control.
+
+### The four named-but-dark fields
+
+    0x20  32   K_PANP   program.pan    desc "Not used"
+    0x38  56   ECHOUT   program.midi   desc "Not used"
+    0x39  57   MW_PAN   program.pan    desc "Not used"
+    0x3a  58   COHERE   program.midi   desc "Not used"
+
+All four carry `range as written: "fixed value in the specification"`.
+
+**RETRACTED THE SAME NIGHT — the corroboration was mine, not the evidence's.**
+This section first claimed that EOS maps `pgm[32]` to *source key, destination
+pan*, matching a byte we call *key pan*, and called it the first outside
+support any of the fourteen dark bytes had. **Both halves are wrong.** In EOS's
+own cord enums (the peer's `docs/E4B_FORMAT.md`, transcribed from the EOS SysEx
+spec) source 11 is `Vel~` and destination 64 is `AmpVol`: `pgm[32]` is
+*velocity to amplitude*. `Key+` is source 8 and `AmpPan` is destination 65 —
+neither appears anywhere in the trace.
+
+I never looked the ids up. I read "11" and "64" and assigned them the meanings
+the Akai name on the other side of the comparison predicted, which is checking
+a component against a **model of its neighbour** — the failure this project
+already has a rule about, committed here while quoting the rule elsewhere in
+the same document. The second cord fits the correction and not my reading
+either: `source 160 = DC → AmpVol` at `pgm[32]/5` is a DC offset holding the
+un-modulated level in place under a velocity depth, not the coarse half of a
+coarse/fine pair.
+
+**The discriminator I proposed in this section refutes the rest of it.** I
+offered: if EOS source 18 is the modwheel, `MW_PAN`@57 is confirmed. Source 18
+is `Press`. `pgm[57]` therefore lands on *pressure*, and the byte that lands on
+the modwheel is `pgm[56]` — `ECHOUT`. One off, in a direction the anchor rules
+out. So **no name in this block is corroborated by EOS at all.** Caveat 2 below
+was right and load-bearing: these are bytes Akai shipped dark and EOS's author
+repurposed, and its use of them carries no information about their Akai names.
+
+The peer has correspondingly declined to ship names for 32/56/57/58, against my
+recommendation. That is the correct call and the recommendation is withdrawn.
+
+The family structure is visible once they are listed together: `V_LOUD`@26 is
+live at −50..50 while `K_LOUD`@27 and `P_LOUD`@28 beside it are dark, and the
+same pattern repeats at `K_PANP`@32 and `K_LRAT`/`K_LDEP`/`K_LDEL`@67-69.
+Velocity implemented; key and pressure named and shipped dark.
+
+### The four interiors — a correct lookup that refutes nothing
+
+**VOID AS A REFUTATION.** What follows is true of our table and says nothing
+about EOS, because displacement 7 is not byte 7. The peer's "mode selector"
+story was never a claim about the program file, so it was never refuted here;
+it went down with their own retraction instead. The `PRNAME` fact is kept
+because it is independently firmware-confirmed and worth having on record.
+
+
+    0x07   7   PRNAME[4]   -- 12-byte name at 3..14
+    0x2e  46   TEMPER[2]   -- D
+    0x2f  47   TEMPER[3]   -- D#
+    0x30  48   TEMPER[4]   -- E
+
+The peer had `pgm[7]` down as a **three-way mode selector** (0 / 255 / other)
+choosing a cord source. It is the fifth character of the program name.
+`PRNAME`'s offset and width are among the very few entries in our table
+confirmed against the machine's own firmware (§258: `mov di,3 / mov cx,0x0C /
+repz cmpsb` at `0x34ABC`), so this refutation rests on the hardware rather than
+on the transcription. In Akai's charset `0` is the character `'0'` and `255` is
+uninitialised — the shape of a branch on junk, not a mode field.
+
+`TEMPER` is twelve **independent** signed bytes, one per semitone from C at 44
+(§66). Three consecutive entries routed to one destination is not a depth trio;
+it is three tuning offsets read as if they were.
+
+### The discriminator, run — it fired against the section that proposed it
+
+The prediction was written here before the answer: *if EOS source 18 is the
+modwheel, `MW_PAN`@57 is confirmed and `TEMPER[3]`@47 is convicted.* Source 18
+is `Press`. Source 17 is `ModWl`, and the byte that reaches it is `pgm[56]` —
+`ECHOUT`. The prediction was falsified in the direction that removes support
+rather than adding it, which is the only reason writing it down first was
+worth anything.
+
+### The one thing here that stands on its own: the block has zero holes
+
+**The counter-proposal this subsection was written to answer has been withdrawn
+by its author**, along with the pitch-trio coherence argument — that too was
+read off displacements. `TEMPER` never needed defending. The packing fact below
+was derived from our own table and survives the occasion that prompted it,
+which is the only reason it is still here.
+
+
+Against our reading of 46/47/48 as `TEMPER[2..4]`, the peer offers coherence:
+EOS reads them as `PitWl→Pitch`, `Press→Pitch`, `LFO1→Pitch` (the source picked
+by `pgm[7]`) — a complete, conventional pitch-modulation trio, which is not the
+kind of structure that arises from misparsing tuning offsets. They note,
+correctly, that this section flagged `TEMPER`'s start byte as document-derived
+and not firmware-confirmed, and suggest the document may place it wrong.
+
+**Two structural facts answer it, and both cut the other way.**
+
+1. **`TEMPER` cannot start anywhere else.** The program common block is packed
+   with **zero holes** — 115 of 115 offsets are covered by a named field. The
+   twelve bytes 44..55 sit between `TPNUM`@43 and `ECHOUT`@56 with no slack. A
+   start at 46 would leave a two-byte hole at 44/45 *and* collide with
+   `ECHOUT`/`MW_PAN`. The start byte is not independently confirmed, but it is
+   pinned by both neighbours, which is a different and stronger thing than the
+   document alone.
+
+2. **The conventional pitch trio already exists in this block, and is not at
+   46/47/48.** We have `B_PTCH`@39 *"Range of increase of Pitch by bendwheel"*
+   (= `PitWl→Pitch`), `P_PTCH`@40 *"Amount of control of Pitch by Pressure"*
+   (= `Press→Pitch`), and `LFODEP`@34 *"Depth of LFO1"* (= `LFO1→Pitch`).
+   That is exactly the trio the peer describes, already present at other
+   offsets. So the coherence of EOS's *reading* is not evidence for its
+   *offsets*: the structure it found is real and belongs elsewhere.
+
+**The open question, and it is theirs to answer:** does EOS's importer also
+read bytes 39 and 40? If it does, 46/47/48 cannot be the same trio and are
+junk. If it does not — an AKAI importer that models pitch-bend depth without
+reading the byte Akai documents as pitch-bend depth — that is worth explaining
+and would be the first real pressure on our layout.
+
+**Not pursued here, and why.** The firmware route that settled `PRNAME` (§258)
+does not transfer cheaply: `mov cx,0x0C` occurs at **89 sites** in
+`S30XLV20.BIN`, so a 12-count loop is not a discriminator for a 12-entry table
+the way a name comparison was. Open, not cheap.
+
+### What this does not settle
+
+Our table models **no S3000-era reassignment** of S1000 "Not used" bytes — only
+two program params carry a model restriction at all (`PFXCHAN`/`PFXSLEV`). If a
+later machine in the family quietly gave 32/56/57/58 meanings, nothing here
+would show it, and the `K_PANP` correspondence is mild evidence that something
+did. Opened as a TODO rather than answered.

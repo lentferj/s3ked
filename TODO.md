@@ -3298,6 +3298,54 @@ never written into this file; they survived only in session state and peer
 messages, which is why this one sat unquantified for days. A finding that is
 not in `TODO.md` is not tracked, however often it is mentioned.
 
+## Do any of the 14 "Not used" program bytes become live on a later model? (OPEN 2026-09-24 — §263)
+
+The program common block has fourteen bytes Akai names and then marks
+`desc: "Not used"`, `range as written: "fixed value in the specification"`:
+`OSHIFT`@21, `K_LOUD`@27, `P_LOUD`@28, `K_PANP`@32, `ECHOUT`@56, `MW_PAN`@57,
+`COHERE`@58, `PLAW`@60, `K_LRAT`@67, `K_LDEP`@68, `K_LDEL`@69, `VSSCL`@71,
+`RESERVED`@103, `PFXSLEV`@114.
+
+They are not random. `V_LOUD`@26 is live at -50..50 and `K_LOUD`/`P_LOUD`
+beside it are dark; `K_PANP`@32 and `K_LRAT`/`K_LDEP`/`K_LDEL`@67-69 repeat the
+shape. Akai named a velocity/key/pressure family, implemented velocity, and
+shipped the other two dark.
+
+**Why it is worth asking — the EOS motivation is gone entirely.** This item
+was opened because EOS's AKAI importer appeared to read four of these bytes as
+live modulation amounts. **It does not read them at all.** Two retractions
+took that apart on the same night (§263): mine, for reading EOS's `src 11 /
+dst 64` as *key / pan* because our byte is named `K_PANP` without opening
+their enum; and the peer's, for the offsets themselves — the eight numbers
+were `%a5` displacements into a parsed structure, not program-file offsets.
+Nothing in EOS bears on these bytes.
+
+What remains is the original document-only observation, which is weaker but
+was never the part that depended on EOS: Akai **named** a velocity/key/pressure
+family and implemented only velocity (`V_LOUD`@26 live, `K_LOUD`@27 and
+`P_LOUD`@28 dark; same at `K_PANP`@32 and `K_LRAT`/`K_LDEP`/`K_LDEL`@67-69).
+Naming fourteen bytes and shipping them fixed is an odd thing to do, and a
+later model in the family is the obvious place for the rest to have gone live.
+
+**Priority: low.** With the EOS evidence withdrawn there is no longer anything
+pushing on it, only the oddity itself.
+
+**Status:** our table models no model-specific reassignment of these bytes.
+Only two program params carry a `models` restriction at all (`PFXCHAN` and
+`PFXSLEV`, S2000/S3000XL/S3200XL), so if the S3000 or S3000XL gave any of the
+fourteen a meaning, nothing here would show it.
+
+**Blocked on:** a read of the S2800-S3000-S3200 and S2000-S3000XL-S3200XL
+documents specifically for these offsets (§1 has the local cache paths) --
+document work, no hardware. If the documents are silent, a hardware probe would
+need a write-then-read on a byte the spec calls fixed, which is not obviously
+safe and should not be attempted without Jan.
+
+**Do not infer the answer from EOS**, and do not re-derive the claim that it
+reads these bytes -- it does not, and two sessions established that the hard
+way (§263). Its displacements are into a reordered structure whose staging is
+not mapped.
+
 ## The pre-release name scan needs a term list, and it cannot live here (OPEN 2026-09-24 — §262)
 
 `probes/relscan.py` now does the scan CLAUDE.md requires before a push, with
