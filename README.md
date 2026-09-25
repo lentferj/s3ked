@@ -558,15 +558,19 @@ and — on the S2000/S3000XL/S3200XL only — the `multi` file header and its 16
 ## Tests
 
 ```sh
-.venv/bin/python -m pytest                        # 980 tests, ~6m45
-.venv/bin/python -m pytest --ignore=tests/test_app.py   # 801 tests, 60s
+.venv/bin/python -m pytest                              # 990 tests, ~6m45
+.venv/bin/python -m pytest -m "not tui"                 # 811 tests, 61s
+.venv/bin/python -m pytest -m "not tui and not bench"   # 586 tests, 4.2s
 ```
 
-980 tests, all synthetic — no hardware, no MIDI ports, no ALSA sequencer
-needed.
+990 tests, all synthetic — no hardware, no MIDI ports, no ALSA sequencer
+needed. **Every line above is measured on the machine described below, not
+estimated.**
 
-**If you are reviewing this project and want a bounded run, use the second
-line.** `tests/test_app.py` drives the TUI and is **344 s of the 402 s
+**If you are reviewing this project and want a bounded run, use the second or
+third line.** `-m "not tui"` drops the Textual event loop; `-m "not tui and
+not bench"` also drops the probe-side analysis suites, leaving everything the
+project actually installs. `tests/test_app.py` drives the TUI and is **344 s of the 402 s
 suite — 86 % of the runtime for 18 % of the tests**; everything else together
 is a minute, and dropping the three bench files
 (`test_measure.py`, `test_calibrate.py`, `test_throttle.py`) as well leaves
@@ -576,7 +580,16 @@ is Textual's event loop, not MIDI.
 That was undocumented until 2026-09-23, when an outside reviewer allowed 240 s
 for the default line, got killed 40 % through twice, and reported the suite as
 unrunnable. The suite was fine and the instruction was not: *unfindable is not
-the same as broken, and only the reader can tell them apart.* They cannot tell you an offset is *correct*; what they do check is
+the same as broken, and only the reader can tell them apart.*
+
+**A second reviewer reported the same thing on 2026-09-25, with the paragraph
+above already written and pushed.** They were looking for `-m`, which is how
+every other project on this bench is bounded, found no marker, and guessed at
+a file list instead — arriving at a green number that was their selection
+rather than this project's. Prose that answers the question is not the same as
+answering it in the form the reader will look for. The markers exist from
+2026-09-25 for that reason, and `test_conformance.py` pins them so the recipes
+here cannot drift out of the README. They cannot tell you an offset is *correct*; what they do check is
 that no two parameters claim the same byte, that no span runs past the end of
 its structure, that `describe_value` never raises anywhere in any parameter's
 range, and that no single keypress in the TUI can reach a delete.

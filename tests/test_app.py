@@ -14,6 +14,15 @@ import pytest
 from textual.widgets import DataTable
 
 from s3ked.app import ConfirmScreen, EditValueScreen, MasterScreen, S3kedApp
+
+# `tui` is 179 of the suite's 980 tests and 344 s of its 402 s -- 86 % of the
+# runtime for 18 % of the tests. Nothing here touches hardware; the cost is
+# Textual's event loop. Marked so a reviewer can bound the run the way the
+# other projects on this bench do, with `-m`, instead of having to find an
+# `--ignore=` path in prose:
+#     pytest -m "not tui"                801 tests, ~60 s
+#     pytest -m "not tui and not bench"  576 tests, ~3 s
+pytestmark = pytest.mark.tui
 from s3ked.demo import DemoBridge
 
 

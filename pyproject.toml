@@ -74,5 +74,7 @@ asyncio_mode = "auto"
 #     .venv/bin/python -m pytest -m ""        everything
 markers = [
     "slow: exhaustive; excluded by default, run before a release",
+    "tui: drives the Textual event loop; 86% of the runtime for 18% of the tests",
+    "bench: probe-side analysis; no hardware, but not the shipped editor",
 ]
 addopts = "-m 'not slow'"

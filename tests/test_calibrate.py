@@ -29,6 +29,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "probes"))
 
 np = pytest.importorskip("numpy", reason="calibration is bench tooling")
 
+# `bench` marks the probe-side analysis suites -- pure arithmetic, no hardware,
+# but not the shipped editor. `pytest -m "not tui and not bench"` is the
+# smallest run that still covers everything s3ked installs.
+pytestmark = pytest.mark.bench
+
 import calibrate as cal                                    # noqa: E402
 
 from s3k import params as p                                # noqa: E402

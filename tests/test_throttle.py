@@ -19,6 +19,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "probes"))
 
 import throttle as th                                      # noqa: E402
 
+import pytest
+
+# `bench` marks the probe-side analysis suites. They are pure arithmetic and
+# need no hardware, but they are not the editor, so a reviewer bounding a run
+# to the shipped code can drop them: `pytest -m "not tui and not bench"`.
+pytestmark = pytest.mark.bench
+
+
 from s3k import messages as m                              # noqa: E402
 
 

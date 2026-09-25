@@ -476,3 +476,46 @@ def test_a_section_whose_law_was_refitted_says_so_in_its_heading():
     assert not stale, (
         "section states a superseded law without a marker in its heading:\n  "
         + "\n  ".join(stale[:6]))
+
+
+def test_the_bounded_runs_the_readme_documents_actually_select_something():
+    """The README's `-m` recipes must keep selecting what it says they do.
+
+    An outside reviewer reported this suite as "does not terminate in bounded
+    time" in two consecutive cross-project reviews, the second while a bounded
+    `--ignore=` path WAS documented in the README and pushed. The instruction
+    was findable only by reading prose; every other project on the bench is
+    bounded with `-m`, so a reviewer looking for a marker found none and
+    guessed at a file list instead. *Unfindable is not the same as broken, and
+    only the reader can tell them apart.*
+
+    So the markers are the interface now, and this pins them. It does NOT
+    assert timings -- those are a property of the machine -- but a marker that
+    selects nothing, or that quietly stops covering the expensive file, is the
+    failure that would put the README back in the state the reviewer found.
+    """
+    import pathlib
+    import re
+
+    root = pathlib.Path(__file__).resolve().parent
+    # The expensive suite must carry the marker that excludes it, at module
+    # scope -- a per-test mark would leave new tests in the file unmarked.
+    for name, marker in (("test_app.py", "tui"),
+                         ("test_measure.py", "bench"),
+                         ("test_calibrate.py", "bench"),
+                         ("test_throttle.py", "bench")):
+        src = (root / name).read_text(encoding="utf-8")
+        assert re.search(rf"^pytestmark = pytest\.mark\.{marker}$", src, re.M), (
+            f"{name} must carry module-scope `pytestmark = pytest.mark.{marker}`; "
+            "without it the README's bounded run silently stops being bounded")
+
+    # And the README must still show the reader how to use them.
+    readme = (root.parent / "README.md").read_text(encoding="utf-8")
+    for recipe in ('-m "not tui"', '-m "not tui and not bench"'):
+        assert recipe in readme, f"README no longer documents {recipe}"
+
+    # Markers must be declared, or `--strict-markers` users get an error and
+    # everyone else gets a silent typo that deselects nothing.
+    pyproject = (root.parent / "pyproject.toml").read_text(encoding="utf-8")
+    for marker in ("tui:", "bench:", "slow:"):
+        assert marker in pyproject, f"marker {marker!r} not declared in pyproject.toml"
