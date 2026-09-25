@@ -454,6 +454,7 @@ silently wrong one.
 - [§261](#261--llngth-is-3216-fixed-point-settled-four-ways-including-the-firmwares-own-arithmetic-2026-09-23) — `LLNGTH` is 32.16 fixed point, settled four ways including the firmware's own arithmetic (2026-09-23)
 - [§262](#262--the-pre-release-name-scan-and-why-it-had-to-become-a-program-2026-09-24) — The pre-release name scan, and why it had to become a program (2026-09-24)
 - [§263](#263--two-sessions-read-the-same-bytes-through-a-model-of-their-neighbour-2026-09-24) — §263 — Two sessions read the same bytes through a model of their neighbour (2026-09-24)
+- [§264](#264--a-retraction-marker-for-one-claim-silences-the-numeric-guard-for-every-other-2026-09-25) — §264 — A retraction marker for one claim silences the numeric guard for every other (2026-09-25)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -4566,7 +4567,9 @@ cleanly, at 25–99× prominence with 4000–10000 Hz of excursion, against cont
 (source 0, and source 8 with `PANDEP` 0) that show 15 Hz of drift.
 
 ```
-PANRAT    rate = 0.23708 * PANRAT Hz      5..80    r2 0.999843
+PANRAT    rate = 0.11880 * PANRAT Hz      1..40    r2 0.999939
+          (this line read 0.23708 over 5..80 until 2026-09-25 -- exactly
+           2.002x the truth, REFUTED AND REPLACED BY §260)
 PANDEP    gates the depth -- 0 silences it entirely with the route live
 PANDEL    delays the growth -- early/late swing ratio 1.14, 1.05, 0.72,
           0.13, 0.17 across 0..99; at 99 the delay exceeds a 6 s capture
@@ -4575,8 +4578,17 @@ LFO2TRIG  mode 1 locks the phase to note-on: sd 54 Hz across five notes,
           against 307, 312 and 471 Hz for the free-running modes
 ```
 
-**LFO2 runs at exactly twice LFO1** for the same parameter value — 0.23708
-against `LFORAT`'s 0.11867, a ratio of 1.998.
+**SUPERSEDED BY §260 — LFO2 runs at LFO1's rate, not twice it.** This
+section claimed *"LFO2 runs at exactly twice LFO1 for the same parameter
+value — 0.23708 against `LFORAT`'s 0.11867, a ratio of 1.998"*. The slope was
+2.002x too high. The shipped constant is **0.11880**, and the ratio to
+`LFORAT` is **1.0011**: the two LFOs share one rate scale.
+
+The correction landed in `scales.py` and in §260 on 2026-09-23 but **not
+here**, so this section went on stating the refuted figure for two days while
+§260 stated the right one — the §260 disease reproduced inside §260's own
+cleanup. Found on 2026-09-25 only because a sibling session said it was
+reading this section, which is not a detection method.
 
 ### Three detectors in a row that could only give one answer
 
@@ -27223,3 +27235,121 @@ two program params carry a model restriction at all (`PFXCHAN`/`PFXSLEV`). If a
 later machine in the family quietly gave 32/56/57/58 meanings, nothing here
 would show it, and the `K_PANP` correspondence is mild evidence that something
 did. Opened as a TODO rather than answered.
+
+## §264 — A retraction marker for one claim silences the numeric guard for every other (2026-09-25)
+
+`PANRAT` shipped at 2.002× the truth for seventeen days (§260). §260's cleanup
+extended the refuted-law guard to linear laws so it could never happen again,
+and marked three headings. **It did not work, and §52 went on stating the
+refuted slope for two more days** — through §260's own audit, through five
+green full-suite runs, and into the handoff file this project hands a sibling
+session.
+
+### What the guard actually does
+
+`test_a_section_whose_law_was_refitted_says_so_in_its_heading` opens with:
+
+```python
+if any(k in head for k in ("SUPERSEDED", "RETRACTED", "RETRACTION",
+                           "WITHDRAWN", "REFUTED")):
+    continue
+```
+
+§52's heading is *"§52 — PARTLY RETRACTED by §181. LFO2 works; only its route
+to pan is dead"*. That marker is about **§181's pan-route retraction**. The
+guard sees the word `RETRACTED`, skips the entire section, and never looks at
+
+```
+PANRAT    rate = 0.23708 * PANRAT Hz      5..80    r2 0.999843
+```
+
+seventeen lines below it — a number §260 had refuted and replaced with
+`0.11880`. **A marker for claim A exempts a section's every other claim.**
+Verified against the pre-fix file: the skip fires, the stale line is never
+examined.
+
+Worse, marking a heading is the guard's own prescribed remedy. So the failure
+path is closed: a section caught stating a superseded law gets a heading
+marker, and that marker then exempts it from every future numeric check.
+
+### Two days is the lucky number here
+
+The real interval is unbounded. This was found on 2026-09-25 only because a
+sibling session mentioned in passing which sections it was reading, and the
+cross-check happened while answering an unrelated question about `LFO2WAVE`'s
+offset. **That is not a detection method.** §260 already recorded that the
+repository simultaneously held a correct measurement, a section explaining the
+artefact, and a shipped wrong constant; this is the same disease one layer out,
+inside the fix for it.
+
+### Also corrected today: the peer-facing copy
+
+`.claude/handoff-mpc2emu.md` carried the same two claims — the `0.23708` slope
+and *"LFO2 runs at exactly twice LFO1 … ratio 1.998"* — and has been asserting
+them at a sibling project since 2026-09-23. The true ratio is **1.0011**: the
+two LFOs share one rate scale. No guard covers that file, because it is
+gitignored and therefore invisible to every check that walks tracked files
+(§262's scope accident, arriving from the other direction).
+
+### The fix, measured but NOT applied
+
+Replace the heading-level exemption with a **strike-at-the-number** rule: a
+stale law line must be struck where it appears, within a few lines, not by a
+marker two hundred lines up about a different claim.
+
+```python
+# a heading marker no longer exempts the section; the LINE must be struck
+window = " ".join(body[max(0, n - 3):n + 4])
+if any(k in window for k in MARK) or quoting.search(window):
+    continue
+```
+
+Measured both ways before writing it down:
+
+| tree | fires |
+|---|---|
+| before today's edit | §22, §24, **§52** — catches the one that shipped |
+| after today's edit  | §22, §24 — §52 now passes, struck at the number |
+
+The falsifier was "this is too strict and the blanket skip was doing real
+work": it did not fire. Only two sections are added, and both are the identical
+shape — `dB = 0.642719 * PRLOUD - 87.63` sitting as a bare measurement line
+(§22:2249, §24:2425) with no strike nearby, superseded by §37's `0.61872`.
+
+**Not applied here** because it changes what the suite enforces and requires
+annotating two historical sections, which is a call about this project's
+documentation convention rather than a defect fix. TODO carries it.
+
+### The guard caught this section, and how it had to be silenced is more evidence
+
+Writing §264 turned the suite red: it quotes both refuted slopes as worked
+examples, its own heading carries no marker, and the guard fired on it. The
+only remedy the current design offers is the `reviewed` baseline — muting
+`("§264","PANRAT")` and `("§264","PRLOUD")` by name, which is what §260 had to
+do for itself.
+
+**Both quotes are already struck in context.** *"a number §260 had refuted"*
+sits two lines under the `PANRAT` block; the `PRLOUD` line is inside a sentence
+naming §37 as superseding it. The guard cannot see either, because `quoting` is
+per-line and the exemption is per-heading — there is no rule in between. The
+strike-at-the-number window above would accept both on the context already
+present and need no baseline entry at all.
+
+So the guard's two escape hatches are a section-wide mute and a line-wide one,
+and a correction written like a human writes it — the strike next to the number
+— matches neither. That is the same gap that let §52 through, met from the
+opposite side: there it silenced a live error, here it silences a correct
+explanation. Recorded in the test's own comments beside the entries.
+
+### Why the round trip could never have caught any of this
+
+A sibling session spent today on the reciprocal case: their reader and writer
+both used byte 4 for an LFO shape, so every round-trip test agreed with itself
+perfectly and with the machine not at all, for months. **A round trip cannot
+see a symmetric error.** s3ked has the same exposure by construction — reader
+and writer share one `params.py` — and 990 passing tests cannot see an offset
+that is wrong in both directions. It is why §52's *functional* result on
+`LFO2WAVE` (byte 98 driven, LFO2's measured shape changed) is worth more than
+the table entry, and why a sibling's corpus check on the same byte is worth
+running even though the number is already known: it is the only leg not
+downstream of the same document.

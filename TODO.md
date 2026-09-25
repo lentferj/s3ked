@@ -3346,6 +3346,51 @@ reads these bytes -- it does not, and two sessions established that the hard
 way (§263). Its displacements are into a reordered structure whose staging is
 not mapped.
 
+## A heading marker exempts a section from EVERY numeric check (OPEN 2026-09-25 — §264)
+
+`test_a_section_whose_law_was_refitted_says_so_in_its_heading` skips a whole
+section if its heading contains any of `SUPERSEDED`/`RETRACTED`/`RETRACTION`/
+`WITHDRAWN`/`REFUTED`. §52's heading says *"PARTLY RETRACTED by §181"* — about
+the pan route — so the guard never examined `PANRAT = 0.23708` seventeen lines
+below, a slope §260 had refuted. **It survived §260's own audit and five green
+full-suite runs, and was found only because a sibling session mentioned which
+sections it was reading.**
+
+Marking a heading is also the guard's prescribed remedy, so the failure path is
+closed: a section caught stating a superseded law gets a marker, and the marker
+then exempts it from every future check.
+
+**The stale numbers are already corrected in place** (§52's body and
+`.claude/handoff-mpc2emu.md`, both struck at the number with the old text
+quoted). What is open is the guard.
+
+**Ready to apply** — replace the heading-level exemption with strike-at-the-number:
+
+```python
+# in the per-line loop, in place of the heading-level `continue`
+window = " ".join(body[max(0, n - 3):n + 4])
+if any(k in window for k in MARK) or quoting.search(window):
+    continue
+```
+
+Measured before writing it down. Against the pre-edit tree it fires on §22,
+§24 and **§52** — catching the one that shipped. Against the current tree it
+fires on §22 and §24 only. The falsifier ("too strict; the blanket skip was
+doing real work") did not fire: the two additions are the identical shape,
+`dB = 0.642719 * PRLOUD - 87.63` as a bare measurement line (§22:2249,
+§24:2425), superseded by §37's `0.61872` with no strike nearby.
+
+**Blocked on:** a decision, not evidence. Applying it means annotating §22 and
+§24 the same way §52 now is, which is a call about this project's
+documentation convention. No hardware.
+
+**Related gap, same day:** `.claude/handoff-mpc2emu.md` is gitignored, so no
+check that walks tracked files can see it — and it carried the refuted slope to
+a sibling project for two days. §262 hit the mirror image of this (a scan
+blind to gitignored paths, where tracked-only happened to be the right scope).
+Here tracked-only is the *wrong* scope, because the file's whole purpose is to
+be read by someone else.
+
 ## The pre-release name scan needs a term list, and it cannot live here (OPEN 2026-09-24 — §262)
 
 `probes/relscan.py` now does the scan CLAUDE.md requires before a push, with

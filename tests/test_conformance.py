@@ -418,6 +418,22 @@ def test_a_section_whose_law_was_refitted_says_so_in_its_heading():
         # says "superseded" is exactly the case the guard must keep catching
         # elsewhere -- §22 and §24 read that way too.
         ("§260", "PRLOUD"),
+        # §264 is the section about THIS GUARD's blind spot, and it quotes
+        # both refuted slopes as the worked examples of what got through --
+        # PANRAT's 0.23708 as the line §52's heading marker hid, PRLOUD's
+        # 0.642719 as the identical shape still sitting in §22 and §24.
+        #
+        # WORTH NOTING WHERE IT LANDS: both quotes ARE struck in context --
+        # "a number §260 had refuted" sits two lines under the PANRAT block,
+        # and the PRLOUD line is inside a sentence naming §37 as superseding
+        # it. The guard cannot see that, because `quoting` is per-line and
+        # the exemption is per-heading, so the only way to make a section
+        # ABOUT stale laws pass is to mute it by name. §264's proposed
+        # strike-at-the-number window (line +/- 3) would accept both on the
+        # context already present and need no entry here at all. These two
+        # lines are therefore evidence for that change, not against it.
+        ("§264", "PANRAT"),
+        ("§264", "PRLOUD"),
     }
     stale = []
     for i, (start, head) in enumerate(heads):
