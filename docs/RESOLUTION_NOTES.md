@@ -284,12 +284,12 @@ silently wrong one.
 - [§91](#91--prgnum-collides-after-multi-volume-loads-and-the-panels-remedy-2026-08-14) — `PRGNUM` collides after multi-volume loads, and the panel's remedy (2026-08-14)
 - [§92](#92--btsorts-two-jobs-split-the-flags-rebuild-themselves-the-sort-does-not-2026-08-14) — BTSORT's two jobs split: the flags rebuild themselves, the sort does not (2026-08-14)
 - [§93](#93--the-load-type-is-in-the-trigger-register-and-74-said-it-was-not-2026-08-14) — The load type IS in the trigger register, and §74 said it was not (2026-08-14)
-- [§94](#94--retraction-the-load-register-performs-the-type-you-write-it-2026-08-14) — **RETRACTION**: the load register performs the type you write it (2026-08-14)
+- [§94](#94--retraction-the-load-register-performs-the-type-you-write-it-2026-08-14) — RETRACTION: the load register performs the type you write it (2026-08-14)
 - [§95](#95--the-client-dying-mid-exchange-wedges-the-machine-2026-08-14) — The client dying mid-exchange wedges the machine (2026-08-14)
-- [§96](#96--retraction-the-volume-is-selectable-and-we-had-already-found-the-register-2026-08-14) — **RETRACTION**: the volume IS selectable, and we had already found the register (2026-08-14)
+- [§96](#96--retraction-the-volume-is-selectable-and-we-had-already-found-the-register-2026-08-14) — RETRACTION: the volume IS selectable, and we had already found the register (2026-08-14)
 - [§97](#97--the-disk-listings-cursor-is-word7-and-it-is-writable-2026-08-14) — The disk listing's cursor is `word[7]`, and it is writable (2026-08-14)
 - [§98](#98--free-pks-is-stats-block-count-and-keygroups-are-in-it-2026-08-14) — `free P/K/S` is `STAT`'s block count, and keygroups are in it (2026-08-14)
-- [§99](#99--retraction-the-third-directory-type-was-our-own-phantom-2026-08-14) — **RETRACTION**: the "third directory type" was our own phantom (2026-08-14)
+- [§99](#99--retraction-the-third-directory-type-was-our-own-phantom-2026-08-14) — RETRACTION: the "third directory type" was our own phantom (2026-08-14)
 - [§100](#100--a-load-replaces-a-resident-program-of-the-same-name-and-this-disc-cannot-fill-the-object-pool-2026-08-14) — A load REPLACES a resident program of the same name; and this disc cannot fill the object pool (2026-08-14)
 - [§101](#101--byte55-is-the-selected-program-number-and-it-is-writable-2026-08-14) — `byte[55]` is the selected PROGRAM NUMBER, and it is writable (2026-08-14)
 - [§102](#102--three-undo-bugs-a-fake-bridge-could-not-have-shown-2026-08-15) — Three undo bugs a fake bridge could not have shown (2026-08-15)
@@ -317,7 +317,7 @@ silently wrong one.
 - [§124](#124--what-122-does-not-establish-and-the-gap-an-operator-found-2026-08-18) — What §122 does not establish, and the gap an operator found (2026-08-18)
 - [§125](#125--the-document-quote-was-misread-and-the-reductio-that-showed-it-2026-08-18) — The document quote was misread, and the reductio that showed it (2026-08-18)
 - [§126](#126--the-lakai-source-no-save-and-a-third-transport-2026-08-18) — The Lakai source: no save, and a third transport (2026-08-18)
-- [§127](#127--retraction-remote-save-exists-and-so-does-remote-rename-2026-08-18) — **RETRACTION**: remote save exists, and so does remote rename (2026-08-18)
+- [§127](#127--retraction-remote-save-exists-and-so-does-remote-rename-2026-08-18) — RETRACTION: remote save exists, and so does remote rename (2026-08-18)
 - [§128](#128--hunting-a-volume-delete-102-registers-no-event-one-wedge-2026-08-18) — Hunting a volume delete: 102 registers, no event, one wedge (2026-08-18)
 - [§129](#129--byte7-is-a-memory-delete-and-where-a-volume-delete-is-not-2026-08-18) — `byte[7]` is a memory delete, and where a volume delete is not (2026-08-18)
 - [§130](#130--save-type-0-writes-every-file-type-a-volume-holds-2026-08-18) — Save type 0 writes every FILE TYPE a volume holds (2026-08-18)
@@ -325,7 +325,7 @@ silently wrong one.
 - [§132](#132--ddata-is-writable-so-the-aux-specimen-needs-no-panel-2026-08-18) — `DDATA` is writable, so the aux specimen needs no panel (2026-08-18)
 - [§133](#133--both-aux-files-decoded-and-115-confirmed-from-the-disk-2026-08-18) — Both aux files decoded, and §115 confirmed from the disk (2026-08-18)
 - [§134](#134--the-delete-page-and-a-warning-i-got-the-size-of-wrong-2026-08-18) — The DELETE page, and a warning I got the size of wrong (2026-08-18)
-- [§135](#135--retracted-nswhite-is-white-noise-i-was-measuring-a-program-stack-2026-08-18) — **RETRACTED**: `NSWHITE` is white noise; I was measuring a program stack (2026-08-18)
+- [§135](#135--retracted-nswhite-is-white-noise-i-was-measuring-a-program-stack-2026-08-18) — RETRACTED: `NSWHITE` is white noise; I was measuring a program stack (2026-08-18)
 - [§136](#136--loopat1-is-the-loop-end-not-the-loop-start-2026-08-18) — `LOOPAT1` is the loop END, not the loop start (2026-08-18)
 - [§137](#137--the-rate-snap-confirmed-by-ear-and-a-detune-discriminator-2026-08-19) — The rate snap confirmed by ear, and a detune discriminator (2026-08-19)
 - [§138](#138--35-keys-swept-the-loops-hold-and-two-estimator-traps-2026-08-20) — 35 keys swept: the loops hold, and two estimator traps (2026-08-20)
@@ -392,7 +392,7 @@ silently wrong one.
 - [§199](#199--backups-follow-attention-and-attention-follows-activity-2026-09-09) — Backups follow attention, and attention follows activity (2026-09-09)
 - [§200](#200--program-header-offset-109-is-the-last-played-note-and-the-iso-path-is-verified-2026-09-09) — Program header offset 109 is the last-played note, and the ISO path is verified (2026-09-09)
 - [§201](#201--the-highpass-has-its-own-exponent-so-the-mode-factor-is-not-a-factor-2026-09-09) — The highpass has its own exponent, so the "mode factor" is not a factor (2026-09-09)
-- [§202](#202--bp-and-eq-ladders-four-modes-three-exponents-and-mode-0-alone-flattens-2026-09-09) — BP and EQ ladders: four modes, and the exponents group in two (2026-09-09)
+- [§202](#202--bp-and-eq-ladders-four-modes-three-exponents-and-mode-0-alone-flattens-2026-09-09) — BP and EQ ladders: four modes, three exponents, and mode 0 alone flattens (2026-09-09)
 - [§203](#203--there-are-no-mode-groups-one-tuning-law-read-through-four-features-2026-09-10) — There are no mode groups: one tuning law, read through four features (2026-09-10)
 - [§204](#204--the-tuning-law-holds-from-rung-25-to-88-and-mode-0s-bend-is-not-in-it-2026-09-10) — The tuning law holds from rung 25 to 88, and mode 0's bend is not in it (2026-09-10)
 - [§205](#205--above-rung-88-the-law-steepens-immediately-and-the-steps-are-uneven-2026-09-10) — Above rung 88 the law steepens immediately, and the steps are uneven (2026-09-10)
@@ -453,9 +453,11 @@ silently wrong one.
 - [§260](#260--panrat-shipped-at-2002x-the-truth-for-seventeen-days-after-we-ourselves-refuted-it-2026-09-23) — `PANRAT` shipped at 2.002x the truth for seventeen days after we ourselves refuted it (2026-09-23)
 - [§261](#261--llngth-is-3216-fixed-point-settled-four-ways-including-the-firmwares-own-arithmetic-2026-09-23) — `LLNGTH` is 32.16 fixed point, settled four ways including the firmware's own arithmetic (2026-09-23)
 - [§262](#262--the-pre-release-name-scan-and-why-it-had-to-become-a-program-2026-09-24) — The pre-release name scan, and why it had to become a program (2026-09-24)
-- [§263](#263--two-sessions-read-the-same-bytes-through-a-model-of-their-neighbour-2026-09-24) — §263 — Two sessions read the same bytes through a model of their neighbour (2026-09-24)
-- [§264](#264--a-retraction-marker-for-one-claim-silences-the-numeric-guard-for-every-other-2026-09-25) — §264 — A retraction marker for one claim silences the numeric guard for every other (2026-09-25)
-- [§265](#265--does-pandep-gate-the-pan-matrix-ready-to-run-not-run-2026-09-25) — §265 — Does `PANDEP` gate the pan matrix? Ready to run, NOT run (2026-09-25)
+- [§263](#263--two-sessions-read-the-same-bytes-through-a-model-of-their-neighbour-2026-09-24) — Two sessions read the same bytes through a model of their neighbour (2026-09-24)
+- [§264](#264--a-retraction-marker-for-one-claim-silences-the-numeric-guard-for-every-other-2026-09-25) — A retraction marker for one claim silences the numeric guard for every other (2026-09-25)
+- [§265](#265--pandep-gates-the-pan-matrix-and-the-rigs-ceiling-is-181s-headline-2026-09-25) — `PANDEP` gates the pan matrix, and the rig's ceiling is §181's headline (2026-09-25)
+- [§266](#266--three-rules-about-checking-each-paid-for-on-2026-09-25-2026-09-25) — Three rules about checking, each paid for on 2026-09-25 (2026-09-25)
+- [§267](#267--prgnum-is-1-based-on-the-panel-and-the-table-has-said-0-since-august-2026-09-25) — `PRGNUM` is 1-based on the panel, and the table has said 0 since August (2026-09-25)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -27396,7 +27398,7 @@ the table entry, and why a sibling's corpus check on the same byte is worth
 running even though the number is already known: it is the only leg not
 downstream of the same document.
 
-## §265 — Does `PANDEP` gate the pan matrix? Ready to run, NOT run (2026-09-25)
+## §265 — `PANDEP` gates the pan matrix, and the rig's ceiling is §181's headline (2026-09-25)
 
 **Status: awaiting Jan's authorisation for a bench slot. Nothing here has been
 executed.** Raised by mpc2emu from corpus evidence, with a 1,342-program blast
@@ -27635,3 +27637,118 @@ multiplier. Recorded as open rather than fitted.
 Do not apply `PANDEP` as a multiplier anywhere on the strength of §52's filter
 result. mpc2emu has explicitly declined to, for the right reason: it would
 silently rewrite the pan behaviour of 30% of a 4,433-program corpus on a guess.
+
+## §266 — Three rules about checking, each paid for on 2026-09-25 (2026-09-25)
+
+Not findings about the machine. Three transferable rules, each one bought by a
+specific mistake made this day, recorded together because they share a shape:
+**in all three the artefact under test was fine and the apparatus around it was
+not.**
+
+### 1. The negative control has to be the whole apparatus, not the statistic
+
+§265's estimator was validated on constructed signals before it touched the
+rig: exact recovery of known swings, and 0.000 dB at the LFO rate against
+2.20 dB of 0.400 Hz drift — the trap a broadband measure falls into. It passed
+cleanly and **told me nothing about whether the 30.3 dB it reported was the
+machine or my own ceiling.**
+
+Synthetic validation tests whether a statistic computes what it claims. It
+cannot test whether the statistic answers the experiment's question. Those are
+different properties and only the second one is the experiment.
+
+What caught the ceiling was **sweeping a parameter the hypothesis said must
+move the number, and watching it not move**: `MODVPAN1` 25 → 40 → 50 gave
+30.312, 30.322, 30.316 dB while the raw excursion grew 45.00 → 47.83 dB. No
+synthetic signal could have produced that, because the thing being tested was
+the relationship between the apparatus and the machine, not the arithmetic.
+
+**A validated estimator can still be the wrong estimator.** The general form is
+that a control must exercise the whole path, including the parts you did not
+write; a broadband-versus-coherent comparison is one instance of it, not the
+rule.
+
+### 2. A relayed finding carries the relayer's authority without its evidence
+
+A cross-project review reported this suite as having no documented offline
+runner. It had one, prominently, in the README, pushed two days earlier — a
+paragraph that existed *because an earlier reviewer hit the same wall*. The
+sibling who passed the review on had both the file and the README in reach and
+checked neither, and said so unprompted: **"a relayed finding carries the
+relayer's authority without the relayer's evidence."**
+
+This project did the same thing in the other direction within the hour, and
+the symmetry is why it is recorded rather than filed as someone else's lesson:
+§265's staging notes attributed a sentence from **Jan's own card manifest**
+(`whatiswhat.txt`, the `ID4` entry) to the sibling session, because the entry
+was *about* their work. Same failure as §263's — "whose object is this?" —
+applied to prose instead of to register displacements.
+
+Either check it or label it unverified. A relay that does neither launders a
+claim into a citation.
+
+### 3. A true structural finding whose obvious application is a regression
+
+The sibling's case, recorded here because the shape is what matters and this
+project has no equivalent yet. Their Ensoniq layer key-map override was dead on
+174 of 175 zones, and they found why: the key map's values are the wavesample
+slot **minus 8**, exactly, on 1,994 of 2,333 layers — 85.5% of a whole disc.
+Grouping right, offset right, only the lookup key wrong. A clean structural
+fact verified at scale.
+
+**Then they scored the fix against the device bank: 16 key ranges change and
+absences go 23 → 35, every change moving away from what the hardware wrote.**
+So the layer key map does not determine the emitted key range at all, and the
+override is not merely dead but wrong in intent. **Leaving it inert produces
+the better answer.**
+
+The finding and the refusal to act on it belong in the same paragraph, because
+an 85.5%-of-the-disc structural fact is exactly what the next reader fixes in
+good faith. A correct explanation of why something is broken is not an argument
+for repairing it — that needs its own measurement, against the output.
+
+## §267 — `PRGNUM` is 1-based on the panel, and the table has said 0 since August (2026-09-25)
+
+Measured while staging §265. The disc's first program stores `PRGNUM` **120**
+and the panel shows it as **121**; five programs store 120..124 and display
+121..125. Confirmed three independent ways: the bytes in the card image, a
+SysEx read of the resident program, and Jan reading the machine's own screen.
+
+This is the **sixth** field in this family found to be 0-based in the register
+and 1-based on the panel — after keygroups (§—, the wire is 0-based), `POLYPH`
+(§11 Finding H), the FX slots (§216), the volume byte (§70) and the V-curve.
+
+**It was already known here.** `bridge.renumber_programs`' docstring has said
+so since 2026-08-14, in terms:
+
+> The value written is the list position itself, because the field is 0-based;
+> the panel adds one for display, so program 0 here is the one its screen
+> calls 1.
+
+and §91 measured it — the panel's `RNUM` → `SEQU` renumbered fifteen resident
+programs and displayed 1..15 while the same fifteen read back over SysEx as
+0..14. A sibling project has carried that measurement, attributed to this one,
+since August.
+
+`params.py` nonetheless carries `display_offset=0`. **§264's disease again, and
+the third instance in three days**: the fact is correct in the prose and
+contradicted in the executing table, so every program number s3ked reports is
+one below the machine's own screen.
+
+### Why it is recorded and not fixed
+
+`display_offset` is **not cosmetic in this codebase.** It is added in
+`_decode_one` and subtracted in `encode_field`, so setting it changes what
+`get_parameter` returns *and* what `set_parameter` stores. `renumber_programs`
+is safe either way — it writes raw bytes through `set_header_bytes` — but the
+API contract for the field moves, and the declared range `0..128` becomes
+`1..129`, which is its own question since a 129-value MIDI program number is
+already suspect.
+
+A one-line change plus a full suite run, deliberately not slipped in beside a
+hardware session. TODO carries it, and the note sits on the parameter itself so
+the next reader meets it at the field rather than in a section.
+
+**`test_params.py` guards this**: only fields with a panel reading may carry a
+`display_offset`, and the allowlist is `POLYPH`, `FX1`-`FX4`. Adding `PRGNUM`
+there is part of the same change, and the evidence is this section.

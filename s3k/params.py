@@ -374,7 +374,7 @@ _PARAMS: List[Parameter] = [
               "set_header_bytes), but the API contract for this field would move, "
               "so the change is a deliberate one-line edit plus a full suite run "
               "rather than something to slip in beside a hardware session. "
-              "RESOLUTION_NOTES §266, TODO."
+              "RESOLUTION_NOTES §267, TODO."
     ),
     _p(
         "program",

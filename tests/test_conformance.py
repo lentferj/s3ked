@@ -312,6 +312,50 @@ def test_the_resolution_notes_index_matches_the_sections():
         f"two sections share a number, so every citation to it is "
         f"ambiguous: {clashes}")
 
+    # THE LABEL, not just the anchor. Until 2026-09-25 this test compared
+    # anchors only, so four consecutive sections shipped index lines reading
+    # "- [§264](#264--...) — §264 — A retraction marker ..." -- the number
+    # duplicated, because each was built by pasting the whole heading after
+    # the dash. Every anchor was correct, so the guard was green throughout.
+    # A rebuild of all index lines then corrected ten of them, which is how
+    # many had drifted while this test watched.
+    for head, anchor_ in zip(headings, anchors):
+        num, _, title = head.partition(" — ")
+        num = num.strip()
+        for line in notes.splitlines():
+            if line.startswith(f"- [{num}](#"):
+                label = line.split(") — ", 1)[1] if ") — " in line else ""
+                assert label == title, (
+                    f"{num}'s index label does not match its heading:\n"
+                    f"  index:   {label!r}\n  heading: {title!r}")
+                break
+
+    # ORDER, which the checks above cannot see: every anchor can be correct,
+    # every label can match its heading, and the index can still list §267
+    # before §266, so a reader scanning between two neighbours does not find
+    # what is there. Added 2026-09-25 after mutation-testing this guard
+    # against a sibling's equivalent, whose order comparison caught a
+    # transposition all three legs above let through.
+    #
+    # THE PROPERTY IS NUMERICAL ORDER IN THE INDEX, NOT AGREEMENT WITH THE
+    # DOCUMENT. The first draft compared index order to heading order and
+    # failed immediately -- correctly reporting that §253's section body sits
+    # tenth in the file, between §9 and §10. That is deliberate and documented
+    # in §253 itself: it was renumbered from §10 on 2026-09-15 and "kept in
+    # place rather than moved to the end of the file, so the diff shows the
+    # renaming and nothing else". Making the document match the test would
+    # have destroyed a recorded decision to satisfy a guard written an hour
+    # earlier -- a true finding whose obvious application is a regression
+    # (§266 rule 3). The index is what a reader scans, so ascending number is
+    # the property that matters and physical placement is not.
+    index_nums = [int(re.match(r"^- \[§(\d+)", ln).group(1))
+                  for ln in notes.splitlines()
+                  if re.match(r"^- \[§\d+[a-z]?\]\(#", ln)]
+    out_of_order = [(a, b) for a, b in zip(index_nums, index_nums[1:]) if b < a]
+    assert not out_of_order, (
+        "index is not in ascending order; a reader scanning between two "
+        f"neighbours will miss what is there: {out_of_order[:5]}")
+
     absent = [h for h, a in zip(headings, anchors) if a not in set(linked)]
     assert not absent, f"sections missing from the index: {absent[:3]}"
 
