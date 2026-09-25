@@ -455,6 +455,7 @@ silently wrong one.
 - [§262](#262--the-pre-release-name-scan-and-why-it-had-to-become-a-program-2026-09-24) — The pre-release name scan, and why it had to become a program (2026-09-24)
 - [§263](#263--two-sessions-read-the-same-bytes-through-a-model-of-their-neighbour-2026-09-24) — §263 — Two sessions read the same bytes through a model of their neighbour (2026-09-24)
 - [§264](#264--a-retraction-marker-for-one-claim-silences-the-numeric-guard-for-every-other-2026-09-25) — §264 — A retraction marker for one claim silences the numeric guard for every other (2026-09-25)
+- [§265](#265--does-pandep-gate-the-pan-matrix-ready-to-run-not-run-2026-09-25) — §265 — Does `PANDEP` gate the pan matrix? Ready to run, NOT run (2026-09-25)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -3527,7 +3528,14 @@ each reading free to be what it wanted to be?"**
 > is the one broken part. The `PANPOS` cross-validation below still stands.
 > Left in place so the reasoning that failed stays legible.
 
-### Auto-pan is inert
+### Auto-pan is inert — RETRACTED, see the banner above
+
+**RETRACTED BY §52 AND §181. All five fields work.** Repeated here because a
+banner at the top of a section does not travel with a sentence copied out of
+its middle: on 2026-09-25 a sibling found this claim in *their* handoff to a
+third project, written 2026-09-05 — twenty-four days after the retraction —
+where it had stood for twenty days. The table below is the failed
+measurement, kept legible, not a finding.
 
 `PANDEP`, `PANRAT`, `PANDEL`, `LFO2WAVE` and `LFO2TRIG` produce **no
 measurable change in the stereo balance** on this S3000XL, across roughly
@@ -3555,8 +3563,16 @@ silent. Writes were read back at every step.
 What this does **not** establish: whether the fields are unimplemented on the
 S3000XL, need the IB304F board, or require an enable this survey missed. It
 establishes only that nothing reachable from these five fields moves the
-stereo output. A converter should treat auto-pan as unavailable rather than
-write values that do nothing.
+stereo output. ~~A converter should treat auto-pan as unavailable rather than
+write values that do nothing.~~
+
+**THAT LAST SENTENCE IS THE ONE THAT TRAVELS, AND IT IS WRONG.** It is a
+directive aimed squarely at the reader most likely to lift it without the
+banner, and at least one sibling project did exactly that. The correct
+instruction: **auto-pan works.** LFO2 is assignable-matrix source 8 (§52) and
+it reaches pan through `MODVPAN1` at offset 89, which was zero throughout this
+survey — with it set the balance swings 29.75 dB against 0.47 dB (§181). A
+converter should write these fields.
 
 ### `PANPOS` cross-validated
 
@@ -27282,6 +27298,23 @@ repository simultaneously held a correct measurement, a section explaining the
 artefact, and a shipped wrong constant; this is the same disease one layer out,
 inside the fix for it.
 
+### A third instance, and the first with a measured interval
+
+2026-09-25, from the sibling: `.claude/handoff-vinsamlib.md` line 150 had been
+telling a **third** project that *"PANDEP, PANRAT, PANDEL, LFO2WAVE, LFO2TRIG
+produce no measurable change in stereo balance"* — this project's §39, which
+§52 fully retracted. The handoff was written **2026-09-05**; the retraction is
+dated **2026-08-12**. It was stale on the day it was written, by twenty-four
+days, and then stood for twenty more.
+
+Nobody copied a live claim that later died. They copied a claim that was
+already dead, out of a section whose retraction banner sits at the top while
+the sentence worth copying — *"A converter should treat auto-pan as unavailable
+rather than write values that do nothing"* — sits thirty-five lines below it.
+**A banner does not travel with the sentence someone lifts.** That sentence is
+now struck inline in §39 with the correct instruction beside it, on the same
+strike-at-the-number principle this section argues for numbers.
+
 ### Also corrected today: the peer-facing copy
 
 `.claude/handoff-mpc2emu.md` carried the same two claims — the `0.23708` slope
@@ -27346,10 +27379,102 @@ explanation. Recorded in the test's own comments beside the entries.
 A sibling session spent today on the reciprocal case: their reader and writer
 both used byte 4 for an LFO shape, so every round-trip test agreed with itself
 perfectly and with the machine not at all, for months. **A round trip cannot
-see a symmetric error.** s3ked has the same exposure by construction — reader
+see a symmetric error.**
+
+They hit the **asymmetric** case in the same session, and it behaved exactly
+opposite: their reader named a byte `3_step`, the writer's table had no such
+key, `.get(name, sine)` fell back, and three voices' 3-Step LFO came back out
+as a Sine. **The round trip found that in minutes.** So the instrument is not
+weak — it is sharply selective. It detects a disagreement between the two
+halves and is structurally blind to an agreement between them, which means the
+better the two sides are kept in step, the less it can tell you. A shared
+table is what makes s3ked's round trips fast and what makes them blind. s3ked has the same exposure by construction — reader
 and writer share one `params.py` — and 990 passing tests cannot see an offset
 that is wrong in both directions. It is why §52's *functional* result on
 `LFO2WAVE` (byte 98 driven, LFO2's measured shape changed) is worth more than
 the table entry, and why a sibling's corpus check on the same byte is worth
 running even though the number is already known: it is the only leg not
 downstream of the same document.
+
+## §265 — Does `PANDEP` gate the pan matrix? Ready to run, NOT run (2026-09-25)
+
+**Status: awaiting Jan's authorisation for a bench slot. Nothing here has been
+executed.** Raised by mpc2emu from corpus evidence, with a 1,342-program blast
+radius on their side and a direct bearing on what this project should tell a
+converter to write.
+
+### The question
+
+`lfo2_to_pan` is read from the pan matrix amount alone. If `PANDEP` is LFO2's
+**output depth** rather than a pan-specific control, it gates that path too.
+Across 4,433 corpus programs:
+
+```
+PANDEP>0   matrix names LFO2 w/ amount   programs
+  no              no                        125
+  no             YES                      1 342   <- the question
+  yes             no                      2 411
+  yes            YES                        555
+```
+
+So of the 1,897 programs that route LFO2 to pan, **1,342 (70.7%) have `PANDEP`
+at zero.** Either they pan and `PANDEP` is not a gate, or they do not and every
+conversion built on the matrix amount alone adds an auto-pan the machine never
+plays.
+
+That 70.7% cuts both ways and is not evidence on its own. It is either the
+"wired and the volume down" arrangement §181 found from the other side —
+`MODVPAN1` zero while every other field looked set — or it is the ordinary
+state of a routing whose depth control lives elsewhere.
+
+### Why our own prior does not settle it
+
+§52 measured *"`PANDEP` gates the depth — 0 silences it entirely with the route
+live"*. That was measured **against the filter destination**. Applying it to
+the pan destination is precisely *a mechanism with a good track record being
+applied past its range*, and this family has already punished that once: §181
+exists because the pan route behaves differently from the filter route, which
+is the whole reason §52 was partly retracted. **The prior is worth stating and
+worth not trusting.**
+
+### Prediction and falsifier, written before the run
+
+**Prediction:** `PANDEP` gates the pan path as it gates the filter path. With
+`MODVPAN1` set and `PANDEP` 0 the balance stays inside the rig floor
+(~0.5–0.8 dB, §39's control); with `PANDEP` 99 it swings like §181's 29.75 dB.
+Those 1,342 programs therefore do **not** auto-pan.
+
+**Falsifier:** with `MODVPAN1` set and `PANDEP` 0 the balance swings materially
+— call it >5 dB against the ~0.8 dB floor. Then `PANDEP` is not on the pan
+path, the matrix amount alone drives it, and mpc2emu's current reader is right
+as written.
+
+**A third outcome to watch for:** a partial swing. `PANDEP` could scale rather
+than gate, in which case 0 is a floor and not an off. Record the number, do not
+round it to a verdict.
+
+### Procedure — one pair plus two controls
+
+Existing balance apparatus (§39/§52/§181). **RAM parameter writes only. No disk
+or card writes. Snapshot every byte touched and verify the restore.**
+
+1. Snapshot `PANDEP`(30), `PANRAT`(29), `PANDEL`(31), `MODVPAN1`(89) and the
+   matrix source byte, by read-back, and record the raw values here.
+2. Set the matrix source to LFO2 (source 8) and `MODVPAN1` to §181's working
+   amount. Set `PANRAT` mid-range so the period fits the capture window; at
+   `0.11880 Hz/unit` (§260) a `PANRAT` of 40 gives ~4.75 Hz.
+3. **A:** `PANDEP` 0 → capture → balance swing in dB.
+4. **B:** `PANDEP` 99 → capture → balance swing in dB.
+5. **Control 1:** `MODVPAN1` 0, `PANDEP` 99 → must return the rig floor. This
+   is the one that catches a detector reading its own noise as a swing.
+6. **Control 2:** `PANDEP` 50 → distinguishes gate from scale (the third
+   outcome above).
+7. Restore from the snapshot and **verify by read-back**, not by assumption.
+
+One pair settles the headline; the controls are what make it reportable.
+
+### What must not happen
+
+Do not apply `PANDEP` as a multiplier anywhere on the strength of §52's filter
+result. mpc2emu has explicitly declined to, for the right reason: it would
+silently rewrite the pan behaviour of 30% of a 4,433-program corpus on a guess.

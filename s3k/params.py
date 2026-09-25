@@ -1109,7 +1109,21 @@ _PARAMS: List[Parameter] = [
         0,
         255,
         desc="LFO2 waveform",
-        notes="range as written: \"0 represents Triangle, 1 represents Sawtooth, 2 represents Square\"",
+        notes="range as written: \"0 represents Triangle, 1 represents Sawtooth, 2 represents Square\". "
+              "OFFSET CONFIRMED TWO WAYS, 2026-09-25. (a) Functional: RESOLUTION_NOTES "
+              "§52 drove this byte with LFO2 routed to the filter and the measured "
+              "modulation SHAPE changed -- wave 0 middle-third 0.27 against 0.09/0.01/0.05. "
+              "(b) Corpus, independent of every document: mpc2emu scanned 4,433 programs "
+              "and byte 98 holds 4 distinct values {0,1,2,3}, 96.5%% on 0, matching byte 97 "
+              "(LFO1WAVE) {0,1,2,3} at 98.6%% on 0. Two adjacent byte-wide fields with the "
+              "same four-value distribution are the two LFOs' waveforms; no out-of-range "
+              "value appears, which would have disproved the alignment. "
+              "VALUE 3 EXISTS HERE (1.8%% of the corpus, ABOVE both 1 at 1.1%% and 2 at "
+              "0.5%%) and is absent from the SysEx documents, exactly as for LFO1. "
+              "LFO1's 3 is MEASURED as RANDOM (§46, and the S3000XL manual p.80). "
+              "LFO2's 3 is NOT measured -- that the two enums are identical is an "
+              "inference from the shared distribution, strong but untested, and the "
+              "cheap falsifier is one shape read off LFO2 at wave 3.",
     ),
     _p(
         "program",

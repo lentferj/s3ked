@@ -3346,6 +3346,31 @@ reads these bytes -- it does not, and two sessions established that the hard
 way (§263). Its displacements are into a reordered structure whose staging is
 not mapped.
 
+## Does `PANDEP` gate the pan matrix path? (OPEN 2026-09-25 — §265)
+
+`lfo2_to_pan` is read downstream from the pan matrix amount alone. If `PANDEP`
+is LFO2's **output depth** rather than a pan-specific control, it gates that
+path too. mpc2emu's corpus: of 4,433 programs, **1,342 (30.3%) carry a pan
+matrix amount naming LFO2 with `PANDEP` at zero** — 70.7% of every program that
+routes LFO2 to pan. Either they pan and `PANDEP` is not a gate, or they do not
+and every conversion built on the matrix amount alone adds an auto-pan the
+machine never plays.
+
+Our own §52 result (*"`PANDEP` gates the depth — 0 silences it entirely"*) was
+measured against the **filter** destination. Using it on the pan destination is
+a mechanism applied past its range, and §181 exists precisely because the pan
+route behaves differently from the filter route.
+
+**Status:** procedure, prediction, falsifier and controls are written and ready
+in §265. **Nothing has been run.**
+
+**Blocked on:** Jan authorising a bench slot, and confirmation no other session
+is driving the sampler. RAM parameter writes only, snapshot + verified restore,
+no disk or card writes. One pair (`PANDEP` 0 vs 99 with `MODVPAN1` set) settles
+the headline; two controls make it reportable.
+
+**Do not** apply `PANDEP` as a multiplier anywhere before this is settled.
+
 ## A heading marker exempts a section from EVERY numeric check (OPEN 2026-09-25 — §264)
 
 `test_a_section_whose_law_was_refitted_says_so_in_its_heading` skips a whole
