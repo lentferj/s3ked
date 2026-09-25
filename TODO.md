@@ -3346,7 +3346,7 @@ reads these bytes -- it does not, and two sessions established that the hard
 way (§263). Its displacements are into a reordered structure whose staging is
 not mapped.
 
-## Does `PANDEP` gate the pan matrix path? (OPEN 2026-09-25 — §265)
+## `PANDEP` gates the pan matrix — RESOLVED on hardware 2026-09-25 (§265)
 
 `lfo2_to_pan` is read downstream from the pan matrix amount alone. If `PANDEP`
 is LFO2's **output depth** rather than a pan-specific control, it gates that
@@ -3370,6 +3370,37 @@ no disk or card writes. One pair (`PANDEP` 0 vs 99 with `MODVPAN1` set) settles
 the headline; two controls make it reportable.
 
 **Do not** apply `PANDEP` as a multiplier anywhere before this is settled.
+
+## The pan swing's LAW is unmeasured, and §181's 29.75 dB is a bound (OPEN 2026-09-25 — §265)
+
+The gate question is settled: `PANDEP` 0 with the route live measures
+1.5e-5 dB against a 0.041 dB floor, while the program sounds at −15.2 dBFS.
+What is **not** settled is how the swing scales.
+
+**§181's headline is an instrument bound, not a measurement.** It reports
+`PANDEP` 99 / `MODVPAN1` 50 → 29.75 dB. This session measures the same
+condition at 30.32 dB, and sweeping `MODVPAN1` 25/40/50 gives 30.312/30.322/
+30.316 — identical — while the raw balance peak-to-peak keeps growing
+45.00/45.68/47.83. The coherent-amplitude-at-`f` statistic caps at ~30 dB
+because a hard pan is spiky, not sinusoidal, in the dB domain, so energy
+leaves the fundamental. Anywhere §181's 29.75 dB is quoted as the strength of
+the pan route, it should read "at least 30 dB; the rig could not see further".
+
+**Proportionality is refuted as stated.** Per-unit slope climbs 0.232 dB/unit
+at `PANDEP` 5 to 0.336 at 90, and the unsaturated amount pair (5 → 5.535,
+10 → 11.504 dB) is 3.9% compressive where a product law wants 2.000.
+
+**Blocked on:** nothing but a better statistic. Re-measure in a
+**linear-amplitude** domain — pan position from `(L−R)/(L+R)` or per-channel
+envelopes — rather than a dB ratio, which is not a linear observable of pan
+depth. Same disc, same rig, no new hardware. Until then **do not use `PANDEP`
+as a multiplier**; that it gates is established, how it scales is not.
+
+**Related:** §173's amplitude product law and §160's pitch one were both fitted
+with dB-domain statistics. Whether either was measured inside its own ceiling
+is now worth checking — §173's own worked example runs to 39.98 dB, above the
+wall found here, though on a different destination and possibly a different
+bound.
 
 ## A heading marker exempts a section from EVERY numeric check (OPEN 2026-09-25 — §264)
 

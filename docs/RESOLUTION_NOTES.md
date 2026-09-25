@@ -27453,6 +27453,46 @@ as written.
 than gate, in which case 0 is a floor and not an off. Record the number, do not
 round it to a verdict.
 
+### A quantitative prediction, from §173 and §181 rather than from expectation
+
+§181 records something the original framing of this section missed. §173
+established that the analogous **amplitude** route is a **product** of the two
+fields — `one-sided swing_dB = 0.010068 × LFODEP × MODVAMP1`, fitted through
+the origin, with equal-product equivalence demonstrated over a 2.5× range of
+each — and §160 found the same for LFO→pitch. §181 then measured the **pan**
+route at one point: `PANDEP` 99, `MODVPAN1` 50 → **29.75 dB**.
+
+If the pan route has that shape, `k = 29.75 / (99 × 50) = 0.006010`, and at the
+disc's `MODVPAN1` = 25:
+
+```
+  PANDEP  0  ->   0.00 dB
+  PANDEP 50  ->   7.51 dB
+  PANDEP 99  ->  14.88 dB
+```
+
+**This turns the gate/scale question into a ratio, and the ratio is the part
+worth trusting.** "Swing" may be one-sided in §173 and two-sided in §181 — the
+absolute predictions move by 2× depending which, and §173's own coefficient
+would give 12.59 and 24.92 dB instead. But **99:50 = 1.980 under every one of
+those parameterisations**, because a product law is linear in `PANDEP` whatever
+the units. §186's rule applies directly: a statistic free of the disputed
+parameter is the one to report.
+
+So:
+
+- **ratio ≈ 1.98 and `PANDEP` 0 silent** → product law, `PANDEP` is a
+  multiplicand. "Gate" and "scale" are then the same thing, and 0 is a floor
+  because it is a factor. mpc2emu's 1,342 programs do **not** pan.
+- **`PANDEP` 50 ≈ `PANDEP` 99, both loud, 0 silent** → a true gate with no
+  proportionality. Different converter behaviour: not a multiplier.
+- **`PANDEP` 0 loud** → `PANDEP` is not on the pan path at all; the matrix
+  amount alone drives it and their reader is right as written.
+
+Predicting a **number** rather than a direction is what makes the third
+outcome cheap to see: any of the three is a clean read, and none of them is
+the absence of a result.
+
 ### Procedure — one pair plus two controls
 
 Existing balance apparatus (§39/§52/§181). **RAM parameter writes only. No disk
@@ -27472,6 +27512,123 @@ or card writes. Snapshot every byte touched and verify the restore.**
 7. Restore from the snapshot and **verify by read-back**, not by assumption.
 
 One pair settles the headline; the controls are what make it reportable.
+
+### The disc, verified here against our own table (2026-09-25)
+
+mpc2emu authored `~/temp/HD_pandep.img` (8,388,608 bytes) and asked this
+session to run it. **Not run: a peer relaying Jan's decision is not Jan's
+decision, and this needs a card write and the rig.** Read-only verification
+was done, against s3ked's `params.py` offsets rather than against their report:
+
+```
+PD DEP 0     prog@0x08c000  PRGNUM=120 PANRAT=28 PANDEP= 0 MODVPAN1=25 MODSPAN1=8
+PD DEP 50    prog@0x08e000  PRGNUM=121 PANRAT=28 PANDEP=50 MODVPAN1=25 MODSPAN1=8
+PD DEP 99    prog@0x090000  PRGNUM=122 PANRAT=28 PANDEP=99 MODVPAN1=25 MODSPAN1=8
+PD NOMATRIX  prog@0x092000  PRGNUM=123 PANRAT=28 PANDEP=99 MODVPAN1= 0 MODSPAN1=8
+PD CTRL      prog@0x094000  PRGNUM=124 PANRAT=28 PANDEP= 0 MODVPAN1= 0 MODSPAN1=8
+```
+
+Every byte matches the disc's own header. `MODSPAN1` is **8 on all five** —
+LFO2 as matrix source is held constant and only the amount varies, which is
+what makes it single-variable. The directory holds exactly six entries: the
+five programs plus the sample `PDTONE`. No program carries `PRGNUM` 0, so
+their §135 fix holds.
+
+**Three false alarms from the verifier, none from the disc.** Worth recording
+because each one formatted as a finding:
+
+1. Searching for each name returned **two hits**, and the first draft reported
+   *"DISC DOES NOT MATCH ITS HEADER"*. An AKAI volume carries the name in the
+   **directory entry** (24-byte stride) as well as in the program block; the
+   script anchored on the directory hit and read program fields from the wrong
+   object. This is §263's failure exactly — a plausible neighbour taken for
+   the thing itself — three days later, in the check written to avoid it.
+2. A 0x1000-stride scan reported **fifteen rogue programs at `PRGNUM` 0**.
+   They are zero-filled space: **charset index 0 is the character `'0'`**, so
+   twelve zero bytes decode as `'000000000000'`, which reads as a name. This
+   project already knew that (`analysis.py:54`) and told a sibling the same
+   thing about `pgm[7]` yesterday.
+3. The same scan read sample data at `0x080000..0x08b000` as programs, and
+   found `PDTONE` at program+0xe2 — the keygroup's sample reference *inside*
+   each program — and reported five more.
+
+The disc was right in all three cases. The rule that caught each of them was
+reading every hit instead of counting them.
+
+### RESULT, measured on hardware 2026-09-25 16:14-16:22
+
+**`PANDEP` GATES THE PAN MATRIX. The 1,342 programs do not auto-pan.**
+
+Five programs, no parameter writes — program change only. All five sounded, at
+−14 to −15 dBFS, which is the check that separates "silent" from "steady":
+
+```
+program       PANDEP  MODVPAN1  level dBFS   swing @ 3.326 Hz
+PD DEP 0         0       25       -15.2          0.000015 dB
+PD DEP 50       50       25       -14.8         14.54     dB
+PD DEP 99       99       25       -14.1         30.18     dB
+PD NOMATRIX     99        0       -15.2          0.000020 dB
+PD CTRL          0        0       -15.2          0.000020 dB
+```
+
+`PANDEP` 0 **with the route fully live** sits at 1.5×10⁻⁵ dB — identical to both
+controls, against a balance standard deviation of 0.00199 dB and a
+peak-to-peak of 0.041 dB. Not "small": indistinguishable from the floor while
+the program plays at full level.
+
+**Why the level column exists.** The first run printed `0.00` three times and
+could not have told a gated program from one that never sounded: with no audio
+both channels sit on the `1e-12` guard and `20·log10(1)` is exactly 0. A load
+failure would have forged the headline result. The column was added before the
+numbers were believed.
+
+**Level control, free because velocity needs no write.** The 99:50 ratio is
+2.075 / 2.075 / 2.077 at velocities 100 / 60 / 35, with L peaking from −2.6 to
+−14.9 dBFS. A clipping artefact would drift across 13 dB; this does not.
+
+### The instrument's ceiling, and what it costs §181
+
+`PANDEP` swept 0..99 at `MODVPAN1` 25 (snapshot 50, restored and verified):
+
+```
+  0   5    10    20    30    40    50    60    70    80    90    99
+0.000 1.162 2.501 5.437 8.198 11.304 14.595 17.712 21.457 25.773 30.274 30.306
+```
+
+90 and 99 are the same number. So `MODVPAN1` was swept at `PANDEP` 99
+(snapshot 25, restored and verified):
+
+```
+  MODVPAN1   coherent swing   raw balance peak-to-peak
+     5           5.535 dB            6.81 dB
+    10          11.504 dB           14.35 dB
+    25          30.312 dB           45.00 dB
+    40          30.322 dB           45.68 dB
+    50          30.316 dB           47.83 dB
+```
+
+**The coherent swing saturates at 30.3 dB while the raw excursion keeps
+growing.** The machine is panning harder; the statistic has stopped reporting
+it. As the pan approaches hard left/right the dB-domain balance curve becomes
+spiky rather than sinusoidal, so energy leaves the fundamental and the
+amplitude at `f` caps. §186 and §189 exactly: **a statistic that terminates at
+the instrument's bound is reporting the instrument.**
+
+**That ceiling is almost certainly §181's headline.** §181 measured `PANDEP` 99,
+`MODVPAN1` 50 → **29.75 dB**. This session measures the same condition at
+**30.32 dB**. Two rigs, two days, the same wall. §181's 29.75 dB should be read
+as *"at least 30 dB, the rig could not see further"*, not as the strength of
+the route — and the product-law coefficient this section derived from it
+(`k = 29.75/(99×50)`) was therefore built on a saturated number, which is why
+the predicted ratio 1.980 missed the measured 2.076.
+
+**So the gate question is answered and the LAW is not.** Proportionality is not
+established: the per-unit slope climbs from 0.232 dB/unit at `PANDEP` 5 to
+0.336 at 90, and even the unsaturated amount pair (5 → 5.535, 10 → 11.504) is
+3.9% compressive where a product law wants 2.000. The dB-domain coherent
+amplitude is not a linear observable of pan depth, so **the law needs
+re-measuring in a linear-amplitude domain** before anyone uses `PANDEP` as a
+multiplier. Recorded as open rather than fitted.
 
 ### What must not happen
 

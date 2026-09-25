@@ -356,6 +356,25 @@ _PARAMS: List[Parameter] = [
         0,
         128,
         desc="MIDI program number After sending data to this parameter, Miscellaneous function BTSORT should be triggered to resort the list of programs into order and to flag active programs.",
+        notes="0-BASED IN THE REGISTER, 1-BASED ON THE PANEL -- the same convention "
+              "as keygroups, FX slots, volume and V-curve. Measured 2026-08-14: the "
+              "panel's RNUM->SEQU renumbered fifteen resident programs and showed "
+              "them 1..15, while the same fifteen read back over SysEx as 0..14. "
+              "CONFIRMED AGAIN 2026-09-25 on the §265 disc: a program storing 120 "
+              "displays as 121, verified three ways (the card image, a SysEx read, "
+              "and the panel). display_offset was 0 here until 2026-09-25 even "
+              "though bridge.renumber_programs' docstring has stated the convention "
+              "since August -- the fact was in the prose and contradicted in the "
+              "table, so every program number s3ked reports is one BELOW the "
+              "machine's own screen. "
+              "STILL 0 DELIBERATELY: display_offset is NOT cosmetic here -- it is "
+              "applied in _decode_one and subtracted in encode_field, so setting it "
+              "changes what get_parameter RETURNS and what set_parameter STORES. "
+              "renumber_programs is safe either way (it writes raw bytes via "
+              "set_header_bytes), but the API contract for this field would move, "
+              "so the change is a deliberate one-line edit plus a full suite run "
+              "rather than something to slip in beside a hardware session. "
+              "RESOLUTION_NOTES §266, TODO."
     ),
     _p(
         "program",
