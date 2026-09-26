@@ -458,6 +458,7 @@ silently wrong one.
 - [§265](#265--pandep-gates-the-pan-matrix-and-the-rigs-ceiling-is-181s-headline-2026-09-25) — `PANDEP` gates the pan matrix, and the rig's ceiling is §181's headline (2026-09-25)
 - [§266](#266--three-rules-about-checking-each-paid-for-on-2026-09-25-2026-09-25) — Three rules about checking, each paid for on 2026-09-25 (2026-09-25)
 - [§267](#267--prgnum-is-1-based-on-the-panel-and-the-table-has-said-0-since-august-2026-09-25) — `PRGNUM` is 1-based on the panel, and the table has said 0 since August (2026-09-25)
+- [§268](#268--lfofilter-the-obvious-instrument-reports-2883-cents-on-a-static-filter-2026-09-26) — LFO→filter: the obvious instrument reports 2883 cents on a static filter (2026-09-26)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -27752,3 +27753,151 @@ the next reader meets it at the field rather than in a section.
 **`test_params.py` guards this**: only fields with a panel reading may carry a
 `display_offset`, and the allowlist is `POLYPH`, `FX1`-`FX4`. Adding `PRGNUM`
 there is part of the same change, and the evidence is this section.
+
+
+## §268 — LFO→filter: the obvious instrument reports 2883 cents on a static filter (2026-09-26)
+
+Item 4 of a sibling's list, prepared and **not run** — the rig needs Jan's
+go-ahead in this session, and a peer relaying it is not it. What follows is the
+instrument, and the reason it is not the instrument anyone would have written
+first.
+
+`MODSFILT1` (program 84) selects the source — **LFO1 is 7, LFO2 is 8** — and
+`MODVFILT1` (keygroup 151) is the amount. The depth is the LFO's own: `LFODEP`
+for LFO1, `PANDEP` for LFO2 (`_LFO_OFF` in `calibrate.py` zeroes exactly those
+two, which is the independent confirmation). §173 found the analogous
+**loudness** route to be a product of depth and amount, so a product is the
+hypothesis.
+
+### What already existed, and the one thing it cannot do
+
+`calibrate.py mod-filter-noise` sweeps this very amount with a noise source,
+handles the wide-open reference spectrum, and carries a prepare block whose
+every line was paid for — `PRLOUD` 70 because 85 clipped the interface, and *a
+clipped peak is not a corner, it is manufactured spectrum that looks like one*.
+
+It sweeps `MODSFILT1` = **velocity**, where the corner is static for a fixed
+velocity, and averages one spectrum per setting. **An LFO source moves the
+corner during the note**, so that average reports the mean and not the
+excursion — and the excursion is the quantity. Hence a time-resolved statistic.
+
+### The obvious design fails, measured
+
+Corner frequency per short window, excursion as a 5th-to-95th percentile:
+
+```
+  true excursion      n_fft 2048   n_fft 4096   n_fft 8192
+    1200 cents          3858 c       3635 c       3303 c
+     347 cents          3691 c       3380 c       3025 c
+       0 cents          3651 c       3469 c       2883 c   <-- STATIC FILTER
+```
+
+**A static filter reports 2883 cents.** One FFT of noise has ~100% per-bin
+variance, so the per-window corner jitters enormously and a percentile of it
+reports the jitter. Every column is dominated by the instrument. Had this gone
+to the rig it would have produced a confident rail from nothing, and the
+numbers would have looked plausible — thousands of cents is the right order for
+a filter matrix.
+
+### What works: coherent band ratio, self-calibrated
+
+A high-band/low-band energy ratio integrates hundreds of bins instead of
+locating an edge, and its residual noise is *random* while the modulation is
+*coherent* — so a fit at the LFO rate averages the noise down by √N. Reusing
+`pandepgate.coherent`, validated in §265 against constructed signals and the
+0.400 Hz rig-wander trap.
+
+**Windows must not overlap.** At hop = n_fft/4 they share 75% of their samples,
+the noise correlates, and the floor rose from 40 to 180 cents with the
+strongest component landing at 2.2 Hz instead of the LFO's 0.95. Independent
+windows, fewer points, lower floor.
+
+```
+  true excursion   14 s capture, n_fft 4096
+    1200 cents  ->  1237 c   (+3.1%)
+     347 cents  ->   387 c   (+11.4%)
+     104 cents  ->   143 c   (+37.2%)
+       0 cents  ->    40 c   <-- the floor
+```
+
+At a 6 s hold the floor is **162 cents**, which is why the default is 14.
+Accuracy over-reads small excursions because noise adds in quadrature, so
+anything under ~150 cents is not distinguishable from zero.
+
+### The calibration has to come off the machine
+
+dB of band ratio converts to cents only through the filter's actual slope, and
+the synthetic above used a **one-pole** low-pass while this family's filter is
+not one. So stage 1 sweeps `FILFRQ` with the LFO off and fits dB against cents
+from the machine's own corner values, taken from the whole-capture averaged
+spectrum where `corner_frequency` is reliable and guarded. Stage 2 then sweeps
+the amount with the LFO running. Every run also prints:
+
+- **window sensitivity** at three `n_fft` values, because two projects derive
+  the filter-2 rail as ~230 ±8 and 216.6 cents/unit and the thing that moves it
+  is a baseline-window position — a property of the analysis, not the machine;
+- a **bound check**, because §265 saturated at 30.3 dB invisibly and §181's
+  published 29.75 dB turned out to be that ceiling.
+
+`probes/lfofilter.py`. It refuses to write without `--allow-write`; the default
+prints its plan and the full list of fields it would snapshot.
+
+### RUN 1, 2026-09-26 09:38-09:41: UNVERIFIABLE, and that is the finding
+
+It ran, restored all 23 fields verified, and returned this:
+
+```
+ FILFRQ |  corner Hz |  ratio 2048   ratio 4096   ratio 8192
+     40 |        nan |      -10.57       -11.41       -11.55
+     50 |        nan |       -9.80       -10.76       -10.97
+     60 |        nan |       -9.88       -10.84       -10.91
+     70 |        nan |       -9.82       -11.00       -10.98
+     80 |        nan |       -9.76       -10.71       -10.93
+```
+
+Corner unmeasurable at every setting and the band ratio moving 0.8 dB across a
+`FILFRQ` span that should move it enormously, so the calibration aborted before
+the sweep — which is the right behaviour and the only thing here that worked as
+designed.
+
+**Then a sibling reported that `jackd` was wedged**: alive at pid 2395 but
+accepting no clients, from six JACK client create/destroy cycles in the
+preceding twenty minutes. Confirmed here — `jack_lsp` exits 124 at a 10 s cap,
+and a diagnostic started at 09:47 hung six minutes on its first `Capture()`
+having never got a client.
+
+**Whether run 1's captures contained audio cannot now be established.** It
+completed rather than hanging, so it got clients; whether those clients
+received signal is unknowable, because **this probe recorded no level and
+discarded the wavs.** A hung capture and a silent capture are the same shape in
+the data, and a band ratio of a noise floor is flat *by construction* — which
+is indistinguishable from a filter that is not moving. The step at `FILFRQ` 40
+suggests something was there. "Suggests" is the whole problem.
+
+`pandepgate.py` prints a level beside every swing **for exactly this reason**,
+one day earlier, in this repository. This file was written without carrying it
+over. §266's first rule turned on its author: the lesson was encoded in one
+instrument and the next was built without it.
+
+Fixed before any re-run: `capture()` measures the level, prints it in both
+stages, and **raises on anything below −60 dBFS** rather than analysing it. A
+refusal costs a re-run; a silent capture analysed as data costs a published rail
+that was never there. The two candidate explanations for run 1 — nothing
+sounding, versus a corner outside the 2.5–6 kHz band — are separable only once
+the level is known, which is why the fix comes before the diagnosis.
+
+### Two corrections owed to the sibling's plan
+
+Their note said the filter-1 rail is *"~216 cents/unit (§AKAIF2DEPTH)"*. They
+withdrew that themselves — it is the **filter 2** matrix — and they were right
+to. But the replacement is also not ours: §226/§227 measured `MODVFLT2_3` at
+**~230 cents per unit, ±8**, where §226's earlier ~225 was one baseline-window
+position and sweeping it moves 220–236. Their independent derivation of 216.6
+sits outside that range, so this is two derivations disagreeing rather than one
+being a stale copy, and both move with a property of the analysis.
+
+For filter **1**, the only measured law here is §116's and it is
+velocity-specific: `4.368 cents per (depth unit × velocity unit)`, pivot
+**64.56** — solved for rather than assumed, landing on §43's predicted pivot as
+a free check. **`scales.py` holds no fitted law for any of `MODVFILT1..3` or
+`MODVFLT2_1..3`.**
