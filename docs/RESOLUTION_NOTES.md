@@ -28158,6 +28158,60 @@ the one that maximises resolution on all of them** — a unique optimum, not a
 tie to be broken by convention. A writer should solve for it across the whole
 routed set rather than pick per destination.
 
+**A consequence a sibling derived from those two constraints, and a correction
+to it.** Writing `d_i = target_i / k_i` — each destination's demand in
+amount-units at `LFODEP` 1 — feasibility gives `L = ceil(max(d)/50)`, and
+destination *j* rounds to **zero** when `d_j < L/2`. So a large demand on one
+destination erases small demands on the others: **a patch with a deep filter
+sweep and a touch of tremolo cannot represent the tremolo at all.** That is a
+defect class rather than a curiosity, and it holds for pan and for the
+unmeasured slots too, since it needs only `|amount| ≤ 50` and integer steps and
+no coefficient at all.
+
+They put the ratio at **exactly 100:1**. **It is not exact, and the worst case
+is twice as bad**, because the ceiling in `L` is what decides it:
+
+```
+  max(d)    L   zero-threshold   achievable range
+      50    1        0.50            100.0 : 1
+      51    2        1.00             51.0 : 1   <- worst
+     100    2        1.00            100.0 : 1
+     101    3        1.50             67.3 : 1
+     150    3        1.50            100.0 : 1
+     201    5        2.50             80.4 : 1
+```
+
+100:1 holds **only when `max(d)` is an exact multiple of 50**. Their concrete
+example checks out exactly: at `LFODEP` 99 the filter step is 396 cents, so any
+filter target below **198** rounds away.
+
+**"Between 50:1 and 100:1" was then wrong in the same way**, and the sibling
+caught it within the hour. That range assumed `L ≥ 2`, i.e. `max(d) > 50`. Below
+that, `L` is pinned at 1, the zero-threshold sticks at 0.5, and the range is
+just `2·max(d)`:
+
+```
+  max(d)      1     5    10    25    49  |   50    51   101   201
+  range     2:1  10:1  20:1  50:1  98:1  | 100:1 51:1  67:1  80:1
+```
+
+**The minimum over all `max(d)` ≥ 1 is 2:1**, not 51:1 — and small demands are
+the common case, so the quoted range was wrong for exactly the patches most
+likely to hit the problem.
+
+**So the object to carry is the formula, and every ratio is a summary of it:**
+
+```
+  usable dynamic range  =  2 * max(d) / ceil( max(d) / 50 )
+```
+
+Both of us quoted a bound outside the regime it was derived in, within the hour
+we had each written down that *a test is blind to whatever it holds constant*.
+Their derivation assumed the continuous case; mine assumed `L ≥ 2`. **Neither of
+us stated the assumption we were making about `max(d)`** — which is the same
+failure twice, from opposite ends, and the reason the formula rather than any
+interval is what belongs in a writer.
+
 **What is missing is coefficients, not structure.** `k` is measured for the
 filter (4.0 cents, here) and for loudness (§173's 0.010068 dB), the pitch route
 is §160's, and **pan has no law at all** — §265 established that `PANDEP` gates
