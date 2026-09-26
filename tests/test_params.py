@@ -493,11 +493,19 @@ def test_only_fields_seen_on_the_panel_carry_a_display_offset():
     FX1-FX4: panel "38 CLEAR DETUNE" against byte 37, and panel "1 REVERB EQ 1"
     against byte 0 -- two points in one photograph (§216).
 
+    PRGNUM: the §265 disc stores 120..124 and the panel showed 121..125,
+    confirmed three ways -- the bytes in the card image, a SysEx read of the
+    resident program, and Jan reading the machine's screen (§267). §91 had
+    measured the same thing on 2026-08-14 via the panel's RNUM->SEQU, and
+    bridge.renumber_programs' docstring has stated the convention since then
+    while this table said 0 -- the fact correct in the prose and contradicted
+    in the executing table.
+
     Adding a name here without a panel reading would be inferring the offset
     from the spec, which is what the spec is silent about.
     """
     offsets = {x.name for x in p._PARAMS if x.display_offset}
-    assert offsets == {"POLYPH", "FX1", "FX2", "FX3", "FX4"}, offsets
+    assert offsets == {"POLYPH", "FX1", "FX2", "FX3", "FX4", "PRGNUM"}, offsets
 
 
 def test_the_fx_fields_render_the_numbers_the_panel_showed():

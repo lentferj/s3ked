@@ -203,7 +203,10 @@ def main():
 
     chan = args.channel if args.channel is not None else \
         br.get_parameter(("program", "PMCHAN"), args.program)
-    prgnum = br.get_parameter(("program", "PRGNUM"), args.program)
+    # RAW, for the same reason as pandepgate: PRGNUM carries
+    # display_offset=1 (§267) and select_program_number wants the stored
+    # 0-based number, not the one the panel shows.
+    prgnum = br.get_header_bytes("program", args.program, 15, 1)[0]
     print("program %d (%s): PRGNUM %d, MIDI channel %d -- selected before each capture"
           % (args.program, br.program_list()[args.program], prgnum, chan))
 

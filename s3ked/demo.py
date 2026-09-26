@@ -130,7 +130,12 @@ class DemoBridge:
         for index, name in enumerate(self._programs):
             header = _blank_header("program")
             self._write_named(header, "program", "PRNAME", name)
-            self._write_named(header, "program", "PRGNUM", index)
+            # RAW, not through _write_named: PRGNUM carries display_offset=1
+            # since 2026-09-26 (§267), so encode_field now expects the PANEL's
+            # 1-based number and would reject a stored 0. This file models the
+            # machine's stored bytes, and renumber_after_load below already
+            # writes this field raw for the same reason.
+            header[p.lookup(("program", "PRGNUM")).offset] = index
             self._write_named(header, "program", "PMCHAN", index % 16)
             self._write_named(header, "program", "PRIORT", 1)
             self._write_named(header, "program", "PLAYLO", 21)
@@ -363,7 +368,8 @@ class DemoBridge:
         for name in names:
             header = _blank_header("program")
             self._write_named(header, "program", "PRNAME", name)
-            self._write_named(header, "program", "PRGNUM", program_number)
+            # raw, as in the constructor -- see the note there (§267)
+            header[p.lookup(("program", "PRGNUM")).offset] = program_number
             self._write_named(header, "program", "GROUPS", 1)
             kheader = _blank_header("keygroup")
             self._write_named(kheader, "keygroup", "LONOTE", 21)

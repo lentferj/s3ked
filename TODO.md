@@ -3346,6 +3346,37 @@ reads these bytes -- it does not, and two sessions established that the hard
 way (§263). Its displacements are into a reordered structure whose staging is
 not mapped.
 
+## §191's `STEREO` law has no representable `Scale` kind (OPEN 2026-09-26)
+
+§191 measured `STEREO` (program 23) on hardware on 2026-09-08 at a sibling's
+request: **`gain = x/99`, linear in AMPLITUDE**, proportionality holding across
+10..99 to within 0.244 dB, and it refuted the proposal that the field follows
+`PRLOUD`'s law (wrong by 20.6 dB at x=60).
+
+**It is not in `scales.py`, and the reason is structural rather than neglect.**
+`Scale.kind` is one of `exp`/`linear`/`pan`/`pole`/`reso`, and none expresses a
+gain proportional to the value — `linear` means linear in the *physical unit*,
+which for a level is dB. So a hardware-measured law has had nowhere to live for
+eighteen days while the prose recorded it. §264's disease again.
+
+**Cheap to close:** the kind dispatch is confined to `Scale.value_to_physical`
+and `Scale.physical_to_value` in `s3k/scales.py`, plus one spot at :1190. A
+kind whose forward form is `20*log10(a*value)` and whose inverse is
+`10**(physical/20)/a` covers it, with `a = 1/99`.
+
+**Two things to decide rather than assume:**
+
+- `x/99` versus `x/100` is **not separable** from §191's data — both are ratios
+  to the same reference and the normalisation cancels. §191 says so explicitly.
+  Only the proportionality is established, so whatever `a` the entry carries
+  must record that its denominator is a convention.
+- `value = 0` is a zero gain, i.e. −∞ dB. The inverse has a pole there and the
+  other kinds raise on their own singularities (`reso` at self-oscillation,
+  `pole` at its asymptote), so this one should too rather than returning a
+  float infinity into a rendering path.
+
+**Blocked on:** nothing but a decision to add a kind. No hardware.
+
 ## The LFO1 depth solve is determinate but under-determined (OPEN 2026-09-26 — §270)
 
 §270 measured `cents = ~4.0 x LFODEP x MODVFILT1` and §173 measured

@@ -92,7 +92,10 @@ def main():
     names = br.program_list()
     rows = []
     for i, nm in enumerate(names):
-        prg = br.get_parameter(("program", "PRGNUM"), i)
+        # RAW: select_program_number takes the 0-based number, and
+        # PRGNUM carries display_offset=1 since 2026-09-26 (§267), so
+        # get_parameter would return the panel's 1-based value here.
+        prg = br.get_header_bytes("program", i, 15, 1)[0]
         rate_unit = br.get_parameter(("program", "PANRAT"), i)
         dep = br.get_parameter(("program", "PANDEP"), i)
         amt = br.get_parameter(("program", "MODVPAN1"), i)

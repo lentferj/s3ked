@@ -354,8 +354,9 @@ _PARAMS: List[Parameter] = [
         1,
         "program.general",
         0,
-        128,
+        127,
         desc="MIDI program number After sending data to this parameter, Miscellaneous function BTSORT should be triggered to resort the list of programs into order and to flag active programs.",
+        display_offset=1,
         notes="0-BASED IN THE REGISTER, 1-BASED ON THE PANEL -- the same convention "
               "as keygroups, FX slots, volume and V-curve. Measured 2026-08-14: the "
               "panel's RNUM->SEQU renumbered fifteen resident programs and showed "
@@ -372,9 +373,29 @@ _PARAMS: List[Parameter] = [
               "changes what get_parameter RETURNS and what set_parameter STORES. "
               "renumber_programs is safe either way (it writes raw bytes via "
               "set_header_bytes), but the API contract for this field would move, "
-              "so the change is a deliberate one-line edit plus a full suite run "
-              "rather than something to slip in beside a hardware session. "
-              "RESOLUTION_NOTES §267, TODO."
+              "so the change was made deliberately, on 2026-09-26, with the caller "
+              "audit below and a full suite run. RESOLUTION_NOTES §267. "
+              "CALLER AUDIT: the RAW paths are unaffected because they bypass "
+              "decode_field -- analysis.collect reads PRGNUM/PMCHAN as two "
+              "bytes via get_header_bytes, bridge.program_numbers likewise, "
+              "renumber_programs writes bytes([index]) through "
+              "set_header_bytes, and app._activate_program_worker reads raw "
+              "and adds one by hand for the status line, commented \"1-based, "
+              "because that is what the machine\'s own display says\". So the "
+              "app ALREADY displayed this field 1-based in one place while the "
+              "parameter pane showed the stored byte; this makes the pane "
+              "agree with both the panel and that status line. Only "
+              "probes/pandepgate.py and probes/lfofilter.py read it through "
+              "get_parameter and fed it to select_program_number, which takes "
+              "the 0-based number -- both switched to raw reads. "
+              "MAXIMUM CORRECTED 0..128 -> 0..127 in the same change, because "
+              "display_offset made an old oddity dangerous: 0..128 is 129 "
+              "values for a 7-bit MIDI program number, and with the offset the "
+              "pane would have accepted a displayed 129, stored 128, past "
+              "bridge._PRGNUM_MAX of 127 which select_program_number and "
+              "renumber_programs both enforce. Without the offset it merely "
+              "permitted one value too many; with it, it permits an out-of-range "
+              "write through a pane that looks correct."
     ),
     _p(
         "program",
