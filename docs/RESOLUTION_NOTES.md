@@ -459,6 +459,7 @@ silently wrong one.
 - [§266](#266--three-rules-about-checking-each-paid-for-on-2026-09-25-2026-09-25) — Three rules about checking, each paid for on 2026-09-25 (2026-09-25)
 - [§267](#267--prgnum-is-1-based-on-the-panel-and-the-table-has-said-0-since-august-2026-09-25) — `PRGNUM` is 1-based on the panel, and the table has said 0 since August (2026-09-25)
 - [§268](#268--lfofilter-the-obvious-instrument-reports-2883-cents-on-a-static-filter-2026-09-26) — LFO→filter: the obvious instrument reports 2883 cents on a static filter (2026-09-26)
+- [§269](#269--the-modvflt23-disagreement-was-entirely-method-settled-offline-2026-09-26) — The `MODVFLT2_3` "disagreement" was entirely method, settled offline (2026-09-26)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -27901,3 +27902,103 @@ velocity-specific: `4.368 cents per (depth unit × velocity unit)`, pivot
 **64.56** — solved for rather than assumed, landing on §43's predicted pivot as
 a free check. **`scales.py` holds no fitted law for any of `MODVFILT1..3` or
 `MODVFLT2_1..3`.**
+
+## §269 — The `MODVFLT2_3` "disagreement" was entirely method, settled offline (2026-09-26)
+
+Two projects derived the `MODVFLT2_3` depth as ~230 cents/unit here and 216.6
+there, and both had been carrying a caveat about it. **It is not a
+disagreement about the machine.** Applying this project's window convention to
+the *other* project's captures collapses the gap, and neither rig was needed.
+
+### Their correction of our number was wrong, and it is worth saying which way
+
+A sibling filed our figure as "~225, ±5 %" and reported that 230.0 is a ladder
+we ourselves call the worst of the three. **Both quotes are real and both are
+from §226 — which §227 supersedes.** §227 says so in terms: *"the honest figure
+is ~230 cents/unit, ±8, and §226's '~225, ±5 %' was the value at one window
+read as the value."*
+
+The confusion is understandable and structural: §226's worst single ladder
+happens to read **230.0** with a 68.8-cent residual, and §227's superseding
+headline is **~230 ±8** from an entirely different computation. Same number,
+different provenance, one page apart.
+
+**The distinction §227 exists to make is the one that resolves it.** That 68.8
+residual belongs to an *absolute* corner reading, which §227 showed is not
+determined by the data at all — it moves 295 cents across the window sweep. The
+depth law is a *differential* between programs measured at the same window
+position, so the common bias cancels and it moves only 18. Attaching an
+absolute reading's residual to a differential figure is comparing the two
+things that section was written to separate.
+
+### Q1: the captures survive
+
+`~/temp/matrix/captures/H3_{032..037,056,121..126}.wav` — thirteen files,
+2026-09-11, the same programs of the same `HD_f2depth.img` volume. The fitters
+are `~/temp/matrix/f2d3fit.py` (absolute window) and `f2d3base.py` (relative).
+§226/§227 cited no paths, which is why the question had to be asked.
+
+### Q2: the window rule, verbatim
+
+Baseline harmonics between **`fc/6` and `fc/3`**, falling back to
+**`fc/8`..`fc/2.5`** when fewer than two harmonics land in the first, iterated
+to convergence in `fc` (≤4 passes, tolerance 1e-4 in log2). Referenced against
+the wide-open program (56) as `rel = db - db_ref`, keeping only harmonics
+**≥20 dB above the noise floor**, where the floor is the median of harmonics
+above 8 kHz. Corner is the −3 dB crossing of `rel` below the baseline median,
+interpolated in log2 frequency, searched from 150 Hz up.
+
+**There is no single window, and that is the finding.** §227 swept the divisors
+3.0/1.7 → 8.0/4.0 precisely because they were picked rather than derived.
+
+### The decisive test, run here on their audio
+
+Their thirteen captures are on this disk (`~/temp/f2d_*.wav` + `.sched.json`,
+2026-09-24). Two checks first, both necessary:
+
+- **Same fundamental.** Their strongest 40–300 Hz peak is 159.67 Hz, which
+  looked like a different note — it is the third harmonic. Fitting the comb
+  gives **F0 = 55.125 Hz**, harmonic-index error 0.003 mean / 0.006 max:
+  identical to ours.
+- **Note timing from their `.sched.json`, not assumed.** `t_on` is
+  `lead_in + notes[0].t_on`. The sibling lost 2565 cents earlier this week to
+  assuming `play_sequence`'s timing instead of reading the schedule it returns,
+  so reading it was not optional.
+
+s3ked's relative window applied to their captures:
+
+```
+  window   FIL2FR 66   FIL2FR 72   FIL2FR 80  |  mean
+  3.0/1.7      237.5      236.6      226.7    | 233.6
+  4.0/2.0      234.9      228.2      221.6    | 228.2
+  5.0/2.5      233.0      224.2      225.2    | 227.5
+  6.0/3.0      229.9      219.5      227.8    | 225.7
+  7.0/3.5      233.0      224.7      230.0    | 229.2
+  8.0/4.0      230.6      221.1      226.3    | 226.0
+```
+
+Corner for corner against our own §227 table at the same window (6.0/3.0):
+
+```
+              ours (09-11)   theirs (09-24)
+  FIL2FR 66      235.6          229.9
+  FIL2FR 72      219.7          219.5
+  FIL2FR 80      227.8          227.8
+```
+
+**Two independent captures a fortnight apart agree to one decimal at two of the
+three corners.** 66 is the outlier and is the corner §227 already flags as
+having the worst residual and fewest baseline harmonics.
+
+So **216.6 is a property of their analysis, not of their audio.** Both caveats
+can go. Nothing shipped depended on either — `MODVFLT2_3` is still written as
+zero — which is why this was worth an hour offline rather than a bench slot.
+
+### The generalisation, which is theirs
+
+*A test is blind to whatever it holds constant.* Three projects hit that shape
+this week from different directions: a cancellation test blind to an error two
+fields shared, two FFT windows blind to a common bias, and an FFT negative that
+was limited by amplitude ratio rather than resolution. This is the fourth — two
+analyses each holding their own window fixed, and the fixed thing was the
+disagreement. The discriminator is never inside the convention both sides keep.
