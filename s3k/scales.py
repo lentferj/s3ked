@@ -141,6 +141,17 @@ class Scale:
                     f"{self.param} {value} is at or past self-oscillation "
                     f"({self.a:.2f}); the field only reaches 15")
             return -20.0 * math.log10(1.0 - value / self.a)
+        if self.kind == "amplitude":
+            # A GAIN proportional to the value, reported in dB. `linear` cannot
+            # express this: it means linear in the PHYSICAL unit, which for a
+            # level is dB, and a gain of a*v is not. §191 measured STEREO this
+            # way on hardware in 2026-09 and the law had nowhere to live for
+            # eighteen days -- in the prose, absent from the table that runs.
+            if value <= 0:
+                raise ValueError(
+                    f"{self.param} {value} is zero gain, which is -inf dB; "
+                    f"the field's own minimum is the edge of this scale")
+            return 20.0 * math.log10(self.a * value)
         if self.kind == "pole":
             # A quantity that runs away as the value approaches ``b``, which
             # lies past the field's own maximum. Zero at value 0 by
@@ -174,6 +185,8 @@ class Scale:
             if physical < 0:
                 raise ValueError(f"{self.param} cannot cut, only boost")
             return self.a * (1.0 - 10.0 ** (-physical / 20.0))
+        if self.kind == "amplitude":
+            return (10.0 ** (physical / 20.0)) / self.a
         if self.kind == "pole":
             if physical < 0:
                 raise ValueError(f"{self.param} cannot be negative")
@@ -291,6 +304,34 @@ SCALES: Dict[Tuple[str, str], Scale] = {
         note="same exact 100/256 scale as KGTUNO, spot-checked at two values",
         bounds="range widened and the scale confirmed by KGTUNO's pitch\nmeasurement over +/-20 semitones (§56); this field shares the\nencoding and the 1/256-semitone unit. Originally: spot-checked rather than swept; KGTUNO carries the evidence.",
     ),
+    ("program", "STEREO"): Scale(
+        "program", "STEREO", "dB", "amplitude", 1.0 / 99.0, 0.0, (10, 99),
+        0.9999,
+        bounds="fitted 10..99 and that IS the field's useful range. §191 swept\n"
+               "60..99 first and then extended down to 10 because 1.76% of\n"
+               "library programs sit below 60 -- 90 of 5,124 on a sibling's\n"
+               "corpus -- where the 60..99 fit would have been extrapolated\n"
+               "15.6 dB past anything measured. Residual is 0.244 dB at the\n"
+               "bottom and under 0.09 dB above 30.",
+        note="A PLAIN AMPLITUDE SCALER: gain proportional to the value, so\n"
+             "  gain = x/99  and  dB = 20*log10(x/99).\n"
+             "NOT dB-linear, and the difference is not small. The proposal\n"
+             "§191 tested was that STEREO reuses PRLOUD's law,\n"
+             "`dB = 0.642719x - 87.63`; that is wrong by **20.6 dB at x=60**.\n"
+             "Worse, the proposal inherited a PRLOUD slope §37 had already\n"
+             "refuted -- the current one is 0.61872 -- so it was an\n"
+             "extrapolation from a superseded constant onto a different field.\n"
+             "x/99 VERSUS x/100 IS NOT SEPARABLE from this data and §191 says\n"
+             "so: both are ratios to the same reference and the normalisation\n"
+             "cancels. Only the PROPORTIONALITY is established; the\n"
+             "denominator here is a convention, not a measurement.\n"
+             "Entered 2026-09-27. It was measured on hardware 2026-09-08 and\n"
+             "sat outside this table for eighteen days because no `kind` could\n"
+             "express a gain proportional to the value -- `linear` means linear\n"
+             "in the physical unit, which for a level is dB. The `amplitude`\n"
+             "kind was added with it. A measured law with nowhere to live is\n"
+             "the §264 disease in a new form: correct in the prose, absent\n"
+             "from the code."),
     ("program", "PRLOUD"): Scale(
         "program", "PRLOUD", "dB", "linear", 0.61872, -0.61872 * 99, (0, 99),
         0.99965,

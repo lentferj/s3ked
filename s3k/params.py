@@ -2319,8 +2319,24 @@ _PARAMS: List[Parameter] = [
         1,
         "keygroup.mods",
         -50,
-        50,
+        99,
         desc="Amount of control of loudness by assignable keygroup source",
+        notes="MAXIMUM CORRECTED -50..50 -> -50..99 on 2026-09-27, on hardware "
+              "evidence. The transcribed range refused a value the machine "
+              "accepts and acts on: mpc2emu's LFO2CAL disc carries MODVAMP3=99 "
+              "on program 103 and the sampler produces 13.045 dB of tremolo "
+              "there, on the same product-2000 contour as 40 and 50 do "
+              "(spread 1.3%% across four splits, §272). A range that blocks a "
+              "demonstrated value is not a conservative range, it is a wrong "
+              "one -- set_parameter would have refused to write what the disc "
+              "already holds. "
+              "THE NEGATIVE HALF IS UNTESTED and is left at -50 deliberately: "
+              "only +99 is demonstrated, nothing here has driven this field "
+              "below zero, and widening both ends on the evidence for one "
+              "would be the inference this project keeps being caught making. "
+              "MODVAMP1/MODVAMP2 are NOT changed -- they are program-scope "
+              "slots 1 and 2, no value above 50 has been seen on either, and "
+              "assuming they share slot 3's range is untested.",
     ),
     _p(
         "keygroup",

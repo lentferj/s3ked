@@ -462,6 +462,7 @@ silently wrong one.
 - [§269](#269--the-modvflt23-disagreement-was-entirely-method-settled-offline-2026-09-26) — The `MODVFLT2_3` "disagreement" was entirely method, settled offline (2026-09-26)
 - [§270](#270--lfo1--filter-1-is-a-product-law-40-cents-per-depth--amount-unit-2026-09-26) — LFO1 → filter 1 is a product law, ~4.0 cents per (depth × amount) unit (2026-09-26)
 - [§271](#271--jackd--pipewire-270-reproduces-and-a-silent-input-substitution-nearly-didnt-show-2026-09-26) — jackd → PipeWire: §270 reproduces, and a silent input substitution nearly didn't show (2026-09-26)
+- [§272](#272--lfo2--loudness-is-a-product-and-a-sine-cannot-measure-a-filter-2026-09-27) — LFO2 → loudness is a product; and a sine cannot measure a filter (2026-09-27)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -28442,3 +28443,83 @@ the transport and has to be re-measured after one.
 amounts 35 and 50 as exceeding the 2589-cent limit on its own. §270 excluded
 exactly those two by hand, after the fact, because the first version of that
 guard computed only the room below the centre.
+
+## §272 — LFO2 → loudness is a product; and a sine cannot measure a filter (2026-09-27)
+
+Measured on mpc2emu's `LFO2CAL` disc, 18 pre-built programs, **zero parameter
+writes** — every condition is a whole program, so this selects and captures and
+cannot leave the machine altered however it dies. After a day in which two
+probes had to be SIGKILLed with fields written, that is the design worth
+copying.
+
+```
+  peak-to-peak dB  =  ~0.00724 * PANDEP * MODVAMP3      products 500..1000
+```
+
+The route is loudness **slot 3** — `MODSAMP3` = 8 (LFO2) with the amount in
+**keygroup `MODVAMP3`** (155), not slot 1. Reading `MODVAMP1` showed zeros on
+all eighteen programs, which is what sent this looking.
+
+### Equal-product equivalence, §173's criterion
+
+```
+  PANDEP x MODVAMP3    swing
+     99 x 20 = 1980   13.136 dB
+     50 x 40 = 2000   13.212 dB
+     40 x 50 = 2000   13.138 dB
+     20 x 99 = 1980   13.045 dB       spread 0.167 dB = 1.3% of the mean
+```
+
+A 5× range of each variable, agreeing to 1.3%. The coefficient sweep at
+`PANDEP` 50 gives **0.00724/unit at products 500 and 1000 — identical to three
+figures** — then 0.00661 at 2000 and 0.00582 at 3000, so the fit is quoted over
+500..1000 and the compression above is left unattributed rather than modelled.
+
+**PANDEP gates loudness as well as pan.** `PANDEP` 0 with amount 40 reads
+0.003 dB, the same as nothing-routed, with the strongest component off-rate at
+~40 Hz. So §265's gate result extends to this destination: one field gates two.
+
+### The confound, measured rather than assumed
+
+The disc carries the pair that makes it visible, and it is the most useful thing
+on the disc:
+
+```
+  pan matrix ZEROED : amp 13.211 dB   pan swing  0.001 dB
+  pan matrix LIVE   : amp 12.748 dB   pan swing 24.919 dB
+```
+
+A 24.9 dB pan swing leaks into the loudness reading as a **3.5% shift**. So the
+mono sum does reject it, and **not completely** — a number neither project had,
+and one that could only come from a program built to be wrong on purpose.
+
+### The filter half of this disc cannot be measured, and the reason is in our own docs
+
+Programs 112–117 route LFO2 to the filter, and the source is `L2TONE`, a
+**220 Hz sine**. `measure.corner_frequency`'s own docstring ranks source
+material *"noise, saw, square, sine (useless: one frequency says nothing about
+where a filter turns over)"*. A band-ratio statistic on a sine is measuring one
+bin against silence.
+
+The columns bear that out: the loudness programs show a large "filter" reading
+(8.2–8.5) purely because a deep tremolo moves both bands, and the filter
+programs show a 9 dB *amplitude* swing, which is real — a moving corner changes
+a 220 Hz sine's level — but is a level measurement, not cents. **§270 used white
+noise for exactly this reason.** The filter half needs a noise source; the six
+programs are otherwise correctly built.
+
+**One xrun** was reported during program 6 and the probe said so at the point of
+capture. That row (17.446 dB) is the one to re-take first if the compression
+above product 1000 ever matters.
+
+### The precondition none of the probes checked
+
+After a `CLR` and load the machine sat on **page 10**, and produced **nothing**
+for any note on **any of 16 channels** — while SysEx answered normally, the
+sample was resident with its audio (`SLNGTH` 352800, 483872 words), and the
+capture path was verified carrying a real noise floor. `select_mode(0)` and the
+same note reads **−11.7 dBFS**.
+
+So `mode` joins the level check and the program selection as a precondition, and
+like both of those it was found by a run returning nothing rather than by being
+designed in. The probe now asserts SINGLE before it captures.
