@@ -456,7 +456,7 @@ silently wrong one.
 - [§263](#263--two-sessions-read-the-same-bytes-through-a-model-of-their-neighbour-2026-09-24) — Two sessions read the same bytes through a model of their neighbour (2026-09-24)
 - [§264](#264--a-retraction-marker-for-one-claim-silences-the-numeric-guard-for-every-other-2026-09-25) — A retraction marker for one claim silences the numeric guard for every other (2026-09-25)
 - [§265](#265--pandep-gates-the-pan-matrix-and-the-rigs-ceiling-is-181s-headline-2026-09-25) — `PANDEP` gates the pan matrix, and the rig's ceiling is §181's headline (2026-09-25)
-- [§266](#266--three-rules-about-checking-each-paid-for-on-2026-09-25-2026-09-25) — Three rules about checking, each paid for on 2026-09-25 (2026-09-25)
+- [§266](#266--four-rules-about-checking-each-paid-for-in-one-week-2026-09-25) — Four rules about checking, each paid for in one week (2026-09-25)
 - [§267](#267--prgnum-is-1-based-on-the-panel-and-the-table-has-said-0-since-august-2026-09-25) — `PRGNUM` is 1-based on the panel, and the table has said 0 since August (2026-09-25)
 - [§268](#268--lfofilter-the-obvious-instrument-reports-2883-cents-on-a-static-filter-2026-09-26) — LFO→filter: the obvious instrument reports 2883 cents on a static filter (2026-09-26)
 - [§269](#269--the-modvflt23-disagreement-was-entirely-method-settled-offline-2026-09-26) — The `MODVFLT2_3` "disagreement" was entirely method, settled offline (2026-09-26)
@@ -27641,9 +27641,9 @@ Do not apply `PANDEP` as a multiplier anywhere on the strength of §52's filter
 result. mpc2emu has explicitly declined to, for the right reason: it would
 silently rewrite the pan behaviour of 30% of a 4,433-program corpus on a guess.
 
-## §266 — Three rules about checking, each paid for on 2026-09-25 (2026-09-25)
+## §266 — Four rules about checking, each paid for in one week (2026-09-25)
 
-Not findings about the machine. Three transferable rules, each one bought by a
+Not findings about the machine. Four transferable rules, each one bought by a
 specific mistake made this day, recorded together because they share a shape:
 **in all three the artefact under test was fine and the apparatus around it was
 not.**
@@ -27689,6 +27689,43 @@ applied to prose instead of to register displacements.
 
 Either check it or label it unverified. A relay that does neither launders a
 claim into a citation.
+
+### 4. Cite the evidence, not the section — because a citation cannot see a retraction
+
+Added 2026-09-26. A sibling has a guard, `test_no_code_cites_a_superseded_section_unreviewed`, whose whole job is that
+a struck section re-opens whatever cites it. It caught them once the same day.
+**It reads only their own notes**, so a *sibling's* superseded section is
+invisible to it — which is exactly the trap they had just fallen into, citing
+this project's §226 after §227 superseded it.
+
+The same gap exists here and is worse in one respect: this project cites peer
+sections inside **shipped code**. `scales.py`'s `PANRAT` entry cites
+mpc2emu's §AKAILFO2RATE. Nothing here can learn that they retracted it.
+
+**But that citation is safe, and the reason generalises.** It does not say
+"see §AKAILFO2RATE". It records what the evidence *was*: `0.11913` from a nine-point
+sweep, and the falsification as an **absence** — at `PANRAT` 37 the predicted
+8.77 Hz sits 40.7 dB below the 4.67 Hz peak, so there is no energy where the
+old law puts the LFO. A reader can weigh that without reading their section at
+all. **A section number is a dependency; the described evidence is a copy.**
+
+And it is one of **four independent routes** to the same constant — this
+project's §257, their 0.11913, LFO1's own 0.11867, and a structural argument
+from E-mu's importer using one table for both rate bytes. No single retraction
+is load-bearing.
+
+So the mechanism is not to parse a peer's supersede markers, which would make
+this project depend on their prose conventions. It is: **quote enough of the
+evidence that the citation survives its source being withdrawn, and do not let
+any one peer's number be the only route to a shipped constant.** Their proposed
+convention — cite the superseding section or say you checked — is the cheap
+half of the same thing.
+
+Audited on 2026-09-26: seven peer section IDs are cited here and **none is
+load-bearing.** §AKAIF2DEPTH appears once, in a passage describing their
+withdrawal of it, resolved by our own measurement in §269. §WRONGLAYER and
+§FIL2FRGAP are cited as *shapes* rather than numbers. §MODWHEEL, §KRZCOARSE and
+§E4BRATE appear only in a header listing which projects name their sections.
 
 ### 3. A true structural finding whose obvious application is a regression
 
