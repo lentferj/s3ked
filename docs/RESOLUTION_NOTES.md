@@ -2254,6 +2254,10 @@ confirming ~63 dB each time.
 
 ```
 dB = 0.642719 * PRLOUD - 87.63          r2 0.9933, 20 points, no NaN
+     ^^^^^^^^ SUPERSEDED by §37: the slope is 0.61872 at r2 0.99965.
+              Struck here, at the number, and not only in the heading --
+              a marker two hundred lines up does not travel with a line
+              someone copies out of a code block (§264, §268's §39 case).
 ```
 
 0.64 dB per unit, ~63 dB of range across 0..99. Declared linear as a
@@ -2430,6 +2434,7 @@ the point of use, and `blocked_on` is cleared.
 filter    Hz         = 6.998      * exp(0.07384 * FILFRQ)     r2 0.9996  (50..90)
 tuning    cents      = 0.391667   * KGTUNO - 0.31             r2 0.9998
 loudness  dB         = 0.642719   * PRLOUD - 87.63            r2 0.9933
+                       ^^^^^^^^ SUPERSEDED by §37: 0.61872, r2 0.99965
 lfo-rate  Hz         = 0.11867    * LFORAT - 0.04             r2 0.9995
 attack    s          = 0.00023924 * exp(0.10463 * ATTAK1)     r2 0.9961
 decay     s          = 0.00071981 * exp(0.08793 * DECAY1)     r2 0.9966
@@ -2562,7 +2567,11 @@ over time can. Routed through the assignable matrix (`MODSFILT1 = 10`,
 
 ```
 ATTAK2:  s = 0.00073832 * exp(0.08963 * ATTAK2)    r2 0.99779, x2.450 per 10
+  ^^ SUPERSEDED: scales.py holds 0.001363*exp(0.09703)
 ATTAK1:  s = 0.00023924 * exp(0.10463 * ATTAK1)    r2 0.99610, x2.847 per 10
+  ^^ SUPERSEDED: scales.py holds 0.000201173*exp(0.10844)
+     (struck at each number, not only in the heading: a line copied out of a
+     code block does not carry the banner -- §264)
 ```
 
 **They are not the same law.** ENV2 is 1.7x slower than ENV1 at value 40 and
@@ -2687,8 +2696,12 @@ data, which is the only kind worth writing down at length.
 
 ```
 ATTAK2   tau = 0.000403868 * exp(0.09785 * v) s    50..85   r2 0.9999
+  ^^ SUPERSEDED by §58: scales.py holds 0.001363*exp(0.09703)
 DECAY2   tau = 0.00090950  * exp(0.09151 * v) s    45..85   r2 0.9903
+  ^^ SUPERSEDED by §58: scales.py holds 0.002464*exp(0.09844)
 RELSE2   tau = 0.00029835  * exp(0.09801 * v) s    55..76   r2 0.9954
+  ^^ SUPERSEDED by §58: scales.py holds 0.001344*exp(0.09692)
+     (the RATE findings of this section stand)
 SUSTN2   FILFRQ shift = 0.024645 * SUSTN2 * MODVFILT1       0..70   r2 0.991
 ```
 
@@ -2908,6 +2921,10 @@ These are the laws.
 ```
 DECAY1   rate = 23525.6 * exp(-0.09776 v) dB/s              45..85   r2 0.99998
 RELSE1   rate = 22055.3 * exp(-0.09683 v) dB/s              55..70   r2 0.99956
+  ^^ CONSTANT SUPERSEDED by §34, which refit it to 23042.3*exp(-0.09754) --
+     4% in the coefficient. This section's heading correctly says the
+     rate-not-duration FINDING stands, and is silent about the number moving,
+     which is why the strike belongs at the number too (§264).
 DECAY2   rate = 25200   * exp(-0.09796 v) FILFRQ-units/s    50..80   r2 0.99995
 RELSE2   rate = 61190   * exp(-0.10123 v) FILFRQ-units/s    58..76   r2 0.99977
 ```
@@ -2973,8 +2990,13 @@ kind of thing as each other**.
 
 ```
 ATTAK1   rise time = 0.000150326 * exp(0.11175 v) s   55..90   r2 0.99991
+  ^^ SUPERSEDED by §141: scales.py holds 0.000201173*exp(0.10844)
 ATTAK2   rise time = 0.00115864  * exp(0.09850 v) s   55..85   r2 0.99967
+  ^^ SUPERSEDED by §58: scales.py holds 0.001363*exp(0.09703)
                                                      (at MODVFILT1 18 only)
+     Both SHAPE findings stand and §141 reconfirms the linear ramp. A converter
+     quoted §31's ATTAK1 law while §141 held the current one, and it cost every
+     attack in its output -- which is why the strike goes at the number.
 ```
 
 ### Finding A — the amplitude attack is a linear ramp in amplitude
@@ -27354,9 +27376,50 @@ work": it did not fire. Only two sections are added, and both are the identical
 shape — `dB = 0.642719 * PRLOUD - 87.63` sitting as a bare measurement line
 (§22:2249, §24:2425) with no strike nearby, superseded by §37's `0.61872`.
 
-**Not applied here** because it changes what the suite enforces and requires
-annotating two historical sections, which is a call about this project's
-documentation convention rather than a defect fix. TODO carries it.
+### APPLIED 2026-09-26 — and it cost more than this section estimated
+
+The estimate above was wrong twice, both times because the measurement behind
+it was narrower than the thing being changed.
+
+**"Annotating two historical sections" was five.** The sweep that produced
+§22/§24 used only the **linear** pattern, while the guard checks linear *and*
+exponential laws. Removing the heading exemption also fired §26, §28, §30 and
+§31 on stale `ATTAK`/`DECAY`/`RELSE` constants. All four carry *properly scoped*
+heading markers — §28's reads *"SUPERSEDED by §58 (three of four laws; the RATE
+findings stand)"*, which is better practice than §52's bare one — and every one
+still needed its numbers struck inline, because a scoped banner does not travel
+with a copied line either.
+
+**Two §30 lines were false positives and are in the reviewed baseline**: it
+states `DECAY2` and `RELSE2` as *rates* in FILFRQ-units/second (25200, 61190)
+where `scales.py` holds their *time constants* in seconds (0.002464, 0.001344).
+Same measurement, two expressions, and the guard has no units to compare.
+§30's `RELSE1` line **is** stale — §34 refit it to `23042.3*exp(-0.09754)`,
+4% in the coefficient — and §30's heading correctly says the
+rate-not-duration *finding* stands while being silent that the number moved.
+
+**And the baseline mechanism only existed for one of the two law forms.**
+`reviewed` was consulted in the linear branch and never in the exponential one:
+it arrived with §260's linear extension and was never applied to the older
+branch, so a section stating a different quantity in exponential form had no way
+to say so. §264's shape inside §264's own guard.
+
+### The proposed rule was not sufficient either, and mutation-testing found it
+
+Restoring §52's `0.23708` into its live line **passed** the first patched
+version. §52 now carries an inline correction quoting its old slope, so the ±3
+window found `REFUTED` and exempted the line — **this project's own correction
+shielding a re-introduced error.** A struck number and a live one are identical
+to a proximity test.
+
+So the rule is stronger than proposed: **the strike must name the value that
+replaced it.** A marker with no replacement is not a strike. That also forces
+strikes to sit beside their claims — two of the six written here put the
+replacement four lines away, outside the window, and had to be tightened to one
+line per claim.
+
+Three mutations now fail as they must: §52's slope restored, a strike naming no
+replacement, and a strike deleted outright.
 
 ### The guard caught this section, and how it had to be silenced is more evidence
 

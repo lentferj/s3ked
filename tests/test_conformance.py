@@ -404,6 +404,32 @@ def test_the_single_factor_lookahead_actually_rejects():
         "this test no longer demonstrates the difference it exists to pin")
 
 
+
+def _names_current(window: str, line: str, current, scales) -> bool:
+    """Does this window quote the value that REPLACED the one on `line`?
+
+    A strike is credible only if it says what the number became. Anything in
+    the window that is a currently-shipped coefficient for a parameter named on
+    the line counts; a marker with no replacement value does not.
+    """
+    import re as _re
+    names = set(_re.findall(r"\b([A-Z][A-Z0-9_]{3,9})\b", line))
+    wanted = []
+    for nm in names:
+        if nm in current:
+            wanted.extend(current[nm])
+        for region in ("program", "keygroup"):
+            sc = scales.SCALES.get((region, nm))
+            if sc is not None:
+                wanted.extend([sc.a, sc.b])
+    for v in wanted:
+        if v in (0.0, None):
+            continue
+        for text in ("%g" % v, "%.6g" % v, "%r" % v):
+            if text in window:
+                return True
+    return False
+
 def test_a_section_whose_law_was_refitted_says_so_in_its_heading():
     """Refinement is invisible where retraction is visible.
 
@@ -478,25 +504,78 @@ def test_a_section_whose_law_was_refitted_says_so_in_its_heading():
         # lines are therefore evidence for that change, not against it.
         ("§264", "PANRAT"),
         ("§264", "PRLOUD"),
+        # §30 states DECAY2 and RELSE2 as RATES in FILFRQ-units per second
+        # (25200 and 61190), while scales.py holds their TIME CONSTANTS in
+        # seconds (0.002464 and 0.001344). Those are different quantities, not
+        # a stale law -- a rate of 25200 units/s and a tau of 2.5 ms are the
+        # same measurement expressed two ways, and the guard has no units to
+        # compare. §30's RELSE1 line IS stale and is struck inline; these two
+        # are not. Read before adding, as this baseline requires.
+        ("§30", "DECAY2"),
+        ("§30", "RELSE2"),
     }
     stale = []
     for i, (start, head) in enumerate(heads):
         end = heads[i + 1][0] if i + 1 < len(heads) else len(notes)
+        # NO HEADING-LEVEL EXEMPTION. It used to `continue` here on any of
+        # SUPERSEDED/RETRACTED/RETRACTION/WITHDRAWN/REFUTED in the heading,
+        # and that is how §52 shipped `PANRAT = 0.23708` for two days after
+        # §260 replaced it with 0.11880: §52's heading says "PARTLY RETRACTED
+        # by §181", which is about the PAN ROUTE, so a marker for claim A
+        # exempted every other claim in the section (§264). Worse, marking a
+        # heading was this guard's own prescribed remedy, so the failure path
+        # was closed -- a section caught stating a superseded law got a marker
+        # and the marker then exempted it forever.
+        #
+        # The property is STRIKE-AT-THE-NUMBER: a stale law must be struck
+        # where it appears, within a few lines, because a banner at the top of
+        # a section does not travel with a line someone copies out of its
+        # middle. §268 records the same shape in prose -- §39's retraction
+        # banner sits thirty-five lines above the sentence that reached a third
+        # project.
+        #
         # CASE-SENSITIVE, and the vocabulary this project actually uses.
         # These notes write a status marker in capitals and the same word in
         # lower case as prose -- "§X — ... and a withdrawn 19 %" is a LIVE
         # section describing a struck sub-claim. A case-insensitive match
         # silences the guard on live sections, which is worse than no guard.
         # (mpc2emu hit this building the same check on 2026-09-23.)
-        if any(k in head for k in ("SUPERSEDED", "RETRACTED", "RETRACTION",
-                                   "WITHDRAWN", "REFUTED")):
-            continue
-        for line in notes[start:end].splitlines():
+        MARK = ("SUPERSEDED", "RETRACTED", "RETRACTION", "WITHDRAWN", "REFUTED")
+        body = notes[start:end].splitlines()
+        for n, line in enumerate(body):
             if quoting.search(line):
+                continue
+            # struck WHERE IT APPEARS: the line, or three either side.
+            #
+            # AND THE STRIKE MUST NAME THE CURRENT VALUE. A bare marker in the
+            # window is not enough, because a struck number and a live one look
+            # identical to a proximity test: §52 now carries an inline
+            # correction quoting its old slope, and with a marker-only window
+            # test, re-introducing 0.23708 into the LIVE line was invisible --
+            # this project's own correction shielded a restored error. Mutation
+            # 1 passed when it had to fail, which is how that was found.
+            #
+            # Requiring the replacement value in the window separates them: a
+            # real strike says what superseded it, an adjacent one does not.
+            window = " ".join(body[max(0, n - 3):n + 4])
+            struck = ((any(k in window for k in MARK) or quoting.search(window))
+                      and _names_current(window, line, current, scales))
+            if struck:
                 continue
             for m in law.finditer(line):
                 param, a, b = m.group(1), float(m.group(2)), float(m.group(3))
                 if param not in current:
+                    continue
+                # The `reviewed` baseline used to be consulted ONLY in the
+                # linear branch below -- it arrived with §260's linear
+                # extension and was never applied to this older exponential
+                # one. So a section stating a different QUANTITY in
+                # exponential form had no way to say so, and the two §30
+                # entries below could not be excluded until 2026-09-26. The
+                # escape hatch existed for one of the two law forms, which is
+                # §264's shape inside §264's own guard.
+                sec_x = head.split(" — ")[0].replace("## ", "")
+                if (sec_x, param) in reviewed:
                     continue
                 ta, tb = current[param]
                 moved = (abs(a - ta) / max(abs(ta), 1e-12) > 0.02
