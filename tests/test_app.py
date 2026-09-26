@@ -4913,3 +4913,115 @@ async def test_a_part_index_past_the_end_reports_instead_of_showing_stale_data()
             await pilot.pause()
         title = str(app.query_one("#param-title", Static).render())
         assert "multi part 999" not in title
+
+
+async def test_delete_sample_resolves_the_row_by_NAME_not_by_position():
+    """The samples pane is program-centric; `delete_sample` takes a RESIDENT index.
+
+    Until 2026-09-26 `_confirm_destructive` passed the pane's `cursor_row`
+    straight to `delete_sample`. Those two numbers are equal only in the "all"
+    scope. The DEFAULT scope is "program", where the rows are the program's
+    referenced names with the MISSING ones first -- so the row number and the
+    resident number are unrelated, and deleting "the highlighted sample"
+    deleted a different one.
+
+    On the demo bridge, program 2 (KIT DRY) diverges on every row:
+
+        row 0 'PAD LOOP L'   resident[0] 'BASS C1'
+        row 2 'KICK 1'       resident[2] 'PAD LOOP L'
+
+    So the old code, with the cursor on row 0, sent DELS for resident sample 0
+    -- 'BASS C1', which that program does not even use. `DELS` has no
+    device-side confirmation and there is no undo.
+
+    The confirmation dialog did not catch it. It printed `_samples[target]`, so
+    it named the real victim truthfully -- just not the row the operator had
+    selected. And in "all" scope the dialog always agrees with the highlight,
+    so the habit built there is precisely the one that fails here.
+
+    Nothing in the suite could catch it either: both index spaces are
+    individually valid, so no value is ever malformed and no assertion about
+    encoding fails. It took a test that holds the two spaces apart on purpose.
+    """
+    from textual.widgets import DataTable
+
+    app = await _app(allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        programs = app.query_one("#programs", DataTable)
+        programs.focus()
+        for _ in range(2):
+            await pilot.press("down")
+        assert await _settled(pilot, app)
+
+        assert app._samples_scope == "program", "the default scope changed"
+        samples = app.query_one("#samples", DataTable)
+        assert samples.row_count >= 3, "need a few rows to tell the spaces apart"
+
+        row = 0
+        shown = str(samples.get_row_at(row)[0]).strip()
+        resident_at_row = app._samples[row].strip()
+        assert shown != resident_at_row, (
+            "this fixture no longer diverges, so it cannot catch the bug: "
+            f"row {row} shows {shown!r} and resident[{row}] is "
+            f"{resident_at_row!r}")
+        expected = [i for i, n in enumerate(app._samples)
+                    if n.strip() == shown]
+        assert len(expected) == 1, "fixture needs one unambiguous match"
+
+        fired = {}
+        app._destructive_worker = lambda a, p, t: fired.update(
+            action=a, program=p, target=t)
+        app.push_screen = lambda screen, callback=None: (
+            callback(True) if callback else None)
+
+        samples.focus()
+        app._confirm_destructive("delete_sample", 2)
+
+        assert fired, "the confirm path never reached the worker"
+        assert fired["target"] == expected[0], (
+            f"delete_sample was aimed at resident sample {fired['target']} "
+            f"while the operator had {shown!r} (resident {expected[0]}) "
+            "highlighted -- the row was used as an index again")
+        assert fired["target"] != row, (
+            "the target equals the ROW number, which is the original bug")
+
+
+async def test_delete_sample_refuses_a_name_it_cannot_resolve_uniquely():
+    """§80: the machine enforces no name uniqueness, so a name can be ambiguous.
+
+    The read-only path takes the first match and says so, which is right for a
+    read. For a delete it is not: there is no undo and the device does not ask
+    again, so an ambiguous name must refuse rather than pick. A MISSING row --
+    a name the program references and the machine does not hold -- has no
+    resident index at all and must refuse for the same reason.
+    """
+    from textual.widgets import DataTable
+
+    app = await _app(allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        assert await _settled(pilot, app)
+        samples = app.query_one("#samples", DataTable)
+
+        fired = {}
+        app._destructive_worker = lambda a, p, t: fired.update(target=t)
+        app.push_screen = lambda screen, callback=None: (
+            callback(True) if callback else None)
+
+        # A name that is resident TWICE.
+        app._samples = ["DUPE", "DUPE", "OTHER"]
+        samples.clear()
+        samples.add_row("DUPE", "ok")
+        samples.focus()
+        app._confirm_destructive("delete_sample", 0)
+        assert not fired, "an ambiguous name must not reach the worker"
+        assert "refusing to guess" in app.last_status
+
+        # A name the machine does not hold at all.
+        app._samples = ["BASS C1", "BASS C2"]
+        samples.clear()
+        samples.add_row("PADMISSING", "MISSING")
+        samples.focus()
+        app._confirm_destructive("delete_sample", 0)
+        assert not fired, "a MISSING row must not reach the worker"
+        assert "not resident" in app.last_status

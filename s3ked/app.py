@@ -3343,11 +3343,52 @@ class S3kedApp(App):
                 return
             what = f"keygroup {target} of program {index}"
         elif action == "delete_sample":
-            target = self.query_one("#samples", DataTable).cursor_row
+            # RESOLVE BY NAME, NOT BY ROW. `cursor_row` is a position in this
+            # pane; `delete_sample` takes a RESIDENT sample number. They are
+            # equal only in the "all" scope. The DEFAULT scope is "program",
+            # where the rows are the program's referenced names with the
+            # MISSING ones first -- so row 0 is routinely a sample the machine
+            # does not even hold, and deleting "row 0" deleted resident sample
+            # 0, an arbitrary sample the user never looked at.
+            #
+            # The confirmation did not save it: it printed `_samples[target]`,
+            # so it named the real victim truthfully -- just not the row the
+            # user had selected. And in "all" scope the dialog always agrees
+            # with the highlight, so the habit built there is the one that
+            # fails here.
+            #
+            # `action_usage`'s docstring has warned about this exact crossing
+            # since the pane became program-centric, and the read-only paths
+            # were fixed to resolve by name. This one was not. The suite could
+            # not catch it: both index spaces are individually valid, so
+            # nothing is ever malformed.
             if not self._samples:
                 self.notify_status("no samples")
                 return
-            what = f"sample {target} ({self._samples[target]})"
+            table = self.query_one("#samples", DataTable)
+            row = table.cursor_row
+            if row is None or row >= table.row_count:
+                self.notify_status("select a sample first")
+                return
+            name = str(table.get_row_at(row)[0]).strip()
+            matches = [i for i, n in enumerate(self._samples)
+                       if n.strip() == name]
+            if not matches:
+                self.notify_status(
+                    f"{name!r} is not resident — nothing to delete",
+                    refused=True)
+                return
+            if len(matches) > 1:
+                # §80: the machine enforces no name uniqueness. The read-only
+                # path takes the first match and says so, which is fine for a
+                # read and never for a delete -- there is no undo and the
+                # device does not ask again.
+                self.notify_status(
+                    f"{len(matches)} resident samples are named {name!r}"
+                    " — refusing to guess which to delete", refused=True)
+                return
+            target = matches[0]
+            what = f"sample {target} ({name})"
         else:
             target = index
             what = f"program {index} ({self._programs[index]}) and its keygroups"
