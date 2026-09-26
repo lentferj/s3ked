@@ -27690,6 +27690,34 @@ applied to prose instead of to register displacements.
 Either check it or label it unverified. A relay that does neither launders a
 claim into a citation.
 
+### Why these four keep failing on the day they are written
+
+Three of the rules above failed within a day of being recorded — rule 1 on
+`lfofilter.py`, the in-band guard that inherited its incident's one-sidedness,
+and the `max(d)` bound that two projects each quoted outside its own regime.
+That looked like bad luck or badly-worded rules. A sibling's reading is better
+and is kept here as theirs:
+
+> **The day you record a rule is the day you have exactly one instance of it.**
+> So the rule is shaped to that instance, and the next one arrives in the region
+> the first did not cover. Recording it early is still right; expecting the
+> first statement to be general is the error.
+
+The corollary in code is the one-sided guard: **a guard written after an
+incident inherits the incident's shape.** `min(down, up)` was the fix; *the
+incident is a bad template* is the part that transfers.
+
+And the sharpest instance is the `max(d)` pair, because of *when* it happened:
+both sessions quoted a bound outside its regime **inside the hour each had
+separately written down that a test is blind to whatever it holds constant.**
+One bound was safe in the continuous case it was reasoned in, the other safe
+from where its table happened to start — **both safe precisely where they did
+not matter**, which is why neither was checked. Knowing a mechanism by name does
+not stop you instantiating it.
+
+So: state the assumption you are making about the regime, and prefer the formula
+to any interval summarising it. Rule 4 follows.
+
 ### 4. Cite the evidence, not the section — because a citation cannot see a retraction
 
 Added 2026-09-26. A sibling has a guard, `test_no_code_cites_a_superseded_section_unreviewed`, whose whole job is that
