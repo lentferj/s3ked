@@ -461,6 +461,7 @@ silently wrong one.
 - [§268](#268--lfofilter-the-obvious-instrument-reports-2883-cents-on-a-static-filter-2026-09-26) — LFO→filter: the obvious instrument reports 2883 cents on a static filter (2026-09-26)
 - [§269](#269--the-modvflt23-disagreement-was-entirely-method-settled-offline-2026-09-26) — The `MODVFLT2_3` "disagreement" was entirely method, settled offline (2026-09-26)
 - [§270](#270--lfo1--filter-1-is-a-product-law-40-cents-per-depth--amount-unit-2026-09-26) — LFO1 → filter 1 is a product law, ~4.0 cents per (depth × amount) unit (2026-09-26)
+- [§271](#271--jackd--pipewire-270-reproduces-and-a-silent-input-substitution-nearly-didnt-show-2026-09-26) — jackd → PipeWire: §270 reproduces, and a silent input substitution nearly didn't show (2026-09-26)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -28333,3 +28334,111 @@ writer that treats `LFODEP` as static is describing only the resting state.
 
 Two lessons from one instrument, neither carried into the next one built the
 following day. §266's first rule turned on its author twice in two runs.
+
+## §271 — jackd → PipeWire: §270 reproduces, and a silent input substitution nearly didn't show (2026-09-26)
+
+This box moved from `jackd` to PipeWire 0.3.65 on 2026-09-26. The JACK API still
+works through the shim, **but `system:*` ports no longer exist** — `jack_lsp`
+lists zero of them. Every probe here hard-coded
+`system:capture_13/14`.
+
+### The failure mode was a substitution, not an error
+
+An item-3 run started eight minutes after PipeWire came up and **did not fail.**
+`client.connect("system:capture_13", …)` raised nothing. It produced real signal
+from an input nobody asked for, at **−30 dBFS against the previous day's −20**,
+and each fourteen-second capture took **sixteen minutes** instead of fifteen
+seconds.
+
+**The mechanism, measured by the transition session rather than guessed here:**
+`pipewire-jack` **aliases `system:*` onto the CURRENT DEFAULT source or sink, by
+port index in `jack_lsp` order.** So `system:capture_13` is port 12 of whatever
+node is default at that moment. Today that is the Scarlett multichannel node and
+capture_AUX12 happens to be the same physical input jackd used — but mid-
+transition the default was very likely a different node or profile, which is what
+the −30 dBFS and the slowdown record. This project's first guess was "the shim
+auto-connects to the default source", which is close and wrong in the way that
+matters: an alias explains why the name is **invisible to listing yet accepted
+everywhere else**. `jack_lsp system:capture_13` prints nothing, while
+`jack_connect` returns 0 and `get_port_by_name("system:capture_13")` hands back
+the real `AUX12` port.
+
+**So `get_port_by_name()` succeeding is no more evidence than `connect()`
+returning.** Verified here: `"system:capture_13" in get_ports()` is `False`
+while `get_port_by_name("system:capture_13")` resolves. `resolve_sources` reads
+`get_ports()` and therefore falls through to the documented AUX mapping and
+binds the **real** name — so what these probes capture does not depend on which
+node is currently default. The reproduction below is trustworthy for that reason
+rather than by luck.
+
+**Not affected here, but worth recording for the bench:** the same aliasing makes
+`system:playback_3..6` land on the *wrong physical outputs*, because the USB
+surround71 route orders them FL FR FC LFE RL RR SL SR while the alias counts
+`jack_lsp` order. s3ked is capture-only — every `playback` in this tree is a
+parameter name — so nothing here plays audio through a wrong channel. Four measured rows were withdrawn — not because they were obviously
+wrong, but because nothing recorded which input they came from. Both nulls were
+null and the peak sat exactly at the LFO rate, so the numbers looked like
+numbers.
+
+**A silent substitution is the worst failure a measurement rig can have.** An
+error stops the run; a substitution publishes.
+
+The run also had to be SIGKILLed — it was wedged in a native call where Python
+could not raise, so SIGINT did nothing for sixty seconds and its `finally` never
+ran, leaving **ten fields written on the sampler**. They were restored
+field-by-field from the snapshot the probe had *printed before writing
+anything*. That habit existed for provenance and turned out to be the recovery
+path; holding the snapshot only in memory would have lost it with the process.
+
+### The fix: resolve against the live port list, and refuse
+
+`jcap.resolve_sources` maps a requested name onto what the server actually
+publishes — `system:capture_N` → `Scarlett … Mehrkanal:capture_AUX(N-1)`, per
+the transition map — and **raises if it cannot**. Then, because `connect()` not
+raising is not evidence a connection exists, the post-connect wiring is read
+back and compared; a redirected port is refused.
+
+**The first version crashed against the real server and the test could not see
+it.** `client.get_ports()` returns `Port` objects, unhashable, so
+`set(client.get_ports())` dies with *"unhashable type: 'Port'"* — while the
+fake client returned plain strings. A fake that is wrong about the API it stands
+in for tests the fake. `_FakePort` is now unhashable and name-comparable like
+the real thing, and that mutation fails **11 of 13** tests instead of none.
+
+### §270 reproduced, and the self-calibration earned its keep
+
+Same disc, same program, same settings, across the transition:
+
+```
+  amount   jackd med   pipe med    delta | note
+       0        44 c       38 c    -13.6% | floor; peak OFF the LFO rate in both
+       2       166 c      142 c    -14.5% |
+       5       398 c      382 c     -4.0% |
+      10       798 c      809 c     +1.4% |
+      20      1551 c     1533 c     -1.2% |
+      35      2660 c     2673 c     +0.5% | now auto-excluded, >2589 c
+      50      3697 c     3695 c     -0.1% | now auto-excluded, >2589 c
+```
+
+Stage 1's corner frequencies are **identical to one decimal** — 275.4, 580.1,
+1183.6, 2502.0 Hz — and so are the levels. The *sampler* measurement did not
+move.
+
+**But the calibration slope moved 6.5%**, 0.00975 → 0.01033 dB/cent: the
+transport really did change the absolute spectral balance, by about 0.6 dB in
+the band ratio. The cents barely moved anyway, because stage 1 re-derives the
+slope from the machine's own corners **in the same run**. That is what
+self-calibration is for, and this is the first evidence it works against a
+change nobody anticipated — a stronger result than bit-identical output would
+have been, which would only have shown that nothing happened.
+
+**The disagreement grows as the signal shrinks**: 0.1% at amount 50, 1.4% at 10,
+14.5% at 2. And the floor is **noisier** — spread 37..46 cents under jackd
+against 17..70 now, 24% of median against 139%. Still under the ~150-cent
+usability threshold, so no conclusion changes, but the floor is a property of
+the transport and has to be re-measured after one.
+
+**And the two-sided in-band guard paid for itself immediately**: it flagged
+amounts 35 and 50 as exceeding the 2589-cent limit on its own. §270 excluded
+exactly those two by hand, after the fact, because the first version of that
+guard computed only the room below the centre.

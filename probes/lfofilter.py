@@ -64,6 +64,10 @@ from jcap import Capture
 from s3kconnect import connect
 
 SOURCES = ("system:capture_13", "system:capture_14")
+# jcap.resolve_sources maps these onto whatever the server actually
+# publishes and REFUSES if it cannot -- this box moved from jackd to
+# PipeWire on 2026-09-26 and `system:*` ceased to exist, while
+# connect() went on succeeding against a substituted input.
 LFO1, LFO2 = 7, 8
 
 # The state the corner measurement needs, from calibrate.py's own

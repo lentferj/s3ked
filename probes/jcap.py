@@ -69,7 +69,8 @@ So the teardown in this file is the only defence there is: if it does not run,
 nothing later can clean up after it. That is the whole reason it catches
 ``BaseException``.
 """
-import queue, threading, warnings
+import queue
+import re, threading, warnings
 import numpy as np
 import jack
 
@@ -81,6 +82,61 @@ MAX_CAPTURE_SECONDS = 300.0
 
 class CaptureError(RuntimeError):
     """Raised when a capture cannot be trusted, rather than returned quietly."""
+
+
+#: Where the Scarlett's inputs live under PipeWire. Before 2026-09-26 this box
+#: ran jackd and the ports were `system:capture_N`; PipeWire's JACK shim does
+#: not publish those names at all -- `jack_lsp` lists zero of them.
+_SCARLETT = "Scarlett 18i8 3rd Gen Mehrkanal:capture_AUX%d"
+
+
+
+def _port_name(x):
+    """A port's name, whether the API handed back a Port or a string."""
+    return getattr(x, "name", x) if not isinstance(x, str) else x
+
+
+def resolve_sources(client, sources):
+    """Map requested port names onto ports that actually exist, or REFUSE.
+
+    WHY THIS EXISTS, and it is not tidiness. On 2026-09-26 a fourteen-second
+    capture per point took sixteen MINUTES per point and returned a signal from
+    an input nobody had asked for: the run requested `system:capture_13/14`,
+    those names no longer exist, and `client.connect()` did not raise -- the
+    shim appears to auto-connect a new client's inputs to the default source.
+    So the data was real, from an unknown pair, at a level 10 dB from the
+    previous day's. Four rows had to be withdrawn.
+
+    A silent substitution is the worst possible failure for a measurement rig,
+    because the numbers look like numbers. This resolves by the live port list
+    and raises if it cannot, so a renamed port stops the run instead of
+    redirecting it.
+    """
+    # get_ports() returns Port OBJECTS, not strings, and they are unhashable.
+    # The first version of this used them as a set directly and died with
+    # "unhashable type: 'Port'" -- and the test could not catch it, because the
+    # fake client modelled get_ports() as returning strings. Checking a real
+    # component against a MODEL of its neighbour, in the helper written to stop
+    # a substituted input.
+    live = {_port_name(x) for x in client.get_ports()}
+    out = []
+    for name in sources:
+        if name in live:
+            out.append(name)
+            continue
+        # `system:capture_N` -> the Nth Scarlett AUX input (AUX is 0-based).
+        m = re.fullmatch(r"system:capture_(\d+)", name)
+        if m:
+            cand = _SCARLETT % (int(m.group(1)) - 1)
+            if cand in live:
+                out.append(cand)
+                continue
+        raise CaptureError(
+            "cannot resolve capture port %r. It is not in the live port list "
+            "and no mapping applies. Do NOT let the server pick: a substituted "
+            "input returns plausible numbers from the wrong place. Live capture "
+            "ports: %s" % (name, sorted(n for n in live if "capture" in n)[:6]))
+    return out
 
 
 class Capture:
@@ -118,8 +174,20 @@ class Capture:
                 self.xruns += 1
 
             self.client.activate()
-            for src, port in zip(sources, self.ports):
+            resolved = resolve_sources(self.client, sources)
+            self.sources = resolved
+            for src, port in zip(resolved, self.ports):
                 self.client.connect(src, port)
+            # AND VERIFY IT TOOK. connect() not raising is not evidence the
+            # connection exists -- that is precisely what failed on 2026-09-26.
+            for src, port in zip(resolved, self.ports):
+                got = [_port_name(c)
+                       for c in self.client.get_all_connections(port)]
+                if src not in got:
+                    raise CaptureError(
+                        "port %s is not connected to %r after connect(); it is "
+                        "wired to %s. Refusing to capture from an input that "
+                        "was chosen for us." % (port.name, src, got or "nothing"))
         except BaseException:
             # BaseException, not Exception: a KeyboardInterrupt or a SystemExit
             # during construction leaked exactly as loudly as a ConnectionError,

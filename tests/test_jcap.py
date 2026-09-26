@@ -35,8 +35,19 @@ np = pytest.importorskip("numpy", reason="jcap is bench tooling")
 
 
 class _FakePort:
+    """Stands in for jack.Port, including the parts that bite.
+
+    UNHASHABLE, because jack.Port is: `set(client.get_ports())` raises
+    "unhashable type: 'Port'" against a real server, and an earlier version of
+    this fake returned plain strings from get_ports() so the test could not
+    catch resolve_sources doing exactly that. A fake that is wrong about the
+    API it stands in for tests the fake.
+    """
+    __hash__ = None
+
     def __init__(self, n): self.name = n
     def get_array(self): return np.ones(4, dtype=np.float32)
+    def __eq__(self, other): return self.name == getattr(other, "name", other)
 
 
 class _FakeInports:
@@ -61,13 +72,34 @@ class _FakeClient:
         self.fail_connect = False
         self.process_cb = None
         self.xrun_cb = None
+        # The live port list and the wiring, so resolve_sources and the
+        # post-connect verification have something real to read. Both exist
+        # because on 2026-09-26 a real server accepted connect() for a port
+        # that did not exist and quietly wired the client somewhere else.
+        self.ports_present = ["system:capture_13", "system:capture_14"]
+        self.wiring = {}
+        self.silent_substitute = False
         _FakeClient.last = self
+    # get_ports returns Port OBJECTS in the real API, not strings. The first
+    # version of this fake returned strings, so it could not catch
+    # resolve_sources using them as a set and dying on "unhashable type:
+    # 'Port'" against the real server. A fake that is wrong about the API it
+    # stands in for tests the fake.
+    def get_ports(self, *a, **k):
+        return [_FakePort(n) for n in self.ports_present]
+    def get_all_connections(self, port):
+        return [_FakePort(n)
+                for n in self.wiring.get(getattr(port, "name", port), [])]
     def set_process_callback(self, fn): self.process_cb = fn; return fn
     def set_xrun_callback(self, fn): self.xrun_cb = fn; return fn
     def activate(self): self.activated = True
     def connect(self, a, b):
         if self.fail_connect:
             raise RuntimeError("no such port")
+        # `silent_substitute` reproduces the PipeWire behaviour: connect()
+        # succeeds and the client ends up wired to something else entirely.
+        wired = "Somewhere Else:capture_AUX0" if self.silent_substitute else a
+        self.wiring.setdefault(getattr(b, "name", b), []).append(wired)
     def deactivate(self): self.deactivated = True; self.activated = False
     def close(self): self.closed = True
 
@@ -211,3 +243,54 @@ def test_the_earliest_failure_of_all_tears_down_without_masking_itself(monkeypat
         sys.path.pop(0)
     with pytest.raises(RuntimeError, match="server not running"):
         mod.Capture()
+
+
+def test_a_port_that_does_not_exist_is_refused_not_resolved_by_the_server(monkeypatch):
+    """A renamed port must stop the run, not redirect it.
+
+    On 2026-09-26 this box moved from jackd to PipeWire and `system:capture_*`
+    ceased to exist. `client.connect()` did not raise: the shim wired the new
+    client's inputs to the default source instead. A fourteen-second capture
+    took sixteen minutes and returned real signal from an input nobody asked
+    for, at a level 10 dB from the previous day's -- four measured rows had to
+    be withdrawn because nothing recorded which input they came from.
+
+    A silent substitution is the worst failure a measurement rig can have,
+    because the numbers still look like numbers.
+    """
+    jc = _load(monkeypatch)
+    _FakeClient.last = None
+    try:
+        with jc.Capture(sources=("system:capture_99",)):
+            pass
+    except jc.CaptureError as exc:
+        assert "cannot resolve" in str(exc)
+        assert "system:capture_99" in str(exc)
+    else:
+        raise AssertionError("an unresolvable port must raise, not be guessed at")
+
+
+def test_the_pipewire_names_resolve_by_the_documented_mapping(monkeypatch):
+    """`system:capture_N` -> the Scarlett's AUX(N-1), per the transition map."""
+    jc = _load(monkeypatch)
+    aux = [jc._SCARLETT % n for n in range(20)]
+
+    def _ctor(name, no_start_server=False):
+        c = _FakeClient(name, no_start_server)
+        c.ports_present = aux
+        return c
+    monkeypatch.setattr(jc.jack, "Client", _ctor)
+    with jc.Capture(sources=("system:capture_13", "system:capture_14")) as cap:
+        assert cap.sources == [jc._SCARLETT % 12, jc._SCARLETT % 13], cap.sources
+
+
+def test_a_connection_the_server_redirected_is_refused(monkeypatch):
+    """connect() not raising is not evidence the connection exists."""
+    jc = _load(monkeypatch, silent_substitute=True)
+    try:
+        with jc.Capture(sources=("system:capture_13",)):
+            pass
+    except jc.CaptureError as exc:
+        assert "not connected" in str(exc)
+    else:
+        raise AssertionError("a redirected connection must be refused")
