@@ -28117,6 +28117,61 @@ signal*. A bare magnitude could not have said that, and §265's 0.400 Hz
 rig-wander trap is why the estimator reports the strongest peak and its
 frequency beside the coherent amplitude.
 
+### The split is NOT arbitrary — a determinate rule falls out of the scopes
+
+A sibling raised the consequence of a product law for a writer: a cents target
+has no unique `(LFODEP, MODVFILT1)` split, so choosing one rescales the pitch
+vibrato and choosing the other rescales every filter destination sharing the
+amount. They filed it as a design decision wanting one answer for both this and
+tremolo. **The two factors are not symmetric, and that decides it.**
+
+```
+  LFODEP     program 34    0..99     PROGRAM-WIDE, shared by every LFO1 target
+  MODVFILT1  keygroup 151  -50..50   per keygroup, per slot, filter only
+```
+
+`LFODEP` is a **shared bus**; the amounts are **per-destination taps**. Every
+LFO1 destination draws on the same depth — `MODVAMP1/2/3` for loudness,
+`MODVFILT1/2/3` for filter, `MODVPAN1/2/3` for pan — and each has its own
+±50 amount. So the writer's problem is not a two-way split per destination; it
+is **one shared free parameter and N per-destination solves**:
+
+```
+  amount_i = target_i / (k_i * LFODEP)      subject to |amount_i| <= 50
+  => LFODEP >= max_i ( target_i / (50 * k_i) )
+```
+
+**And the objective is not a preference, because the quantisation runs the other
+way.** The amount is an integer, so the reachable step on destination *i* is
+`k_i * LFODEP` cents — for the filter, `4.0 * LFODEP`:
+
+```
+  LFODEP  1  ->      4 ..   200 cents, step   4
+  LFODEP 10  ->     40 ..  2000 cents, step  40
+  LFODEP 20  ->     80 ..  4000 cents, step  80
+  LFODEP 99  ->    396 .. 19800 cents, step 396
+```
+
+At `LFODEP` 99 the filter cannot be set more finely than 396 cents. So **the
+smallest `LFODEP` satisfying every destination's feasibility is simultaneously
+the one that maximises resolution on all of them** — a unique optimum, not a
+tie to be broken by convention. A writer should solve for it across the whole
+routed set rather than pick per destination.
+
+**What is missing is coefficients, not structure.** `k` is measured for the
+filter (4.0 cents, here) and for loudness (§173's 0.010068 dB), the pitch route
+is §160's, and **pan has no law at all** — §265 established that `PANDEP` gates
+it but the shape is unmeasured, and `PANDEP` is LFO2's depth rather than LFO1's
+anyway. Until every routed destination has its `k`, the solve is
+under-determined in practice even though it is determinate in principle. Recorded
+in TODO.
+
+One caveat that makes the rule less clean than it looks: `LFODEP` is itself
+modulated by `MWLDEP`, `PRSDEP` and `VELDEP` (program 36/37/38), so a performance
+control can move the shared bus at play time and rescale every destination
+together. That is a feature of the machine, not an error in the solve, but a
+writer that treats `LFODEP` as static is describing only the resting state.
+
 ### Three failures before the measurement, all in the apparatus
 
 1. **Run 1 recorded a program that was never addressed.** The machine's selected

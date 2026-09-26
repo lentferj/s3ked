@@ -3346,6 +3346,32 @@ reads these bytes -- it does not, and two sessions established that the hard
 way (§263). Its displacements are into a reordered structure whose staging is
 not mapped.
 
+## The LFO1 depth solve is determinate but under-determined (OPEN 2026-09-26 — §270)
+
+§270 measured `cents = ~4.0 x LFODEP x MODVFILT1` and §173 measured
+`dB = 0.010068 x LFODEP x MODVAMP1`. Both share `LFODEP`, which is
+**program-wide** while the amounts are per-destination and bounded at ±50.
+
+So a writer has **one shared free parameter and N per-destination solves**:
+`amount_i = target_i / (k_i * LFODEP)` with `|amount_i| <= 50`, hence
+`LFODEP >= max_i(target_i / (50*k_i))`. Because the reachable step on each
+destination is `k_i * LFODEP` — 396 cents for the filter at `LFODEP` 99 — the
+**smallest feasible `LFODEP` is also the highest-resolution one**, so the
+optimum is unique rather than a convention.
+
+**Blocked on coefficients, not on structure.** Measured: filter 1 (§270, 4.0
+cents), loudness (§173, 0.010068 dB), pitch (§160). **Pan has no law** — §265
+established that `PANDEP` gates it but the shape is unmeasured, and `PANDEP` is
+LFO2's depth in any case. `MODVFILT2/3` and `MODVAMP2/3` are also unmeasured;
+whether they share filter 1's coefficient is an assumption nobody has tested.
+
+**Also unmodelled:** `LFODEP` is itself modulated by `MWLDEP`/`PRSDEP`/`VELDEP`
+(program 36/37/38), so the shared bus moves at play time. A writer treating
+`LFODEP` as static describes the resting state only.
+
+No hardware needed to write the solver; the missing `k` values each need a
+sweep of §270's shape.
+
 ## `PANDEP` gates the pan matrix — RESOLVED on hardware 2026-09-25 (§265)
 
 `lfo2_to_pan` is read downstream from the pan matrix amount alone. If `PANDEP`
