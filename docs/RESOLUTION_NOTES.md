@@ -460,6 +460,7 @@ silently wrong one.
 - [§267](#267--prgnum-is-1-based-on-the-panel-and-the-table-has-said-0-since-august-2026-09-25) — `PRGNUM` is 1-based on the panel, and the table has said 0 since August (2026-09-25)
 - [§268](#268--lfofilter-the-obvious-instrument-reports-2883-cents-on-a-static-filter-2026-09-26) — LFO→filter: the obvious instrument reports 2883 cents on a static filter (2026-09-26)
 - [§269](#269--the-modvflt23-disagreement-was-entirely-method-settled-offline-2026-09-26) — The `MODVFLT2_3` "disagreement" was entirely method, settled offline (2026-09-26)
+- [§270](#270--lfo1--filter-1-is-a-product-law-40-cents-per-depth--amount-unit-2026-09-26) — LFO1 → filter 1 is a product law, ~4.0 cents per (depth × amount) unit (2026-09-26)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -28002,3 +28003,96 @@ fields shared, two FFT windows blind to a common bias, and an FFT negative that
 was limited by amplitude ratio rather than resolution. This is the fourth — two
 analyses each holding their own window fixed, and the fixed thing was the
 disagreement. The discriminator is never inside the convention both sides keep.
+
+## §270 — LFO1 → filter 1 is a product law, ~4.0 cents per (depth × amount) unit (2026-09-26)
+
+**Measured on hardware, 12:22–12:29.** The first measured rail for the filter-1
+matrix with an LFO source; §116's law is velocity-specific and `scales.py` held
+nothing for `MODVFILT1..3`.
+
+```
+  cents peak-to-peak  =  ~4.0  x  LFODEP  x  MODVFILT1
+  products 40..400, equal-product spread 5.3%, coefficient spread +/-7%
+  MODSFILT1 = 7 (LFO1), FILFRQ 70 (centre 1184 Hz), LFORAT 8 (0.949 Hz)
+```
+
+### Equal-product equivalence, which is what makes it a product
+
+§173 is explicit that linearity in each variable separately does not establish a
+product, and it earned that: a coefficient taken at `LFODEP` 99 and applied flat
+over-reads by `99/LFODEP` — **9.9× at depth 10**. So, product held at 400 and
+the split varied over a 6.25× range of each variable:
+
+```
+  LFODEP x amount    excursion    peak Hz
+      20 x 20          1565 c      0.93
+      40 x 10          1629 c      0.93
+      10 x 40          1634 c      0.93
+      50 x  8          1547 c      0.93
+       8 x 50          1549 c      0.93
+```
+
+**Spread 87 cents, 5.3% of the mean.** An independent amount sweep at `LFODEP`
+20 gives 3.92 cents/unit at the same product against the equal-product mean's
+3.96 — agreement to 1%, from two different runs and two different calibrations.
+
+### The clean range, and why the apparent compression is NOT a finding
+
+Per-unit coefficient across the sweep: 4.15 (product 40), 4.45 (100), 4.01
+(200), 3.92 (400), 3.88 (700), 3.72 (1000). That looks like mild compression at
+large products. **It is my high band.**
+
+```
+  product  excursion   corner sweeps      verdict
+      40      166 c    1128..1242 Hz      clean
+     100      445 c    1041..1346 Hz      clean
+     200      802 c     939..1492 Hz      clean
+     400     1567 c     753..1861 Hz      clean
+     700     2715 c     540..2593 Hz      into the 2500 Hz high band
+    1000     3717 c     405..3463 Hz      into the 2500 Hz high band
+```
+
+So the law is fitted over **products 40..400** and the two largest points are
+excluded. Whether the machine compresses above that is **unmeasured**, and
+saying "~4.0, mildly compressive" would have been reporting the instrument.
+
+### The guard added to catch exactly this had the same blind spot
+
+Run 2 failed because a 580 Hz centre over a 150–400 Hz baseline gave only 643
+cents of headroom below, so every excursion above ~1286 cents swept the corner
+**into the baseline** and the ratio folded — returning 1915, 3415, 4286, 3144,
+2554 cents for rising amounts, which is not a plateau but a fold.
+
+The fix raised the centre, lowered the baseline, and added a guard computing the
+in-band limit from the calibration. **That guard computed only the room below
+the centre**: it reported a 6156-cent limit where the real one was 2589, and so
+passed the two points that had swept the corner *up* into the high band. A guard
+written against a one-sided error inherited its one-sidedness, and the two
+excluded points above were found by hand afterwards rather than by it. Now
+`min(down, up)`, with both printed.
+
+### What the negative control shows, and why a magnitude would not have
+
+At amount 0 the excursion reads 37–46 cents — but its strongest component sits
+at **1.9–5.8 Hz**, while every non-zero amount peaks at **0.93–0.94 Hz**, the
+LFO's own rate. So the floor is not merely small, it is identifiably *not the
+signal*. A bare magnitude could not have said that, and §265's 0.400 Hz
+rig-wander trap is why the estimator reports the strongest peak and its
+frequency beside the coherent amplitude.
+
+### Three failures before the measurement, all in the apparatus
+
+1. **Run 1 recorded a program that was never addressed.** The machine's selected
+   program was 3; this volume's are 120–125. Both halves are needed and each
+   alone is silent: with 122 selected, channel 0 gives −96.2 dBFS and its own
+   `PMCHAN` 2 gives −20.2; unselected, `PMCHAN` 2 is also −96.2. 23 parameters
+   were written correctly to a program that could not be heard.
+2. **The level check was missing.** `pandepgate.py` prints one beside every
+   swing *for this exact reason*, one day earlier, in this repository. Without it
+   a silent capture and a working one are the same shape in a ratio statistic.
+   `capture()` now refuses below −60 dBFS.
+3. **Program selection was missing**, for the same reason — `pandepgate.py`
+   selects before every capture and this file did not.
+
+Two lessons from one instrument, neither carried into the next one built the
+following day. §266's first rule turned on its author twice in two runs.

@@ -50,6 +50,7 @@ verified read-back.  Nothing is written to disk or card.
 """
 
 import argparse
+import math
 import sys
 import time
 
@@ -78,7 +79,7 @@ PREPARE = (
     ("keygroup", "MODVFILT3", 0),
     ("program", "SPFILT", 0),
     ("keygroup", "VLOUD1", 0),
-    ("keygroup", "FILFRQ", 60),
+    ("keygroup", "FILFRQ", 70),
     # Envelope 1 held wide open. Dropped from the first draft of this block and
     # put back before the first run: a note that decays across a 14 s hold puts
     # a slow ramp into the band-ratio series. Most of that lands below the
@@ -96,7 +97,7 @@ PREPARE = (
 )
 
 
-def band_ratio(mono, sr, n_fft, lo=(150.0, 400.0), hi=(2500.0, 6000.0)):
+def band_ratio(mono, sr, n_fft, lo=(80.0, 200.0), hi=(2500.0, 6000.0)):
     """High-band / low-band energy ratio in dB, one value per INDEPENDENT window.
 
     Not a per-window corner frequency. That was the first design and it does
@@ -161,10 +162,18 @@ def main():
                          "channel is what selects which one sounds")
     ap.add_argument("--velocity", type=int, default=100)
     ap.add_argument("--windows", default="2048,4096,8192")
+    ap.add_argument("--filfrq", type=int, default=70,
+                    help="static centre. 60 put the centre at 580 Hz, only 643 "
+                         "cents above a 400 Hz low band, so every excursion over "
+                         "~1286 cents swept the corner INTO the baseline band")
+    ap.add_argument("--lo-band", default="80,200")
+    ap.add_argument("--hi-band", default="2500,6000")
     ap.add_argument("--allow-write", action="store_true",
                     help="required; without it the run only prints its plan")
     args = ap.parse_args()
 
+    LO = tuple(float(x) for x in args.lo_band.split(","))
+    HI = tuple(float(x) for x in args.hi_band.split(","))
     depth_field = "LFODEP" if args.lfo == 1 else "PANDEP"
     rate_field = "LFORAT" if args.lfo == 1 else "PANRAT"
     src = LFO1 if args.lfo == 1 else LFO2
@@ -194,8 +203,9 @@ def main():
 
     chan = args.channel if args.channel is not None else \
         br.get_parameter(("program", "PMCHAN"), args.program)
-    print("program %d (%s) responds on MIDI channel %d"
-          % (args.program, br.program_list()[args.program], chan))
+    prgnum = br.get_parameter(("program", "PRGNUM"), args.program)
+    print("program %d (%s): PRGNUM %d, MIDI channel %d -- selected before each capture"
+          % (args.program, br.program_list()[args.program], prgnum, chan))
 
     out = rtmidi.MidiOut()
     out.open_port([k for k, n in enumerate(out.get_ports())
@@ -218,6 +228,17 @@ def main():
         raises rather than being analysed. A refusal costs a re-run; a silent
         capture analysed as data costs a published rail that was never there.
         """
+        # SELECT THE PROGRAM BEFORE EVERY CAPTURE. Both halves are required and
+        # each alone is silent: with PRGNUM 122 selected, channel 0 gives
+        # -96.2 dBFS and its own PMCHAN 2 gives -20.2; and without selecting at
+        # all, PMCHAN 2 is also -96.2 because the machine's selected program was
+        # 3 -- nothing to do with this volume. Run 1 of this probe wrote 23
+        # parameters correctly to program index 2 and recorded fourteen seconds
+        # of a program that was never addressed. pandepgate.py selects before
+        # every capture; this file did not, which is the second lesson from
+        # §265 it was built without.
+        br.select_program_number(prgnum)
+        time.sleep(0.35)
         with Capture(sources=SOURCES, name="s3ked-lfofilt") as cap:
             cap.start(); time.sleep(0.30)
             out.send_message([0x90 | chan, args.note, args.velocity])
@@ -268,7 +289,7 @@ def main():
             f, mag = ms.spectrum(mono, sr, skip_s=0.0, n_fft=8192)
             hz = ms.corner_frequency(f, mag, ref_lo=80.0, ref_hi=200.0,
                                      reference=ref_spec[8192])
-            ratios = {w: float(np.median(band_ratio(mono, sr, w)[0])) for w in windows}
+            ratios = {w: float(np.median(band_ratio(mono, sr, w, LO, HI)[0])) for w in windows}
             cal.append((ff, hz, ratios))
             print("%7d | %10.1f | %8.1f | %s"
                   % (ff, hz, lvl, "  ".join("%11.2f" % ratios[w] for w in windows)))
@@ -290,7 +311,7 @@ def main():
             return 1
 
         # ---- STAGE 2: LFO on, sweep the amount -------------------------
-        br.set_parameter(("keygroup", "FILFRQ"), args.program, 60, **kg)
+        br.set_parameter(("keygroup", "FILFRQ"), args.program, args.filfrq, **kg)
         br.set_parameter(("program", "MODSFILT1"), args.program, src)
         br.set_parameter(("program", rate_field), args.program, args.rate)
         br.set_parameter(("program", depth_field), args.program, args.depth)
@@ -309,7 +330,7 @@ def main():
             for w in windows:
                 if w not in slope:
                     cells.append("%18s" % "-"); continue
-                ser, hop = band_ratio(mono, sr, w)
+                ser, hop = band_ratio(mono, sr, w, LO, HI)
                 sw, pk, pf = coherent(ser, hop, rate_hz)
                 cents = sw / slope[w]
                 by_w[w] = (cents, pf)
@@ -324,6 +345,35 @@ def main():
                 print("  amount %2d: %.0f..%.0f cents, spread %.0f (%.0f%% of median)"
                       % (amt, min(v), max(v), max(v) - min(v),
                          100 * (max(v) - min(v)) / max(np.median(v), 1e-9)))
+
+        # IN-BAND GUARD. Run 2 returned 1915, 3415, 4286, 3144, 2554 cents for
+        # amounts 5..50 -- rising then FALLING -- and the fall was entirely the
+        # instrument: at a 580 Hz centre with a 150-400 Hz baseline, every
+        # excursion over ~1286 cents sweeps the corner down INTO the baseline
+        # band, so the reference is in the stopband for part of each cycle and
+        # the ratio folds. That is measure.corner_frequency's documented failure
+        # in a new coordinate, and §227's baseline-window problem again. A
+        # folded number is not a small number, so it must not be reported as one.
+        centre = next((h for ff, h, _ in cal if ff == args.filfrq and np.isfinite(h)), None)
+        if centre:
+            # BOTH DIRECTIONS. The first version of this guard computed only
+            # the room BELOW the centre and reported a 6156-cent limit for a
+            # case whose real limit was 2589 -- so it passed the two points that
+            # had swept the corner up into the high band, which is the very
+            # failure it was added to catch. A guard written against a
+            # one-sided error inherited its one-sidedness.
+            down = 2400.0 * math.log2(centre / LO[1])
+            up = 2400.0 * math.log2(HI[0] / centre)
+            limit = min(down, up)
+            print("\nIN-BAND LIMIT: centre %.0f Hz, %.0f cents of room below the "
+                  "%.0f Hz baseline top and %.0f above the %.0f Hz high band "
+                  "=> binding limit %.0f cents"
+                  % (centre, down, LO[1], up, HI[0], limit))
+            for amt, by_w in rows:
+                v = [c for c, _ in by_w.values()]
+                if v and max(v) > limit:
+                    print("  amount %2d: %.0f cents EXCEEDS the limit -- not a measurement"
+                          % (amt, max(v)))
 
         print("\nBOUND CHECK -- the excursion must keep growing with the amount")
         w0 = windows[len(windows) // 2]
