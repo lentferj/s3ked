@@ -113,6 +113,40 @@ def test_a_scrubbed_filename_does_not_scrub_the_payload(tmp_path):
     assert "dump001.bin" in r.stdout
 
 
+def test_hits_print_on_a_console_that_cannot_encode_them(tmp_path):
+    """The Windows CI failure of 2026-09-26, reproduced in 0.9 s on Linux.
+
+    A hit line is decoded binary and carries U+FFFD.  With a cp1252 stdout
+    `print` raised UnicodeEncodeError after the header and before the first
+    hit, and an uncaught exception exits 1 -- which is this tool's "hits
+    found, read them below".  The count said one hit, the instruction said
+    read it, and nothing was there to read.
+
+    Nine tests ran the scanner and every one of them inherited a UTF-8
+    stdout, so none could see it.  The encoding of the terminal is an input.
+    """
+    blob = b"\x00\x01keygroup\x00\xff" + "Zarquon Bass".encode() + b"\x00\xfe"
+    repo, env = make_repo(tmp_path, {"dump001.bin": blob})
+    env = dict(env, PYTHONIOENCODING="cp1252")
+    r = run(repo, env, write_terms(tmp_path))
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "dump001.bin" in r.stdout
+    assert "Zarquon Bass" in r.stdout
+
+
+def test_an_unexpected_failure_exits_2_and_never_1(tmp_path):
+    """1 is a RESULT here, so nothing that failed may wear it.
+
+    --rev with a revision git cannot resolve raises CalledProcessError out of
+    the middle of the scan.  Before the guard that exited 1, indistinguishable
+    from a clean run that found one name.
+    """
+    repo, env = make_repo(tmp_path, {"a.md": "a keygroup and nothing else\n"})
+    r = run(repo, env, write_terms(tmp_path), "--rev", "no/such/revision")
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "clean" not in r.stdout
+
+
 def test_a_term_inside_a_longer_word_does_not_match(tmp_path):
     """The peer's 816-then-11-then-3 failure: 'VEL SAMP' matching
     'leVEL SAMPlevolume'.  A hit that is not a word is an artefact."""

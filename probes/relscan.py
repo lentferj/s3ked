@@ -65,12 +65,30 @@ import argparse
 import re
 import subprocess
 import sys
+import traceback
 
 # A term the tree MUST contain.  If this does not hit, the scan proved nothing
 # about the terms that did not hit either.
 DEFAULT_CONTROL = "keygroup"
 
 MAX_CONTEXT = 120
+
+
+def make_output_encoding_independent():
+    """Print hits whatever the console's codepage happens to be.
+
+    A hit line is decoded binary, so it carries U+FFFD, and a cp1252 stdout
+    (Windows' default) raises UnicodeEncodeError on it.  That killed the
+    process AFTER the five header lines and BEFORE a single hit line, on
+    2026-09-26 CI -- the one outcome this design forbids, because an uncaught
+    exception exits 1 and 1 is "hits found, go read them below".  A reader
+    gets a count, an instruction to read the hits, and no hits.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="backslashreplace")
+        except (AttributeError, ValueError):   # not a reconfigurable stream
+            pass
 
 
 def git(*args):
@@ -127,6 +145,7 @@ def main():
                     help="commit range whose messages to scan (default: all)")
     args = ap.parse_args()
 
+    make_output_encoding_independent()
     terms = load_terms(args.terms)
     if not terms:
         print("refusing: %s holds no terms" % args.terms, file=sys.stderr)
@@ -188,4 +207,14 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except SystemExit:
+        raise
+    except BaseException:
+        traceback.print_exc()
+        # NOT 1.  1 is this tool's "hits found, read them below", so a crash
+        # exiting 1 wears the code of a result it never produced.  An
+        # unexpected failure proved nothing, which is what 2 means here --
+        # and an interrupted scan is unsound for the same reason.
+        sys.exit(2)

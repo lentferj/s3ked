@@ -463,6 +463,7 @@ silently wrong one.
 - [§270](#270--lfo1--filter-1-is-a-product-law-40-cents-per-depth--amount-unit-2026-09-26) — LFO1 → filter 1 is a product law, ~4.0 cents per (depth × amount) unit (2026-09-26)
 - [§271](#271--jackd--pipewire-270-reproduces-and-a-silent-input-substitution-nearly-didnt-show-2026-09-26) — jackd → PipeWire: §270 reproduces, and a silent input substitution nearly didn't show (2026-09-26)
 - [§272](#272--lfo2--loudness-is-a-product-and-a-sine-cannot-measure-a-filter-2026-09-27) — LFO2 → loudness is a product; and a sine cannot measure a filter (2026-09-27)
+- [§273](#273--the-release-scanner-died-on-a-codepage-wearing-the-exit-code-of-a-result-2026-09-27) — The release scanner died on a codepage, wearing the exit code of a result (2026-09-27)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -28523,3 +28524,91 @@ same note reads **−11.7 dBFS**.
 So `mode` joins the level check and the program selection as a precondition, and
 like both of those it was found by a run returning nothing rather than by being
 designed in. The probe now asserts SINGLE before it captures.
+
+## §273 — The release scanner died on a codepage, wearing the exit code of a result (2026-09-27)
+
+The pre-release commercial-name scan (§262) was built around one rule: **an
+unsound run can never exit 0.** It exits 2 when it opened no files, when it
+missed a tracked file, or when the positive control never hit. It exits 1 when
+it found something, and then prints every hit, because a count nobody can read
+is the failure the whole tool exists to replace.
+
+It shipped with a hole at the other end of that rule, and CI found it within
+six minutes of the push.
+
+### What happened
+
+Windows runners, Python 3.11 and 3.13, both jobs:
+
+```
+UnicodeEncodeError: 'charmap' codec can't encode character '�'
+                    in position 44: character maps to <undefined>
+```
+
+A hit line is **decoded binary** — the tool scans bytes, because a scrubbed
+filename does not scrub the payload, and `bytes.decode("utf-8", "replace")`
+puts U+FFFD wherever the payload was not text. Windows' default stdout is
+cp1252 and cannot encode it. `print` raised on the **first hit line**, after
+all five header lines had already flushed.
+
+So the run produced exactly this, and exited **1**:
+
+```
+control        1 hits for 'keygroup'
+hits           1
+
+Read every line below before concluding anything:
+```
+
+A count of one hit, an instruction to read it, and nothing to read. **1 is not
+an error code in this tool — it is a result**, and an uncaught Python exception
+exits 1 too. The crash wore the exit code of the finding it failed to report.
+A release gate that says "one commercial name found, go read the line" and
+prints no line is worse than one that says nothing, because the reader will go
+looking for the line and conclude the tool is noisy.
+
+### Why nine tests could not see it
+
+Every one of them ran the scanner through `subprocess` and inherited the
+parent's UTF-8 stdout. Not one of them varied it. **The encoding of the
+terminal is an input to a program that prints**, and the suite held it
+constant — §266's rule again: a test is blind to whatever it holds constant,
+and here the constant was not even recognised as a value.
+
+It reproduces on Linux in 0.9 s:
+
+```
+PYTHONIOENCODING=cp1252 .venv/bin/python -m pytest tests/test_relscan.py
+```
+
+That is the whole falsifier. It was available from the day the tool was
+written, and cost one environment variable.
+
+### The fix, both halves
+
+1. `make_output_encoding_independent()` reconfigures stdout and stderr to
+   `errors="backslashreplace"` before anything is printed. ASCII is unchanged,
+   and a byte the console cannot represent prints as `�` rather than
+   killing the process. Called from `main()`, not at import, because the tests
+   import this module by path and must not reconfigure pytest's streams.
+2. The `__main__` guard catches everything that is not a `SystemExit`, prints
+   the traceback, and **exits 2**. Nothing that failed may wear a code that
+   means a result. An interrupt lands here too, which is correct: an
+   interrupted scan proved nothing.
+
+Two tests, both confirmed to fail against the unfixed tool: one runs a scan
+with `PYTHONIOENCODING=cp1252` and asserts the hit line is printed, one passes
+a revision git cannot resolve and asserts 2 rather than 1.
+
+### What transfers
+
+**A tool whose exit codes carry meaning must reserve one for "I broke".** The
+default for an uncaught exception is 1, so 1 is the one code that cannot safely
+mean anything else — and this tool had given 1 its most load-bearing meaning.
+Any probe here that returns a small integer has the same exposure.
+
+And the CI leg that caught it is the one that was nearly not worth having.
+These commits sat unpushed for three days with a green local suite; the Windows
+jobs are slower than the whole of the rest of the matrix and have never found
+anything before. A platform this project does not develop on is the cheapest
+source of a held-constant input it never thought to vary.

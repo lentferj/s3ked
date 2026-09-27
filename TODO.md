@@ -3532,6 +3532,30 @@ Two smaller things left open by §262:
   into the sibling projects, the control has to be chosen per tree, not
   inherited.
 
+## Do the other probes reserve an exit code for "I broke"? (OPEN 2026-09-27 — §273)
+
+**Status:** `relscan.py` gave exit 1 the meaning *"hits found, read them
+below"*, which is also the code Python uses for an uncaught exception. On
+2026-09-26 it crashed on a cp1252 stdout after printing the header and before
+printing a single hit, and exited 1 — a release gate announcing a finding it
+had failed to report. Fixed there (§273): `__main__` now catches everything
+and exits 2, and output encoding no longer depends on the console.
+
+The same shape is possible in every probe here that returns a small integer
+from `main()`. Nothing else is known to be affected; this is an audit, not a
+report of a second instance.
+
+- For each probe with a meaningful non-zero return, check whether 1 carries a
+  *result* meaning. If it does, give the crash path its own code.
+- The cheap falsifier for the encoding half is one environment variable:
+  `PYTHONIOENCODING=cp1252 .venv/bin/python -m pytest tests/test_<probe>.py`.
+  It reproduced the Windows CI failure on Linux in 0.9 s.
+- Worth asking what else the suite holds constant because it inherits it from
+  the parent process rather than choosing it. Locale, `TERM`, `COLUMNS` and
+  the working directory are all inputs nothing here varies.
+
+**Blocked on:** nothing. No hardware, no rig.
+
 ## External code review — GLM-5.3-Flash, 2026-09-20 (OPEN — triaged against the files)
 
 **Status:** every finding below was re-checked against the code on
