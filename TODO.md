@@ -3532,6 +3532,51 @@ Two smaller things left open by §262:
   into the sibling projects, the control has to be chosen per tree, not
   inherited.
 
+## `-m slow` is unrun, and nothing in this repo records it ever running (OPEN 2026-09-27)
+
+**Status:** staged for the next session. The one slow-marked test is
+`tests/test_app.py::test_every_multi_section_and_parameter_round_trips_through_the_tui`
+— the file header and all sixteen parts through the TUI, ~1m50.
+
+    .venv/bin/python -m pytest -m slow            # the slow test alone
+    .venv/bin/python -m pytest -m ""              # everything, ~8m30
+
+**It has never run on CI and no run of it is recorded here.** `tests.yml`
+step "Run the suite" is a plain `python -m pytest -q`, which deselects it on
+all seven jobs, so the green matrix on `025f13c` says nothing about it. The
+marker was added on 2026-09-14 (38fb6fb), and searching `docs/`, `TODO.md`
+and every commit message since finds no run. That is not the same as knowing
+it last passed on 2026-09-14 — it means the last pass is unrecorded, and an
+unrecorded pass is not a pass anyone can point at.
+
+**Twelve commits have touched the code it drives since that marker**, six of
+them in the batch pushed tonight:
+
+    9105119  §272 -- MODVAMP3 range, STEREO scale     s3k/params.py, s3k/scales.py
+    5db8bde  PRGNUM display_offset + range            s3k/params.py, s3ked/demo.py
+    a0da743  delete_sample resolves by name           s3ked/app.py
+    b9c6540  §266/§267                                s3k/params.py
+    876ede2  §265                                     s3k/params.py
+    8de9ab6  LFO2WAVE corpus leg                      s3k/params.py
+
+`5db8bde` is the one to watch. The fast version of this test exists because
+the multi is the only section carrying `display_offset` fields (`FX1`-`FX4`,
+§215/§217), so its rendered-value assertion is the thing that bites on the
+display-offset path — and `5db8bde` changed `s3ked/demo.py`'s write route
+through `encode_field`, which is the path the TUI round trip drives. The fast
+version covers the file header, part 0 and part 15 and is green; the
+exhaustive one is the only thing that has looked at parts 1-14.
+
+CLAUDE.md's reason for the split still holds and is the reason this is an
+item rather than a habit: *a guarantee you run before a release is worth more
+than one skipped because the suite got tiresome.* Unrun and unrecorded is the
+failure mode that wording was written against.
+
+Record the result here when it runs, so the next reader does not have to
+re-establish that nobody knows.
+
+**Blocked on:** nothing. Synthetic, no hardware, no rig.
+
 ## Do the other probes reserve an exit code for "I broke"? (OPEN 2026-09-27 — §273)
 
 **Status:** `relscan.py` gave exit 1 the meaning *"hits found, read them
