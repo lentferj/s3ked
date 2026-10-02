@@ -464,6 +464,7 @@ silently wrong one.
 - [§271](#271--jackd--pipewire-270-reproduces-and-a-silent-input-substitution-nearly-didnt-show-2026-09-26) — jackd → PipeWire: §270 reproduces, and a silent input substitution nearly didn't show (2026-09-26)
 - [§272](#272--lfo2--loudness-is-a-product-and-a-sine-cannot-measure-a-filter-2026-09-27) — LFO2 → loudness is a product; and a sine cannot measure a filter (2026-09-27)
 - [§273](#273--the-release-scanner-died-on-a-codepage-wearing-the-exit-code-of-a-result-2026-09-27) — The release scanner died on a codepage, wearing the exit code of a result (2026-09-27)
+- [§274](#274--relse1-below-45-is-measurable-after-all-and-158s-reason-for-stopping-was-wrong-2026-10-02) — `RELSE1` below 45 is measurable after all, and §158's reason for stopping was wrong (2026-10-02)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -28612,3 +28613,173 @@ These commits sat unpushed for three days with a green local suite; the Windows
 jobs are slower than the whole of the rest of the matrix and have never found
 anything before. A platform this project does not develop on is the cheapest
 source of a held-constant input it never thought to vary.
+
+## §274 — `RELSE1` below 45 is measurable after all, and §158's reason for stopping was wrong (2026-10-02)
+
+§158 fitted the release law over 45..99 and recorded why it stopped there:
+
+> Below 45 is still unmeasured, and the tell is that the reading stops moving
+> […] At 35 and below the fit collapses **and the value stops depending on the
+> setting** […] That is the signature of measuring something that is not the
+> envelope: at those settings the release is over in a millisecond or two and
+> what survives above the floor is the rig's own tail. The law may well hold
+> down there — its shape is clean and there is no hint of a knee — but this rig
+> cannot say so.
+
+A sibling converter asked for the window to be extended, and quoted that
+sentence as the reason it believed the extension was not possible. **The window
+now exists, it covers 0..99, and both halves of the recorded reason are wrong.**
+The law was right; the rig could say so; and what defeated the earlier attempt
+was the statistic, not the hardware.
+
+### The captures that would have settled it were deleted
+
+`rel1/fast.py` wrote `fast_{v}.wav` beside the rows it summarised. The rows
+survive in `~/temp/s3ked-logs/rel1/fast/rows.json`; **the waveforms do not
+exist anywhere.** So the diagnosis of the sub-45 collapse rested on eleven
+summary lines and had not been looked at since 2026-08-24. Nothing in this
+section would have been cheap to find without hardware; all of it was cheap
+*because* the captures were re-taken with the waveform saved.
+
+### The law holds over the whole range, and §158's extrapolation was 2% out
+
+Two repeats per setting, 16 settings from 0 to 99, every waveform saved, and
+the control points from inside §158's own window included in the same run:
+
+```
+  RELSE1   measured dB/s   spread   §158 law    ratio
+       0            24000        -      23042    1.04
+       5             9000     2.00      14149    0.64      <- repeats disagree
+      10             8000     1.00       8688    0.92
+      15             6000     1.00       5335    1.12
+      20             4800     1.00       3276    1.47      <- off the line
+      25             2200     1.20       2011    1.09
+      30             1200     1.00       1235    0.97
+      35              782     1.21        758    1.03
+      40              500     1.00        466    1.07
+      45              338        -        286    1.18
+      50              181     1.08        176    1.03
+      60               81     1.00         66    1.22
+      70               26     1.13         25    1.04
+      80                9     1.00          9    1.00
+```
+
+```
+  whole range 0..99 :  22546.3 * exp(-0.09566 * v)   log-space r2 0.99429
+  §158             :  23042.3 * exp(-0.09754 * v)   window 45..99
+```
+
+**§158's law, extrapolated 45 units below its own window, is within 2.2 % in
+the prefactor and 1.9 % in the exponent of the fit over the whole range.**
+On the eleven settings whose repeats agree within 1.6x the fit is
+`25537.4 * exp(-0.09818 * v)`, log-space r2 0.99692 — an exponent 0.6 % from
+§158's. Extrapolating that law was never the problem.
+
+Two settings do not sit on the line and are **not** explained: `RELSE1` 5 reads
+36 % low and its two captures disagree 2.0x, and `RELSE1` 20 reads 44–47 % high
+and reproduces. Both are repeatable readings off the line rather than scatter,
+so either is a real feature of the machine or an artefact of a statistic whose
+crossings are quantised to a 1 ms frame. Unresolved, and left unresolved rather
+than absorbed into a fit.
+
+### What actually limits it: the frame, and shorter is worse
+
+The statistic is a **two-crossing time** — the interval between the level
+passing 3 dB down and 15 dB down, both read from the same waveform. It is
+latency-free by construction (the host's note-off lands on the machine several
+milliseconds later, by a jitter that is comparable to the whole fall at low
+`RELSE1`; both crossings come from one waveform so any offset cancels), it
+assumes no shape, and it cannot be dragged by the floor.
+
+Frame length is the only knob that matters, and the direction is the opposite of
+intuition:
+
+```
+  frame   0.25 ms (12 samples)   frame 0.5 ms (24)   frame 1.0 ms (48)
+  RELSE1 45    145  (-49 %)           130  (-55 %)      289  (+1 %)
+  RELSE1 30    161  (-87 %)           324  (-74 %)     1200  (-3 %)
+  RELSE1 20    199  (-94 %)           417  (-87 %)     4800  (+47 %)
+  RELSE1 10    193  (-98 %)           440  (-95 %)     8000  (-8 %)
+  RELSE1  0    189  (-99 %)           234  (-99 %)    24000  (+4 %)
+```
+
+The RMS of N Gaussian samples carries a relative error of `1/sqrt(2N)`, which is
+**1.8 dB at 12 samples and 0.89 dB at 48**. The crossing times inherit that
+error, and at the fast end the whole 12 dB interval is one or two frames long,
+so the short frame measures its own noise. There is no frame length that is
+both short enough not to smear a fall that lasts a few milliseconds and long
+enough to locate a crossing: **the two errors are opposed, and below about
+`RELSE1` 30 the fall is shorter than the window that would measure it.** The
+hop is a separate knob and did not matter — 0.05 ms and 0.5 ms hops agree
+except where a second crossing latched onto a noise excursion (`RELSE1` 5 and
+20, once each), which is a failure of the guard rather than of the hop.
+
+§158 used a 2 ms frame and fitted the top 40 dB. Both choices are wrong at the
+fast end, and for the same underlying reason.
+
+### The common tail is real, and it is not the rig's and not `RELSE1`'s
+
+Jan heard a release tail on the machine while these captures were being taken,
+which is the observation that corrected the first pass of this section: an
+earlier draft here claimed there was no tail, on the strength of the level
+350–1200 ms after note-off sitting at the measured noise floor. That is true
+and it is not the same claim — the tail ends before 350 ms, and the envelope
+has it clearly:
+
+```
+  RELSE1  +100ms  +150ms  +200ms  +250ms  +300ms  +350ms   hits floor
+       45   -24.9   -37.4   -49.4   -56.2   -61.1   -71.4     370 ms
+       40   -40.0   -48.6   -53.7   -57.9   -63.7   -80.2     348 ms
+       35   -47.8   -50.4   -56.2   -60.2   -68.1   -80.5     329 ms
+       30   -47.6   -50.9   -56.8   -60.6   -68.8   -82.1     332 ms
+       25   -47.5   -51.1   -56.9   -60.7   -68.7   -79.8     330 ms
+       20   -47.3   -50.6   -55.9   -60.1   -66.7   -82.0     347 ms
+       15   -47.5   -51.1   -57.2   -60.5   -67.7   -80.9     332 ms
+       10   -46.8   -49.3   -54.7   -58.8   -64.2   -80.6     345 ms
+        5   -47.6   -51.2   -57.0   -60.2   -69.2   -81.3     329 ms
+```
+
+Below `RELSE1` 40 the tail is **the same decay in every capture** — about
+−47 dB at +100 ms, reaching the noise floor at ~330 ms, a rate near 126 dB/s
+and accelerating. It does not depend on `RELSE1`, so it is not `RELSE1`'s
+release; and it is not silence, so a linear rig cannot have invented it.
+
+**The obvious candidate was tested and refuted.** §59 gives this machine a
+second release stage, `RELSE2`, whose law is a full traverse in *seconds* — and
+0.35 s, where this tail sits, is a mid-range `RELSE2`. The volume carries
+`V_ENV2` 25 and `RELSE2` 45. Two captures at `RELSE1` 40, one as found and one
+with `V_ENV2` written to 0:
+
+```
+  V_ENV2      +50ms  +75ms  +100ms  +150ms  +200ms  +250ms  +300ms   to floor
+       25   -17.1  -29.8   -39.5   -48.6   -53.8   -57.8   -63.8   349.5 ms
+        0   -16.3  -27.7   -38.8   -48.6   -53.5   -57.9   -63.7   356.7 ms
+```
+
+Identical to about 1 dB. **It is not envelope 2.** What it is remains open,
+and the next step is a reading only a person at the machine can make — see the
+TODO entry.
+
+### For the sibling converter
+
+`RELSE1` 10 — the value that produced a warning over ordinary MPC material —
+reads **8000 dB/s against a law of 8688, i.e. 8 % low**. The extrapolated rate
+was never the problem, and a warning raised on 39.5 % of voices for an 8 %
+error is wallpaper by mpc2emu's own standard. `scales.py` still carries §158's
+`45..99` window; **widening it to 0..99 is justified by this section** and is
+recorded as a TODO rather than done here, because the two settings that miss
+the line should be settled first.
+
+### The three mistakes this section is made of
+
+1. **A diagnosis written from a summary row.** §158's explanation of the
+   sub-45 collapse was written on the same day as the run and never revisited,
+   because the rows were still there and the waveforms were not.
+2. **A negative result generalised from a window.** "Nothing above the floor
+   350–1200 ms after note-off" became "there is no tail" in the first draft of
+   this section. Same shape as the failure this project already has a name for:
+   **a search procedure read as a fact about the world.**
+3. **A plausible mechanism, which a one-capture experiment killed in twelve
+   seconds.** `RELSE2` explained the tail's duration, its level and its
+   independence of `RELSE1`, and it was wrong. Writing the prediction down
+   first is what made it cheap to refuse.

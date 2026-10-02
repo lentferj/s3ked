@@ -3793,3 +3793,61 @@ autodetect sweep teardown, stale-reply accept-set, write-gap labelling;
 
 **Blocked on:** nothing — all code work, no hardware. The critical finding
 first; it is the only one that can destroy a user's sample.
+
+---
+
+## `RELSE1` below 45 — three open items from §274 (2026-10-02)
+
+`RELSE1`'s law now has a whole-range fit (0..99, `22546 * exp(-0.09566 v)`,
+log-space r² 0.994) and §158's extrapolated constants are within 2 % of it, so
+**this is no longer an extrapolation problem.** Three things are still open.
+
+### 1. Widen `scales.py`'s fitted window from 45..99 to 0..99
+
+**Status:** open, deliberately not done in the same commit as the measurement.
+`s3k/scales.py` still declares `("keygroup", "RELSE1")` over `(45, 99)` and
+still describes the sub-45 region as unmeasurable in its notes. §274 makes
+both statements wrong.
+
+**Blocked on:** item 2. Two settings read off the fitted line in opposite
+directions (`RELSE1` 5 is 36 % low with its repeats disagreeing 2.0×, `RELSE1`
+20 is 44–47 % high and repeatable). Widening a shipped window over a fit that
+has two unexplained departures is the wrong order of operations — settle them,
+then widen, and record the span the rate is a statistic over alongside the
+number.
+
+### 2. `RELSE1` 5 and `RELSE1` 20 both miss the line, repeatably
+
+**Status:** open. `RELSE1` 5: 6000/12000 logged, law 14149. `RELSE1` 20:
+4800 twice, law 3276. Both are repeatable readings off the line rather than
+scatter, so either is a feature of the machine or an artefact of crossings
+quantised to a 1 ms frame.
+
+**Blocked on:** hardware, and more repeats than 2. `probes/relse_rate.py
+--values 0 3 5 7 10 15 20 25 --repeats 6` is the shape; the two-crossing
+interval is ~1–2 frames at these settings, so the useful lever is a *shorter
+interval* (`--l1 6 --l2 12`) rather than more captures. Run both and see
+whether the departures move with the interval — if they do, it is the
+statistic; if they do not, it is the machine.
+
+### 3. The common release tail is still unidentified
+
+**Status:** open. A decay that is **identical for every `RELSE1` from 5 to 40**
+— about −47 dB at +100 ms, reaching the noise floor at ~330 ms, near 126 dB/s
+and accelerating. Not `RELSE1`'s (it does not move when `RELSE1` does), not
+silence (so no linear rig invented it), and **not envelope 2** — `V_ENV2` 25 vs
+0 changes it by under 1 dB (§274).
+
+**Blocked on:** a reading only a person at the machine can make, which is what
+`HW_PANEL_CHECKS.md` is for. Two questions, in this order:
+
+1. **Is the tail audible with `RELSE1` 99?** If yes, it is not `RELSE1`'s
+   release at all and something else is sounding. If no, it is bounded by the
+   release itself and the two facts are consistent.
+2. **Does the tail's length change if `FILFRQ` is opened to 99 or shut?** A
+   filter envelope on the keygroup is the largest untested candidate left.
+
+Then one more capture each way. A level-based test worth running at the same
+time, because it separates "the machine is still making sound" from "the rig
+is": **drop `PRLOUD` by 20 dB.** If the tail drops with it, it is signal from
+the machine; if it stays at the same absolute level, it is the rig.
