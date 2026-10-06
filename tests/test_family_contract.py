@@ -46,8 +46,7 @@ def test_the_editor_flags_match_the_family() -> None:
     # that is stated rather than merely left out.
     problems = conformance.check_flags(
         build_app_parser(),
-        required=("port", "exclusive-channel", "demo", "timeout", "config",
-                  "allow-write"),
+        required=("port", "exclusive-channel", "demo", "timeout", "config", "allow-write"),
         forbidden=("channel", "favorites", "scan"),
     )
     assert not problems, "\n".join(problems)

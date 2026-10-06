@@ -105,9 +105,7 @@ def load_last_ports(path: str = DEFAULT_CONFIG_PATH) -> Optional[Tuple[str, str]
     return settings.load_ports(path)
 
 
-def save_last_ports(
-    send_port: str, recv_port: str, path: str = DEFAULT_CONFIG_PATH
-) -> None:
+def save_last_ports(send_port: str, recv_port: str, path: str = DEFAULT_CONFIG_PATH) -> None:
     """Remember both ports in one write to the file."""
     settings.save_ports(send_port, recv_port, path)
 
@@ -139,11 +137,7 @@ def load_boards(path: str = DEFAULT_CONFIG_PATH) -> Set[str]:
     nothing rather than declaring the board.
     """
     data = settings.read(path)[0]
-    return {
-        name
-        for name, key in _BOARDS.items()
-        if data.get(key) is True
-    }
+    return {name for name, key in _BOARDS.items() if data.get(key) is True}
 
 
 def save_boards(boards: Any, path: str = DEFAULT_CONFIG_PATH) -> None:
