@@ -3851,3 +3851,82 @@ Then one more capture each way. A level-based test worth running at the same
 time, because it separates "the machine is still making sound" from "the rig
 is": **drop `PRLOUD` by 20 dB.** If the tail drops with it, it is signal from
 the machine; if it stays at the same absolute level, it is the rig.
+
+## `RELSE1` below 45 — rig bring-up done, item 2 still open (2026-10-03)
+
+An attempt at item 2 got as far as measuring and stopped. **Nothing here closes
+item 2 or item 3**, and one of the tests item 3 proposes turns out to be
+invalid as written. What follows is the bring-up, so the next attempt does not
+spend its first hour rediscovering it.
+
+**Captures:** `~/temp/s3ked-logs/tail-2026-10-03/` — waveforms, the live-meter
+traces, and every script used, including the dead ends. Conditions and the
+caveats are in `NOTES.md` there.
+
+### What has to be true before anything is measurable
+
+1. **The sampler is silent until a Program Change is sent.** `PC 50` / `PC 51`
+   select the noise programs; the SysEx program indices (`0 N50 NOISE WH`,
+   `1 N51 NOISE WH`) do NOT. Playing index 0 or 1 produces **nothing on any of
+   the 20 Scarlett capture buses** — a full sweep found a best case of 26 LSB,
+   which is hum. This is the single biggest time sink: an hour went into
+   proving the audio path was dead before the cause turned out to be a missing
+   Program Change.
+2. **`system:capture_13` / `system:capture_14` is the right pair**, and resolves
+   to `Scarlett 18i8 3rd Gen Mehrkanal:capture_AUX12` / `capture_AUX13` under
+   PipeWire. Confirmed, not assumed: the hardware gain knob moves both by
+   **80.4 dB**, and the two track each other to within 0.01 dB, which is what
+   one stereo analog pair should do.
+3. **The Akai's output is analog** into that stereo pair.
+4. **"Channel 16" is channel 0.** The status byte masks to four bits, so
+   `16 & 0x0F == 0`. Channels 0 and 15 both respond.
+5. **The hardware gain knob is the signal-to-noise control for this
+   measurement, and it is worth having.** The tail sits ~47 dB below the note
+   and the capture floor is around −96 dBFS, so gain is what separates the two.
+   At 12 o'clock the pair reads about −23 dBFS RMS. *An earlier note in this
+   session claimed the knob did not reach this path; that was wrong, and the
+   claim was made from a run in which the knob was not being turned.*
+
+### The level control named `PRLOUD` is not the level control
+
+Item 3 proposes "drop `PRLOUD` by 20 dB" as the level-based test separating
+machine from rig. **That test cannot work as written.** Writing `PRLOUD` 80 → 60
+moved the measured peak by **0.0 dB**. Whatever sets the output level, it is
+not `PRLOUD`, despite the name. Find the real control before spending a session
+on that test, or the test will return a confident null.
+
+No clipping anywhere: 0.00 % of samples ≥ 32000 across a 180 s sustained-note
+run at `VEL 100`, peak −19 dBFS, ~17 dB headroom. Clipping is **ruled out** as
+the cause of the item-2 anomaly below.
+
+### Item 2: still open, and now contradicted
+
+At `RELSE1` 45 the tail is confirmed and **agrees with §274** — decay begins
+~40 ms after note-off, reaches the floor at ~340 ms against §274's 370 ms.
+
+At **`RELSE1` 5 and `RELSE1` 20 the note reaches the noise floor within
+50–60 ms**, where §274 records a tail out to ~330 ms at both. That is a direct
+contradiction. It is not clipping (ruled out above), and this rig's floor is
+~−96 dBFS, which should make a tail *easier* to see than on the rig §274 used,
+not harder. **Unexplained — not offered as a refutation of §274.**
+
+Note the absolute dB figures here are NOT comparable with §274's: these are
+sampled peaks relative to the note's own steady level, on a different
+statistic. Compare slopes, not levels.
+
+**Next step, one run:** `RELSE1` 5 / 20 with the gain up, the note held long
+enough for the tail to resolve above the floor, and every waveform saved. If it
+still contradicts §274, that is a finding about the rig, not the machine, and
+the difference between the two set-ups is what to go looking for.
+
+### Two smaller loose ends
+
+- **Is SysEx program index 0 the program `PC 50` plays?** Unresolved. `FILFRQ`
+  read 99 before any write and 96 afterwards, and the writes are clean —
+  `scripts/corrupt.py` confirms four writes each moved only their own target —
+  so nothing written here caused it. Either the panel changed, or index 0 is
+  not the sounding program. **Every parameter read in this session is of index 0
+  and may not be what was sounding.** Item 3's question 2 wants `FILFRQ` at 99;
+  it is at 96.
+- `ATTLVL` raises `KeyError` in the keygroup header (`s3k/params.py:lookup`).
+  Probably a lookup gap, unrelated to the above.
