@@ -48,19 +48,26 @@ SOURCES = ("system:capture_13", "system:capture_14")
 # PipeWire on 2026-09-26 and `system:*` ceased to exist, while
 # connect() went on succeeding against a substituted input.
 NOTE = 60
-HOP = 0.010                     # 100 Hz balance series; LFO2 is a few Hz
-SKIP = 0.60                     # let the attack pass before analysing
+HOP = 0.010  # 100 Hz balance series; LFO2 is a few Hz
+SKIP = 0.60  # let the attack pass before analysing
 
 
 def balance_series(left, right, sr, hop=HOP):
-    """dB difference between the channels, once per `hop` seconds."""
+    """Right-minus-left level difference in dB, once per `hop` seconds.
+
+    Positive means the image sits right -- the same convention as
+    ``measure.balance_db``. (An earlier revision returned left-minus-right;
+    the sign was flipped to match so cross-tool comparisons cannot invert
+    the pan direction. Coherent swing magnitudes are unaffected: negating
+    a demeaned series leaves its amplitude unchanged.)
+    """
     n = int(sr * hop)
     m = min(len(left), len(right)) // n
-    l = np.asarray(left[:m * n], float).reshape(m, n)
-    r = np.asarray(right[:m * n], float).reshape(m, n)
-    rl = np.sqrt((l ** 2).mean(axis=1)) + 1e-12
-    rr = np.sqrt((r ** 2).mean(axis=1)) + 1e-12
-    return 20.0 * np.log10(rl / rr)
+    l = np.asarray(left[: m * n], float).reshape(m, n)
+    r = np.asarray(right[: m * n], float).reshape(m, n)
+    rl = np.sqrt((l**2).mean(axis=1)) + 1e-12
+    rr = np.sqrt((r**2).mean(axis=1)) + 1e-12
+    return 20.0 * np.log10(rr / rl)
 
 
 def coherent_swing_db(series, hop, target_hz):
@@ -74,13 +81,13 @@ def coherent_swing_db(series, hop, target_hz):
     n = len(x)
     t = np.arange(n) * hop
     w = np.hanning(n)
-    gain = w.sum() / 2.0                      # coherent gain of the window
+    gain = w.sum() / 2.0  # coherent gain of the window
     amp_at = abs((x * w * np.exp(-2j * np.pi * target_hz * t)).sum()) / gain
 
     fs = 1.0 / hop
     spec = np.abs(np.fft.rfft(x * w)) / gain
     freqs = np.fft.rfftfreq(n, hop)
-    lo = freqs > 0.15                          # ignore DC and very slow drift
+    lo = freqs > 0.15  # ignore DC and very slow drift
     k = np.argmax(spec[lo])
     return 2.0 * amp_at, 2.0 * spec[lo][k], freqs[lo][k]
 
@@ -92,52 +99,70 @@ def main():
     ap.add_argument("--velocity", type=int, default=100)
     args = ap.parse_args()
 
-    br = connect()
-    names = br.program_list()
-    rows = []
-    for i, nm in enumerate(names):
-        # RAW: select_program_number takes the 0-based number, and
-        # PRGNUM carries display_offset=1 since 2026-09-26 (§267), so
-        # get_parameter would return the panel's 1-based value here.
-        prg = br.get_header_bytes("program", i, 15, 1)[0]
-        rate_unit = br.get_parameter(("program", "PANRAT"), i)
-        dep = br.get_parameter(("program", "PANDEP"), i)
-        amt = br.get_parameter(("program", "MODVPAN1"), i)
-        src = br.get_parameter(("program", "MODSPAN1"), i)
-        rows.append(dict(idx=i, name=nm, prgnum=prg, panrat=rate_unit,
-                         pandep=dep, modvpan1=amt, modspan1=src))
-
-    # §260's corrected law: rate = 0.11880 * PANRAT Hz.  §52's 0.23708 was
-    # 2.002x too high and would put the probe frequency at 6.65 Hz, where a
-    # real 3.33 Hz modulation reads as near-zero.
-    target = 0.11880 * rows[0]["panrat"]
-    print("LFO2 rate from PANRAT %d -> %.3f Hz (§260 law)\n" % (rows[0]["panrat"], target))
-
-    out = rtmidi.MidiOut()
-    port = [k for k, n in enumerate(out.get_ports())
-            if "M4U XT" in n and "MIDI 1" in n][0]
-    out.open_port(port)
-
-    print("%-13s %6s %6s %9s | %9s %9s %9s"
-          % ("program", "PANDEP", "MODV", "level dBFS", "swing@f", "peak", "peak Hz"))
+    br = None
+    out = None
+    cap = None
     try:
+        br = connect()
+        names = br.program_list()
+        rows = []
+        for i, nm in enumerate(names):
+            # RAW: select_program_number takes the 0-based number, and
+            # PRGNUM carries display_offset=1 since 2026-09-26 (§267), so
+            # get_parameter would return the panel's 1-based value here.
+            prg = br.get_header_bytes("program", i, 15, 1)[0]
+            rate_unit = br.get_parameter(("program", "PANRAT"), i)
+            dep = br.get_parameter(("program", "PANDEP"), i)
+            amt = br.get_parameter(("program", "MODVPAN1"), i)
+            src = br.get_parameter(("program", "MODSPAN1"), i)
+            rows.append(
+                dict(
+                    idx=i,
+                    name=nm,
+                    prgnum=prg,
+                    panrat=rate_unit,
+                    pandep=dep,
+                    modvpan1=amt,
+                    modspan1=src,
+                )
+            )
+
+        # §260's corrected law: rate = 0.11880 * PANRAT Hz.  §52's 0.23708 was
+        # 2.002x too high and would put the probe frequency at 6.65 Hz, where a
+        # real 3.33 Hz modulation reads as near-zero.
+        target = 0.11880 * rows[0]["panrat"]
+        print("LFO2 rate from PANRAT %d -> %.3f Hz (§260 law)\n" % (rows[0]["panrat"], target))
+
+        out = rtmidi.MidiOut()
+        port = [k for k, n in enumerate(out.get_ports()) if "M4U XT" in n and "MIDI 1" in n][0]
+        out.open_port(port)
+
+        print(
+            "%-13s %6s %6s %9s | %9s %9s %9s"
+            % ("program", "PANDEP", "MODV", "level dBFS", "swing@f", "peak", "peak Hz")
+        )
+        # One persistent Capture for the whole run: a create/destroy cycle per
+        # capture is per-capture JACK churn, and the churn is what wedges the
+        # server (see jcap.py). Sample rate comes from the client, never a
+        # constant: frame/offset arithmetic at the wrong rate misplaces every
+        # window.
+        cap = Capture(sources=SOURCES, name="s3ked-pandep")
+        sr = int(cap.samplerate)
         for row in rows:
             got = []
             for _ in range(args.repeats):
                 br.select_program_number(row["prgnum"])
                 time.sleep(0.35)
-                with Capture(sources=SOURCES, name="s3ked-pandep") as cap:
-                    cap.start()
-                    time.sleep(0.30)
-                    out.send_message([0x90, NOTE, args.velocity])
-                    time.sleep(args.hold)
-                    out.send_message([0x80, NOTE, 0])
-                    time.sleep(0.25)
-                    chans = cap.stop_channels()
-                    xr, ov = cap.xruns, cap.overflows
+                cap.start()
+                time.sleep(0.30)
+                out.send_message([0x90, NOTE, args.velocity])
+                time.sleep(args.hold)
+                out.send_message([0x80, NOTE, 0])
+                time.sleep(0.25)
+                chans = cap.stop_channels()
+                xr, ov = cap.xruns, cap.overflows
                 if len(chans) != 2 or xr or ov:
                     print("   !! chans=%d xruns=%d overflows=%d" % (len(chans), xr, ov))
-                sr = 48000
                 skip = int(SKIP * sr)
                 L = np.asarray(chans[0][skip:], float) / 32768.0
                 R = np.asarray(chans[1][skip:], float) / 32768.0
@@ -147,7 +172,7 @@ def main():
                 # is reported beside the swing -- without it, "PANDEP 0 is
                 # silent" cannot be told from "the note never played", and
                 # the first run of this probe could not tell them apart.
-                lvl = 20 * np.log10(max(np.sqrt((L ** 2).mean()), 1e-12))
+                lvl = 20 * np.log10(max(np.sqrt((L**2).mean()), 1e-12))
                 b = balance_series(L, R, sr)
                 got.append(coherent_swing_db(b, HOP, target) + (lvl,))
             sw = float(np.median([g[0] for g in got]))
@@ -156,21 +181,40 @@ def main():
             lv = float(np.median([g[3] for g in got]))
             row.update(swing=sw, peak=pk, peak_hz=pf, level=lv)
             flag = "  <-- SILENT, not steady" if lv < -60 else ""
-            print("%-13s %6d %6d %9.1f | %9.2f %9.2f %9.3f%s"
-                  % (row["name"], row["pandep"], row["modvpan1"],
-                     lv, sw, pk, pf, flag))
+            print(
+                "%-13s %6d %6d %9.1f | %9.2f %9.2f %9.3f%s"
+                % (row["name"], row["pandep"], row["modvpan1"], lv, sw, pk, pf, flag)
+            )
     finally:
-        out.send_message([0x80, NOTE, 0])
-        out.close_port()
+        if cap is not None:
+            try:
+                cap.close()
+            except Exception:
+                pass
+        if out is not None:
+            try:
+                out.send_message([0x80, NOTE, 0])
+            except Exception:
+                pass
+            try:
+                out.close_port()
+            except Exception:
+                pass
+        if br is not None:
+            try:
+                br.close()
+            except Exception:
+                pass
 
     print()
     by = {r["name"]: r for r in rows}
     d99, d50, d0 = by["PD DEP 99"], by["PD DEP 50"], by["PD DEP 0"]
     if d50["swing"] > 0.01:
-        print("RATIO 99:50 = %.3f   (product law predicts 1.980)"
-              % (d99["swing"] / d50["swing"]))
-    print("floor  PD CTRL   %.2f dB     route-absent PD NOMATRIX %.2f dB"
-          % (by["PD CTRL"]["swing"], by["PD NOMATRIX"]["swing"]))
+        print("RATIO 99:50 = %.3f   (product law predicts 1.980)" % (d99["swing"] / d50["swing"]))
+    print(
+        "floor  PD CTRL   %.2f dB     route-absent PD NOMATRIX %.2f dB"
+        % (by["PD CTRL"]["swing"], by["PD NOMATRIX"]["swing"])
+    )
     print("PANDEP 0 with the route live: %.2f dB" % d0["swing"])
 
 

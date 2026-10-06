@@ -43,6 +43,7 @@ the bridge was never wrong.
 Every value is verified by reading the machine back, never by trusting what
 the app believes.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -88,7 +89,43 @@ def read(app, bridge, name, index, keygroup=0):
 
 
 async def main() -> int:
+    import signal as _signal
+
     bridge = b.S3kBridge.autodetect(channels=(0,))
+    # SIGTERM ends CPython without unwinding; without this RAM is left
+    # holding test values. One-shot, like calibrate.run_sweep.
+    _previous = {}
+
+    def _bail(signum, _frame):
+        for _s, _h in _previous.items():
+            try:
+                _signal.signal(_s, _h)
+            except (ValueError, OSError):
+                pass
+        raise KeyboardInterrupt(f"signal {signum}")
+
+    for _sig in (_signal.SIGTERM, getattr(_signal, "SIGHUP", None), _signal.SIGINT):
+        if _sig is None:
+            continue
+        try:
+            _previous[_sig] = _signal.signal(_sig, _bail)
+        except (ValueError, OSError):
+            pass
+    try:
+        return await _main_inner(bridge)
+    finally:
+        for _s, _h in _previous.items():
+            try:
+                _signal.signal(_s, _h)
+            except (ValueError, OSError):
+                pass
+        try:
+            bridge.close()
+        except Exception:
+            pass
+
+
+async def _main_inner(bridge) -> int:
     programs = bridge.program_list()
     if not programs:
         print("no programs resident -- load a volume first", flush=True)
@@ -97,16 +134,21 @@ async def main() -> int:
     # The program with the MOST keygroups, so the non-zero keygroup cases can
     # actually run. Picking program 0 blindly meant they were skipped, and a
     # skipped case is not a passing one.
-    counts = [bridge.get_header_bytes("program", i, 42, 1)[0]
-              for i in range(len(programs))]
+    counts = [bridge.get_header_bytes("program", i, 42, 1)[0] for i in range(len(programs))]
     program = counts.index(max(counts))
     groups = counts[program]
-    print(f"{len(programs)} programs resident; using program {program}, "
-          f"which has {groups} keygroup(s)\n", flush=True)
+    print(
+        f"{len(programs)} programs resident; using program {program}, "
+        f"which has {groups} keygroup(s)\n",
+        flush=True,
+    )
     cases = [c for c in CASES if c[0] == "program" or c[2] < groups]
     if len(cases) != len(CASES):
-        print(f"  skipping {len(CASES) - len(cases)} case(s) needing more "
-              f"keygroups than this program has", flush=True)
+        print(
+            f"  skipping {len(CASES) - len(cases)} case(s) needing more "
+            f"keygroups than this program has",
+            flush=True,
+        )
 
     app = S3kedApp(bridge, allow_write=True)
     failures = []
@@ -114,8 +156,9 @@ async def main() -> int:
     async with app.run_test(size=(120, 40)) as pilot:
         await settle(pilot, 60)
 
-        print("  case                          orig  wrote  readback  "
-              "after undo  verdict", flush=True)
+        print(
+            "  case                          orig  wrote  readback  after undo  verdict", flush=True
+        )
         print("  " + "-" * 76, flush=True)
 
         for region, name, keygroup, new in cases:
@@ -135,13 +178,36 @@ async def main() -> int:
 
                 ok = wrote == target and restored == original
                 label = f"{region} {name} kg{keygroup} #{round_number}"
-                print(f"  {label:<28} {original:>5} {target:>6} "
-                      f"{wrote:>9} {restored:>11}  "
-                      f"{'ok' if ok else 'FAIL'}", flush=True)
+                print(
+                    f"  {label:<28} {original:>5} {target:>6} "
+                    f"{wrote:>9} {restored:>11}  "
+                    f"{'ok' if ok else 'FAIL'}",
+                    flush=True,
+                )
                 if not ok:
                     failures.append(
                         f"{label}: wrote {target} read {wrote}, "
-                        f"undo gave {restored} want {original}")
+                        f"undo gave {restored} want {original}"
+                    )
+                if restored != original:
+                    # The undo under test failed: force-restore through the
+                    # bridge directly, independently of the application, so
+                    # a broken undo cannot leave RAM altered for the next
+                    # case. A force-restore that itself fails is reported
+                    # loudly rather than silently moving on.
+                    try:
+                        with app._bridge_lock:
+                            bridge.set_parameter(param, program, original, keygroup=keygroup)
+                            forced = bridge.get_parameter(param, program, keygroup=keygroup)
+                    except Exception as exc:
+                        failures.append(f"{label}: FORCE-RESTORE FAILED: {exc}")
+                    else:
+                        if forced != original:
+                            failures.append(
+                                f"{label}: force-restore read {forced}, want {original}"
+                            )
+                        else:
+                            print(f"  {label:<28} force-restored to {original}", flush=True)
 
         # --- Z, over several edits at once --------------------------------
         print("\n  undo-all over three edits:", flush=True)
@@ -158,12 +224,22 @@ async def main() -> int:
         await settle(pilot, 150)
         after = read(app, bridge, name, program, keygroup)
         ok = mid == 43 and after == before
-        print(f"    {name} kg{keygroup}: {before} -> 41,42,43 -> "
-              f"read {mid} -> Z -> {after}  {'ok' if ok else 'FAIL'}",
-              flush=True)
+        print(
+            f"    {name} kg{keygroup}: {before} -> 41,42,43 -> "
+            f"read {mid} -> Z -> {after}  {'ok' if ok else 'FAIL'}",
+            flush=True,
+        )
         if not ok:
-            failures.append(
-                f"Z: started {before}, reached {mid}, ended {after}")
+            failures.append(f"Z: started {before}, reached {mid}, ended {after}")
+        if after != before:
+            try:
+                with app._bridge_lock:
+                    bridge.set_parameter(param, program, before, keygroup=keygroup)
+                    forced = bridge.get_parameter(param, program, keygroup=keygroup)
+                if forced != before:
+                    failures.append(f"Z: force-restore read {forced}, want {before}")
+            except Exception as exc:
+                failures.append(f"Z: FORCE-RESTORE FAILED: {exc}")
         if app._undo:
             failures.append(f"Z left {len(app._undo)} entries in the log")
 
@@ -175,8 +251,7 @@ async def main() -> int:
         app._load_program(program)
         await settle(pilot, 80)
         table = app.query_one("#parameters", DataTable)
-        row = next(i for i, x in enumerate(app._param_rows)
-                   if x.name == "PLAYLO")
+        row = next(i for i, x in enumerate(app._param_rows) if x.name == "PLAYLO")
         table.move_cursor(row=row)
         await settle(pilot, 20)
 
@@ -193,11 +268,13 @@ async def main() -> int:
         await settle(pilot, 80)
         back = read(app, bridge, "PLAYLO", program)
 
-        ok = (stepped == start + 4 and entries == 1 and back == start
-              and still_on == "PLAYLO")
-        print(f"    PLAYLO: {start} -> +4 -> {stepped}; log grew by "
-              f"{entries}; cursor on {still_on}; after z {back}  "
-              f"{'ok' if ok else 'FAIL'}", flush=True)
+        ok = stepped == start + 4 and entries == 1 and back == start and still_on == "PLAYLO"
+        print(
+            f"    PLAYLO: {start} -> +4 -> {stepped}; log grew by "
+            f"{entries}; cursor on {still_on}; after z {back}  "
+            f"{'ok' if ok else 'FAIL'}",
+            flush=True,
+        )
         if stepped != start + 4:
             failures.append(f"nudge: 4 taps moved {start}->{stepped}")
         if entries != 1:
@@ -206,16 +283,30 @@ async def main() -> int:
             failures.append(f"cursor moved to {still_on} during the run")
         if back != start:
             failures.append(f"one z after a run gave {back}, want {start}")
+        if back != start:
+            try:
+                with app._bridge_lock:
+                    bridge.set_parameter(
+                        p.lookup(("program", "PLAYLO")), program, start, keygroup=0
+                    )
+                    forced = bridge.get_parameter(
+                        p.lookup(("program", "PLAYLO")), program, keygroup=0
+                    )
+                if forced != start:
+                    failures.append(f"nudge: force-restore read {forced}, want {start}")
+            except Exception as exc:
+                failures.append(f"nudge: FORCE-RESTORE FAILED: {exc}")
 
-    bridge.close()
     print(flush=True)
     if failures:
         print(f"{len(failures)} FAILURE(S):", flush=True)
         for line in failures:
             print(f"  {line}", flush=True)
         return 1
-    print(f"all {len(cases) * ROUNDS + 1} round trips exact, "
-          f"read back off the machine every time.", flush=True)
+    print(
+        f"all {len(cases) * ROUNDS + 1} round trips exact, read back off the machine every time.",
+        flush=True,
+    )
     return 0
 
 

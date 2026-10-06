@@ -67,6 +67,7 @@ place. A null result is worth recording either way: "swept 0-127 of the byte
 bank across three settings, nothing tracked" is a finding, and re-running it
 later costs nothing to avoid only if it was written down.
 """
+
 import sys
 import time
 
@@ -86,7 +87,10 @@ KNOWN = {
     0: "device type",
     2: "partition",
     4: "selection held",
-    6: "load trigger", 7: "load trigger", 8: "load trigger", 9: "load trigger",
+    6: "load trigger",
+    7: "load trigger",
+    8: "load trigger",
+    9: "load trigger",
     11: "SCSI drive id",
     12: "SCSI local id",
     49: "CURSOR VALUE -- tracks the field the cursor is on, not a register",
@@ -107,13 +111,25 @@ def sweep(bridge, indices):
 def main():
     duration = float(sys.argv[1]) if len(sys.argv) > 1 else 180.0
     bridge = b.S3kBridge.autodetect(channels=(0,))
-    print(f"baseline sweep… (watching for {duration:.0f} s, "
-          f"or until Ctrl-C)", flush=True)
+    try:
+        _main_inner(bridge, duration)
+    finally:
+        try:
+            bridge.close()
+        except Exception:
+            pass
+
+
+def _main_inner(bridge, duration):
+    print(f"baseline sweep… (watching for {duration:.0f} s, or until Ctrl-C)", flush=True)
     baseline = sweep(bridge, range(HIGHEST + 1))
     live = sorted(baseline)
     print(f"  {len(live)} readable indices, 0-{max(live)}\n", flush=True)
-    print(f"  page is {bridge.MODES.get(baseline.get(91), '?')}; "
-          f"change the load type at the panel now\n", flush=True)
+    print(
+        f"  page is {bridge.MODES.get(baseline.get(91), '?')}; "
+        f"change the load type at the panel now\n",
+        flush=True,
+    )
     print("   time  index  from -> to   note", flush=True)
     print("  " + "-" * 62, flush=True)
 
@@ -128,10 +144,12 @@ def main():
                 if index not in current or current[index] == previous[index]:
                     continue
                 moved.setdefault(index, []).append(current[index])
-                print(f"  {time.time() - started:>5.0f}s  {index:>5}  "
-                      f"{previous[index]:>4} -> {current[index]:<4}  "
-                      f"{KNOWN.get(index, '<< UNKNOWN -- candidate')}",
-                      flush=True)
+                print(
+                    f"  {time.time() - started:>5.0f}s  {index:>5}  "
+                    f"{previous[index]:>4} -> {current[index]:<4}  "
+                    f"{KNOWN.get(index, '<< UNKNOWN -- candidate')}",
+                    flush=True,
+                )
                 previous[index] = current[index]
     except KeyboardInterrupt:
         pass
@@ -142,15 +160,14 @@ def main():
         values = moved[index]
         note = KNOWN.get(index)
         if note is None:
-            note = ("CANDIDATE -- tracked across "
-                    f"{len(set(values))} value(s)"
-                    if len(set(values)) > 1 else
-                    "moved once only -- could be coincidence")
+            note = (
+                f"CANDIDATE -- tracked across {len(set(values))} value(s)"
+                if len(set(values)) > 1
+                else "moved once only -- could be coincidence"
+            )
         print(f"  {index:>5}  {sorted(set(values))!s:<20}  {note}", flush=True)
     if not moved:
-        print("  nothing moved at all -- was the setting actually changed?",
-              flush=True)
-    bridge.close()
+        print("  nothing moved at all -- was the setting actually changed?", flush=True)
 
 
 if __name__ == "__main__":

@@ -136,7 +136,22 @@ class _ReadOnlyOut:
         self.sent += 1
         self._inner.send_message(data)
 
+    #: Attributes that may pass through to the wrapped port. Everything
+    #: else raises :class:`AttributeError`. An open ``__getattr__`` would let
+    #: any caller reach the inner port object itself (or a `delete`/`open`
+    #: method that rebinds it) and send frames past the allowlist, so the
+    #: guard would be advisory rather than enforced. Read-only operation
+    #: needs `close_port`/`delete` for teardown and `get_ports` for
+    #: diagnostics; nothing else passes.
+    _SAFE_DELEGATE = frozenset({"close_port", "delete", "get_ports"})
+
     def __getattr__(self, name):
+        if name not in self._SAFE_DELEGATE:
+            raise AttributeError(
+                f"{type(self).__name__} has no attribute {name!r} "
+                f"(delegation is limited to {sorted(self._SAFE_DELEGATE)} "
+                f"so frames cannot bypass the read-only allowlist)"
+            )
         return getattr(self._inner, name)
 
 
@@ -179,7 +194,16 @@ def _signed(value: int, size: int, minimum: int) -> int:
 
 
 def _raw_exchange(bridge, frame: bytes, timeout: float) -> Optional[bytes]:
-    """Send a hand-built frame, return the reply, or None on silence."""
+    """Send a hand-built frame, return the reply, or None on TRANSPORT silence.
+
+    None means the exchange failed (timeout, dropped bytes) -- it says
+    nothing about the device. A device REFUSAL arrives as a well-formed
+    REPLY frame and is returned, not mapped to None, so callers can tell
+    "the machine said no" (a finding about the opcode) from "nothing came
+    back" (a finding about the bus). Findings must never be built on None:
+    a transient timeout counted as an answer is how a GROUPS/opcode
+    contradiction gets invented out of a loose cable.
+    """
     try:
         return bridge.send_and_receive(frame, timeout=timeout)
     except Exception:
@@ -292,11 +316,23 @@ def check_opcodes(bridge, report: Report, timeout: float) -> Dict[str, str]:
             exclusive_channel=bridge.exclusive_channel,
         ).encode()
         reply = _raw_exchange(bridge, frame, timeout)
+        if reply is None:
+            # A single silence is a transport event, not a device finding;
+            # retry once before recording it.
+            reply = _raw_exchange(bridge, frame, timeout)
+            report.reads += 1
         status, detail = _classify(reply, m.EXTENDED_REPLY_FOR[op])
         key = f"{C(op).name}[{selector}]"
         supported[key] = status
-        rows.append({"op": C(op).name, "selector": selector, "what": label,
-                     "status": status, "detail": detail})
+        rows.append(
+            {
+                "op": C(op).name,
+                "selector": selector,
+                "what": label,
+                "status": status,
+                "detail": detail,
+            }
+        )
         report.reads += 1
 
     for op, expect, kg, label in (
@@ -306,10 +342,14 @@ def check_opcodes(bridge, report: Report, timeout: float) -> Dict[str, str]:
     ):
         frame = _s1000_request(op, 0, bridge.exclusive_channel, keygroup=kg)
         reply = _raw_exchange(bridge, frame, timeout)
+        if reply is None:
+            reply = _raw_exchange(bridge, frame, timeout)
+            report.reads += 1
         status, detail = _classify(reply, expect)
         supported[C(op).name] = status
-        rows.append({"op": C(op).name, "selector": None, "what": label,
-                     "status": status, "detail": detail})
+        rows.append(
+            {"op": C(op).name, "selector": None, "what": label, "status": status, "detail": detail}
+        )
         report.reads += 1
 
     report.sections["opcodes"] = rows
@@ -372,9 +412,7 @@ def check_ranges(
                     )
                 continue
 
-            number = _signed(
-                int.from_bytes(span, "little"), param.size, param.minimum
-            )
+            number = _signed(int.from_bytes(span, "little"), param.size, param.minimum)
             decoded[param.name] = number
             if param.kind == "address":
                 continue  # "internal use"; the spec states no meaningful range
@@ -384,8 +422,7 @@ def check_ranges(
                     "ranges",
                     "contradiction",
                     f"{label} {param.name} = {number}, outside {param.minimum}..{param.maximum}",
-                    f"offset {param.offset}, {param.size} byte(s), "
-                    f"raw {span.hex(' ')}",
+                    f"offset {param.offset}, {param.size} byte(s), raw {span.hex(' ')}",
                 )
         values[label] = decoded
 
@@ -519,8 +556,14 @@ def check_extent(bridge, report: Report, regions: Sequence[str], timeout: float)
         actual = low + 1
 
         if actual >= _EXTENT_CEILING:
-            rows.append({"region": region, "documented": documented,
-                         "measured": None, "result": "no bound found"})
+            rows.append(
+                {
+                    "region": region,
+                    "documented": documented,
+                    "measured": None,
+                    "result": "no bound found",
+                }
+            )
             report.add(
                 "extent",
                 "contradiction",
@@ -565,22 +608,56 @@ def check_invariants(
             # read for *any* keygroup number (§11), so counting with it would
             # measure this loop's own bound; the S1000 layer refuses a
             # keygroup that does not exist, exactly as documented.
+            #
+            # Silence is not an answer: a transient timeout mid-list would
+            # truncate the count and invent a GROUPS contradiction out of a
+            # loose cable. Each keygroup is retried once, and a persistent
+            # silence (or an unparseable/unexpected reply) ends the count as
+            # UNDECIDED -- a gap about the bus, never a contradiction about
+            # the device.
             answering = 0
+            undecided = False
             for kg in range(99):
-                frame = _s1000_request(
-                    C.RKDATA, 0, bridge.exclusive_channel, keygroup=kg
-                )
+                frame = _s1000_request(C.RKDATA, 0, bridge.exclusive_channel, keygroup=kg)
                 reply = _raw_exchange(bridge, frame, timeout)
                 report.reads += 1
                 if reply is None:
+                    reply = _raw_exchange(bridge, frame, timeout)
+                    report.reads += 1
+                if reply is None:
+                    undecided = True
                     break
-                _channel, command, _payload = m.parse_frame(reply)
-                if command != C.KDATA:
+                try:
+                    _channel, command, _payload = m.parse_frame(reply)
+                except ValueError:
+                    undecided = True
                     break
-                answering += 1
-            rows.append({"GROUPS": groups, "keygroups_answering": answering,
-                         "counted_with": "RKDATA"})
-            if answering != groups:
+                if command == C.KDATA:
+                    answering += 1
+                    continue
+                if command == C.REPLY:
+                    break  # a clean refusal: the documented end of the list
+                undecided = True
+                break
+            rows.append(
+                {
+                    "GROUPS": groups,
+                    "keygroups_answering": answering,
+                    "counted_with": "RKDATA",
+                    "undecided": undecided,
+                }
+            )
+            if undecided:
+                report.add(
+                    "invariants",
+                    "gap",
+                    f"program 0 declares GROUPS={groups} but the keygroup "
+                    f"count could not be determined ({answering} answered "
+                    f"before transport silence or an unexpected reply)",
+                    "no contradiction is reported: a timeout is a finding "
+                    "about the bus, not about GROUPS",
+                )
+            elif answering != groups:
                 report.add(
                     "invariants",
                     "contradiction",
@@ -653,16 +730,13 @@ def run(bridge, *, timeout: float, max_keygroups: int, max_samples: int) -> Repo
     # Sweeping a fixed count instead would fill the report with refusals that
     # are correct behaviour, and bury the findings that are not.
     program_targets = [("program", i, 0) for i in range(len(programs))]
-    program_targets += [
-        ("sample", i, 0) for i in range(min(len(samples), max_samples))
-    ]
+    program_targets += [("sample", i, 0) for i in range(min(len(samples), max_samples))]
     # Multi mode is the S2000/S3000XL/S3200XL headline feature and the least
     # corroborated part of the table, so sweep it whenever the machine
     # answers the opcode at all.
     opcodes = report.sections.get("opcodes")
     if isinstance(opcodes, list) and any(
-        row["op"] == "RMULTIDATA" and row["status"] == "supported"
-        for row in opcodes
+        row["op"] == "RMULTIDATA" and row["status"] == "supported" for row in opcodes
     ):
         program_targets += [("multi", 0, 0), ("multipart", 0, 0)]
     values = check_ranges(bridge, report, program_targets, timeout)
@@ -693,9 +767,7 @@ def _print(report: Report) -> None:
 
     order = ("contradiction", "gap", "note")
     counts = {s: len(report.by_severity(s)) for s in order}
-    print(
-        "contradictions: {contradiction}   gaps: {gap}   notes: {note}".format(**counts)
-    )
+    print("contradictions: {contradiction}   gaps: {gap}   notes: {note}".format(**counts))
 
     for severity in order:
         found = report.by_severity(severity)
@@ -716,15 +788,19 @@ def main(argv: Optional[List[str]] = None) -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("--port", help="MIDI port name (default: autodetect)")
-    ap.add_argument("--dry-run", action="store_true",
-                    help="run against the demo sampler; opens no MIDI port")
+    ap.add_argument(
+        "--dry-run", action="store_true", help="run against the demo sampler; opens no MIDI port"
+    )
     ap.add_argument("--exclusive-channel", type=int, default=0)
-    ap.add_argument("--timeout", type=float, default=1.0,
-                    help="reply timeout in seconds (default: 1.0)")
-    ap.add_argument("--max-keygroups", type=int, default=4,
-                    help="keygroups per program to sweep (default: 4)")
-    ap.add_argument("--max-samples", type=int, default=8,
-                    help="sample headers to sweep (default: 8)")
+    ap.add_argument(
+        "--timeout", type=float, default=1.0, help="reply timeout in seconds (default: 1.0)"
+    )
+    ap.add_argument(
+        "--max-keygroups", type=int, default=4, help="keygroups per program to sweep (default: 4)"
+    )
+    ap.add_argument(
+        "--max-samples", type=int, default=8, help="sample headers to sweep (default: 8)"
+    )
     ap.add_argument("--out", help="write the full report as JSON here")
     args = ap.parse_args(argv)
 
@@ -733,9 +809,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         bridge = DemoBridge()
     elif args.port:
-        bridge = b.S3kBridge.standard(
-            args.port, exclusive_channel=args.exclusive_channel
-        )
+        bridge = b.S3kBridge.standard(args.port, exclusive_channel=args.exclusive_channel)
     else:
         bridge = b.S3kBridge.autodetect(
             channels=(args.exclusive_channel,),
@@ -772,8 +846,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             "reads": report.reads,
             "seconds": round(report.seconds, 2),
         }
-        Path(args.out).write_text(
-            json.dumps(payload, indent=2, default=str), encoding="utf-8")
+        Path(args.out).write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
         print()
         print(f"full report written to {args.out}")
 

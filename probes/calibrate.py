@@ -74,11 +74,11 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import measure as ms                   # noqa: E402  (beside this file)
-from s3k import params as p            # noqa: E402
+import measure as ms  # noqa: E402  (beside this file)
+from s3k import params as p  # noqa: E402
 
-LEAD_IN = 1.5                          # recorder head start before the first note
-TAIL = 2.0                             # recording tail after the last note-off
+LEAD_IN = 1.5  # recorder head start before the first note
+TAIL = 2.0  # recording tail after the last note-off
 
 
 # ==========================================================================
@@ -127,22 +127,64 @@ class _InProcessRecorder:
         import numpy as np
 
         self._np = np
-        self.client = jack.Client(name, no_start_server=True)
-        self.ports = [self.client.inports.register(f"in{i}")
-                      for i in range(len(capture))]
-        self._frames = []
-        self._armed = False
+        self.xruns = 0
+        self.overflows = 0
+        self.client = None
+        try:
+            self.client = jack.Client(name, no_start_server=True)
+            self.ports = [self.client.inports.register(f"in{i}") for i in range(len(capture))]
+            self._frames = []
+            self._armed = False
 
-        @self.client.set_process_callback
-        def _process(nframes):          # noqa: ARG001 - jack calls with frames
-            if self._armed:
-                self._frames.append(
-                    [p.get_array().copy() for p in self.ports])
+            @self.client.set_process_callback
+            def _process(nframes):  # noqa: ARG001 - jack calls with frames
+                if self._armed:
+                    self._frames.append([p.get_array().copy() for p in self.ports])
 
-        self.client.activate()
+            try:
+                self.client.set_xrun_callback(lambda _delay: self._count_xrun())
+            except Exception:
+                pass
+            self.client.activate()
+            # Resolve through jcap's discipline: a renamed port must stop
+            # the run instead of being silently substituted by the server,
+            # and a connect() that did not take must be refused rather than
+            # captured from. Falls back to the raw names only where jcap
+            # itself is unavailable; the verify below still applies.
+            try:
+                from jcap import resolve_sources as _resolve
+
+                wanted = _resolve(self.client, list(capture))
+            except Exception:
+                wanted = list(capture)
+            for src, dst in zip(wanted, self.ports):
+                self.client.connect(src, dst)
+            self._verify_connections(wanted)
+            self.samplerate = self.client.samplerate
+        except BaseException:
+            self.close()
+            raise
+
+    def _count_xrun(self) -> None:
+        self.xruns += 1
+
+    def _verify_connections(self, capture) -> None:
+        """Refuse a connection the server did not actually make.
+
+        ``connect()`` not raising is not evidence the connection exists --
+        see ``probes/jcap.py``. Only skipped where the client API cannot
+        answer at all; ``jcap.Capture`` remains the strict path.
+        """
+        get_all = getattr(self.client, "get_all_connections", None)
+        if get_all is None:
+            return
         for src, dst in zip(capture, self.ports):
-            self.client.connect(src, dst)
-        self.samplerate = self.client.samplerate
+            got = [getattr(c, "name", c) for c in get_all(dst)]
+            if src not in got:
+                raise RuntimeError(
+                    f"capture port {src!r} is wired to {got or 'nothing'} "
+                    f"after connect() -- refusing a substituted input"
+                )
 
     def record(self, seconds: float, during=None, then=None, after: float = 0.0):
         """Capture *seconds*, calling *during* at the start and *then* at
@@ -157,7 +199,7 @@ class _InProcessRecorder:
         self._frames = []
         self._armed = True
         try:
-            time.sleep(0.15)            # let a couple of periods land first
+            time.sleep(0.15)  # let a couple of periods land first
             if during is not None:
                 during()
             if then is not None:
@@ -184,13 +226,16 @@ class _InProcessRecorder:
 
     def close(self):
         try:
-            self.client.deactivate()
+            if self.client is not None:
+                self.client.deactivate()
         except Exception:
             pass
         try:
-            self.client.close()
+            if self.client is not None:
+                self.client.close()
         except Exception:
             pass
+        self.client = None
 
 
 @dataclass
@@ -212,7 +257,7 @@ class Rig:
     """
 
     midi_port: str
-    midi_channel: int = 0                          # 0-indexed
+    midi_channel: int = 0  # 0-indexed
     capture: Sequence[str] = ("system:capture_1", "system:capture_2")
 
     def _recorder(self):
@@ -226,8 +271,7 @@ class Rig:
                 object.__setattr__(self, "_cached_rec", cached)
             except Exception as exc:
                 object.__setattr__(self, "_rec_failed", True)
-                print(f"  (in-process recorder unavailable: {exc}; "
-                      f"falling back to jack_rec)")
+                print(f"  (in-process recorder unavailable: {exc}; falling back to jack_rec)")
                 return None
         return cached
 
@@ -269,6 +313,7 @@ class Rig:
         side.
         """
         import rtmidi
+
         out = rtmidi.MidiOut()
         ports = out.get_ports()
         exact = [i for i, name in enumerate(ports) if name == self.midi_port]
@@ -281,15 +326,20 @@ class Rig:
         if len(hits) > 1:
             listing = "\n  ".join(ports[i] for i in hits)
             raise SystemExit(
-                f"{self.midi_port!r} matches {len(hits)} ports; name one exactly:"
-                f"\n  {listing}"
+                f"{self.midi_port!r} matches {len(hits)} ports; name one exactly:\n  {listing}"
             )
         out.open_port(hits[0])
         return out
 
-    def play_and_record(self, note: int, hold: float, velocity: int = 100,
-                        gap: float = 0.5, out_wav: Optional[str] = None,
-                        release_velocity: int = 0):
+    def play_and_record(
+        self,
+        note: int,
+        hold: float,
+        velocity: int = 100,
+        gap: float = 0.5,
+        out_wav: Optional[str] = None,
+        release_velocity: int = 0,
+    ):
         """Record one note. Returns ``(wav_path, t_on, t_off)`` in audio time.
 
         The two times come from the MIDI clock plus the measured onset offset,
@@ -309,8 +359,7 @@ class Rig:
         release velocity at all.
         """
         if not 0 <= release_velocity <= 127:
-            raise ValueError(
-                f"release_velocity {release_velocity} outside 0..127")
+            raise ValueError(f"release_velocity {release_velocity} outside 0..127")
         total = LEAD_IN + hold + gap + TAIL
         ours = not out_wav
         if ours:
@@ -327,19 +376,26 @@ class Rig:
                 out.send_message([0x90 | self.midi_channel, note, velocity])
 
             def _release():
-                out.send_message([0x80 | self.midi_channel, note,
-                                  release_velocity])
+                out.send_message([0x80 | self.midi_channel, note, release_velocity])
 
             # note-on at ~0.15 s in, note-off `hold` later, and TAIL of
             # recording after that so the release has somewhere to land.
-            data = recorder.record(0.15 + hold + TAIL, during=_play,
-                                   then=_release, after=0.15 + hold)
+            data = recorder.record(
+                0.15 + hold + TAIL, during=_play, then=_release, after=0.15 + hold
+            )
+            if getattr(recorder, "xruns", 0) or getattr(recorder, "overflows", 0):
+                raise RuntimeError(
+                    f"capture is not contiguous: "
+                    f"{getattr(recorder, 'xruns', 0)} xrun(s), "
+                    f"{getattr(recorder, 'overflows', 0)} dropped block(s)"
+                )
             recorder.write_wav(out_wav, data)
             return out_wav, 0.0, hold
 
         rec = subprocess.Popen(
             ["jack_rec", "-f", out_wav, "-d", f"{total:.1f}", *self.capture],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
         try:
             time.sleep(LEAD_IN)
@@ -385,6 +441,7 @@ class Rig:
 # Sweep definitions
 # ==========================================================================
 
+
 @dataclass
 class Sweep:
     """One calibration run: what to hold still, what to vary, what to measure.
@@ -398,10 +455,10 @@ class Sweep:
     """
 
     name: str
-    param: str                                     # the parameter being swept
+    param: str  # the parameter being swept
     region: str
     values: Sequence[int]
-    measure: str                                   # key into MEASURERS
+    measure: str  # key into MEASURERS
     unit: str
     note: int = 60
     hold: float = 3.0
@@ -410,8 +467,8 @@ class Sweep:
     source: str = "any sustained sample"
     ref_band: Tuple[float, float] = (100.0, 500.0)
     prepare: Sequence[Tuple[str, str, int]] = field(default_factory=tuple)
-    fit: str = "exp"          # "exp" or "linear"; see summarise()
-    reference_value: Optional[int] = None          # take a reference at this value first
+    fit: str = "exp"  # "exp" or "linear"; see summarise()
+    reference_value: Optional[int] = None  # take a reference at this value first
     # Applied for the REFERENCE recording only, then put back. `reference_value`
     # sets the SWEPT parameter, which is right when sweeping the filter itself
     # -- FILFRQ 99 is wide open and gives the source's own shape. It is no use
@@ -447,12 +504,12 @@ _MAIN_OUT = (
 )
 
 _FILTER_NEUTRAL = (
-    ("keygroup", "K_FREQ", 0),        # key follow off: the corner must not track the note
-    ("keygroup", "VFREQ1", 0),        # velocity zone 1 filter offset
+    ("keygroup", "K_FREQ", 0),  # key follow off: the corner must not track the note
+    ("keygroup", "VFREQ1", 0),  # velocity zone 1 filter offset
     ("keygroup", "MODVFILT1", 0),
     ("keygroup", "MODVFILT2", 0),
     ("keygroup", "MODVFILT3", 0),
-    ("program", "SPFILT", 0),         # soft-pedal filter reduction
+    ("program", "SPFILT", 0),  # soft-pedal filter reduction
 )
 
 _LFO_OFF = (
@@ -468,9 +525,11 @@ SWEEPS: Dict[str, Sweep] = {
         name="filter",
         # MEASURED exponential, 2026-08-11: x2.092 per 10 units, r2 0.9996.
         fit="exp",
-        param="FILFRQ", region="keygroup",
+        param="FILFRQ",
+        region="keygroup",
         values=tuple(range(0, 100, 2)),
-        measure="corner_hz", unit="Hz",
+        measure="corner_hz",
+        unit="Hz",
         hold=3.0,
         # Note 24, NOT the default 60. Measured 2026-08-11 (§20): the resident
         # SAWTOOTH sounds at 261.6 Hz at note 60, which puts the reference band
@@ -488,9 +547,9 @@ SWEEPS: Dict[str, Sweep] = {
         reference_value=99,
         prepare=_MAIN_OUT + _ENV1_OPEN + _FILTER_NEUTRAL + _LFO_OFF,
         why="FILFRQ 0..99 is documented as 'basic filter frequency' with no "
-            "unit anywhere. Everything downstream -- showing a frequency in "
-            "the editor, converting a cutoff INTO an Akai program -- needs "
-            "the map from that integer to hertz.",
+        "unit anywhere. Everything downstream -- showing a frequency in "
+        "the editor, converting a cutoff INTO an Akai program -- needs "
+        "the map from that integer to hertz.",
     ),
     # Run this one TWICE, at two velocities, and difference the results.
     # `Sweep` varies a PARAMETER at a fixed velocity, and the quantity wanted
@@ -511,12 +570,14 @@ SWEEPS: Dict[str, Sweep] = {
     "mod-filter": Sweep(
         name="mod-filter",
         fit="exp",
-        param="MODVFILT1", region="keygroup",
+        param="MODVFILT1",
+        region="keygroup",
         # POSITIVE only, and stopping at 50 because that is where the machine
         # clamps (§109: 90 read back as 50). Negative depths close the corner
         # further at low velocity and would sit under the reference band.
         values=(0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50),
-        measure="corner_hz", unit="Hz",
+        measure="corner_hz",
+        unit="Hz",
         hold=3.0,
         # Same note and band as the `filter` sweep, and for the same reason
         # (§20): at note 24 the fundamental is ~32.7 Hz and its 2nd and 3rd
@@ -525,11 +586,14 @@ SWEEPS: Dict[str, Sweep] = {
         note=24,
         ref_band=(50.0, 100.0),
         source="broadband: white noise, or failing that a bright saw",
-        prepare=_MAIN_OUT + _ENV1_OPEN + _LFO_OFF + (
-            ("keygroup", "K_FREQ", 0),        # key follow off
-            ("keygroup", "VFREQ1", 0),        # the zone's static filter offset
-            ("keygroup", "MODVFILT2", 0),     # the other two depths off, so
-            ("keygroup", "MODVFILT3", 0),     # only source 1 reaches the filter
+        prepare=_MAIN_OUT
+        + _ENV1_OPEN
+        + _LFO_OFF
+        + (
+            ("keygroup", "K_FREQ", 0),  # key follow off
+            ("keygroup", "VFREQ1", 0),  # the zone's static filter offset
+            ("keygroup", "MODVFILT2", 0),  # the other two depths off, so
+            ("keygroup", "MODVFILT3", 0),  # only source 1 reaches the filter
             ("program", "SPFILT", 0),
             # THE ROUTE. MODVFILT1 is "amount of control of filter frequency by
             # ASSIGNABLE SOURCE 1", and source 1 is chosen by MODSFILT1. 5 is
@@ -570,11 +634,11 @@ SWEEPS: Dict[str, Sweep] = {
         reference_value=0,
         reference_setup=(("keygroup", "FILFRQ", 99),),
         why="MODVFILT1's DEPTH has never been measured -- §109 established "
-            "that it responds, that it is per-keygroup and that it clamps at "
-            "+-50, but a clamp is a range limit and not a scale. Nothing "
-            "converts a MODVFILT1 value into octaves, so a converter mapping "
-            "a source's velocity-to-filter amount onto this field has no "
-            "basis for its multiplier. See TODO.md.",
+        "that it responds, that it is per-keygroup and that it clamps at "
+        "+-50, but a clamp is a range limit and not a scale. Nothing "
+        "converts a MODVFILT1 value into octaves, so a converter mapping "
+        "a source's velocity-to-filter amount onto this field has no "
+        "basis for its multiplier. See TODO.md.",
     ),
     # The same measurement with a NOISE source instead of the resident
     # sawtooth. Flat per Hz means the output spectrum IS the transfer
@@ -592,9 +656,11 @@ SWEEPS: Dict[str, Sweep] = {
     "mod-filter-noise": Sweep(
         name="mod-filter-noise",
         fit="exp",
-        param="MODVFILT1", region="keygroup",
+        param="MODVFILT1",
+        region="keygroup",
         values=(0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50),
-        measure="corner_hz", unit="Hz",
+        measure="corner_hz",
+        unit="Hz",
         hold=3.0,
         note=60,
         ref_band=(80.0, 200.0),
@@ -602,37 +668,44 @@ SWEEPS: Dict[str, Sweep] = {
         reference_value=0,
         reference_setup=(("keygroup", "FILFRQ", 99),),
         prepare=(
-            ("program", "OUTPUT", 0),      # off the individual outputs
+            ("program", "OUTPUT", 0),  # off the individual outputs
             ("program", "PANPOS", 0),
             # 70, not 85 and certainly not 99. A -9 dBFS noise sample at
             # velocity 120 clipped the interface at 85, and a clipped peak is
             # not a corner -- it is manufactured spectrum that looks like one.
             ("program", "PRLOUD", 70),
             ("program", "V_LOUD", 0),
-        ) + _ENV1_OPEN + _LFO_OFF + (
+        )
+        + _ENV1_OPEN
+        + _LFO_OFF
+        + (
             ("keygroup", "K_FREQ", 0),
             ("keygroup", "VFREQ1", 0),
             ("keygroup", "MODVFILT2", 0),
             ("keygroup", "MODVFILT3", 0),
             ("program", "SPFILT", 0),
-            ("program", "MODSFILT1", 5),   # source 1 = velocity
+            ("program", "MODSFILT1", 5),  # source 1 = velocity
             ("keygroup", "FILFRQ", 60),
             ("keygroup", "VLOUD1", 0),
         ),
         why="§116 measured MODVFILT1's depth against a sawtooth, whose comb "
-            "forced a reference and still saturated above depth 20 at "
-            "velocity 120. A flat source should extend the usable range and "
-            "remove the compensation.",
+        "forced a reference and still saturated above depth 20 at "
+        "velocity 120. A flat source should extend the usable range and "
+        "remove the compensation.",
     ),
     "amp-attack": Sweep(
         name="amp-attack",
-        param="ATTAK1", region="keygroup",
+        param="ATTAK1",
+        region="keygroup",
         values=(0, 5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 99),
-        measure="attack_s", unit="s",
+        measure="attack_s",
+        unit="s",
         hold=12.0,
         source="a sample with an immediate onset, so the attack measured is "
-               "the envelope's and not the sample's",
-        prepare=_MAIN_OUT + _LFO_OFF + (
+        "the envelope's and not the sample's",
+        prepare=_MAIN_OUT
+        + _LFO_OFF
+        + (
             ("keygroup", "DECAY1", 0),
             ("keygroup", "SUSTN1", 99),
             ("keygroup", "RELSE1", 0),
@@ -640,18 +713,22 @@ SWEEPS: Dict[str, Sweep] = {
             ("keygroup", "K_DAR1", 0),
         ),
         why="ATTAK1 is a RATE, so 99 is fastest and the curve almost "
-            "certainly runs the other way from the parameter number. Hold "
-            "must exceed the slowest attack or the top of the range measures "
-            "as 'still rising'.",
+        "certainly runs the other way from the parameter number. Hold "
+        "must exceed the slowest attack or the top of the range measures "
+        "as 'still rising'.",
     ),
     "amp-release": Sweep(
         name="amp-release",
-        param="RELSE1", region="keygroup",
+        param="RELSE1",
+        region="keygroup",
         values=(0, 5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 99),
-        measure="release_s", unit="s",
+        measure="release_s",
+        unit="s",
         hold=2.0,
         source="a sustained sample, looped, so the level at note-off is steady",
-        prepare=_MAIN_OUT + _LFO_OFF + (
+        prepare=_MAIN_OUT
+        + _LFO_OFF
+        + (
             ("keygroup", "ATTAK1", 0),
             ("keygroup", "DECAY1", 0),
             ("keygroup", "SUSTN1", 99),
@@ -660,24 +737,28 @@ SWEEPS: Dict[str, Sweep] = {
             ("keygroup", "K_DAR1", 0),
         ),
         why="Release is measured from note-off to -40 dB. A NaN at the slow "
-            "end means the release outran the 12 s measurement window, which "
-            "is a finding: widen the window and re-run those points only.",
+        "end means the release outran the 12 s measurement window, which "
+        "is a finding: widen the window and re-run those points only.",
     ),
     "amp-decay": Sweep(
         name="amp-decay",
-        param="DECAY1", region="keygroup",
+        param="DECAY1",
+        region="keygroup",
         values=(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99),
-        measure="decay_s", unit="s",
+        measure="decay_s",
+        unit="s",
         hold=10.0,
         source="a sustained sample, looped",
-        prepare=_MAIN_OUT + _LFO_OFF + (
+        prepare=_MAIN_OUT
+        + _LFO_OFF
+        + (
             ("keygroup", "ATTAK1", 0),
-            ("keygroup", "SUSTN1", 50),          # MUST be below peak or there
-            ("keygroup", "RELSE1", 0),           # is no decay phase to time
+            ("keygroup", "SUSTN1", 50),  # MUST be below peak or there
+            ("keygroup", "RELSE1", 0),  # is no decay phase to time
             ("keygroup", "K_DAR1", 0),
         ),
         why="Sustain is deliberately at half: with SUSTN1 at 99 there is no "
-            "decay segment and every point returns NaN.",
+        "decay segment and every point returns NaN.",
     ),
     "loudness": Sweep(
         name="loudness",
@@ -685,19 +766,24 @@ SWEEPS: Dict[str, Sweep] = {
         # is logarithmic, so a level control is likely linear in it. If the
         # data disagrees, summarise() will say so.
         fit="linear",
-        param="PRLOUD", region="program",
+        param="PRLOUD",
+        region="program",
         values=tuple(range(0, 100, 5)),
-        measure="rms_db", unit="dB",
+        measure="rms_db",
+        unit="dB",
         hold=3.0,
         source="a sustained sample, looped",
         reference_value=99,
-        prepare=_MAIN_OUT[:2] + _ENV1_OPEN + _LFO_OFF + (
+        prepare=_MAIN_OUT[:2]
+        + _ENV1_OPEN
+        + _LFO_OFF
+        + (
             ("program", "V_LOUD", 0),
             ("keygroup", "VLOUD1", 0),
         ),
         why="0..99 could be dB, could be linear amplitude, could be a table. "
-            "The answer decides how a converter maps a gain onto this field "
-            "-- get it wrong and every converted program is mixed wrong.",
+        "The answer decides how a converter maps a gain onto this field "
+        "-- get it wrong and every converted program is mixed wrong.",
     ),
     # The per-ZONE loudness offset. §51 measured it spanning 39.81 dB across
     # its range but never fitted a law, and it is the one field an AKAI
@@ -707,9 +793,11 @@ SWEEPS: Dict[str, Sweep] = {
     "zone-loudness": Sweep(
         name="zone-loudness",
         fit="linear",
-        param="VLOUD1", region="keygroup",
+        param="VLOUD1",
+        region="keygroup",
         values=tuple(range(-50, 51, 5)),
-        measure="rms_db", unit="dB",
+        measure="rms_db",
+        unit="dB",
         hold=3.0,
         note=60,
         source="a sustained sample; a steady state is all this needs",
@@ -723,15 +811,18 @@ SWEEPS: Dict[str, Sweep] = {
             # against a ceiling measures the ceiling.
             ("program", "PRLOUD", 70),
             ("program", "V_LOUD", 0),
-        ) + _ENV1_OPEN + _LFO_OFF + (
-            ("keygroup", "FILFRQ", 99),    # filter open: level, not tone
+        )
+        + _ENV1_OPEN
+        + _LFO_OFF
+        + (
+            ("keygroup", "FILFRQ", 99),  # filter open: level, not tone
             ("keygroup", "MODVFILT1", 0),
             ("keygroup", "K_FREQ", 0),
             ("keygroup", "VFREQ1", 0),
         ),
         why="An AKAI converter writing velocity layers sets this per zone to "
-            "balance them. §51 gives its span and no law, so a converter has "
-            "a range and no scale.",
+        "balance them. §51 gives its span and no law, so a converter has "
+        "a range and no scale.",
     ),
     "pan": Sweep(
         name="pan",
@@ -739,24 +830,32 @@ SWEEPS: Dict[str, Sweep] = {
         # runs symmetrically about centre, so linear is the guess. A pan law
         # is often sin/cos, which is neither shape -- expect disagreement.
         fit="linear",
-        param="PANPOS", region="program",
+        param="PANPOS",
+        region="program",
         values=tuple(range(-50, 51, 5)),
-        measure="balance_db", unit="dB",
-        hold=2.0, stereo=True,
+        measure="balance_db",
+        unit="dB",
+        hold=2.0,
+        stereo=True,
         source="a sustained MONO sample -- a stereo one pans its own image",
-        prepare=_MAIN_OUT[:1] + _ENV1_OPEN + _LFO_OFF + (
+        prepare=_MAIN_OUT[:1]
+        + _ENV1_OPEN
+        + _LFO_OFF
+        + (
             ("program", "STEREO", 99),
             ("keygroup", "VPANO1", 0),
         ),
         why="Settles the pan law: linear-amplitude, constant-power, or a "
-            "table. Needs a two-channel recording; a mono sum makes every "
-            "position look alike.",
+        "table. Needs a two-channel recording; a mono sum makes every "
+        "position look alike.",
     ),
     "lfo-rate": Sweep(
         name="lfo-rate",
-        param="LFORAT", region="program",
+        param="LFORAT",
+        region="program",
         values=tuple(range(0, 100, 5)),
-        measure="mod_hz", unit="Hz",
+        measure="mod_hz",
+        unit="Hz",
         hold=10.0,
         source="a sustained sample, looped",
         # MEASURED linear, 2026-08-11: 0.11867 Hz per unit, r2 0.9995, so
@@ -764,7 +863,9 @@ SWEEPS: Dict[str, Sweep] = {
         # one sweep whose shape the old single-model harness got outright
         # wrong. RESOLUTION_NOTES §24.
         fit="linear",
-        prepare=_MAIN_OUT + _ENV1_OPEN + (
+        prepare=_MAIN_OUT
+        + _ENV1_OPEN
+        + (
             ("program", "LFODEP", 99),
             ("program", "LFODEL", 0),
             ("program", "VELDEP", 0),
@@ -781,27 +882,27 @@ SWEEPS: Dict[str, Sweep] = {
             ("program", "MODVAMP1", 50),
         ),
         why="LFORAT is 'speed of LFO1', unitless. Ten seconds of note gives "
-            "the envelope FFT enough resolution to resolve rates below 1 Hz.",
+        "the envelope FFT enough resolution to resolve rates below 1 Hz.",
     ),
     "tuning": Sweep(
         name="tuning",
         # MEASURED linear, 2026-08-11: 0.39167 cents per unit, r2 0.9998.
         # KGTUNO's low byte is 1/256 semitone, so the scale does not bend.
         fit="linear",
-        param="KGTUNO", region="keygroup",
+        param="KGTUNO",
+        region="keygroup",
         values=(0, 1, 2, 4, 8, 16, 32, 50),
-        measure="cents", unit="cents",
+        measure="cents",
+        unit="cents",
         hold=2.0,
         source="a steady pitched sample with a clear fundamental",
         reference_value=0,
-        prepare=_MAIN_OUT + _ENV1_OPEN + _LFO_OFF + (
-            ("program", "PTUNO", 0),
-        ),
+        prepare=_MAIN_OUT + _ENV1_OPEN + _LFO_OFF + (("program", "PTUNO", 0),),
         why="The tuning fields are documented as 'cent:semi' pairs, so the "
-            "low byte should be cents and a step of 1 should move the pitch "
-            "by one cent. That is a claim about a two-byte layout, and it is "
-            "cheap to check: sweep it and see whether 50 gives 50 cents or "
-            "half a semitone of something else.",
+        "low byte should be cents and a step of 1 should move the pitch "
+        "by one cent. That is a claim about a two-byte layout, and it is "
+        "cheap to check: sweep it and see whether 50 gives 50 cents or "
+        "half a semitone of something else.",
     ),
 }
 
@@ -812,10 +913,18 @@ SWEEPS: Dict[str, Sweep] = {
 
 #: Every measurement the sweeps may name. Checked before a note is played:
 #: a typo that only surfaces after the first recording costs a whole take.
-_MEASUREMENTS = frozenset({
-    "corner_hz", "attack_s", "release_s", "decay_s",
-    "rms_db", "balance_db", "mod_hz", "cents",
-})
+_MEASUREMENTS = frozenset(
+    {
+        "corner_hz",
+        "attack_s",
+        "release_s",
+        "decay_s",
+        "rms_db",
+        "balance_db",
+        "mod_hz",
+        "cents",
+    }
+)
 
 
 #: Minimum dB a real note lifts above its own pre-roll. Anything less means
@@ -877,18 +986,18 @@ def lift_over_preroll(wav: str, t_on: float, *, window: float = 1.0) -> float:
     def _rms_db(chunk):
         if not len(chunk):
             return float("-inf")
-        return 20 * _np.log10(
-            max(float(_np.sqrt(_np.mean(chunk ** 2))), 1e-9) / 32768)
+        return 20 * _np.log10(max(float(_np.sqrt(_np.mean(chunk**2))), 1e-9) / 32768)
 
-    pre = data[:max(int((t_on - 0.1) * rate), 0)]
-    note = data[int((t_on + 0.1) * rate):int((t_on + 0.1 + window) * rate)]
+    pre = data[: max(int((t_on - 0.1) * rate), 0)]
+    note = data[int((t_on + 0.1) * rate) : int((t_on + 0.1 + window) * rate)]
     if not len(pre) or not len(note):
         return 0.0
     return _rms_db(note) - _rms_db(pre)
 
 
-def sounded(wav: str, t_on: float, *, window: float = 1.0,
-            minimum: float = SOUNDED_MIN_LIFT_DB) -> bool:
+def sounded(
+    wav: str, t_on: float, *, window: float = 1.0, minimum: float = SOUNDED_MIN_LIFT_DB
+) -> bool:
     """Did this take contain a note? See :func:`lift_over_preroll`."""
     return lift_over_preroll(wav, t_on, window=window) >= minimum
 
@@ -925,11 +1034,10 @@ def preroll_floor_dbfs(wav: str, t_on: float) -> float:
     data = _np.frombuffer(raw, dtype=_np.int16).astype(float)
     if channels > 1:
         data = data.reshape(-1, channels).mean(axis=1)
-    pre = data[:max(int((t_on - 0.1) * rate), 0)]
+    pre = data[: max(int((t_on - 0.1) * rate), 0)]
     if not len(pre):
         return float("-inf")
-    return 20 * _np.log10(
-        max(float(_np.sqrt(_np.mean(pre ** 2))), 1e-9) / 32768)
+    return 20 * _np.log10(max(float(_np.sqrt(_np.mean(pre**2))), 1e-9) / 32768)
 
 
 def contaminated_takes(floors, *, margin: float = None):
@@ -960,8 +1068,7 @@ def contaminated_takes(floors, *, margin: float = None):
     return [i for i, f in enumerate(floors) if f > baseline + limit]
 
 
-def preroll_is_clean(wav: str, t_on: float,
-                     *, maximum: float = None) -> bool:
+def preroll_is_clean(wav: str, t_on: float, *, maximum: float = None) -> bool:
     """Is this take's pre-roll quiet enough to measure a LEVEL against?
 
     See :func:`preroll_floor_dbfs`. Not needed for a sounded/silent verdict.
@@ -970,13 +1077,17 @@ def preroll_is_clean(wav: str, t_on: float,
     return preroll_floor_dbfs(wav, t_on) <= limit
 
 
-def _measure(kind: str, wav: str, t_on: float, t_off: float,
-             reference=None, ref_band: Tuple[float, float] = (100.0, 500.0)
-             ) -> Tuple[float, object]:
+def _measure(
+    kind: str,
+    wav: str,
+    t_on: float,
+    t_off: float,
+    reference=None,
+    ref_band: Tuple[float, float] = (100.0, 500.0),
+) -> Tuple[float, object]:
     """Returns ``(value, reference_to_carry_forward)``."""
     if kind not in _MEASUREMENTS:
-        raise KeyError(f"unknown measurement {kind!r}; expected one of "
-                       f"{sorted(_MEASUREMENTS)}")
+        raise KeyError(f"unknown measurement {kind!r}; expected one of {sorted(_MEASUREMENTS)}")
     if kind == "balance_db":
         stereo, _sr = ms.read_wav(wav, mono=False)
         return ms.balance_db(stereo), reference
@@ -993,20 +1104,21 @@ def _measure(kind: str, wav: str, t_on: float, t_off: float,
     if kind == "decay_s":
         return ms.decay_time(env, on, off), reference
     if kind == "rms_db":
-        seg = mono[int((on + 0.25) * sr): int(off * sr)]
+        seg = mono[int((on + 0.25) * sr) : int(off * sr)]
         return ms.rms_db(seg), reference
     if kind == "mod_hz":
         i0, i1 = int(on / ms.DEFAULT_HOP), int(off / ms.DEFAULT_HOP)
         return ms.modulation_rate_hz(env[i0:i1]), reference
     if kind == "corner_hz":
-        seg = mono[int(on * sr): int(off * sr)]
+        seg = mono[int(on * sr) : int(off * sr)]
         freqs, mag = ms.spectrum(seg, sr)
         if reference is None:
-            return float("nan"), mag          # this take IS the reference
-        return ms.corner_frequency(freqs, mag, reference=reference,
-                                   ref_lo=ref_band[0], ref_hi=ref_band[1]), reference
+            return float("nan"), mag  # this take IS the reference
+        return ms.corner_frequency(
+            freqs, mag, reference=reference, ref_lo=ref_band[0], ref_hi=ref_band[1]
+        ), reference
     if kind == "cents":
-        seg = mono[int((on + 0.1) * sr): int(off * sr)]
+        seg = mono[int((on + 0.1) * sr) : int(off * sr)]
         f = ms.fundamental_hz(seg, sr)
         if reference is None:
             return 0.0, f
@@ -1032,9 +1144,15 @@ def _np():
     return np
 
 
-def frame_spectra(samples, sr: int, frame: float = 0.040, hop: float = 0.010,
-                  lo: float = 120.0, hi: float = 9000.0,
-                  quiet: float = 1e-4):
+def frame_spectra(
+    samples,
+    sr: int,
+    frame: float = 0.040,
+    hop: float = 0.010,
+    lo: float = 120.0,
+    hi: float = 9000.0,
+    quiet: float = 1e-4,
+):
     """``(times, spectra_db, freqs)`` -- a log spectrogram, frames of silence dropped.
 
     The frame length sets two things at once and they pull opposite ways: it is
@@ -1052,16 +1170,15 @@ def frame_spectra(samples, sr: int, frame: float = 0.040, hop: float = 0.010,
     band = (freqs > lo) & (freqs < hi)
     times, rows = [], []
     for i in range(0, len(samples) - n, h):
-        seg = samples[i:i + n]
-        if float(np.sqrt((seg ** 2).mean())) < quiet:
+        seg = samples[i : i + n]
+        if float(np.sqrt((seg**2).mean())) < quiet:
             continue
         times.append(i / sr)
         rows.append(20 * np.log10(np.abs(np.fft.rfft(seg * win))[band] + 1e-12))
     return np.asarray(times), np.asarray(rows), freqs[band]
 
 
-def corner_from_difference(ref_db, run_db, freqs, *, gate_db: float = 45.0,
-                           smooth_bins: int = 3):
+def corner_from_difference(ref_db, run_db, freqs, *, gate_db: float = 45.0, smooth_bins: int = 3):
     """Filter corner per frame, from resonance-on minus resonance-off spectra.
 
     Both arguments are log spectrograms of the SAME note under the SAME
@@ -1102,18 +1219,18 @@ def corner_from_difference(ref_db, run_db, freqs, *, gate_db: float = 45.0,
         return np.asarray([])
     ref, run = np.asarray(ref_db)[:m], np.asarray(run_db)[:m]
     diff = run - ref
-    diff = np.where(ref > ref.max(axis=1, keepdims=True) - gate_db,
-                    diff, -np.inf)
+    diff = np.where(ref > ref.max(axis=1, keepdims=True) - gate_db, diff, -np.inf)
     if smooth_bins > 1:
         k = np.ones(smooth_bins) / float(smooth_bins)
         diff = np.apply_along_axis(
-            lambda r: np.convolve(np.where(np.isfinite(r), r, -300.0), k,
-                                  "same"), 1, diff)
+            lambda r: np.convolve(np.where(np.isfinite(r), r, -300.0), k, "same"), 1, diff
+        )
     return np.asarray(freqs)[np.argmax(diff, axis=1)]
 
 
-def verify_varies(values, *, label: str = "reading", settings=None,
-                  min_distinct: int = 3, rel_tol: float = 1e-9):
+def verify_varies(
+    values, *, label: str = "reading", settings=None, min_distinct: int = 3, rel_tol: float = 1e-9
+):
     """Refuse a series whose readings barely move across settings that should differ.
 
     ``(ok, message)``. Call it on the swept quantity before fitting anything.
@@ -1173,14 +1290,12 @@ def verify_varies(values, *, label: str = "reading", settings=None,
     v = np.asarray([x for x in values], dtype="float64")
     finite = v[np.isfinite(v)]
     if len(finite) < 2:
-        return False, (f"{label}: {len(finite)} finite readings, nothing to "
-                       f"compare")
+        return False, (f"{label}: {len(finite)} finite readings, nothing to compare")
     scale = float(np.max(np.abs(finite))) or 1.0
     rounded = np.round(finite / (scale * max(rel_tol, 1e-12)))
     distinct = len(set(rounded.tolist()))
     if distinct >= min_distinct:
-        return True, (f"{label}: {distinct} distinct values across "
-                      f"{len(finite)} readings")
+        return True, (f"{label}: {distinct} distinct values across {len(finite)} readings")
     where = ""
     if settings is not None:
         where = " at " + ", ".join(str(s) for s in list(settings)[:8])
@@ -1190,7 +1305,8 @@ def verify_varies(values, *, label: str = "reading", settings=None,
         f"That is an instrument at a floor or a field that does nothing, and "
         f"either way it is not a law. Check that the ANALYSIS window was "
         f"widened and not just the capture, and that the detector can produce "
-        f"the value it would show if the field worked.")
+        f"the value it would show if the field worked."
+    )
 
 
 def running_median(values, width: int = 5):
@@ -1207,16 +1323,17 @@ def running_median(values, width: int = 5):
     if len(v) < width or width < 2:
         return v
     half = width // 2
-    return np.asarray([np.median(v[max(0, i - half):i + half + 1])
-                       for i in range(len(v))])
+    return np.asarray([np.median(v[max(0, i - half) : i + half + 1]) for i in range(len(v))])
 
 
 # ==========================================================================
 # Driving
 # ==========================================================================
 
-def verify_isolation(bridge, rig, program: int, keygroup: int, note: int,
-                     hold: float = 1.5, min_drop_db: float = 6.0) -> float:
+
+def verify_isolation(
+    bridge, rig, program: int, keygroup: int, note: int, hold: float = 1.5, min_drop_db: float = 6.0
+) -> float:
     """Refuse to measure until the program under test is the one being heard.
 
     Silences the keygroup by moving its key range off *note*, records, restores
@@ -1248,8 +1365,10 @@ def verify_isolation(bridge, rig, program: int, keygroup: int, note: int,
     """
     lo = p.lookup(("keygroup", "LONOTE"))
     hi = p.lookup(("keygroup", "HINOTE"))
-    was = (bridge.get_parameter(lo, program, keygroup=keygroup),
-           bridge.get_parameter(hi, program, keygroup=keygroup))
+    was = (
+        bridge.get_parameter(lo, program, keygroup=keygroup),
+        bridge.get_parameter(hi, program, keygroup=keygroup),
+    )
 
     def _level():
         wav, t_on, t_off = rig.play_and_record(note, hold)
@@ -1293,7 +1412,7 @@ class Replicated:
 
     @property
     def mean(self) -> float:
-        good = [v for v in self.values if v == v]      # drop NaN
+        good = [v for v in self.values if v == v]  # drop NaN
         return sum(good) / len(good) if good else float("nan")
 
     @property
@@ -1377,8 +1496,7 @@ def beyond_noise(groups, factor: float = 3.0):
     # at a ratio of 952; mine returned "varies" at 276. A repeat that shares
     # state with its predecessor is not a repeat, and one that re-analyses a
     # cached recording is not a measurement.
-    frozen = [i for i, g in enumerate(usable)
-              if max(g.values) == min(g.values)]
+    frozen = [i for i, g in enumerate(usable) if max(g.values) == min(g.values)]
     if frozen:
         raise ValueError(
             f"conditions {frozen} have identical replicates -- `measure` must "
@@ -1393,8 +1511,7 @@ def beyond_noise(groups, factor: float = 3.0):
     between = (sum((x - m) ** 2 for x in means) / (len(means) - 1)) ** 0.5
     pooled = (sum(s * s for s in sds) / len(sds)) ** 0.5
     if pooled == 0:
-        return between, pooled, float("inf"), (
-            "varies" if between > 0 else "undecidable")
+        return between, pooled, float("inf"), ("varies" if between > 0 else "undecidable")
     ratio = between / pooled
     if ratio >= factor:
         return between, pooled, ratio, "varies"
@@ -1436,13 +1553,19 @@ def read_snapshot(path: str) -> dict:
     """Load a snapshot written by `write_snapshot`, keyed as `saved` was."""
     with open(path, encoding="utf-8") as fh:
         payload = json.load(fh)
-    return {(row["region"], row["name"]): row["value"]
-            for row in payload["values"]}
+    return {(row["region"], row["name"]): row["value"] for row in payload["values"]}
 
 
-def verify_responds(measure, low_value, high_value, apply_value, *,
-                    label: str = "the parameter", min_change: float = 0.0,
-                    unit: str = "") -> float:
+def verify_responds(
+    measure,
+    low_value,
+    high_value,
+    apply_value,
+    *,
+    label: str = "the parameter",
+    min_change: float = 0.0,
+    unit: str = "",
+) -> float:
     """Refuse to sweep a parameter the detector cannot see move.
 
     Sets *apply_value* to each end of the range, measures with *measure*, and
@@ -1493,13 +1616,11 @@ def snapshot_prepare(bridge, sweep: Sweep, program: int, keygroup: int) -> dict:
     saved = {}
     for region, name, _value in touched:
         param = p.lookup(name, region)
-        saved[(region, name)] = bridge.get_parameter(
-            param, program, keygroup=keygroup)
+        saved[(region, name)] = bridge.get_parameter(param, program, keygroup=keygroup)
     return saved
 
 
-def restore_prepare(bridge, saved: dict, program: int, keygroup: int,
-                    verbose: bool = True) -> list:
+def restore_prepare(bridge, saved: dict, program: int, keygroup: int, verbose: bool = True) -> list:
     """Put back everything :func:`snapshot_prepare` recorded. Returns failures."""
     failed = []
     for (region, name), value in saved.items():
@@ -1517,8 +1638,7 @@ def restore_prepare(bridge, saved: dict, program: int, keygroup: int,
     return failed
 
 
-def apply_prepare(bridge, sweep: Sweep, program: int, keygroup: int,
-                  verbose: bool = True) -> None:
+def apply_prepare(bridge, sweep: Sweep, program: int, keygroup: int, verbose: bool = True) -> None:
     """Neutralise everything that would otherwise contaminate the sweep."""
     for region, name, value in sweep.prepare:
         param = p.lookup(name, region)
@@ -1527,8 +1647,119 @@ def apply_prepare(bridge, sweep: Sweep, program: int, keygroup: int,
             print(f"    {region}.{name} = {value}")
 
 
-def run_sweep(bridge, rig, sweep: Sweep, program: int = 0, keygroup: int = 0,
-              keep_dir: Optional[str] = None, verbose: bool = True) -> List[dict]:
+def _verify_route_responds(
+    bridge, rig, sweep: Sweep, param, program: int, keygroup: int, verbose: bool = True
+) -> float:
+    """Refuse to sweep a route the detector cannot see move.
+
+    Records at two probe settings spanning the sweep's range and threads the
+    sweep's own reference state through, so reference-relative measurements
+    (``corner_hz``, ``cents``) compare against the same baseline the sweep
+    will use. A route that answers NaN at both probes, or identically at
+    both, raises before the sweep can produce a full set of clean, flat,
+    entirely fictitious numbers.
+
+    One finite probe and one NaN probe passes: a corner below the reference
+    band reads NaN by design, and that movement (measurable vs unmeasurable)
+    is itself a response. The probes are the bottom and the middle of the
+    range rather than the two extremes, because the top extreme can sit too
+    close to the wide-open reference to resolve against it (filter FILFRQ 98
+    vs reference 99 never drops 3 dB), which is proximity and not a dead
+    route.
+    """
+    ordered = sorted(sweep.values)
+    lo = ordered[0]
+    mid = ordered[len(ordered) // 2]
+    reference = None
+
+    def _record_and_measure():
+        path, t_on, t_off = rig.play_and_record(sweep.note, sweep.hold, velocity=sweep.velocity)
+        try:
+            return path, t_on, t_off
+        except Exception:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+            raise
+
+    def _at(value, ref):
+        bridge.set_parameter(param, program, value, keygroup=keygroup)
+        path, t_on, t_off = _record_and_measure()
+        try:
+            got, new_ref = _measure(sweep.measure, path, t_on, t_off, ref, ref_band=sweep.ref_band)
+        finally:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+        return got, new_ref
+
+    if sweep.reference_value is not None:
+        # Reference-relative measurements need the sweep's own baseline --
+        # measuring one end against the other compares two filtered spectra
+        # instead of source against filter, and reads NaN at both ends.
+        bridge.set_parameter(param, program, sweep.reference_value, keygroup=keygroup)
+        saved_setup = []
+        if sweep.reference_setup:
+            for region, name, temp in sweep.reference_setup:
+                field_ = p.lookup((region, name))
+                was = bridge.get_parameter(field_, program, keygroup=keygroup)
+                saved_setup.append((field_, was))
+                bridge.set_parameter(field_, program, temp, keygroup=keygroup)
+        try:
+            path, t_on, t_off = _record_and_measure()
+            try:
+                _, reference = _measure(
+                    sweep.measure, path, t_on, t_off, None, ref_band=sweep.ref_band
+                )
+            finally:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
+        finally:
+            for field_, was in saved_setup:
+                bridge.set_parameter(field_, program, was, keygroup=keygroup)
+    first, reference = _at(lo, reference)
+    second, reference = _at(mid, reference)
+    finite = [v for v in (first, second) if v == v]
+    if len(finite) < 1:
+        raise RuntimeError(
+            f"response check FAILED: moving {sweep.region}.{sweep.param} "
+            f"from {lo} to {mid} changed nothing measurable (both probes "
+            f"NaN). "
+            f"The parameter is not reaching the sound -- check the modulation "
+            f"SOURCE is routed, not just its depth. Sweeping now would "
+            f"produce clean numbers that describe nothing."
+        )
+    if len(finite) == 2 and finite[0] == finite[1]:
+        raise RuntimeError(
+            f"response check FAILED: moving {sweep.region}.{sweep.param} "
+            f"from {lo} to {mid} returned {finite[0]:.4g}{sweep.unit} at both "
+            f"probes. The parameter is not reaching the sound -- check the "
+            f"modulation SOURCE is routed, not just its depth. Sweeping now "
+            f"would produce clean numbers that describe nothing."
+        )
+    change = abs(finite[-1] - finite[0]) if len(finite) == 2 else float("inf")
+    if verbose:
+        print(
+            f"  response ok -- {sweep.param} {lo}->{mid}: {first:.4g} -> {second:.4g} {sweep.unit}"
+        )
+    return change
+
+
+def run_sweep(
+    bridge,
+    rig,
+    sweep: Sweep,
+    program: int = 0,
+    keygroup: int = 0,
+    keep_dir: Optional[str] = None,
+    verbose: bool = True,
+    snapshot_path: Optional[str] = None,
+    skip_response_check: bool = False,
+) -> List[dict]:
     """Set, play, record, measure -- once per value. Returns one row per point."""
     param = p.lookup(sweep.param, sweep.region)
     if verbose:
@@ -1578,6 +1809,12 @@ def run_sweep(bridge, rig, sweep: Sweep, program: int = 0, keygroup: int = 0,
         # A guard that fails for the wrong reason is worse than no guard: it
         # sends you to look at the wrong thing with the authority of a check.
         saved = snapshot_prepare(bridge, sweep, program, keygroup)
+        if snapshot_path is not None:
+            # On disk BEFORE any write: a SIGKILLed process never runs its
+            # `finally`, and the file is then the only record of what to put
+            # back. Printed first so it survives even a mid-sweep kill.
+            write_snapshot(snapshot_path, saved, note=f"before the {sweep.name} sweep")
+            print(f"  SNAPSHOT {snapshot_path}", flush=True)
         if verbose:
             print(f"  preparing ({len(sweep.prepare)} parameters neutralised)")
         apply_prepare(bridge, sweep, program, keygroup, verbose=False)
@@ -1588,11 +1825,17 @@ def run_sweep(bridge, rig, sweep: Sweep, program: int = 0, keygroup: int = 0,
             print("  verifying the program under test is the one being heard")
         drop = verify_isolation(bridge, rig, program, keygroup, sweep.note)
         if verbose:
-            print(f"  isolation ok -- silencing it drops the recording "
-                  f"{drop:.1f} dB")
+            print(f"  isolation ok -- silencing it drops the recording {drop:.1f} dB")
 
-        return _sweep_points(bridge, rig, sweep, param, program, keygroup,
-                             keep_dir, verbose)
+        if not skip_response_check:
+            if verbose:
+                print("  verifying the parameter reaches the sound")
+            _verify_route_responds(bridge, rig, sweep, param, program, keygroup, verbose=verbose)
+            # The check moved the swept parameter to both extremes; put the
+            # neutralised state back before the sweep proper runs.
+            apply_prepare(bridge, sweep, program, keygroup, verbose=False)
+
+        return _sweep_points(bridge, rig, sweep, param, program, keygroup, keep_dir, verbose)
     finally:
         if saved is not None:
             restore_prepare(bridge, saved, program, keygroup, verbose=verbose)
@@ -1603,13 +1846,51 @@ def run_sweep(bridge, rig, sweep: Sweep, program: int = 0, keygroup: int = 0,
                 pass
 
 
-def _sweep_points(bridge, rig, sweep: Sweep, param, program: int, keygroup: int,
-                  keep_dir: Optional[str], verbose: bool) -> List[dict]:
+def _take_sounded(path: str, t_on: float, t_off: float, kind: str):
+    """Did this take contain a note? ``(True, t)`` when it cannot be told.
+
+    Returns the audio-clock onset beside the verdict, so the caller reports
+    the floor and lift at the time the note actually starts.
+    The take's times are on the MIDI clock; the audio runs late by the
+    anchoring offset :func:`measure.anchor_offset` finds from the first
+    onset, exactly as :func:`_measure` maps them. The lift is meaningless
+    without pre-roll to compare against -- a file whose note starts at its
+    first sample (the synthetic rig renders no lead-in) has no silence
+    before it, so the check abstains there and the NaN/frozen guards carry
+    the verdict instead.
+    """
+    try:
+        if kind == "balance_db":
+            stereo, sr = ms.read_wav(path, mono=False)
+            import numpy as _np
+
+            mono = _np.asarray(stereo).mean(axis=1)
+        else:
+            mono, sr = ms.read_wav(path)
+        env, t = ms.envelope(mono, sr)
+        offset = ms.anchor_offset(env, t, t_on)
+        t_audio = t_on + offset
+        if t_audio < 0.13:
+            return True, t_audio  # no pre-roll in this file; cannot assess
+        return sounded(path, t_audio), t_audio
+    except Exception:
+        return True, t_on  # best-effort: never void on a failed check
+
+
+def _sweep_points(
+    bridge,
+    rig,
+    sweep: Sweep,
+    param,
+    program: int,
+    keygroup: int,
+    keep_dir: Optional[str],
+    verbose: bool,
+) -> List[dict]:
     reference = None
     order = list(sweep.values)
     if sweep.reference_value is not None:
-        order = [sweep.reference_value] + [v for v in order
-                                           if v != sweep.reference_value]
+        order = [sweep.reference_value] + [v for v in order if v != sweep.reference_value]
 
     rows: List[dict] = []
     for i, value in enumerate(order):
@@ -1622,18 +1903,59 @@ def _sweep_points(bridge, rig, sweep: Sweep, param, program: int, keygroup: int,
         if taking_reference and sweep.reference_setup:
             for region, name, temp in sweep.reference_setup:
                 field_ = p.lookup((region, name))
-                was = bridge.get_parameter(field_, program,
-                                           keygroup=keygroup)
+                was = bridge.get_parameter(field_, program, keygroup=keygroup)
                 restore_after_reference.append((field_, was))
                 bridge.set_parameter(field_, program, temp, keygroup=keygroup)
         wav = None
         if keep_dir:
             wav = str(Path(keep_dir) / f"{sweep.name}_{value:+04d}.wav")
-        path, t_on, t_off = rig.play_and_record(
-            sweep.note, sweep.hold, velocity=sweep.velocity, out_wav=wav)
         try:
-            got, reference = _measure(sweep.measure, path, t_on, t_off, reference,
-                                      ref_band=sweep.ref_band)
+            path, t_on, t_off = rig.play_and_record(
+                sweep.note, sweep.hold, velocity=sweep.velocity, out_wav=wav
+            )
+        except (KeyboardInterrupt, SystemExit):
+            for field_, was in restore_after_reference:
+                bridge.set_parameter(field_, program, was, keygroup=keygroup)
+            raise
+        except Exception as exc:
+            # A hung recorder or a noncontiguous capture voids the take, it
+            # does not end the sweep. NaN so the fit ignores it rather than
+            # fitting a fictitious number.
+            for field_, was in restore_after_reference:
+                bridge.set_parameter(field_, program, was, keygroup=keygroup)
+            if verbose:
+                print(f"    {sweep.param:>8} = {value:>4}  ->  VOID (capture failed: {exc})")
+            if not taking_reference:
+                rows.append(
+                    {"value": value, sweep.measure: float("nan"), "void": f"capture failed: {exc}"}
+                )
+            continue
+        try:
+            try:
+                ok, t_audio = _take_sounded(path, t_on, t_off, sweep.measure)
+                if not ok:
+                    floor = preroll_floor_dbfs(path, t_audio)
+                    lift = lift_over_preroll(path, t_audio)
+                    msg = f"VOID -- silent take (lift {lift:.1f} dB, floor {floor:.1f} dBFS)"
+                    if taking_reference:
+                        raise RuntimeError(
+                            f"reference take at {sweep.param}={value} "
+                            f"did not sound ({msg}) -- nothing downstream "
+                            f"can be measured against it"
+                        )
+                    if verbose:
+                        print(f"    {sweep.param:>8} = {value:>4}  ->  NaN ({msg})")
+                    rows.append({"value": value, sweep.measure: float("nan"), "void": msg})
+                    continue
+            except RuntimeError:
+                raise
+            except Exception:
+                # Best-effort: an unreadable file must not turn a sounding
+                # take into a void. Measure below; NaN speaks for itself.
+                pass
+            got, reference = _measure(
+                sweep.measure, path, t_on, t_off, reference, ref_band=sweep.ref_band
+            )
         finally:
             # A sweep is one recording per point and they are large. Only the
             # ones the caller asked to keep survive; the rest go, even if the
@@ -1643,15 +1965,14 @@ def _sweep_points(bridge, rig, sweep: Sweep, param, program: int, keygroup: int,
                     os.unlink(path)
                 except OSError:
                     pass
-        for field_, was in restore_after_reference:
-            bridge.set_parameter(field_, program, was, keygroup=keygroup)
+            for field_, was in restore_after_reference:
+                bridge.set_parameter(field_, program, was, keygroup=keygroup)
         is_ref = taking_reference
         if not is_ref:
             rows.append({"value": value, sweep.measure: got})
         if verbose:
             tag = "  (reference)" if is_ref else ""
-            print(f"    {sweep.param:>8} = {value:>4}  ->  "
-                  f"{got:10.4g} {sweep.unit}{tag}")
+            print(f"    {sweep.param:>8} = {value:>4}  ->  {got:10.4g} {sweep.unit}{tag}")
     rows.sort(key=lambda r: r["value"])
     return rows
 
@@ -1673,28 +1994,51 @@ def summarise(sweep: Sweep, rows: List[dict]) -> dict:
     """
     xs = [r["value"] for r in rows]
     ys = [r[sweep.measure] for r in rows]
-    finite = [(x, y) for x, y in zip(xs, ys)
-              if isinstance(y, float) and math.isfinite(y)]
+    finite = [(x, y) for x, y in zip(xs, ys) if isinstance(y, float) and math.isfinite(y)]
     positive = [(x, y) for x, y in finite if y > 0]
 
-    out = {"sweep": sweep.name, "parameter": sweep.param, "unit": sweep.unit,
-           "points": len(rows), "usable": len(finite),
-           "expected_model": sweep.fit}
+    out = {
+        "sweep": sweep.name,
+        "parameter": sweep.param,
+        "unit": sweep.unit,
+        "points": len(rows),
+        "usable": len(finite),
+        "expected_model": sweep.fit,
+    }
+
+    # A frozen series is not a law. Refuse to fit it: the three flat series
+    # this project reported as findings (PANDEL, resonance, release frames)
+    # all fit cleanly. NaN (unmeasurable) points are ignored, not counted.
+    if len(finite) >= 2:
+        ok, msg = verify_varies(
+            [y for _, y in finite], label=sweep.measure, settings=[x for x, _ in finite]
+        )
+        if not ok:
+            out["frozen_series"] = msg
+            out["fit_trustworthy"] = False
+            return out
 
     fits = {}
     if len(positive) >= 3:
-        a, b, r2 = ms.fit_exponential([x for x, _ in positive],
-                                      [y for _, y in positive])
+        a, b, r2 = ms.fit_exponential([x for x, _ in positive], [y for _, y in positive])
         if not math.isnan(r2):
             fits["exp"] = {
                 "expr": f"{sweep.unit} = {a:.6g} * exp({b:.6g} * {sweep.param})",
-                "r2": r2, "a": a, "b": b, "n": len(positive)}
+                "r2": r2,
+                "a": a,
+                "b": b,
+                "n": len(positive),
+            }
     if len(finite) >= 3:
         m, c, r2 = ms.fit_linear([x for x, _ in finite], [y for _, y in finite])
         if not math.isnan(r2):
             fits["linear"] = {
                 "expr": f"{sweep.unit} = {m:.6g} * {sweep.param} {c:+.6g}",
-                "r2": r2, "m": m, "c": c, "n": len(finite)}
+                "r2": r2,
+                "m": m,
+                "c": c,
+                "n": len(finite),
+            }
     if not fits:
         return out
 
@@ -1706,23 +2050,27 @@ def summarise(sweep: Sweep, rows: List[dict]) -> dict:
     chosen = sweep.fit if sweep.fit in fits else best
     picked = fits[chosen]
 
-    out.update(fit=picked["expr"], r2=picked["r2"], model=chosen,
-               fits={k: {"expr": v["expr"], "r2": round(v["r2"], 6)}
-                     for k, v in fits.items()})
-    out.update({k: v for k, v in picked.items()
-                if k in ("a", "b", "m", "c")})
+    out.update(
+        fit=picked["expr"],
+        r2=picked["r2"],
+        model=chosen,
+        fits={k: {"expr": v["expr"], "r2": round(v["r2"], 6)} for k, v in fits.items()},
+    )
+    out.update({k: v for k, v in picked.items() if k in ("a", "b", "m", "c")})
     out["fit_trustworthy"] = bool(picked["r2"] > 0.99)
     if best != chosen and fits[best]["r2"] > picked["r2"] + 0.01:
         out["fit_model_disagrees"] = (
             f"declared {chosen} (r2 {picked['r2']:.5f}) but the data prefers "
             f"{best} (r2 {fits[best]['r2']:.5f}) -- check which shape the "
-            f"parameter really has before trusting either")
+            f"parameter really has before trusting either"
+        )
     return out
 
 
 # ==========================================================================
 # Dry run: a fake machine, so the pipeline can be exercised with no hardware
 # ==========================================================================
+
 
 class _SyntheticBridge:
     """Accepts every write and remembers it. Verifies nothing.
@@ -1745,8 +2093,9 @@ class _SyntheticBridge:
         self.state[param.name] = int(value)
 
     def get_parameter(self, param, index, *, keygroup=0, **_kw):
-        return self.state.get(param.name, param.default
-                              if param.default is not None else param.minimum)
+        return self.state.get(
+            param.name, param.default if param.default is not None else param.minimum
+        )
 
 
 class _SyntheticRig:
@@ -1763,8 +2112,7 @@ class _SyntheticRig:
     def __init__(self, state: Dict[str, int]):
         self.state = state
 
-    def play_and_record(self, note, hold, velocity=100, gap=0.5, out_wav=None,
-                        release_velocity=0):
+    def play_and_record(self, note, hold, velocity=100, gap=0.5, out_wav=None, release_velocity=0):
         import wave
         import numpy as np
 
@@ -1773,8 +2121,7 @@ class _SyntheticRig:
         # keygroup can play the note cannot fail the check that exists to
         # catch a program which is not the one being heard -- and a check
         # nothing can fail is decoration (RESOLUTION_NOTES §18).
-        audible = (self.state.get("LONOTE", 0) <= note
-                   <= self.state.get("HINOTE", 127))
+        audible = self.state.get("LONOTE", 0) <= note <= self.state.get("HINOTE", 127)
 
         n = int((hold + 1.0) * self.SR)
         t = np.arange(n) / self.SR
@@ -1786,8 +2133,7 @@ class _SyntheticRig:
         sus = s.get("SUSTN1", 99) / 99.0
         env = np.clip(t / max(atk, 1e-4), 0, 1)
         held = t <= hold
-        env = np.where(held, sus + (1 - sus) * np.exp(-t / 0.4) * (env >= 1) + env * 0,
-                       0.0)
+        env = np.where(held, sus + (1 - sus) * np.exp(-t / 0.4) * (env >= 1) + env * 0, 0.0)
         env = np.where(t < atk, (t / max(atk, 1e-4)) * 1.0, env)
         after = ~held
         env = np.where(after, sus * np.exp(-(t - hold) / max(rel, 1e-4)), env)
@@ -1806,7 +2152,7 @@ class _SyntheticRig:
 
         gain = 10 ** ((s.get("PRLOUD", 99) - 99) * 0.35 / 20.0)
         if not audible:
-            gain *= 1e-4                      # silenced: 80 dB down
+            gain *= 1e-4  # silenced: 80 dB down
         mono = env * src * gain
 
         pan = s.get("PANPOS", 0) / 50.0
@@ -1835,12 +2181,17 @@ class _SyntheticRig:
 # CLI
 # ==========================================================================
 
+
 def _print_plan(sweep: Sweep) -> None:
-    print(f"\n{sweep.name}: sweep {sweep.region}.{sweep.param} over "
-          f"{len(sweep.values)} values -> {sweep.unit}")
+    print(
+        f"\n{sweep.name}: sweep {sweep.region}.{sweep.param} over "
+        f"{len(sweep.values)} values -> {sweep.unit}"
+    )
     print(f"  source needed : {sweep.source}")
-    print(f"  note {sweep.note}, hold {sweep.hold} s, velocity {sweep.velocity}"
-          f"{', STEREO capture required' if sweep.stereo else ''}")
+    print(
+        f"  note {sweep.note}, hold {sweep.hold} s, velocity {sweep.velocity}"
+        f"{', STEREO capture required' if sweep.stereo else ''}"
+    )
     print(f"  neutralises   : {len(sweep.prepare)} parameters")
     est = len(sweep.values) * (LEAD_IN + sweep.hold + 0.5 + TAIL)
     print(f"  run time      : about {est / 60:.1f} min unattended")
@@ -1851,50 +2202,80 @@ def _print_plan(sweep: Sweep) -> None:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("sweep", nargs="?", choices=sorted(SWEEPS),
-                    help="which calibration to run")
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument("sweep", nargs="?", choices=sorted(SWEEPS), help="which calibration to run")
     ap.add_argument("--list", action="store_true", help="describe every sweep and exit")
     ap.add_argument("--port", help="MIDI port substring for the sampler")
-    ap.add_argument("--midi-channel", type=int, default=1,
-                    help="1-indexed MIDI channel the program answers on")
-    ap.add_argument("--capture", nargs=2,
-                    default=["system:capture_1", "system:capture_2"],
-                    help="JACK capture ports -- the HARDWARE inputs, not a "
-                         "downstream client (see Rig)")
+    ap.add_argument(
+        "--midi-channel", type=int, default=1, help="1-indexed MIDI channel the program answers on"
+    )
+    ap.add_argument(
+        "--capture",
+        nargs=2,
+        default=["system:capture_1", "system:capture_2"],
+        help="JACK capture ports -- the HARDWARE inputs, not a downstream client (see Rig)",
+    )
     ap.add_argument("--exclusive-channel", type=int, default=0)
     ap.add_argument("--program", type=int, default=0)
     ap.add_argument("--keygroup", type=int, default=0)
-    ap.add_argument("--allow-write", action="store_true",
-                    help="required: a sweep writes parameters continuously")
-    ap.add_argument("--dry-run", action="store_true",
-                    help="run against a synthetic machine, no hardware touched")
-    ap.add_argument("--filfrq", type=int,
-                    help="override the base FILFRQ in the sweep's prepare. "
-                         "§116's depth law was fitted at ONE base; two fields "
-                         "on this machine already have behaviour that moves "
-                         "with the level they sit on (§116 saturation, §117 "
-                         "VLOUD1 headroom), so base-independence is a claim "
-                         "and not a given.")
-    ap.add_argument("--prloud", type=int,
-                    help="override the sweep's PRLOUD. `_MAIN_OUT` sets 99, "
-                         "which clips a sine at the interface -- and a clipped "
-                         "peak makes an attack appear to complete early, so it "
-                         "biases exactly the measurement it is used for.")
-    ap.add_argument("--velocity", type=int,
-                    help="override the sweep's note velocity. The `mod-filter` "
-                         "sweep is run TWICE with different values and the two "
-                         "results differenced -- see its comment.")
+    ap.add_argument(
+        "--allow-write",
+        action="store_true",
+        help="required: a sweep writes parameters continuously",
+    )
+    ap.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="run against a synthetic machine, no hardware touched",
+    )
+    ap.add_argument(
+        "--filfrq",
+        type=int,
+        help="override the base FILFRQ in the sweep's prepare. "
+        "§116's depth law was fitted at ONE base; two fields "
+        "on this machine already have behaviour that moves "
+        "with the level they sit on (§116 saturation, §117 "
+        "VLOUD1 headroom), so base-independence is a claim "
+        "and not a given.",
+    )
+    ap.add_argument(
+        "--prloud",
+        type=int,
+        help="override the sweep's PRLOUD. `_MAIN_OUT` sets 99, "
+        "which clips a sine at the interface -- and a clipped "
+        "peak makes an attack appear to complete early, so it "
+        "biases exactly the measurement it is used for.",
+    )
+    ap.add_argument(
+        "--velocity",
+        type=int,
+        help="override the sweep's note velocity. The `mod-filter` "
+        "sweep is run TWICE with different values and the two "
+        "results differenced -- see its comment.",
+    )
     ap.add_argument("--out", help="write the rows here as CSV")
     ap.add_argument("--keep-wavs", help="directory to keep every recording in")
+    ap.add_argument(
+        "--snapshot",
+        help="where to write the pre-sweep snapshot (default: "
+        "beside --out/--keep-wavs, else a temp file). The "
+        "file is the SIGKILL recovery path: a killed process "
+        "never runs its restore, so the values live on disk "
+        "before the first write.",
+    )
+    ap.add_argument(
+        "--skip-response-check",
+        action="store_true",
+        help="skip the verify-the-parameter-reaches-the-sound gate (pure-analysis use only)",
+    )
     args = ap.parse_args(argv)
 
     if args.list or not args.sweep:
         for sweep in SWEEPS.values():
             _print_plan(sweep)
-        print("\nRun order and the reasoning behind it: "
-              "docs/re_procedures/calibration.md")
+        print("\nRun order and the reasoning behind it: docs/re_procedures/calibration.md")
         return 0
 
     sweep = SWEEPS[args.sweep]
@@ -1902,15 +2283,19 @@ def main(argv: Optional[List[str]] = None) -> int:
         if not 0 <= args.prloud <= 99:
             print(f"prloud {args.prloud} outside 0..99")
             return 2
-        prep = tuple((r, n, args.prloud if (r, n) == ("program", "PRLOUD")
-                      else v) for r, n, v in sweep.prepare)
+        prep = tuple(
+            (r, n, args.prloud if (r, n) == ("program", "PRLOUD") else v)
+            for r, n, v in sweep.prepare
+        )
         sweep = dataclasses.replace(sweep, prepare=prep)
     if args.filfrq is not None:
         if not 0 <= args.filfrq <= 99:
             print(f"filfrq {args.filfrq} outside 0..99")
             return 2
-        prep = tuple((r, n, args.filfrq if (r, n) == ("keygroup", "FILFRQ")
-                      else v) for r, n, v in sweep.prepare)
+        prep = tuple(
+            (r, n, args.filfrq if (r, n) == ("keygroup", "FILFRQ") else v)
+            for r, n, v in sweep.prepare
+        )
         if not any((r, n) == ("keygroup", "FILFRQ") for r, n, _ in prep):
             print("this sweep does not set FILFRQ; --filfrq would do nothing")
             return 2
@@ -1928,30 +2313,57 @@ def main(argv: Optional[List[str]] = None) -> int:
         rig = _SyntheticRig(bridge.state)
     else:
         if not args.allow_write:
-            print("\nrefusing to run: a sweep writes parameters continuously. "
-                  "Pass --allow-write once you have worked through "
-                  "HW_CHECKLIST.md and saved the machine's state to disk.",
-                  file=sys.stderr)
+            print(
+                "\nrefusing to run: a sweep writes parameters continuously. "
+                "Pass --allow-write once you have worked through "
+                "HW_CHECKLIST.md and saved the machine's state to disk.",
+                file=sys.stderr,
+            )
             return 2
         if not args.port:
             print("--port is required without --dry-run", file=sys.stderr)
             return 2
         from s3k.bridge import S3kBridge
-        bridge = S3kBridge.standard(args.port,
-                                    exclusive_channel=args.exclusive_channel)
-        rig = Rig(args.port if not args.capture else args.port,
-                  midi_channel=args.midi_channel - 1, capture=tuple(args.capture))
+
+        bridge = S3kBridge.standard(args.port, exclusive_channel=args.exclusive_channel)
+        rig = Rig(
+            args.port if not args.capture else args.port,
+            midi_channel=args.midi_channel - 1,
+            capture=tuple(args.capture),
+        )
         print(f"  connected: {bridge.description}")
 
     if args.keep_wavs:
         Path(args.keep_wavs).mkdir(parents=True, exist_ok=True)
 
+    if args.snapshot:
+        snapshot_path = args.snapshot
+    elif args.keep_wavs:
+        snapshot_path = str(Path(args.keep_wavs) / "snapshot.json")
+    elif args.out:
+        snapshot_path = args.out + ".snapshot.json"
+    else:
+        snapshot_path = os.path.join(tempfile.gettempdir(), f"s3ked-cal-{sweep.name}.snapshot.json")
+
     try:
-        rows = run_sweep(bridge, rig, sweep, program=args.program,
-                         keygroup=args.keygroup, keep_dir=args.keep_wavs)
+        rows = run_sweep(
+            bridge,
+            rig,
+            sweep,
+            program=args.program,
+            keygroup=args.keygroup,
+            keep_dir=args.keep_wavs,
+            snapshot_path=snapshot_path,
+            skip_response_check=args.skip_response_check,
+        )
     finally:
         if hasattr(rig, "close"):
             rig.close()
+        if hasattr(bridge, "close"):
+            try:
+                bridge.close()
+            except Exception:
+                pass
     summary = summarise(sweep, rows)
     print("\n  " + json.dumps(summary, indent=2).replace("\n", "\n  "))
 

@@ -45,6 +45,7 @@ outcomes are far apart -- the rule §73 wrote and §74 broke:
 Anything that moves memory re-establishes the state before the next value, so
 every reading is taken from the same starting point.
 """
+
 from __future__ import annotations
 
 import sys
@@ -54,9 +55,9 @@ sys.path.insert(0, "/home/lentferj/git-repos/s3ked")
 
 from s3k import bridge as b, messages as m
 
-BIG = (2, 0)            # (drive, volume) -- 28.8 MB
-SMALL = (2, 2)          # 0.05 MB
-LOAD_ALL = 1            # ALL PROGS+SAMPLES
+BIG = (2, 0)  # (drive, volume) -- 28.8 MB
+SMALL = (2, 2)  # 0.05 MB
+LOAD_ALL = 1  # ALL PROGS+SAMPLES
 #: The selected volume is deliberately tiny, so any load or
 #: clear-then-load it triggers finishes quickly. 22 s was the
 #: first batch's caution; the machine proved willing.
@@ -97,17 +98,60 @@ def establish(bridge):
     return free_words(bridge)
 
 
-def main() -> int:
-    first = int(sys.argv[1]) if len(sys.argv) > 1 else 8
-    last = int(sys.argv[2]) if len(sys.argv) > 2 else 15
+def main(argv=None) -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser(
+        description="Probe the load register for a CLR trigger. "
+        "WRITES action-register values to RAM; can crash the machine."
+    )
+    ap.add_argument("first", nargs="?", type=int, default=None, help="first register value to try")
+    ap.add_argument(
+        "last", nargs="?", type=int, default=None, help="last register value to try (inclusive)"
+    )
+    ap.add_argument(
+        "--allow-write",
+        action="store_true",
+        help="REQUIRED: without it this prints its plan and exits",
+    )
+    ap.add_argument(
+        "--dry-run", action="store_true", help="print the plan without touching hardware"
+    )
+    ap.add_argument(
+        "--yes",
+        action="store_true",
+        help="confirm the machine-crashing risk (somebody must be at the power switch)",
+    )
+    args = ap.parse_args(argv)
+    first = args.first if args.first is not None else 8
+    last = args.last if args.last is not None else 15
+
+    plan = (
+        f"CLR hunt: values {first}..{last} at MISCDATA index 6 selector 1; "
+        f"establishes volume {BIG} resident + volume {SMALL} selected, "
+        f"watches free memory for inert/load/cleared."
+    )
+    if args.dry_run or not args.allow_write:
+        print(plan)
+        print(
+            "REFUSING to write: pass --allow-write --yes once somebody is "
+            "at the power switch. Default never begins action-register "
+            "writes with no arguments."
+        )
+        return 0 if args.dry_run else 2
+    if not args.yes:
+        print(plan)
+        print(
+            "REFUSING to write: pass --yes to confirm you accept that an "
+            "out-of-range value crashed this machine twice (§85, §90)."
+        )
+        return 2
 
     bridge = b.S3kBridge.autodetect(channels=(0,))
-    print(f"establishing: volume {BIG} resident, volume {SMALL} selected",
-          flush=True)
+    print(f"establishing: volume {BIG} resident, volume {SMALL} selected", flush=True)
     baseline = establish(bridge)
     resident = patient(bridge, bridge.program_list)
-    print(f"  free {mb(baseline):.2f} MB, {len(resident)} program(s) resident",
-          flush=True)
+    print(f"  free {mb(baseline):.2f} MB, {len(resident)} program(s) resident", flush=True)
     print(f"\n  PREDICTIONS from here:", flush=True)
     print(f"    inert            free stays ~{mb(baseline):.2f} MB", flush=True)
     print(f"    a load           free falls a little", flush=True)
@@ -117,22 +161,21 @@ def main() -> int:
 
     findings = []
     for value in range(first, last + 1):
-        frame = m.HeaderData(
-            command=m.Command.MISCDATA, index=6, selector=1, offset=0,
-            data=bytes([value]), exclusive_channel=bridge.exclusive_channel,
-        ).encode()
-        bridge._drain()
-        bridge._send(frame, write=True)
+        try:
+            bridge._misc_byte(6, value)
+        except Exception as exc:
+            # A crashed machine answers nothing; that IS the finding here.
+            print(f"  {value:>5}   *** WRITE/READ-BACK FAILED: {exc} ***", flush=True)
+            print("  power-cycle it; this value is the one that did it", flush=True)
+            return 2
         time.sleep(SETTLE)
 
         try:
             now = free_words(bridge)
             programs = len(patient(bridge, bridge.program_list))
         except RuntimeError:
-            print(f"  {value:>5}   *** THE MACHINE STOPPED ANSWERING ***",
-                  flush=True)
-            print("  power-cycle it; this value is the one that did it",
-                  flush=True)
+            print(f"  {value:>5}   *** THE MACHINE STOPPED ANSWERING ***", flush=True)
+            print("  power-cycle it; this value is the one that did it", flush=True)
             return 2
 
         moved = now - baseline
@@ -142,14 +185,12 @@ def main() -> int:
             verdict = f"LOADED ({mb(-moved):.2f} MB taken)"
         else:
             verdict = f"*** CLEARED ({mb(moved):.2f} MB returned) ***"
-        print(f"  {value:>5}   {mb(now):>6.2f}   {programs:>8}   {verdict}",
-              flush=True)
+        print(f"  {value:>5}   {mb(now):>6.2f}   {programs:>8}   {verdict}", flush=True)
 
         if verdict != "inert":
             findings.append((value, verdict))
             baseline = establish(bridge)
-            print(f"          state re-established, free {mb(baseline):.2f} MB",
-                  flush=True)
+            print(f"          state re-established, free {mb(baseline):.2f} MB", flush=True)
 
     print(flush=True)
     if findings:

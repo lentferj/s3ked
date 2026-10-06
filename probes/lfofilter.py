@@ -75,8 +75,8 @@ LFO1, LFO2 = 7, 8
 PREPARE = (
     ("program", "OUTPUT", 0),
     ("program", "PANPOS", 0),
-    ("program", "PRLOUD", 70),      # 85 clipped the interface; a clipped peak
-    ("program", "V_LOUD", 0),       # is manufactured spectrum, not a corner
+    ("program", "PRLOUD", 70),  # 85 clipped the interface; a clipped peak
+    ("program", "V_LOUD", 0),  # is manufactured spectrum, not a corner
     ("keygroup", "K_FREQ", 0),
     ("keygroup", "VFREQ1", 0),
     ("keygroup", "MODVFILT2", 0),
@@ -123,7 +123,7 @@ def band_ratio(mono, sr, n_fft, lo=(80.0, 200.0), hi=(2500.0, 6000.0)):
     mh = (f >= hi[0]) & (f <= hi[1])
     out = []
     for k in range(len(mono) // n_fft):
-        P = np.abs(np.fft.rfft(mono[k * n_fft:(k + 1) * n_fft] * np.hanning(n_fft))) ** 2
+        P = np.abs(np.fft.rfft(mono[k * n_fft : (k + 1) * n_fft] * np.hanning(n_fft))) ** 2
         out.append(10.0 * np.log10(P[mh].mean() / max(P[ml].mean(), 1e-30)))
     return np.array(out, float), n_fft / sr
 
@@ -153,27 +153,43 @@ def main():
     ap.add_argument("--program", type=int, default=0, help="RPLIST index")
     ap.add_argument("--keygroup", type=int, default=0)
     ap.add_argument("--lfo", type=int, choices=(1, 2), default=1)
-    ap.add_argument("--rate", type=int, default=8,
-                    help="LFORAT/PANRAT; low so each half-cycle outlasts a window")
+    ap.add_argument(
+        "--rate",
+        type=int,
+        default=8,
+        help="LFORAT/PANRAT; low so each half-cycle outlasts a window",
+    )
     ap.add_argument("--depth", type=int, default=99)
     ap.add_argument("--amounts", default="0,5,10,20,35,50")
-    ap.add_argument("--hold", type=float, default=14.0,
-                    help="14 s gives a ~40 cent floor; 6 s gives 162")
+    ap.add_argument(
+        "--hold", type=float, default=14.0, help="14 s gives a ~40 cent floor; 6 s gives 162"
+    )
     ap.add_argument("--note", type=int, default=60)
-    ap.add_argument("--channel", type=int, default=None,
-                    help="MIDI channel; defaults to the program's own PMCHAN, "
-                         "because CALNOISE puts its six programs on 0..5 and the "
-                         "channel is what selects which one sounds")
+    ap.add_argument(
+        "--channel",
+        type=int,
+        default=None,
+        help="MIDI channel; defaults to the program's own PMCHAN, "
+        "because CALNOISE puts its six programs on 0..5 and the "
+        "channel is what selects which one sounds",
+    )
     ap.add_argument("--velocity", type=int, default=100)
     ap.add_argument("--windows", default="2048,4096,8192")
-    ap.add_argument("--filfrq", type=int, default=70,
-                    help="static centre. 60 put the centre at 580 Hz, only 643 "
-                         "cents above a 400 Hz low band, so every excursion over "
-                         "~1286 cents swept the corner INTO the baseline band")
+    ap.add_argument(
+        "--filfrq",
+        type=int,
+        default=70,
+        help="static centre. 60 put the centre at 580 Hz, only 643 "
+        "cents above a 400 Hz low band, so every excursion over "
+        "~1286 cents swept the corner INTO the baseline band",
+    )
     ap.add_argument("--lo-band", default="80,200")
     ap.add_argument("--hi-band", default="2500,6000")
-    ap.add_argument("--allow-write", action="store_true",
-                    help="required; without it the run only prints its plan")
+    ap.add_argument(
+        "--allow-write",
+        action="store_true",
+        help="required; without it the run only prints its plan",
+    )
     args = ap.parse_args()
 
     LO = tuple(float(x) for x in args.lo_band.split(","))
@@ -184,39 +200,100 @@ def main():
     amounts = [int(x) for x in args.amounts.split(",")]
     windows = [int(x) for x in args.windows.split(",")]
 
-    touch = [("program", "MODSFILT1"), ("program", depth_field),
-             ("program", rate_field), ("keygroup", "MODVFILT1")] + \
-            [(r, n) for r, n, _ in PREPARE]
+    touch = [
+        ("program", "MODSFILT1"),
+        ("program", depth_field),
+        ("program", rate_field),
+        ("keygroup", "MODVFILT1"),
+    ] + [(r, n) for r, n, _ in PREPARE]
 
-    print("LFO%d -> filter 1.  source %d, depth %s=%d, rate %s=%d, amounts %s"
-          % (args.lfo, src, depth_field, args.depth, rate_field, args.rate, amounts))
-    print("windows: %s   note %d vel %d hold %.1fs" % (windows, args.note, args.velocity, args.hold))
-    print("fields touched (all snapshotted): %s"
-          % ", ".join("%s.%s" % t for t in touch))
+    print(
+        "LFO%d -> filter 1.  source %d, depth %s=%d, rate %s=%d, amounts %s"
+        % (args.lfo, src, depth_field, args.depth, rate_field, args.rate, amounts)
+    )
+    print(
+        "windows: %s   note %d vel %d hold %.1fs" % (windows, args.note, args.velocity, args.hold)
+    )
+    print("fields touched (all snapshotted): %s" % ", ".join("%s.%s" % t for t in touch))
     if not args.allow_write:
         print("\n--allow-write not given: plan only, nothing sent.")
         return 0
 
-    br = connect()
-    kg = dict(keygroup=args.keygroup)
+    import atexit as _atexit
+    import signal as _signal
+
+    br = None
+    out = None
+    cap = None
     snap = {}
-    for region, name in touch:
-        snap[(region, name)] = br.get_parameter((region, name), args.program,
-                                                **(kg if region == "keygroup" else {}))
-    print("\nSNAPSHOT: " + ", ".join("%s=%s" % (n, v) for (_, n), v in snap.items()))
+    kg = {}
+    chan = args.channel
+    prgnum = 0
+    _previous = {}
 
-    chan = args.channel if args.channel is not None else \
-        br.get_parameter(("program", "PMCHAN"), args.program)
-    # RAW, for the same reason as pandepgate: PRGNUM carries
-    # display_offset=1 (§267) and select_program_number wants the stored
-    # 0-based number, not the one the panel shows.
-    prgnum = br.get_header_bytes("program", args.program, 15, 1)[0]
-    print("program %d (%s): PRGNUM %d, MIDI channel %d -- selected before each capture"
-          % (args.program, br.program_list()[args.program], prgnum, chan))
+    def _restore_best_effort():
+        if br is None or not snap:
+            return
+        for (region, name), val in snap.items():
+            try:
+                br.set_parameter(
+                    (region, name), args.program, val, **(kg if region == "keygroup" else {})
+                )
+            except Exception:
+                pass
 
-    out = rtmidi.MidiOut()
-    out.open_port([k for k, n in enumerate(out.get_ports())
-                   if "M4U XT" in n and "MIDI 1" in n][0])
+    def _bail(signum, _frame):
+        for _s, _h in _previous.items():
+            try:
+                _signal.signal(_s, _h)
+            except (ValueError, OSError):
+                pass
+        raise KeyboardInterrupt(f"signal {signum}")
+
+    _atexit.register(_restore_best_effort)
+    for _sig in (_signal.SIGTERM, getattr(_signal, "SIGHUP", None), _signal.SIGINT):
+        if _sig is None:
+            continue
+        try:
+            _previous[_sig] = _signal.signal(_sig, _bail)
+        except (ValueError, OSError):
+            pass
+    try:
+        br = connect()
+        kg = dict(keygroup=args.keygroup)
+        for region, name in touch:
+            snap[(region, name)] = br.get_parameter(
+                (region, name), args.program, **(kg if region == "keygroup" else {})
+            )
+        print("\nSNAPSHOT: " + ", ".join("%s=%s" % (n, v) for (_, n), v in snap.items()))
+
+        if chan is None:
+            chan = br.get_parameter(("program", "PMCHAN"), args.program)
+        # RAW, for the same reason as pandepgate: PRGNUM carries
+        # display_offset=1 (§267) and select_program_number wants the stored
+        # 0-based number, not the one the panel shows.
+        prgnum = br.get_header_bytes("program", args.program, 15, 1)[0]
+        print(
+            "program %d (%s): PRGNUM %d, MIDI channel %d -- selected before each capture"
+            % (args.program, br.program_list()[args.program], prgnum, chan)
+        )
+
+        out = rtmidi.MidiOut()
+        out.open_port(
+            [k for k, n in enumerate(out.get_ports()) if "M4U XT" in n and "MIDI 1" in n][0]
+        )
+        # One persistent Capture for the whole run (m3): per-capture
+        # create/destroy churn is what wedges the JACK server.
+        cap = Capture(sources=SOURCES, name="s3ked-lfofilt")
+    except Exception:
+        _restore_best_effort()
+        for _c, _m in ((cap, "close"), (out, "close_port"), (br, "close")):
+            try:
+                if _c is not None:
+                    getattr(_c, _m)()
+            except Exception:
+                pass
+        raise
 
     SILENT_DBFS = -60.0
 
@@ -246,34 +323,36 @@ def main():
         # §265 it was built without.
         br.select_program_number(prgnum)
         time.sleep(0.35)
-        with Capture(sources=SOURCES, name="s3ked-lfofilt") as cap:
-            cap.start(); time.sleep(0.30)
-            out.send_message([0x90 | chan, args.note, args.velocity])
-            time.sleep(args.hold)
-            out.send_message([0x80 | chan, args.note, 0])
-            time.sleep(0.25)
-            ch = cap.stop_channels()
-            xr, ov = cap.xruns, cap.overflows
+        cap.start()
+        time.sleep(0.30)
+        out.send_message([0x90 | chan, args.note, args.velocity])
+        time.sleep(args.hold)
+        out.send_message([0x80 | chan, args.note, 0])
+        time.sleep(0.25)
+        ch = cap.stop_channels()
+        xr, ov = cap.xruns, cap.overflows
         if xr or ov:
             print("   !! xruns=%d overflows=%d -- capture is not contiguous" % (xr, ov))
         if len(ch) != 2:
             raise RuntimeError("capture returned %d channels, expected 2" % len(ch))
-        sr = 48000
+        # Sample rate from the capture client (M6), never a constant.
+        sr = int(cap.samplerate)
         mono = (np.asarray(ch[0], float) + np.asarray(ch[1], float)) / 2.0
-        mono = mono[int(0.6 * sr):] / 32768.0
-        lvl = 20.0 * np.log10(max(np.sqrt((mono ** 2).mean()), 1e-12))
+        mono = mono[int(0.6 * sr) :] / 32768.0
+        lvl = 20.0 * np.log10(max(np.sqrt((mono**2).mean()), 1e-12))
         if lvl < SILENT_DBFS:
             raise RuntimeError(
                 "capture %s is SILENT at %.1f dBFS (floor %.0f). Either nothing "
                 "sounded or the JACK client got no audio -- both look identical "
-                "in a band ratio. Not analysing it."
-                % (tag or "?", lvl, SILENT_DBFS))
+                "in a band ratio. Not analysing it." % (tag or "?", lvl, SILENT_DBFS)
+            )
         return mono, sr, lvl
 
     try:
         for region, name, val in PREPARE:
-            br.set_parameter((region, name), args.program, val,
-                             **(kg if region == "keygroup" else {}))
+            br.set_parameter(
+                (region, name), args.program, val, **(kg if region == "keygroup" else {})
+            )
         # ---- STAGE 1: static self-calibration, LFO off -----------------
         # Sweep FILFRQ and record, for each setting, BOTH the band ratio and
         # the corner in Hz taken from the whole-capture averaged spectrum --
@@ -287,19 +366,27 @@ def main():
         ref_spec = {w: ms.spectrum(ref_mono, sr, skip_s=0.0, n_fft=w)[1] for w in windows}
 
         print("\nSTAGE 1  static calibration, LFO off")
-        print("%7s | %10s | %8s | %s" % ("FILFRQ", "corner Hz", "lvl dBFS",
-                                   "  ".join("%11s" % ("ratio %d" % w) for w in windows)))
+        print(
+            "%7s | %10s | %8s | %s"
+            % (
+                "FILFRQ",
+                "corner Hz",
+                "lvl dBFS",
+                "  ".join("%11s" % ("ratio %d" % w) for w in windows),
+            )
+        )
         cal = []
         for ff in (40, 50, 60, 70, 80):
             br.set_parameter(("keygroup", "FILFRQ"), args.program, ff, **kg)
             mono, sr, lvl = capture("FILFRQ %d" % ff)
             f, mag = ms.spectrum(mono, sr, skip_s=0.0, n_fft=8192)
-            hz = ms.corner_frequency(f, mag, ref_lo=80.0, ref_hi=200.0,
-                                     reference=ref_spec[8192])
+            hz = ms.corner_frequency(f, mag, ref_lo=80.0, ref_hi=200.0, reference=ref_spec[8192])
             ratios = {w: float(np.median(band_ratio(mono, sr, w, LO, HI)[0])) for w in windows}
             cal.append((ff, hz, ratios))
-            print("%7d | %10.1f | %8.1f | %s"
-                  % (ff, hz, lvl, "  ".join("%11.2f" % ratios[w] for w in windows)))
+            print(
+                "%7d | %10.1f | %8.1f | %s"
+                % (ff, hz, lvl, "  ".join("%11.2f" % ratios[w] for w in windows))
+            )
 
         slope = {}
         for w in windows:
@@ -311,8 +398,10 @@ def main():
             m, b = np.polyfit(cents, dbs, 1)
             r = float(np.corrcoef(cents, dbs)[0, 1])
             slope[w] = m
-            print("  n_fft %4d: %.6f dB per cent  (r=%.5f, 1 dB = %.0f cents)"
-                  % (w, m, r, 1.0 / m if m else float("nan")))
+            print(
+                "  n_fft %4d: %.6f dB per cent  (r=%.5f, 1 dB = %.0f cents)"
+                % (w, m, r, 1.0 / m if m else float("nan"))
+            )
         if not slope:
             print("  calibration failed -- corner unmeasurable; aborting before the sweep")
             return 1
@@ -323,10 +412,14 @@ def main():
         br.set_parameter(("program", rate_field), args.program, args.rate)
         br.set_parameter(("program", depth_field), args.program, args.depth)
         rate_hz = (0.11867 if args.lfo == 1 else 0.11880) * args.rate
-        print("\nSTAGE 2  LFO%d at %s=%d -> %.3f Hz, depth %s=%d"
-              % (args.lfo, rate_field, args.rate, rate_hz, depth_field, args.depth))
-        print("%6s %7s | %s" % ("amount", "lvl dB",
-                            "  ".join("%18s" % ("n_fft %d" % w) for w in windows)))
+        print(
+            "\nSTAGE 2  LFO%d at %s=%d -> %.3f Hz, depth %s=%d"
+            % (args.lfo, rate_field, args.rate, rate_hz, depth_field, args.depth)
+        )
+        print(
+            "%6s %7s | %s"
+            % ("amount", "lvl dB", "  ".join("%18s" % ("n_fft %d" % w) for w in windows))
+        )
         rows = []
         for amt in amounts:
             br.set_parameter(("keygroup", "MODVFILT1"), args.program, amt, **kg)
@@ -336,7 +429,8 @@ def main():
             cells, by_w = [], {}
             for w in windows:
                 if w not in slope:
-                    cells.append("%18s" % "-"); continue
+                    cells.append("%18s" % "-")
+                    continue
                 ser, hop = band_ratio(mono, sr, w, LO, HI)
                 sw, pk, pf = coherent(ser, hop, rate_hz)
                 cents = sw / slope[w]
@@ -349,9 +443,16 @@ def main():
         for amt, by_w in rows:
             v = [c for c, _ in by_w.values()]
             if len(v) > 1 and max(v) > 0:
-                print("  amount %2d: %.0f..%.0f cents, spread %.0f (%.0f%% of median)"
-                      % (amt, min(v), max(v), max(v) - min(v),
-                         100 * (max(v) - min(v)) / max(np.median(v), 1e-9)))
+                print(
+                    "  amount %2d: %.0f..%.0f cents, spread %.0f (%.0f%% of median)"
+                    % (
+                        amt,
+                        min(v),
+                        max(v),
+                        max(v) - min(v),
+                        100 * (max(v) - min(v)) / max(np.median(v), 1e-9),
+                    )
+                )
 
         # IN-BAND GUARD. Run 2 returned 1915, 3415, 4286, 3144, 2554 cents for
         # amounts 5..50 -- rising then FALLING -- and the fall was entirely the
@@ -372,35 +473,80 @@ def main():
             down = 2400.0 * math.log2(centre / LO[1])
             up = 2400.0 * math.log2(HI[0] / centre)
             limit = min(down, up)
-            print("\nIN-BAND LIMIT: centre %.0f Hz, %.0f cents of room below the "
-                  "%.0f Hz baseline top and %.0f above the %.0f Hz high band "
-                  "=> binding limit %.0f cents"
-                  % (centre, down, LO[1], up, HI[0], limit))
+            print(
+                "\nIN-BAND LIMIT: centre %.0f Hz, %.0f cents of room below the "
+                "%.0f Hz baseline top and %.0f above the %.0f Hz high band "
+                "=> binding limit %.0f cents" % (centre, down, LO[1], up, HI[0], limit)
+            )
             for amt, by_w in rows:
                 v = [c for c, _ in by_w.values()]
                 if v and max(v) > limit:
-                    print("  amount %2d: %.0f cents EXCEEDS the limit -- not a measurement"
-                          % (amt, max(v)))
+                    print(
+                        "  amount %2d: %.0f cents EXCEEDS the limit -- not a measurement"
+                        % (amt, max(v))
+                    )
 
         print("\nBOUND CHECK -- the excursion must keep growing with the amount")
         w0 = windows[len(windows) // 2]
         seq = [(a, by_w[w0][0]) for a, by_w in rows if w0 in by_w]
         for (a1, v1), (a2, v2) in zip(seq, seq[1:]):
-            flag = "   <-- PLATEAU: statistic may have stopped before the machine" \
-                   if v2 <= v1 * 1.02 else ""
+            flag = (
+                "   <-- PLATEAU: statistic may have stopped before the machine"
+                if v2 <= v1 * 1.02
+                else ""
+            )
             print("  %2d -> %2d : %.0f -> %.0f cents%s" % (a1, a2, v1, v2, flag))
         print("\nFLOOR: ~40 cents at a 14 s hold. Treat anything under ~150 as zero.")
     finally:
-        for (region, name), val in snap.items():
-            br.set_parameter((region, name), args.program, val,
-                             **(kg if region == "keygroup" else {}))
-        bad = [n for (r, n), v in snap.items()
-               if br.get_parameter((r, n), args.program,
-                                   **(kg if r == "keygroup" else {})) != v]
-        print("\nRESTORE: %s" % ("VERIFIED, all %d fields" % len(snap) if not bad
-                                 else "*** FAILED on %s ***" % bad))
-        out.send_message([0x80 | chan, args.note, 0])
-        out.close_port()
+        for _s, _h in _previous.items():
+            try:
+                _signal.signal(_s, _h)
+            except (ValueError, OSError):
+                pass
+        if br is not None:
+            for (region, name), val in snap.items():
+                try:
+                    br.set_parameter(
+                        (region, name), args.program, val, **(kg if region == "keygroup" else {})
+                    )
+                except Exception as exc:
+                    print("  !! restore %s.%s: %s" % (region, name, exc))
+            try:
+                bad = [
+                    n
+                    for (r, n), v in snap.items()
+                    if br.get_parameter((r, n), args.program, **(kg if r == "keygroup" else {}))
+                    != v
+                ]
+            except Exception:
+                bad = [n for (_, n) in snap]
+            print(
+                "\nRESTORE: %s"
+                % (
+                    "VERIFIED, all %d fields" % len(snap)
+                    if not bad
+                    else "*** FAILED on %s ***" % bad
+                )
+            )
+        if cap is not None:
+            try:
+                cap.close()
+            except Exception:
+                pass
+        if out is not None:
+            try:
+                out.send_message([0x80 | chan, args.note, 0])
+            except Exception:
+                pass
+            try:
+                out.close_port()
+            except Exception:
+                pass
+        if br is not None:
+            try:
+                br.close()
+            except Exception:
+                pass
     return 0
 
 

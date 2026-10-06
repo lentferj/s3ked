@@ -61,6 +61,7 @@ An index that tracks across two different volumes is the answer. `byte[49]`
 will track too, and is not the answer -- it is the cursor, and it stops
 meaning anything the moment the cursor moves off the field.
 """
+
 import sys
 import time
 
@@ -100,8 +101,12 @@ KNOWN = {
 
 def read_raw(bridge, selector, index, count):
     frame = m.HeaderRequest(
-        command=m.Command.RMISCDATA, index=index, selector=selector,
-        offset=0, count=count, exclusive_channel=bridge.exclusive_channel,
+        command=m.Command.RMISCDATA,
+        index=index,
+        selector=selector,
+        offset=0,
+        count=count,
+        exclusive_channel=bridge.exclusive_channel,
     ).encode()
     reply = bridge.send_and_receive(frame, timeout=1.5)
     _c, command, _p = m.parse_frame(reply)
@@ -132,10 +137,8 @@ def sweep(bridge, live):
 
 def dump_names(bridge):
     print("\n=== name bank (selector 6) ===", flush=True)
-    print("  Looking for the volume the panel is showing. A name index that "
-          "returns it", flush=True)
-    print("  IS the register, and one that can be written would let a volume "
-          "be chosen", flush=True)
+    print("  Looking for the volume the panel is showing. A name index that returns it", flush=True)
+    print("  IS the register, and one that can be written would let a volume be chosen", flush=True)
     print("  by name rather than by number.\n", flush=True)
     found = False
     for index in range(NAME_INDICES):
@@ -156,7 +159,16 @@ def dump_names(bridge):
 def main():
     duration = float(sys.argv[1]) if len(sys.argv) > 1 else 240.0
     bridge = b.S3kBridge.autodetect(channels=(0,))
+    try:
+        _main_inner(bridge, duration)
+    finally:
+        try:
+            bridge.close()
+        except Exception:
+            pass
 
+
+def _main_inner(bridge, duration):
     dump_names(bridge)
 
     live = []
@@ -164,19 +176,16 @@ def main():
         for index in range(count):
             live.append((selector, index, width))
 
-    print(f"\n=== baseline sweep of {len(live)} entries across "
-          f"{len(BANKS)} banks ===", flush=True)
+    print(f"\n=== baseline sweep of {len(live)} entries across {len(BANKS)} banks ===", flush=True)
     baseline = sweep(bridge, live)
     live = [key for key in live if key in baseline]
     per_bank = {}
     for selector, index, _w in live:
         per_bank[selector] = per_bank.get(selector, 0) + 1
     for selector, label, _w, _c in BANKS:
-        print(f"   {label:>6} bank: {per_bank.get(selector, 0)} readable",
-              flush=True)
+        print(f"   {label:>6} bank: {per_bank.get(selector, 0)} readable", flush=True)
 
-    print(f"\n  STEP THE VOLUME AT THE PANEL NOW -- twice, to two different "
-          f"volumes.", flush=True)
+    print(f"\n  STEP THE VOLUME AT THE PANEL NOW -- twice, to two different volumes.", flush=True)
     print(f"  Watching for {duration:.0f}s.\n", flush=True)
     print("   time   bank  index   from -> to      note", flush=True)
     print("  " + "-" * 68, flush=True)
@@ -195,10 +204,12 @@ def main():
                 selector, index, _w = key
                 moved.setdefault(key, []).append(current[key])
                 note = KNOWN.get((selector, index), "<< UNKNOWN -- candidate")
-                print(f"  {time.time() - started:>5.0f}s  "
-                      f"{labels[selector]:>6}  {index:>5}   "
-                      f"{previous[key]:>5} -> {current[key]:<7} {note}",
-                      flush=True)
+                print(
+                    f"  {time.time() - started:>5.0f}s  "
+                    f"{labels[selector]:>6}  {index:>5}   "
+                    f"{previous[key]:>5} -> {current[key]:<7} {note}",
+                    flush=True,
+                )
                 previous[key] = current[key]
     except KeyboardInterrupt:
         pass
@@ -211,15 +222,14 @@ def main():
         values = sorted(set(moved[key]))
         note = KNOWN.get((selector, index))
         if note is None:
-            note = ("CANDIDATE -- tracked across "
-                    f"{len(values)} values" if len(values) > 1
-                    else "moved once -- could be coincidence")
-        print(f"  {labels[selector]:>6}  {index:>5}  {str(values):<20}  {note}",
-              flush=True)
+            note = (
+                f"CANDIDATE -- tracked across {len(values)} values"
+                if len(values) > 1
+                else "moved once -- could be coincidence"
+            )
+        print(f"  {labels[selector]:>6}  {index:>5}  {str(values):<20}  {note}", flush=True)
     if not moved:
-        print("  nothing moved at all -- was the volume actually changed?",
-              flush=True)
-    bridge.close()
+        print("  nothing moved at all -- was the volume actually changed?", flush=True)
 
 
 if __name__ == "__main__":

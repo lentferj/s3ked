@@ -48,6 +48,7 @@ weaker reading than "did this specific program move to the top".
 The change is undone before this exits. It is a program number, not audio:
 nothing is deleted and nothing is written to disc.
 """
+
 import sys
 import time
 
@@ -60,10 +61,7 @@ SETTLE = 2.0
 
 def read_state(bridge):
     names = bridge.program_list()
-    numbers = [
-        bridge.get_header_bytes("program", i, PRGNUM, 1)[0]
-        for i in range(len(names))
-    ]
+    numbers = [bridge.get_header_bytes("program", i, PRGNUM, 1)[0] for i in range(len(names))]
     return names, numbers
 
 
@@ -76,25 +74,72 @@ def show(label, names, numbers):
 
 
 def main():
+    import signal as _signal
+
+    bridge = None
+    # One-shot, like calibrate.run_sweep: SIGTERM ends CPython without
+    # unwinding, so without this the restore below never runs.
+    _previous = {}
+
+    def _bail(signum, _frame):
+        for _s, _h in _previous.items():
+            try:
+                _signal.signal(_s, _h)
+            except (ValueError, OSError):
+                pass
+        raise KeyboardInterrupt(f"signal {signum}")
+
     bridge = b.S3kBridge.autodetect(channels=(0,))
-    names, numbers = read_state(bridge)
+    for _sig in (_signal.SIGTERM, getattr(_signal, "SIGHUP", None), _signal.SIGINT):
+        if _sig is None:
+            continue
+        try:
+            _previous[_sig] = _signal.signal(_sig, _bail)
+        except (ValueError, OSError):
+            pass
+    try:
+        # The initial read lives inside the lifecycle too: a failed first
+        # read must close the bridge rather than leaking it.
+        names, numbers = read_state(bridge)
+    except Exception:
+        try:
+            bridge.close()
+        except Exception:
+            pass
+        raise
     if len(names) < 3:
-        print(f"only {len(names)} program(s) resident -- load a volume first; "
-              f"a re-sort needs somewhere to move to", flush=True)
+        print(
+            f"only {len(names)} program(s) resident -- load a volume first; "
+            f"a re-sort needs somewhere to move to",
+            flush=True,
+        )
+        try:
+            bridge.close()
+        except Exception:
+            pass
         return
 
     last = len(names) - 1
     original = numbers[last]
     target = numbers[0]
     if original == target:
-        print("the last program already carries the first one's number; "
-              "nothing to manufacture", flush=True)
+        print(
+            "the last program already carries the first one's number; nothing to manufacture",
+            flush=True,
+        )
+        try:
+            bridge.close()
+        except Exception:
+            pass
         return
 
     print("=== before ===", flush=True)
     show("resident", names, numbers)
-    print(f"\n  writing PRGNUM {target} onto program index {last} "
-          f"(was {original}) -- collides with index 0\n", flush=True)
+    print(
+        f"\n  writing PRGNUM {target} onto program index {last} "
+        f"(was {original}) -- collides with index 0\n",
+        flush=True,
+    )
 
     restored = False
     try:
@@ -105,41 +150,54 @@ def main():
         print("=== after the write ===", flush=True)
         show("resident", after_names, after_numbers)
 
-        reordered = [len(n.strip()) for n in after_names] != \
-                    [len(n.strip()) for n in names]
+        reordered = [len(n.strip()) for n in after_names] != [len(n.strip()) for n in names]
         print(flush=True)
         if reordered:
-            print("RPLIST REORDERED -- the machine re-sorted on its own, with "
-                  "no BTSORT from us.", flush=True)
+            print(
+                "RPLIST REORDERED -- the machine re-sorted on its own, with no BTSORT from us.",
+                flush=True,
+            )
             print("  s3ked's renumber needs no ordering caveat.", flush=True)
         else:
-            print("RPLIST UNCHANGED -- the machine did NOT re-sort.",
-                  flush=True)
-            print("  Note this does not settle the `*` flags, which are a "
-                  "separate half of what", flush=True)
-            print("  BTSORT is documented to do. Read the panel now:",
-                  flush=True)
+            print("RPLIST UNCHANGED -- the machine did NOT re-sort.", flush=True)
+            print(
+                "  Note this does not settle the `*` flags, which are a separate half of what",
+                flush=True,
+            )
+            print("  BTSORT is documented to do. Read the panel now:", flush=True)
         print(flush=True)
         print("  AT THE PANEL, on SINGLE mode's SLCT page:", flush=True)
-        print(f"    - select PROGRAM NUMBER {target + 1} "
-              f"(the panel shows the byte 1-based)", flush=True)
-        print("    - how many does it say are 'now active'? 2 means the flags "
-              "were rebuilt;", flush=True)
+        print(
+            f"    - select PROGRAM NUMBER {target + 1} (the panel shows the byte 1-based)",
+            flush=True,
+        )
+        print(
+            "    - how many does it say are 'now active'? 2 means the flags were rebuilt;",
+            flush=True,
+        )
         print("      1 means they were not.", flush=True)
-        print("    - and has the list visibly reordered on screen?",
-              flush=True)
+        print("    - and has the list visibly reordered on screen?", flush=True)
         print("\n  Look now. Restoring in 60 s.", flush=True)
         time.sleep(60)
     finally:
         try:
-            bridge.set_header_bytes("program", last, PRGNUM, bytes([original]))
-            check = bridge.get_header_bytes("program", last, PRGNUM, 1)[0]
-            restored = check == original
-        except Exception as exc:          # noqa: BLE001 -- report, never mask
+            if bridge is not None:
+                bridge.set_header_bytes("program", last, PRGNUM, bytes([original]))
+                check = bridge.get_header_bytes("program", last, PRGNUM, 1)[0]
+                restored = check == original
+        except Exception as exc:  # noqa: BLE001 -- report, never mask
             print(f"\n  RESTORE FAILED: {exc}", flush=True)
-        print(f"\n  restored program {last} to PRGNUM {original}: {restored}",
-              flush=True)
-        bridge.close()
+        print(f"\n  restored program {last} to PRGNUM {original}: {restored}", flush=True)
+        for _s, _h in _previous.items():
+            try:
+                _signal.signal(_s, _h)
+            except (ValueError, OSError):
+                pass
+        if bridge is not None:
+            try:
+                bridge.close()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

@@ -75,6 +75,7 @@ WHAT IT NEEDS FROM YOU, all of it learned from runs that returned nothing:
   A summary row that outlives its own evidence is how §158's sub-45 diagnosis
   became unfalsifiable -- `rel1/fast.py` wrote the WAVs and they are gone.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -87,8 +88,9 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "probes"))
+sys.path.insert(
+    0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "probes")
+)
 
 import numpy as np
 
@@ -99,13 +101,19 @@ from jcap import Capture
 INT16 = 20 * math.log10(32768.0)
 
 #: Keygroup bytes this touches. Saved first, written back on every exit path.
-KG_FIELDS = ("ATTAK1", "DECAY1", "SUSTN1", "RELSE1", "V_REL1", "O_REL1",
-             "K_DAR1", "VLOUD1")
+KG_FIELDS = ("ATTAK1", "DECAY1", "SUSTN1", "RELSE1", "V_REL1", "O_REL1", "K_DAR1", "VLOUD1")
 PG_FIELDS = ("LFODEP", "PRLOUD", "MODVAMP1", "MODVAMP2")
 
 #: §158's prepare list, unchanged, so rows stay comparable with §158's.
-PREPARE_KG = {"ATTAK1": 0, "DECAY1": 0, "SUSTN1": 99, "V_REL1": 0, "O_REL1": 0,
-              "K_DAR1": 0, "VLOUD1": 0}
+PREPARE_KG = {
+    "ATTAK1": 0,
+    "DECAY1": 0,
+    "SUSTN1": 99,
+    "V_REL1": 0,
+    "O_REL1": 0,
+    "K_DAR1": 0,
+    "VLOUD1": 0,
+}
 PREPARE_PG = {"LFODEP": 0, "PRLOUD": 85, "MODVAMP1": 0, "MODVAMP2": 0}
 
 DEFAULT_VALUES = (99, 80, 70, 60, 50, 45, 40, 35, 30, 25, 20, 15, 10, 5, 0)
@@ -122,20 +130,46 @@ def envelope(x, sr, frame, hop):
     return 20 * np.log10(e), st / sr
 
 
-def crossing_rate(x, sr, sus_db, t_off, frame=0.001, hop=0.00025,
-                  l1=3.0, l2=15.0):
+def _first_persistent(mask, hold: int = 3) -> int:
+    """Index of the first run of ``hold`` consecutive True values, or -1.
+
+    A single frame below the threshold is noise until it persists: the
+    RMS envelope jitters frame to frame, so a bare first-crossing
+    search latches onto dips. Requiring the crossing to hold costs a
+    frame of resolution and removes that whole error class.
+    """
+    run = 0
+    for i, ok in enumerate(mask):
+        run = run + 1 if ok else 0
+        if run >= hold:
+            return i - run + 1
+    return -1
+
+
+def crossing_rate(x, sr, sus_db, t_off, frame=0.001, hop=0.00025, l1=3.0, l2=15.0, hold: int = 3):
     """dB/s from the interval between two level crossings, or nan.
 
     Returns (rate, t_of_first_crossing_relative_to_note_off).
+
+    Both crossings are searched strictly at or after note-off
+    (``t >= t_off``): the sustain before it carries its own noise, and a
+    pre-note-off dip latched as the first crossing reports a rate
+    measured against a level the release never passed through, with a
+    negative latency. Each crossing must persist ``hold`` frames -- a
+    one-frame dip is jitter, not a crossing. A non-positive interval,
+    or a first crossing before note-off, returns NaN rather than a
+    fictitious rate.
     """
     db, t = envelope(x, sr, frame, hop)
-    after = t >= t_off - 0.05
-    a = np.where(after & (db <= sus_db - l1))[0]
-    b = np.where(after & (db <= sus_db - l2))[0]
-    if len(a) == 0 or len(b) == 0:
+    after = t >= t_off
+    below1 = after & (db <= sus_db - l1)
+    below2 = after & (db <= sus_db - l2)
+    i1 = _first_persistent(below1, hold)
+    i2 = _first_persistent(below2, hold)
+    if i1 < 0 or i2 < 0:
         return float("nan"), float("nan")
-    t1, t2 = t[a[0]], t[b[0]]
-    if t2 <= t1:
+    t1, t2 = t[i1], t[i2]
+    if t1 < t_off or t2 <= t1:
         return float("nan"), float("nan")
     return (l2 - l1) / (t2 - t1), float(t1 - t_off)
 
@@ -147,34 +181,44 @@ def law(v, a=23042.3, b=-0.09754):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--out", default="/tmp/s3ked-relse",
-                    help="where captures and rows.json go")
-    ap.add_argument("--volume", default="TC10 NOISE",
-                    help="volume already present on the card (a disc read)")
-    ap.add_argument("--program", type=int, default=50,
-                    help="PRGNUM of the one-keygroup white-noise program")
+    ap.add_argument("--out", default="/tmp/s3ked-relse", help="where captures and rows.json go")
+    ap.add_argument(
+        "--volume", default="TC10 NOISE", help="volume already present on the card (a disc read)"
+    )
+    ap.add_argument(
+        "--program", type=int, default=50, help="PRGNUM of the one-keygroup white-noise program"
+    )
     ap.add_argument("--note", type=int, default=48)
     ap.add_argument("--velocity", type=int, default=100)
     ap.add_argument("--pre", type=float, default=0.6)
     ap.add_argument("--hold", type=float, default=2.0)
     ap.add_argument("--tail", type=float, default=1.5)
     ap.add_argument("--repeats", type=int, default=2)
-    ap.add_argument("--frame", type=float, default=0.001,
-                    help="RMS frame in seconds; 0.001 is the measured value")
+    ap.add_argument(
+        "--frame",
+        type=float,
+        default=0.001,
+        help="RMS frame in seconds; 0.001 is the measured value",
+    )
     ap.add_argument("--hop", type=float, default=0.00025)
     ap.add_argument("--l1", type=float, default=3.0, help="first crossing, dB down")
     ap.add_argument("--l2", type=float, default=15.0, help="second crossing, dB down")
     ap.add_argument("--values", type=int, nargs="+", default=list(DEFAULT_VALUES))
-    ap.add_argument("--dry-run", action="store_true",
-                    help="print the plan and exit; touches no hardware")
+    ap.add_argument(
+        "--dry-run", action="store_true", help="print the plan and exit; touches no hardware"
+    )
     args = ap.parse_args(argv)
 
     os.makedirs(args.out, exist_ok=True)
     if args.dry_run:
-        print("would sweep RELSE1", args.values, "x", args.repeats,
-              "repeats, into", args.out)
-        print("law check: RELSE1 45 ->", round(law(45), 1), "dB/s (measured 338);"
-              " RELSE1 10 ->", round(law(10), 1), "(measured 8000)")
+        print("would sweep RELSE1", args.values, "x", args.repeats, "repeats, into", args.out)
+        print(
+            "law check: RELSE1 45 ->",
+            round(law(45), 1),
+            "dB/s (measured 338); RELSE1 10 ->",
+            round(law(10), 1),
+            "(measured 8000)",
+        )
         return 0
 
     def patient(fn, *a, tries=8, gap=1.4, **kw):
@@ -182,7 +226,7 @@ def main(argv=None):
         for _ in range(tries):
             try:
                 return fn(*a, timeout=12.0, **kw)
-            except Exception as e:          # noqa: BLE001 - retry is the point
+            except Exception as e:  # noqa: BLE001 - retry is the point
                 last = e
                 time.sleep(gap)
         raise last
@@ -191,26 +235,32 @@ def main(argv=None):
     pg_off = {n: p.lookup(("program", n)).offset for n in PG_FIELDS}
     pn = p.lookup(("program", "PRGNUM")).offset
 
-    log = open(os.path.join(args.out, "relse_rate.log"), "w",
-              encoding="utf-8")
+    log = None
+    cap = None
+    br = None
 
     def say(*t):
         s = " ".join(str(x) for x in t)
         print(s, flush=True)
-        log.write(s + "\n")
-        log.flush()
-
-    cap = Capture(sources=("system:capture_13", "system:capture_14"),
-                  name="s3ked-relse")
-    br = s3kconnect.connect(channels=(0,))
-    sr = cap.samplerate
-    midi = br.out
-    say(f"[{time.strftime('%H:%M:%S')}] {br.description}")
-    say(f"    capture: {' -> '.join(cap.sources)}   jack {sr} Hz")
-    say("    RAM only: loading a volume (a disc read), writing keygroup and")
-    say("    program bytes and writing them back. No volume is written.")
+        if log is not None:
+            log.write(s + "\n")
+            log.flush()
 
     try:
+        # Everything that acquires a client, a port pair or a file handle
+        # lives inside the protected lifecycle: a failed Capture
+        # construction, a refused bridge connection or an unwritable log
+        # must not leak the ones that succeeded before it, and the
+        # `finally` below closes deterministically on every path.
+        log = open(os.path.join(args.out, "relse_rate.log"), "w", encoding="utf-8")
+        cap = Capture(sources=("system:capture_13", "system:capture_14"), name="s3ked-relse")
+        br = s3kconnect.connect(channels=(0,))
+        sr = cap.samplerate
+        midi = br.out
+        say(f"[{time.strftime('%H:%M:%S')}] {br.description}")
+        say(f"    capture: {' -> '.join(cap.sources)}   jack {sr} Hz")
+        say("    RAM only: loading a volume (a disc read), writing keygroup and")
+        say("    program bytes and writing them back. No volume is written.")
         patient(br.select_device, 1)
         time.sleep(1.0)
         patient(br.select_drive, 4)
@@ -243,17 +293,79 @@ def main(argv=None):
             except Exception:
                 continue
         if idx is None:
-            say(f"!! no resident program reads PRGNUM {args.program}. Stopping "
-                f"rather than editing an unknown one.")
+            say(
+                f"!! no resident program reads PRGNUM {args.program}. Stopping "
+                f"rather than editing an unknown one."
+            )
             return 3
-        say(f"    {args.volume}: {len(names)} programs; PRGNUM {args.program} "
-            f"is index {idx} (read back)")
+        say(
+            f"    {args.volume}: {len(names)} programs; PRGNUM {args.program} "
+            f"is index {idx} (read back)"
+        )
+        # Confirm the sounding program/keygroup, not the loader list alone:
+        # select the number and prove the edited index is the addressed one,
+        # that keygroup 0 exists, and that the test note falls inside its
+        # key/velocity range. Fail loudly rather than measuring silence or
+        # the wrong program.
+        try:
+            patient(br.select_program_number, args.program)
+            time.sleep(0.5)
+            again = patient(br.get_header_bytes, "program", idx, pn, 1)[0]
+            if again != args.program:
+                say(
+                    f"!! index {idx} no longer reads PRGNUM {args.program} "
+                    f"after selecting it (reads {again}). Stopping."
+                )
+                return 3
+            groups = patient(br.get_header_bytes, "program", idx, 42, 1)[0]
+            if groups < 1:
+                say(
+                    f"!! program index {idx} reports {groups} keygroup(s). "
+                    f"Stopping rather than editing keygroup 0 blind."
+                )
+                return 3
+            lonote = p.lookup(("keygroup", "LONOTE")).offset
+            hinote = p.lookup(("keygroup", "HINOTE")).offset
+            lovel = p.lookup(("keygroup", "LOVEL1")).offset
+            hivel = p.lookup(("keygroup", "HIVEL1")).offset
+            lo = patient(br.get_header_bytes, "keygroup", idx, lonote, 1, selector=0)[0]
+            hi = patient(br.get_header_bytes, "keygroup", idx, hinote, 1, selector=0)[0]
+            lv_lo = patient(br.get_header_bytes, "keygroup", idx, lovel, 1, selector=0)[0]
+            lv_hi = patient(br.get_header_bytes, "keygroup", idx, hivel, 1, selector=0)[0]
+            if not (lo <= args.note <= hi):
+                say(
+                    f"!! note {args.note} is outside keygroup 0 range "
+                    f"{lo}..{hi}. It would measure silence, not release."
+                )
+                return 3
+            if not (lv_lo <= args.velocity <= lv_hi):
+                say(
+                    f"!! velocity {args.velocity} is outside zone 1 range "
+                    f"{lv_lo}..{lv_hi}. It would measure silence, not release."
+                )
+                return 3
+            say(
+                f"    selected PRGNUM {args.program} (index {idx}); keygroup 0 "
+                f"of {groups}, note {args.note} in {lo}..{hi}, "
+                f"velocity {args.velocity} in {lv_lo}..{lv_hi}"
+            )
+        except SystemExit:
+            raise
+        except Exception as exc:
+            say(
+                f"!! could not verify sounding program/keygroup: {exc}. "
+                f"Stopping rather than measuring the wrong program."
+            )
+            return 3
 
         saved = {
-            "kg": {n: patient(br.get_header_bytes, "keygroup", idx, o, 1,
-                              selector=0)[0] for n, o in kg_off.items()},
-            "pg": {n: patient(br.get_header_bytes, "program", idx, o, 1)[0]
-                   for n, o in pg_off.items()},
+            "kg": {
+                n: patient(br.get_header_bytes, "keygroup", idx, o, 1, selector=0)[0]
+                for n, o in kg_off.items()
+            },
+            "pg": {
+                n: patient(br.get_header_bytes, "program", idx, o, 1)[0] for n, o in pg_off.items()
+            },
         }
         with open(os.path.join(args.out, "saved.json"), "w", encoding="utf-8") as fh:
             json.dump(saved, fh, indent=1)
@@ -266,28 +378,40 @@ def main(argv=None):
             done["v"] = True
             for n, v in saved["kg"].items():
                 try:
-                    br.set_header_bytes("keygroup", idx, kg_off[n],
-                                        bytes([v & 0xFF]), selector=0, timeout=12.0)
-                except Exception as e:      # noqa: BLE001
+                    br.set_header_bytes(
+                        "keygroup", idx, kg_off[n], bytes([v & 0xFF]), selector=0, timeout=12.0
+                    )
+                except Exception as e:  # noqa: BLE001
                     say(f"  !! restore kg {n}: {e}")
             for n, v in saved["pg"].items():
                 try:
-                    br.set_header_bytes("program", idx, pg_off[n],
-                                        bytes([v & 0xFF]), timeout=12.0)
-                except Exception as e:      # noqa: BLE001
+                    br.set_header_bytes("program", idx, pg_off[n], bytes([v & 0xFF]), timeout=12.0)
+                except Exception as e:  # noqa: BLE001
                     say(f"  !! restore pg {n}: {e}")
 
         atexit.register(restore)
         signal.signal(signal.SIGINT, lambda *a: (restore(), sys.exit(1)))
         signal.signal(signal.SIGTERM, lambda *a: (restore(), sys.exit(1)))
 
+        swept_relse1 = []
+
         def wkg(n, v):
-            br.set_header_bytes("keygroup", idx, kg_off[n], bytes([v & 0xFF]),
-                                selector=0, timeout=12.0)
+            br.set_header_bytes(
+                "keygroup", idx, kg_off[n], bytes([v & 0xFF]), selector=0, timeout=12.0
+            )
+            # Verify the swept field actually moved: a dropped write would
+            # otherwise sweep one setting N times and report a flat series
+            # as a law (M9). Fail loudly on mismatch.
+            if n == "RELSE1":
+                got = patient(
+                    br.get_header_bytes, "keygroup", idx, kg_off[n], 1, selector=0, tries=3
+                )[0]
+                if got != (v & 0xFF):
+                    raise RuntimeError(f"RELSE1 write not acknowledged: asked {v}, reads {got}")
+                swept_relse1.append(got)
 
         def wpg(n, v):
-            br.set_header_bytes("program", idx, pg_off[n], bytes([v & 0xFF]),
-                                timeout=12.0)
+            br.set_header_bytes("program", idx, pg_off[n], bytes([v & 0xFF]), timeout=12.0)
 
         for n, v in PREPARE_KG.items():
             wkg(n, v)
@@ -298,33 +422,58 @@ def main(argv=None):
         t_off = args.pre + args.hold
         want = (args.pre + args.hold + args.tail) * sr
 
+        # MIDI routing, read off the machine rather than assumed: the notes
+        # must leave on the program's own PMCHAN and the program change must
+        # carry the STORED (0-based) number, not the panel's 1-based one.
+        # Sending on channel 0 to a program listening elsewhere measures
+        # silence on the wrong channel and calls it a release.
+        pmchan_off = p.lookup(("program", "PMCHAN")).offset
+        chan = patient(br.get_header_bytes, "program", idx, pmchan_off, 1)[0]
+        if chan == 255:
+            chan = 0  # OMNI: channel 0 reaches it; anything would
+            say("    PMCHAN is OMNI; driving on channel 0")
+        elif not (0 <= chan <= 15):
+            say(
+                f"!! PMCHAN reads {chan}, outside 0..15 and not OMNI (255). "
+                f"Stopping rather than driving the wrong channel."
+            )
+            return 3
+        prgnum_stored = patient(br.get_header_bytes, "program", idx, pn, 1)[0]
+        say(f"    driving MIDI channel {chan}, program number {prgnum_stored} (stored, 0-based)")
+
         def capture(tag):
-            midi.send_message([0xC0, args.program])
+            midi.send_message([0xC0 | (chan & 0x0F), prgnum_stored])
             time.sleep(0.3)
             time.sleep(1.0)
             cap.start()
             time.sleep(args.pre)
-            midi.send_message([0x90, args.note, args.velocity])
+            midi.send_message([0x90 | (chan & 0x0F), args.note, args.velocity])
             time.sleep(args.hold)
-            midi.send_message([0x80, args.note, 0])
+            midi.send_message([0x80 | (chan & 0x0F), args.note, 0])
             time.sleep(args.tail)
             ch = np.asarray(cap.stop_channels(), dtype=np.float64)
             if cap.xruns > 1 or cap.overflows:
-                raise RuntimeError(f"{cap.xruns} xruns / {cap.overflows} "
-                                   f"dropped -- capture is not contiguous")
+                raise RuntimeError(
+                    f"{cap.xruns} xruns / {cap.overflows} dropped -- capture is not contiguous"
+                )
             if ch.ndim != 2 or not (0.9 * want <= ch.shape[1] <= 1.1 * want):
-                raise RuntimeError(f"capture is {ch.shape}, expected about "
-                                   f"{want / sr:.2f}s")
+                raise RuntimeError(f"capture is {ch.shape}, expected about {want / sr:.2f}s")
             np.save(os.path.join(args.out, f"{tag}.npy"), ch)
-            sched = {"tag": tag, "volume": args.volume,
-                     "program": args.program, "prgnum_index": idx,
-                     "note": args.note, "velocity": args.velocity, "sr": sr,
-                     "t_off": t_off, "frame": args.frame, "hop": args.hop,
-                     "sources": list(cap.sources),
-                     "captured_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ",
-                                                    time.gmtime())}
-            with open(os.path.join(args.out, f"{tag}.sched.json"), "w",
-                      encoding="utf-8") as fh:
+            sched = {
+                "tag": tag,
+                "volume": args.volume,
+                "program": args.program,
+                "prgnum_index": idx,
+                "note": args.note,
+                "velocity": args.velocity,
+                "sr": sr,
+                "t_off": t_off,
+                "frame": args.frame,
+                "hop": args.hop,
+                "sources": list(cap.sources),
+                "captured_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            }
+            with open(os.path.join(args.out, f"{tag}.sched.json"), "w", encoding="utf-8") as fh:
                 json.dump(sched, fh, indent=1)
             return ch
 
@@ -333,16 +482,20 @@ def main(argv=None):
             for c in range(ch.shape[0]):
                 db, _ = envelope(ch[c], sr, args.frame, args.hop)
                 if len(db):
-                    f = float(np.median(db[:max(1, int(0.45 / args.hop))]))
+                    f = float(np.median(db[: max(1, int(0.45 / args.hop))]))
                     best = f if best is None else max(best, f)
             return best
 
         say("")
-        say(f"[{time.strftime('%H:%M:%S')}] === two-crossing rate "
+        say(
+            f"[{time.strftime('%H:%M:%S')}] === two-crossing rate "
             f"({args.l1:.0f} dB then {args.l2:.0f} dB, frame "
-            f"{args.frame * 1000:.2f} ms) ===")
-        say(f"  {'RELSE1':>6} {'rep':>4} {'sus dBFS':>9} {'floor dBFS':>11} "
-            f"{'dB/s':>9} {'law':>9} {'ratio':>7}")
+            f"{args.frame * 1000:.2f} ms) ==="
+        )
+        say(
+            f"  {'RELSE1':>6} {'rep':>4} {'sus dBFS':>9} {'floor dBFS':>11} "
+            f"{'dB/s':>9} {'law':>9} {'ratio':>7}"
+        )
         rows = []
         for v in args.values:
             wkg("RELSE1", v)
@@ -351,7 +504,7 @@ def main(argv=None):
                 tag = f"relse_{v:02d}_{k}"
                 try:
                     ch = capture(tag)
-                except Exception as e:      # noqa: BLE001
+                except Exception as e:  # noqa: BLE001
                     say(f"  {v:>6} {k:>4}  CAPTURE FAILED: {e}")
                     continue
                 fl = floor_db(ch)
@@ -363,21 +516,64 @@ def main(argv=None):
                         best = (sus, c)
                 sus, c = best
                 if not (sus > fl + 20):
-                    say(f"  {v:>6} {k:>4}  VOID -- the note was not sounding "
+                    say(
+                        f"  {v:>6} {k:>4}  VOID -- the note was not sounding "
                         f"(sustain {sus - INT16:.1f}, floor {fl - INT16:.1f} dBFS). "
-                        f"Not a low reading: no reading.")
+                        f"Not a low reading: no reading."
+                    )
                     rows.append(dict(v=v, rep=k, void=True))
                     continue
-                r, lat = crossing_rate(ch[c], sr, sus, t_off, args.frame,
-                                       args.hop, args.l1, args.l2)
+                r, lat = crossing_rate(
+                    ch[c], sr, sus, t_off, args.frame, args.hop, args.l1, args.l2
+                )
+                # Latency is t(first crossing) - t(note-off) from the same
+                # waveform. Negative means the crossing latched onto
+                # pre-note-off sustain noise; beyond the capture tail means
+                # it latched onto the floor. Either is not a measurement.
+                if lat != lat or not (0.0 <= lat <= args.tail):
+                    say(
+                        f"  {v:>6} {k:>4}  VOID -- implausible latency "
+                        f"{lat * 1000.0 if lat == lat else float('nan'):.1f} ms "
+                        f"(t1-t_off outside 0..{args.tail * 1000.0:.0f} ms). "
+                        f"Not a slow release: no crossing."
+                    )
+                    rows.append(
+                        dict(
+                            v=v, rep=k, void=True, latency_ms=(lat * 1000.0 if lat == lat else None)
+                        )
+                    )
+                    continue
                 lv = law(v)
-                say(f"  {v:>6} {k:>4} {sus - INT16:9.1f} {fl - INT16:11.1f} "
-                    f"{r:9.0f} {lv:9.0f} {r / lv if r == r else float('nan'):7.2f}")
-                rows.append(dict(v=v, rep=k, sus_dbfs=sus - INT16,
-                                 floor_dbfs=fl - INT16, rate=r, law=lv,
-                                 latency_ms=lat * 1000))
+                say(
+                    f"  {v:>6} {k:>4} {sus - INT16:9.1f} {fl - INT16:11.1f} "
+                    f"{r:9.0f} {lv:9.0f} {r / lv if r == r else float('nan'):7.2f}"
+                )
+                rows.append(
+                    dict(
+                        v=v,
+                        rep=k,
+                        sus_dbfs=sus - INT16,
+                        floor_dbfs=fl - INT16,
+                        rate=r,
+                        law=lv,
+                        latency_ms=lat * 1000,
+                    )
+                )
             with open(os.path.join(args.out, "rows.json"), "w", encoding="utf-8") as fh:
                 json.dump(rows, fh, indent=1)
+
+        distinct = sorted(set(swept_relse1))
+        if len(distinct) < min(3, len(args.values)):
+            say(
+                f"!! RELSE1 reads back only {distinct}: the sweep did not "
+                f"move the field -- a flat series is not a law and no fit "
+                f"follows. Check the write path before trusting rows.json."
+            )
+        elif swept_relse1 != list(args.values):
+            say(
+                f"!! RELSE1 read back {distinct}, wanted "
+                f"{sorted(set(args.values))}: some writes did not land."
+            )
 
         say("")
         say(f"[{time.strftime('%H:%M:%S')}] === RESTORE ===")
@@ -385,17 +581,28 @@ def main(argv=None):
         done["v"] = True
         ok = True
         for n, v in saved["kg"].items():
-            ok &= patient(br.get_header_bytes, "keygroup", idx, kg_off[n], 1,
-                          selector=0)[0] == v
+            ok &= patient(br.get_header_bytes, "keygroup", idx, kg_off[n], 1, selector=0)[0] == v
         for n, v in saved["pg"].items():
             ok &= patient(br.get_header_bytes, "program", idx, pg_off[n], 1)[0] == v
         say(f"    restored: {ok}")
         return 0 if ok else 4
     finally:
-        cap.close()
-        br.close()
+        if cap is not None:
+            try:
+                cap.close()
+            except Exception:
+                pass
+        if br is not None:
+            try:
+                br.close()
+            except Exception:
+                pass
         say(f"[{time.strftime('%H:%M:%S')}] port RELEASED")
-        log.close()
+        if log is not None:
+            try:
+                log.close()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

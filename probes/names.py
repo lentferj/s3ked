@@ -72,14 +72,13 @@ from s3k import params as p  # noqa: E402
 NAME_LEN = m.NAME_LENGTH
 
 
-def coverage_names(charset: str = m.AKAI_CHARSET,
-                   length: int = NAME_LEN) -> List[str]:
+def coverage_names(charset: str = m.AKAI_CHARSET, length: int = NAME_LEN) -> List[str]:
     """Split the character set into names that use every entry exactly once.
 
     The final chunk is short, which is deliberate -- it exercises padding in
     the same pass.
     """
-    return [charset[i:i + length] for i in range(0, len(charset), length)]
+    return [charset[i : i + length] for i in range(0, len(charset), length)]
 
 
 @dataclass
@@ -120,18 +119,17 @@ class NameProbe:
     def _write(self, param, index, value, keygroup=0) -> None:
         if not self.allow_write:
             return
-        self.bridge.set_parameter(
-            param, index, value, keygroup=keygroup, timeout=self.timeout
-        )
+        self.bridge.set_parameter(param, index, value, keygroup=keygroup, timeout=self.timeout)
 
     def _read(self, param, index, keygroup=0):
-        return self.bridge.get_parameter(
-            param, index, keygroup=keygroup, timeout=self.timeout
-        )
+        return self.bridge.get_parameter(param, index, keygroup=keygroup, timeout=self.timeout)
 
     def _raw(self, param, index, keygroup=0) -> bytes:
         return self.bridge.get_header_bytes(
-            param.region, index, param.offset, param.size,
+            param.region,
+            index,
+            param.offset,
+            param.size,
             selector=keygroup if param.region == "keygroup" else 0,
             timeout=self.timeout,
         )
@@ -174,13 +172,10 @@ class NameProbe:
                     continue
                 if got != want:
                     seen_ok = False
-                    bad = [
-                        (i, a, c)
-                        for i, (a, c) in enumerate(zip(want, got))
-                        if a != c
-                    ]
+                    bad = [(i, a, c) for i, (a, c) in enumerate(zip(want, got)) if a != c]
                     self.run.add(
-                        f"charset chunk {chunk!r}", False,
+                        f"charset chunk {chunk!r}",
+                        False,
                         f"read {got!r}; first difference {bad[:3]}",
                     )
                 else:
@@ -189,7 +184,8 @@ class NameProbe:
                 # Cross-opcode: RPLIST is a different family entirely.
                 listed = self.bridge.program_list()[self.program]
                 self.run.add(
-                    f"RPLIST agrees for {chunk!r}", listed == want,
+                    f"RPLIST agrees for {chunk!r}",
+                    listed == want,
                     f"list says {listed!r}",
                 )
         finally:
@@ -209,11 +205,12 @@ class NameProbe:
             got = self._read(param, self.program)
             space = m.AKAI_CHARSET.index(" ")
             tail = set(raw[3:])
-            self.run.add("short name reads back trimmed", got == "ABC",
-                         f"read {got!r}")
-            self.run.add("tail is space-padded", tail == {space},
-                         f"raw {raw.hex(' ')}, tail bytes {sorted(tail)} "
-                         f"(space = {space})")
+            self.run.add("short name reads back trimmed", got == "ABC", f"read {got!r}")
+            self.run.add(
+                "tail is space-padded",
+                tail == {space},
+                f"raw {raw.hex(' ')}, tail bytes {sorted(tail)} (space = {space})",
+            )
         finally:
             self._restore(param, self.program, original)
 
@@ -231,8 +228,9 @@ class NameProbe:
             if not self.allow_write:
                 return
             got = self._read(param, self.program, keygroup)
-            self.run.add(f"zone 1 reference {original!r} -> {other!r}",
-                         got == other, f"read {got!r}")
+            self.run.add(
+                f"zone 1 reference {original!r} -> {other!r}", got == other, f"read {got!r}"
+            )
         finally:
             self._restore(param, self.program, original, keygroup)
 
@@ -247,13 +245,12 @@ class NameProbe:
                     header = self.bridge.get_header("keygroup", prog, keygroup=kg)
                 except Exception:
                     break
-                referenced |= {
-                    str(header[f"SNAME{i}"]).strip() for i in (1, 2, 3, 4)
-                }
+                referenced |= {str(header[f"SNAME{i}"]).strip() for i in (1, 2, 3, 4)}
         free = [i for i, s in enumerate(samples) if s not in referenced]
         if not free:
-            self.run.add("sample rename", False,
-                         "every resident sample is referenced by a keygroup")
+            self.run.add(
+                "sample rename", False, "every resident sample is referenced by a keygroup"
+            )
             return
 
         index = free[-1]
@@ -264,10 +261,10 @@ class NameProbe:
                 return
             got = self._read(param, index)
             listed = self.bridge.sample_list()[index]
-            self.run.add(f"sample {index} rename ({original!r})",
-                         got == "RENAMETEST", f"read {got!r}")
-            self.run.add("RSLIST agrees", listed == "RENAMETEST",
-                         f"list says {listed!r}")
+            self.run.add(
+                f"sample {index} rename ({original!r})", got == "RENAMETEST", f"read {got!r}"
+            )
+            self.run.add("RSLIST agrees", listed == "RENAMETEST", f"list says {listed!r}")
         finally:
             self._restore(param, index, original)
 
@@ -283,15 +280,18 @@ class NameProbe:
             if not self.allow_write:
                 return
             got = self._read(param, 0)
-            self.run.add(f"multi file name ({original!r})", got == "MULTITEST",
-                         f"read {got!r}")
+            self.run.add(f"multi file name ({original!r})", got == "MULTITEST", f"read {got!r}")
         finally:
             self._restore(param, 0, original)
 
     def all_checks(self) -> Run:
-        for check in (self.check_coverage, self.check_padding,
-                      self.check_reference, self.check_sample_name,
-                      self.check_multi_name):
+        for check in (
+            self.check_coverage,
+            self.check_padding,
+            self.check_reference,
+            self.check_sample_name,
+            self.check_multi_name,
+        ):
             try:
                 check()
             except Exception as exc:
@@ -307,8 +307,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--port")
     ap.add_argument("--exclusive-channel", type=int, default=0)
-    ap.add_argument("--program", type=int, default=1,
-                    help="scratch program to rename (default 1)")
+    ap.add_argument("--program", type=int, default=1, help="scratch program to rename (default 1)")
     ap.add_argument("--gap", type=float, default=0.1)
     ap.add_argument("--timeout", type=float, default=2.0)
     args = ap.parse_args(argv)
@@ -319,24 +318,56 @@ def main(argv: Optional[List[str]] = None) -> int:
         bridge = DemoBridge()
     elif args.port:
         bridge = b.S3kBridge.standard(
-            args.port, exclusive_channel=args.exclusive_channel,
-            gap=args.gap, write_gap=args.gap,
+            args.port,
+            exclusive_channel=args.exclusive_channel,
+            gap=args.gap,
+            write_gap=args.gap,
         )
     else:
         bridge = b.S3kBridge.autodetect(
-            channels=(args.exclusive_channel,), gap=args.gap, write_gap=args.gap,
+            channels=(args.exclusive_channel,),
+            gap=args.gap,
+            write_gap=args.gap,
             on_try=lambda name: print(f"  probing {name}...", file=sys.stderr),
         )
 
-    probe = NameProbe(bridge, allow_write=args.allow_write,
-                      program=args.program, timeout=args.timeout)
+    probe = NameProbe(
+        bridge, allow_write=args.allow_write, program=args.program, timeout=args.timeout
+    )
     if args.allow_write:
         print(f"WRITING names to program {args.program} on {bridge.description}")
     else:
         print("REHEARSAL -- nothing will be written.")
+    # SIGTERM ends CPython without unwinding, skipping the per-check
+    # `finally` restores. One-shot, like calibrate.run_sweep: turning the
+    # signal into an exception lets the restores run.
+    import signal as _signal
+
+    _previous = {}
+
+    def _bail(signum, _frame):
+        for _s, _h in _previous.items():
+            try:
+                _signal.signal(_s, _h)
+            except (ValueError, OSError):
+                pass
+        raise KeyboardInterrupt(f"signal {signum}")
+
+    for _sig in (_signal.SIGTERM, getattr(_signal, "SIGHUP", None), _signal.SIGINT):
+        if _sig is None:
+            continue
+        try:
+            _previous[_sig] = _signal.signal(_sig, _bail)
+        except (ValueError, OSError):
+            pass
     try:
         run = probe.all_checks()
     finally:
+        for _s, _h in _previous.items():
+            try:
+                _signal.signal(_s, _h)
+            except (ValueError, OSError):
+                pass
         if hasattr(bridge, "close"):
             bridge.close()
 

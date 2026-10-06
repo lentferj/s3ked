@@ -96,6 +96,7 @@ def _np():
 # Input
 # --------------------------------------------------------------------------
 
+
 def read_wav(path: str, mono: bool = True):
     """Read a 16-bit WAV. Returns ``(samples, sample_rate)``.
 
@@ -107,9 +108,7 @@ def read_wav(path: str, mono: bool = True):
     with wave.open(path, "rb") as w:
         sr, ch = w.getframerate(), w.getnchannels()
         if w.getsampwidth() != 2:
-            raise ValueError(
-                f"{path}: {w.getsampwidth() * 8}-bit WAV; this reader handles 16-bit"
-            )
+            raise ValueError(f"{path}: {w.getsampwidth() * 8}-bit WAV; this reader handles 16-bit")
         raw = w.readframes(w.getnframes())
     a = np.frombuffer(raw, dtype="<i2").astype("float64") / 32768.0
     a = a.reshape(-1, ch)
@@ -119,6 +118,7 @@ def read_wav(path: str, mono: bool = True):
 # --------------------------------------------------------------------------
 # Envelope
 # --------------------------------------------------------------------------
+
 
 def envelope(samples, sr: int, hop: float = DEFAULT_HOP):
     """RMS envelope and its time axis, in seconds."""
@@ -134,8 +134,14 @@ def envelope(samples, sr: int, hop: float = DEFAULT_HOP):
     return env, np.arange(n) * hop
 
 
-def anchor_offset(env, t, first_note_on: float, hop: float = DEFAULT_HOP,
-                  search_s: float = 5.0, frac: float = 0.05) -> float:
+def anchor_offset(
+    env,
+    t,
+    first_note_on: float,
+    hop: float = DEFAULT_HOP,
+    search_s: float = 5.0,
+    frac: float = 0.05,
+) -> float:
     """Map the MIDI clock onto the audio clock, using the first note's onset.
 
     The recorder starts before the first note and the two clocks are not the
@@ -155,8 +161,7 @@ def anchor_offset(env, t, first_note_on: float, hop: float = DEFAULT_HOP,
     return float(t[int(np.argmax(head > head.max() * frac))] - first_note_on)
 
 
-def attack_time(env, on: float, off: float, frac: float = 0.90,
-                hop: float = DEFAULT_HOP) -> float:
+def attack_time(env, on: float, off: float, frac: float = 0.90, hop: float = DEFAULT_HOP) -> float:
     """Seconds from onset to ``frac`` of the note's own plateau.
 
     The plateau is the 98th percentile rather than the maximum: a single
@@ -164,7 +169,7 @@ def attack_time(env, on: float, off: float, frac: float = 0.90,
     the target and the answer would come back near zero.
     """
     np = _np()
-    seg = env[int(on / hop): int(off / hop)]
+    seg = env[int(on / hop) : int(off / hop)]
     if len(seg) < 10:
         return float("nan")
     pk = float(np.percentile(seg, 98))
@@ -229,8 +234,7 @@ def residual_structure(x, y, predicted):
     return int(longest), float(expected), float(growth), bool(run_bad or growth_bad)
 
 
-def ramp_rate(values, hop: float = DEFAULT_HOP, lo: float = 0.20,
-              hi: float = 0.80):
+def ramp_rate(values, hop: float = DEFAULT_HOP, lo: float = 0.20, hi: float = 0.80):
     """Slope of a straight ramp, in units per second, and the span it crosses.
 
     **This exists because "attack time" was not a well-defined quantity here.**
@@ -261,8 +265,8 @@ def ramp_rate(values, hop: float = DEFAULT_HOP, lo: float = 0.20,
     if good.sum() < 8:
         return float("nan"), float("nan"), 0.0
     idx = np.nonzero(good)[0]
-    v = v[idx[0]:idx[-1] + 1]
-    start, end = float(v[0]), float(np.median(v[int(len(v) * 0.85):]))
+    v = v[idx[0] : idx[-1] + 1]
+    start, end = float(v[0]), float(np.median(v[int(len(v) * 0.85) :]))
     span = end - start
     if span == 0:
         return float("nan"), 0.0, 0.0
@@ -282,7 +286,7 @@ def ramp_rate(values, hop: float = DEFAULT_HOP, lo: float = 0.20,
     while run_end + 1 < len(v) and inside[run_end + 1]:
         run_end += 1
     sel = np.zeros(len(v), dtype=bool)
-    sel[first:run_end + 1] = True
+    sel[first : run_end + 1] = True
     if sel.sum() < 5:
         return float("nan"), float(span), 0.0
     x = np.nonzero(sel)[0].astype("float64") * hop
@@ -294,8 +298,7 @@ def ramp_rate(values, hop: float = DEFAULT_HOP, lo: float = 0.20,
     return float(slope), float(span), float(r2)
 
 
-def ramp_duration(values, hop: float = DEFAULT_HOP, lo: float = 0.20,
-                  hi: float = 0.80) -> float:
+def ramp_duration(values, hop: float = DEFAULT_HOP, lo: float = 0.20, hi: float = 0.80) -> float:
     """Time to cross the whole ramp at its measured gradient, in seconds.
 
     ``span / rate`` -- the extrapolated duration of the full travel. It is a
@@ -327,9 +330,15 @@ def _first_persistent(mask, hold: int) -> int:
     return -1
 
 
-def release_time(env, on: float, off: float, drop_db: float = 40.0,
-                 hop: float = DEFAULT_HOP, window_s: float = 12.0,
-                 hold: int = 3) -> float:
+def release_time(
+    env,
+    on: float,
+    off: float,
+    drop_db: float = 40.0,
+    hop: float = DEFAULT_HOP,
+    window_s: float = 12.0,
+    hold: int = 3,
+) -> float:
     """Seconds from note-off until the level has fallen ``drop_db``.
 
     Measured against the median of the sustained part, not the peak, so a
@@ -340,8 +349,8 @@ def release_time(env, on: float, off: float, drop_db: float = 40.0,
     """
     np = _np()
     i0 = int(off / hop)
-    seg = env[i0: i0 + int(window_s / hop)]
-    held = env[int(on / hop) + 40: i0]
+    seg = env[i0 : i0 + int(window_s / hop)]
+    held = env[int(on / hop) + 40 : i0]
     if len(seg) < 10 or len(held) == 0:
         return float("nan")
     lvl = float(np.percentile(held, 50))
@@ -352,8 +361,7 @@ def release_time(env, on: float, off: float, drop_db: float = 40.0,
     return float(i * hop) if i >= 0 else float("nan")
 
 
-def decay_time(env, on: float, off: float, hop: float = DEFAULT_HOP,
-               hold: int = 3) -> float:
+def decay_time(env, on: float, off: float, hop: float = DEFAULT_HOP, hold: int = 3) -> float:
     """Seconds from the attack peak down to the sustain plateau.
 
     ``DECAY1``/``DECAY2`` only produce a measurable segment when the sustain
@@ -367,16 +375,19 @@ def decay_time(env, on: float, off: float, hop: float = DEFAULT_HOP,
     if len(seg) < 20:
         return float("nan")
     peak_i = int(np.argmax(seg))
-    tail = seg[max(peak_i, len(seg) // 2):]
+    tail = seg[max(peak_i, len(seg) // 2) :]
     sus = float(np.percentile(tail, 50))
     # The peak is a percentile of the frames around it rather than the single
     # loudest frame: envelope jitter (see _first_persistent) inflates a bare
     # max by a couple of percent, which biases the 1/e target low.
-    pk = float(np.percentile(seg[peak_i:peak_i + 4], 50)) if peak_i + 4 <= len(seg) \
+    pk = (
+        float(np.percentile(seg[peak_i : peak_i + 4], 50))
+        if peak_i + 4 <= len(seg)
         else float(seg[peak_i])
+    )
     if pk <= 0 or sus >= pk * 0.95:
-        return float("nan")          # no decay phase to measure
-    target = sus + (pk - sus) * math.exp(-1.0)      # the 1/e point
+        return float("nan")  # no decay phase to measure
+    target = sus + (pk - sus) * math.exp(-1.0)  # the 1/e point
     i = _first_persistent(seg[peak_i:] <= target, hold)
     return float(i * hop) if i >= 0 else float("nan")
 
@@ -384,18 +395,19 @@ def decay_time(env, on: float, off: float, hop: float = DEFAULT_HOP,
 def sustain_level(env, on: float, off: float, hop: float = DEFAULT_HOP) -> float:
     """Sustain plateau as a fraction of the note's peak."""
     np = _np()
-    seg = env[int(on / hop): int(off / hop)]
+    seg = env[int(on / hop) : int(off / hop)]
     if len(seg) < 10:
         return float("nan")
     pk = float(seg.max())
     if pk <= 0:
         return float("nan")
-    return float(np.percentile(seg[len(seg) // 2:], 50) / pk)
+    return float(np.percentile(seg[len(seg) // 2 :], 50) / pk)
 
 
 # --------------------------------------------------------------------------
 # Level
 # --------------------------------------------------------------------------
+
 
 def peak_db(samples, ref: float = 1.0) -> float:
     """Peak level in dB relative to ``ref`` (default full scale)."""
@@ -416,7 +428,7 @@ def rms_db(samples, ref: float = 1.0) -> float:
     a = np.asarray(samples, dtype="float64")
     if a.size == 0:
         return float("-inf")
-    return 20 * math.log10(max(float(np.sqrt((a ** 2).mean())), 1e-12) / ref)
+    return 20 * math.log10(max(float(np.sqrt((a**2).mean())), 1e-12) / ref)
 
 
 def balance_db(stereo) -> float:
@@ -443,6 +455,7 @@ def balance_db(stereo) -> float:
 # Spectrum
 # --------------------------------------------------------------------------
 
+
 def spectrum(samples, sr: int, skip_s: float = 0.25, n_fft: int = 1 << 14):
     """Average magnitude spectrum of a steady segment. Returns ``(freqs, mag)``.
 
@@ -453,14 +466,14 @@ def spectrum(samples, sr: int, skip_s: float = 0.25, n_fft: int = 1 << 14):
     a = np.asarray(samples, dtype="float64")
     if a.ndim > 1:
         a = a.mean(axis=1)
-    a = a[int(skip_s * sr):]
+    a = a[int(skip_s * sr) :]
     if len(a) < n_fft:
         return np.zeros(0), np.zeros(0)
     win = np.hanning(n_fft)
     frames = len(a) // n_fft
     acc = np.zeros(n_fft // 2 + 1)
     for k in range(frames):
-        acc += np.abs(np.fft.rfft(a[k * n_fft:(k + 1) * n_fft] * win))
+        acc += np.abs(np.fft.rfft(a[k * n_fft : (k + 1) * n_fft] * win))
     return np.fft.rfftfreq(n_fft, 1 / sr), acc / max(frames, 1)
 
 
@@ -486,9 +499,16 @@ def _smooth_log(freqs, mag, frac: float = 1 / 6):
     return out
 
 
-def corner_frequency(freqs, mag, drop_db: float = 3.0, ref_lo: float = 100.0,
-                     ref_hi: float = 500.0, reference=None,
-                     smooth: float = 1 / 6, ref_flat_db: float = 3.0) -> float:
+def corner_frequency(
+    freqs,
+    mag,
+    drop_db: float = 3.0,
+    ref_lo: float = 100.0,
+    ref_hi: float = 500.0,
+    reference=None,
+    smooth: float = 1 / 6,
+    ref_flat_db: float = 3.0,
+) -> float:
     """The -``drop_db`` point of a low-pass, in hertz.
 
     This is what turns ``FILFRQ`` from a number into a frequency.
@@ -536,8 +556,7 @@ def corner_frequency(freqs, mag, drop_db: float = 3.0, ref_lo: float = 100.0,
             # Only trust bins the reference actually excited; a harmonic gap
             # divides noise by noise and produces garbage either way.
             floor = ref_curve.max() * 1e-4
-            curve = np.where(ref_curve > floor,
-                             curve / np.maximum(ref_curve, 1e-12), np.nan)
+            curve = np.where(ref_curve > floor, curve / np.maximum(ref_curve, 1e-12), np.nan)
     if smooth:
         curve = _smooth_log(freqs, curve, frac=smooth)
 
@@ -556,19 +575,39 @@ def corner_frequency(freqs, mag, drop_db: float = 3.0, ref_lo: float = 100.0,
         if lo_m > 0 and hi_m > 0:
             tilt = 20 * math.log10(hi_m / lo_m)
             if tilt < -ref_flat_db:
-                return float("nan")     # corner is below the band: see docstring
+                return float("nan")  # corner is below the band: see docstring
 
     db = 20 * np.log10(np.maximum(curve, 1e-12) / ref)
 
-    # Require the drop to PERSIST. A real corner stays down; a noise dip does
-    # not. `hold` bins is about a sixth of an octave at the top of the range.
-    below = (freqs > ref_hi) & (db <= -drop_db)
-    hold = max(3, int(len(freqs) * 0.002))
-    run = 0
-    for i in np.where(freqs > ref_hi)[0]:
-        run = run + 1 if below[i] else 0
-        if run >= hold:
-            return float(freqs[i - run + 1])
+    # Require the drop to PERSIST over a fraction of an octave. A real
+    # corner stays down; a noise dip does not. The window is a fraction of
+    # an octave WIDE, not a fixed bin count: a fixed count is a sixth of an
+    # octave at the top of the range and a whole octave at the bottom, so it
+    # holds low corners to a wider persistence than high ones for no reason.
+    # The width follows the smoothing fraction, with a floor of 3 bins where
+    # the range is too narrow to hold that many.
+    above_idx = np.where(freqs > ref_hi)[0]
+    below = db <= -drop_db
+    frac = smooth if smooth else 0.0
+    for pos, i in enumerate(above_idx):
+        if not below[i]:
+            continue
+        if frac > 0:
+            top = float(freqs[i]) * (2.0 ** (frac / 2.0))
+            j = pos
+            while j < len(above_idx) and float(freqs[above_idx[j]]) <= top:
+                if not below[above_idx[j]]:
+                    break
+                j += 1
+            width = j - pos
+        else:
+            width = 0
+            j = pos
+            while j < len(above_idx) and below[above_idx[j]]:
+                j += 1
+            width = j - pos
+        if width >= 3:
+            return float(freqs[i])
     return float("nan")
 
 
@@ -605,8 +644,8 @@ def fundamental_hz(samples, sr: int, lo: float = 20.0, hi: float = 2000.0) -> fl
     # window is a programming error, so it says so.
     if len(samples) < sr / lo:
         raise ValueError(
-            f"window of {len(samples)/sr*1000:.0f} ms cannot resolve {lo:.0f} Hz; "
-            f"need at least {1000/lo:.0f} ms, or raise `lo`"
+            f"window of {len(samples) / sr * 1000:.0f} ms cannot resolve {lo:.0f} Hz; "
+            f"need at least {1000 / lo:.0f} ms, or raise `lo`"
         )
     np = _np()
     a = np.asarray(samples, dtype="float64")
@@ -615,7 +654,7 @@ def fundamental_hz(samples, sr: int, lo: float = 20.0, hi: float = 2000.0) -> fl
     a = a - a.mean()
     if len(a) < int(sr / lo) * 2:
         return float("nan")
-    corr = np.correlate(a, a, mode="full")[len(a) - 1:]
+    corr = np.correlate(a, a, mode="full")[len(a) - 1 :]
     lo_lag, hi_lag = int(sr / hi), int(sr / lo)
     if hi_lag >= len(corr):
         return float("nan")
@@ -659,7 +698,7 @@ def fundamental_hz(samples, sr: int, lo: float = 20.0, hi: float = 2000.0) -> fl
         denom = y0 - 2.0 * y1 + y2
         if denom != 0.0:
             delta = 0.5 * (y0 - y2) / denom
-            if -1.0 < delta < 1.0:          # a sane sub-sample correction only
+            if -1.0 < delta < 1.0:  # a sane sub-sample correction only
                 lag += delta
     return float(sr) / lag if lag > 0 else float("nan")
 
@@ -671,8 +710,7 @@ def cents_between(f_measured: float, f_reference: float) -> float:
     return 1200.0 * math.log2(f_measured / f_reference)
 
 
-def modulation_rate_hz(env, hop: float = DEFAULT_HOP, lo: float = 0.05,
-                       hi: float = 25.0) -> float:
+def modulation_rate_hz(env, hop: float = DEFAULT_HOP, lo: float = 0.05, hi: float = 25.0) -> float:
     """Dominant modulation frequency of an envelope, in hertz.
 
     ``LFORAT``/``PANRAT`` run 0..99 and the specification calls them "speed",
@@ -698,6 +736,7 @@ def modulation_rate_hz(env, hop: float = DEFAULT_HOP, lo: float = 0.05,
 # --------------------------------------------------------------------------
 # Fitting
 # --------------------------------------------------------------------------
+
 
 def fit_exponential(x: Sequence[float], y: Sequence[float]) -> Tuple[float, float, float]:
     """Least-squares fit of ``y = a * exp(b * x)``. Returns ``(a, b, r2)``.

@@ -188,7 +188,10 @@ def snapshot(bridge, structures, *, timeout: float) -> Dict[str, bytes]:
         extent = max(x.end for x in p.region_params(region))
         try:
             out[f"{region}:{index}:{keygroup}"] = bridge.get_header_bytes(
-                region, index, 0, extent,
+                region,
+                index,
+                0,
+                extent,
                 selector=keygroup if region == "keygroup" else 0,
                 timeout=timeout,
             )
@@ -211,21 +214,23 @@ def diff_snapshots(before: Dict[str, bytes], after: Dict[str, bytes]) -> List[di
             continue
         named = []
         for offset in changed:
-            hit = [x.name for x in p.region_params(region)
-                   if x.offset <= offset < x.end]
+            hit = [x.name for x in p.region_params(region) if x.offset <= offset < x.end]
             named.append(f"{offset}({hit[0] if hit else 'undescribed'})")
-        findings.append({
-            "structure": key,
-            "changed_bytes": changed[:64],
-            "count": len(changed),
-            "fields": named[:32],
-        })
+        findings.append(
+            {
+                "structure": key,
+                "changed_bytes": changed[:64],
+                "count": len(changed),
+                "fields": named[:32],
+            }
+        )
     return findings
 
 
 class Sweeper:
-    def __init__(self, bridge, *, allow_write: bool, interleave: bool,
-                 timeout: float, verbose: bool = False):
+    def __init__(
+        self, bridge, *, allow_write: bool, interleave: bool, timeout: float, verbose: bool = False
+    ):
         self.bridge = bridge
         self.allow_write = allow_write
         self.interleave = interleave
@@ -233,6 +238,12 @@ class Sweeper:
         self.verbose = verbose
         self.report = Report()
         self._decoy: Optional[Tuple[str, int, int]] = None
+        # Parameters with a restore still owed: (region, index, keygroup,
+        # name) -> original value. The per-parameter `finally` in
+        # `sweep_one` clears each entry; anything left here at process exit
+        # is a sweep interrupted mid-parameter, and the atexit handler in
+        # `main` puts those back best-effort.
+        self._pending: Dict[tuple, object] = {}
 
     # -- primitives ---------------------------------------------------------
 
@@ -247,7 +258,10 @@ class Sweeper:
         region, index, keygroup = self._decoy
         try:
             self.bridge.get_header_bytes(
-                region, index, 0, 4,
+                region,
+                index,
+                0,
+                4,
                 selector=keygroup if region == "keygroup" else 0,
                 timeout=self.timeout,
             )
@@ -255,10 +269,33 @@ class Sweeper:
         except Exception:
             pass  # the eviction failing is not a result about the parameter
 
+    def restore_pending(self) -> None:
+        """Best-effort restore of parameters a killed sweep left mid-write.
+
+        Runs from the atexit handler: no read-back verification, no
+        reporting beyond stderr, and never raising -- at interpreter exit
+        there is nobody left to hear an exception.
+        """
+        for (region, index, keygroup, name), original in list(self._pending.items()):
+            try:
+                param = p.lookup((region, name))
+                if self.allow_write:
+                    self.bridge.set_parameter(
+                        param,
+                        index,
+                        original,
+                        keygroup=keygroup,
+                        postpone=m.Postpone.NONE,
+                        confirm=False,
+                        timeout=self.timeout,
+                    )
+            except Exception as exc:  # noqa: BLE001 -- best effort only
+                print(f"  !! atexit restore {region} {index} {name}: {exc}", file=sys.stderr)
+            finally:
+                self._pending.pop((region, index, keygroup, name), None)
+
     def read(self, param, index, keygroup):
-        value = self.bridge.get_parameter(
-            param, index, keygroup=keygroup, timeout=self.timeout
-        )
+        value = self.bridge.get_parameter(param, index, keygroup=keygroup, timeout=self.timeout)
         self.report.reads += 1
         return value
 
@@ -266,10 +303,13 @@ class Sweeper:
         if not self.allow_write:
             return
         self.bridge.set_parameter(
-            param, index, value, keygroup=keygroup,
+            param,
+            index,
+            value,
+            keygroup=keygroup,
             postpone=m.Postpone.NONE,  # let the machine redraw and recalculate
-            confirm=True,              # wait for REPLY; §11 says this is the
-            timeout=self.timeout,      # only sound confirmation there is
+            confirm=True,  # wait for REPLY; §11 says this is the
+            timeout=self.timeout,  # only sound confirmation there is
         )
         self.report.writes += 1
 
@@ -289,21 +329,25 @@ class Sweeper:
             values = chosen
 
         a, bb = values
-        touched = False
+        # Set BEFORE the first device write: a write that is applied and
+        # then times out raises out of self.write, and with the flag set
+        # after the write that parameter would escape its restore. Once the
+        # original was read, the restore is owed unconditionally (in
+        # allow-write mode; the rehearsal sends nothing either way).
+        needs_restore = bool(self.allow_write)
+        key = (param.region, index, keygroup, param.name)
+        self._pending[key] = original
         try:
             for label, want in (("write A", a), ("write B", bb), ("back to A", a)):
                 self.write(param, index, keygroup, want)
-                touched = True
                 self._evict()
                 got = self.read(param, index, keygroup)
                 ok = (got == want) if self.allow_write else True
-                result.steps.append(
-                    {"step": label, "wrote": want, "read": got, "ok": ok}
-                )
+                result.steps.append({"step": label, "wrote": want, "read": got, "ok": ok})
                 if not ok:
                     break
         finally:
-            if touched and self.allow_write:
+            if needs_restore:
                 try:
                     self.write(param, index, keygroup, original)
                     self._evict()
@@ -314,6 +358,7 @@ class Sweeper:
                     self.report.unrestored.append(
                         f"{param.region} {index} {param.name} (wanted {original!r})"
                     )
+            self._pending.pop(key, None)
         return result
 
     # -- the whole sweep ----------------------------------------------------
@@ -349,8 +394,13 @@ class Sweeper:
                 except Exception as exc:
                     result = Result(region, index, keygroup, param.name, param.offset)
                     result.steps.append(
-                        {"step": "exception", "wrote": None, "read": None,
-                         "ok": False, "error": str(exc)}
+                        {
+                            "step": "exception",
+                            "wrote": None,
+                            "read": None,
+                            "ok": False,
+                            "error": str(exc),
+                        }
                     )
                 if result is None:
                     self.report.skipped[f"{region}.{param.name}"] = "range has one value"
@@ -360,12 +410,12 @@ class Sweeper:
                 if not result.ok:
                     failures += 1
                     if self.verbose:
-                        print(f"  MISMATCH {region} {param.name}: "
-                              f"{result.failures()}", file=sys.stderr)
-                    if stop_after and failures >= stop_after:
-                        self.report.aborted = (
-                            f"stopped after {failures} failing parameters"
+                        print(
+                            f"  MISMATCH {region} {param.name}: {result.failures()}",
+                            file=sys.stderr,
                         )
+                    if stop_after and failures >= stop_after:
+                        self.report.aborted = f"stopped after {failures} failing parameters"
                         self.report.seconds = time.time() - started
                         return self.report
 
@@ -384,15 +434,19 @@ def summarise(report: Report, allow_write: bool) -> None:
     print()
     if not allow_write:
         print("REHEARSAL -- nothing was written.")
-    print(f"{total} parameters swept, {report.writes} writes, "
-          f"{report.reads} reads, {report.seconds:.1f}s")
+    print(
+        f"{total} parameters swept, {report.writes} writes, "
+        f"{report.reads} reads, {report.seconds:.1f}s"
+    )
     print(f"  round-tripped exactly : {len(good)}")
     print(f"  mismatched            : {len(bad)}")
     print(f"  skipped               : {len(report.skipped)}")
 
     if report.witnessed:
-        print(f"  untouched structures watched : {report.witnessed}"
-              f"{' -- all unchanged' if not report.leaked else ''}")
+        print(
+            f"  untouched structures watched : {report.witnessed}"
+            f"{' -- all unchanged' if not report.leaked else ''}"
+        )
 
     if report.unrestored:
         print()
@@ -416,12 +470,13 @@ def summarise(report: Report, allow_write: bool) -> None:
         for r in bad:
             for step in r.failures():
                 if "error" in step:
-                    print(f"  {r.region} {r.name} (offset {r.offset}): "
-                          f"{step['error']}")
+                    print(f"  {r.region} {r.name} (offset {r.offset}): {step['error']}")
                 else:
-                    print(f"  {r.region} {r.name} (offset {r.offset}) "
-                          f"{step['step']}: wrote {step['wrote']!r}, "
-                          f"read {step['read']!r}")
+                    print(
+                        f"  {r.region} {r.name} (offset {r.offset}) "
+                        f"{step['step']}: wrote {step['wrote']!r}, "
+                        f"read {step['read']!r}"
+                    )
 
     if report.aborted:
         print()
@@ -441,30 +496,44 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    ap.add_argument("--allow-write", action="store_true",
-                    help="actually write; without it this is a rehearsal")
-    ap.add_argument("--dry-run", action="store_true",
-                    help="run against the demo sampler; opens no MIDI port")
+    ap.add_argument(
+        "--allow-write", action="store_true", help="actually write; without it this is a rehearsal"
+    )
+    ap.add_argument(
+        "--dry-run", action="store_true", help="run against the demo sampler; opens no MIDI port"
+    )
     ap.add_argument("--port", help="MIDI port name (default: autodetect)")
     ap.add_argument("--exclusive-channel", type=int, default=0)
     ap.add_argument("--program", type=int, default=0, help="program to sweep")
-    ap.add_argument("--keygroup", default="0",
-                    help="keygroup(s) to sweep, comma-separated (default 0)")
+    ap.add_argument(
+        "--keygroup", default="0", help="keygroup(s) to sweep, comma-separated (default 0)"
+    )
     ap.add_argument("--sample", type=int, default=0, help="sample header to sweep")
-    ap.add_argument("--regions", default="program,keygroup,sample",
-                    help="comma-separated subset to sweep")
-    ap.add_argument("--include-names", action="store_true",
-                    help="also sweep text/name fields")
-    ap.add_argument("--no-interleave", action="store_true",
-                    help="skip the decoy read between write and read-back")
-    ap.add_argument("--gap", type=float, default=WRITE_GAP,
-                    help=f"seconds between sends (default {WRITE_GAP})")
+    ap.add_argument(
+        "--regions", default="program,keygroup,sample", help="comma-separated subset to sweep"
+    )
+    ap.add_argument("--include-names", action="store_true", help="also sweep text/name fields")
+    ap.add_argument(
+        "--no-interleave",
+        action="store_true",
+        help="skip the decoy read between write and read-back",
+    )
+    ap.add_argument(
+        "--gap", type=float, default=WRITE_GAP, help=f"seconds between sends (default {WRITE_GAP})"
+    )
     ap.add_argument("--timeout", type=float, default=2.0)
-    ap.add_argument("--stop-after", type=int, default=5,
-                    help="abort after this many failing parameters (0 = never)")
-    ap.add_argument("--witness", action="store_true",
-                    help="snapshot every structure NOT being swept, and diff "
-                         "it afterwards -- catches writes leaking across items")
+    ap.add_argument(
+        "--stop-after",
+        type=int,
+        default=5,
+        help="abort after this many failing parameters (0 = never)",
+    )
+    ap.add_argument(
+        "--witness",
+        action="store_true",
+        help="snapshot every structure NOT being swept, and diff "
+        "it afterwards -- catches writes leaking across items",
+    )
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--out", help="write the full report as JSON here")
     args = ap.parse_args(argv)
@@ -475,12 +544,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         bridge = DemoBridge()
     elif args.port:
         bridge = b.S3kBridge.standard(
-            args.port, exclusive_channel=args.exclusive_channel,
-            gap=args.gap, write_gap=args.gap,
+            args.port,
+            exclusive_channel=args.exclusive_channel,
+            gap=args.gap,
+            write_gap=args.gap,
         )
     else:
         bridge = b.S3kBridge.autodetect(
-            channels=(args.exclusive_channel,), gap=args.gap, write_gap=args.gap,
+            channels=(args.exclusive_channel,),
+            gap=args.gap,
+            write_gap=args.gap,
             on_try=lambda name: print(f"  probing {name}...", file=sys.stderr),
         )
 
@@ -505,6 +578,32 @@ def main(argv: Optional[List[str]] = None) -> int:
         verbose=args.verbose,
     )
 
+    # SIGTERM (timeout(1), schedulers, kill) ends CPython without unwinding,
+    # so without this the per-parameter `finally` never runs and RAM is left
+    # altered. One-shot, like calibrate.run_sweep: a second signal during
+    # the restore must not interrupt the restore itself.
+    import atexit as _atexit
+    import signal as _signal
+
+    _atexit.register(sweeper.restore_pending)
+    _previous_handlers = {}
+
+    def _bail(signum, _frame):
+        for _s, _h in _previous_handlers.items():
+            try:
+                _signal.signal(_s, _h)
+            except (ValueError, OSError):
+                pass
+        raise KeyboardInterrupt(f"signal {signum}")
+
+    for _sig in (_signal.SIGTERM, getattr(_signal, "SIGHUP", None), _signal.SIGINT):
+        if _sig is None:
+            continue
+        try:
+            _previous_handlers[_sig] = _signal.signal(_sig, _bail)
+        except (ValueError, OSError):
+            pass  # not the main thread, or the platform lacks it
+
     witnesses = []
     if args.witness:
         # Everything resident that the sweep is not aiming at. If a write
@@ -520,41 +619,49 @@ def main(argv: Optional[List[str]] = None) -> int:
             for candidate in candidates:
                 if candidate not in targets:
                     witnesses.append(candidate)
-        witnesses += [("sample", i, 0) for i in samples
-                      if ("sample", i, 0) not in targets]
+        witnesses += [("sample", i, 0) for i in samples if ("sample", i, 0) not in targets]
 
     if args.allow_write:
         print(f"WRITING to {bridge.description}")
         print(f"  targets: {targets}")
-        print(f"  gap {args.gap}s, restore-after-each, "
-              f"{'interleaved' if not args.no_interleave else 'not interleaved'}")
+        print(
+            f"  gap {args.gap}s, restore-after-each, "
+            f"{'interleaved' if not args.no_interleave else 'not interleaved'}"
+        )
         if witnesses:
             print(f"  witnessing {len(witnesses)} untouched structures")
     try:
         before = snapshot(bridge, witnesses, timeout=args.timeout) if witnesses else {}
-        report = sweeper.run(
-            targets, include_names=args.include_names, stop_after=args.stop_after
-        )
+        report = sweeper.run(targets, include_names=args.include_names, stop_after=args.stop_after)
         if before:
             after = snapshot(bridge, list(witnesses), timeout=args.timeout)
             report.witnessed = len(before)
             report.leaked = diff_snapshots(before, after)
     finally:
+        for _s, _h in _previous_handlers.items():
+            try:
+                _signal.signal(_s, _h)
+            except (ValueError, OSError):
+                pass
         if hasattr(bridge, "close"):
             bridge.close()
 
     summarise(report, args.allow_write)
 
     if args.out:
-        payload = json.dumps({
-            "results": [vars(r) for r in report.results],
-            "skipped": report.skipped,
-            "writes": report.writes,
-            "reads": report.reads,
-            "seconds": round(report.seconds, 2),
-            "aborted": report.aborted,
-            "unrestored": report.unrestored,
-        }, indent=2, default=str)
+        payload = json.dumps(
+            {
+                "results": [vars(r) for r in report.results],
+                "skipped": report.skipped,
+                "writes": report.writes,
+                "reads": report.reads,
+                "seconds": round(report.seconds, 2),
+                "aborted": report.aborted,
+                "unrestored": report.unrestored,
+            },
+            indent=2,
+            default=str,
+        )
         Path(args.out).write_text(payload, encoding="utf-8")
         print()
         print(f"full report written to {args.out}")
