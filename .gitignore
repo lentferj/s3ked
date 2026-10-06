@@ -4,6 +4,12 @@ __pycache__/
 *.pyc
 *.egg-info/
 .pytest_cache/
+# Created by the quality-check pipeline (see README, Development checks).
+# Neither is a build artefact of the package -- they are caches a
+# tool wrote, and a stale one is never what you wanted to commit.
+.ruff_cache/
+.mypy_cache/
+.coverage
 config.toml
 probes/*.png
 

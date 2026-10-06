@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-FileCopyrightText: Copyright (C) 2026  s3ked contributors
+#
+# pre-commit. `pre-commit install` has already been run for this checkout.
+#
+# WHY SOME HOOKS ARE PINNED TO A rev AND SOME ARE `local`:
+#
+# A baseline is only valid for the version of the tool that produced it. ruff
+# is baselined against 0.14.4 and mypy against 1.18.2, both pinned exactly in
+# pyproject.toml's `checks` extra. If a hook ran a DIFFERENT version, it would
+# report a different set of findings and the whole "passes on current code,
+# flags anything new" property would be quietly false.
+#
+#   * ruff and detect-secrets use their upstream mirrors, with `rev` set to the
+#     exact version in `checks`. Same version, independently installed.
+#   * mypy is a LOCAL hook. There is no upstream mirror to pin: the
+#     `pre-commit/mypy` repository returns 404 as of 2026-10-02 (verified, not
+#     assumed). It runs `.venv/bin/mypy`, which is the pinned one -- the same
+#     binary `make typecheck` runs, so the hook and the gate cannot disagree.
+#   * NO shellcheck or shfmt hooks: this repository contains no shell scripts
+#     (no *.sh, and no tracked file carries a bash/sh shebang). Both tools are
+#     installed system-wide, and adding hooks for a language this project does
+#     contain would be a hook that never runs. If a script is ever added,
+#     uncomment the two blocks at the end of this file.
+#
+# KEEP THE revs IN STEP WITH `checks` IN pyproject.toml. They are duplicated
+# deliberately -- a pin you cannot see is not a pin -- and the cost of the
+# duplication is one line to change when you upgrade.
+
+default_language_version:
+  python: python3.11
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # 0.14.4 -- the version the pyproject.toml ruff baseline was measured with.
+    rev: v0.14.4
+    hooks:
+      - id: ruff-check
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      # mypy is run with NO filenames. The baseline in pyproject.toml is
+      # per-module, and mypy's answer for a file depends on the other files it
+      # follows -- passing the changed-file list would type-check them in
+      # isolation and both invent and hide errors. `files` in pyproject.toml
+      # says what to check; the hook just says "do the check".
+      - id: mypy
+        name: mypy
+        entry: .venv/bin/mypy
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: detect-secrets
+        name: detect-secrets
+        entry: >-
+          .venv/bin/detect-secrets-hook
+          --baseline .secrets.baseline
+          --exclude-files (^|/)(\.venv|build|dist|\.git|s3ked\.egg-info|__pycache__|\.pytest_cache|\.mypy_cache|\.ruff_cache)/
+        language: system
+
+      # Uncomment both when the first shell script lands. Until then they are
+      # noise: a hook that never fires is indistinguishable from a hook that
+      # works.
+      #
+      # - id: shellcheck
+      #   name: shellcheck
+      #   entry: shellcheck
+      #   language: system
+      #   types: [shell]
+      #
+      # - id: shfmt
+      #   name: shfmt
+      #   entry: shfmt --diff --indent=0
+      #   language: system
+      #   types: [shell]
