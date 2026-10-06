@@ -356,6 +356,7 @@ def build_parser() -> argparse.ArgumentParser:
         "Explore an Akai S1000/S3000-family sampler over MIDI SysEx.",
         epilog="Destructive operations are intentionally not available here; "
         "use the s3ked TUI, which requires an explicit arm-then-fire step.",
+        distribution="s3ked",
     )
     # Every shared option's help text is the family's, from vinsynlib.spec.
     # This tool used to word five of them its own way, and "MIDI port name
