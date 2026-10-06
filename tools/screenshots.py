@@ -41,6 +41,7 @@ Every image is verified after writing: the SVG carries its own text, so the
 script greps for what each screen must contain and fails loudly rather than
 shipping a picture captioned with something it does not show.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -50,44 +51,63 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from textual.widgets import DataTable                       # noqa: E402
+from textual.widgets import DataTable  # noqa: E402
 
-from s3ked.app import S3kedApp                              # noqa: E402
-from s3ked.demo import DemoBridge                           # noqa: E402
+from s3ked.app import S3kedApp  # noqa: E402
+from s3ked.demo import DemoBridge  # noqa: E402
 
 OUT = ROOT / "docs" / "screenshots"
 SIZE = (100, 30)
 
-#: name -> (keys, allow_write, parameter to select, text the image must contain)
+#: name -> (keys, allow_write, parameter to select, text the image must
+#: contain, seconds to wait for it, where the shot is exercised)
 #: name -> (keys to press, write gate, parameter to select, text that MUST
-#: appear in the result). The last field is the point: an SVG carries its own
-#: text, so a screenshot captioned with something it does not show fails the
-#: run instead of shipping.
+#: appear in the result, ...). The text field is the point: an SVG carries its
+#: own text, so a screenshot captioned with something it does not show fails
+#: the run instead of shipping.
 #:
-#: `settle` is how many extra pauses to allow before capturing. The disk
-#: browser reads volumes and a directory in a worker, and a screenshot taken
-#: before that lands shows an empty pane -- which is exactly the picture the
-#: README must not carry.
+#: `settle` is a TIMEOUT in seconds, not a frame count: a pause is as long as
+#: the event loop's mood, so forty of them wait differently on a loaded box
+#: than on an idle one. The disk browser reads volumes and a directory in a
+#: worker, and a screenshot taken before that lands shows an empty pane --
+#: which is exactly the picture the README must not carry. Polling for the
+#: text with a deadline waits exactly as long as needed and no longer.
+#:
+#: `covered` says where the shot is exercised, because a picture nothing
+#: checks rots: README means the image is embedded there, test names the
+#: test. A shot with neither is marked UNCOVERED on purpose rather than left
+#: to imply coverage it does not have.
 SHOTS = {
-    "catalog": ((), False, None, "Programs", 0),
-    "parameters": (("down", "down", "tab"), False, None, "Parameters", 0),
-    "write-gate": (("w",), False, None, "write ARMED", 0),
-    "edit": (("w", "e"), False, "PRIORT", "range:", 0),
-    "master": (("m",), True, None, "Destructive operations", 0),
+    # README + test_each_documented_screen_actually_renders[catalog]
+    "catalog": ((), False, None, "Programs", 2.0, "README, test_app"),
+    # UNCOVERED: generated for the docs folder but embedded nowhere and
+    # asserted by no test. Kept because it is the only picture of the
+    # keygroup-follow view, and deleting it would silently drop a file the
+    # folder otherwise carries.
+    "parameters": (("down", "down", "tab"), False, None, "Parameters", 2.0, "UNCOVERED"),
+    # README + test_each_documented_screen_actually_renders[write-gate]
+    "write-gate": (("w",), False, None, "write ARMED", 2.0, "README, test_app"),
+    # README + test_each_documented_screen_actually_renders[edit]
+    "edit": (("w", "e"), False, "PRIORT", "range:", 2.0, "README, test_app"),
+    # README + test_each_documented_screen_actually_renders[master]
+    "master": (("m",), True, None, "Destructive operations", 2.0, "README, test_app"),
     # The disk browser now owns the right-hand column rather than a quarter of
     # the left one, so this is `d` plus time for the worker to answer.
     # NOT the "in the selected volume" divider: it sits below all 34 demo
     # volumes and is off-screen. Asserting text that is present in the DOM but
     # scrolled out of view is a check that passes for the wrong reason.
-    "disk": (("d",), False, None, "HARD-:A", 40),
+    # README (disk.svg).
+    "disk": (("d",), False, None, "HARD-:A", 15.0, "README"),
     # The load screen: eight types, add-vs-clear, renumber. `l` from inside
-    # the browser is the one that offers it.
-    "load": (("d", "l"), True, None, "clear first", 60),
+    # the browser is the one that offers it. README (load.svg).
+    "load": (("d", "l"), True, None, "clear first", 15.0, "README"),
     # the check that finds programs whose samples never arrived; the demo
-    # carries one dangling reference on purpose so this has something to show
-    "integrity": (("i",), False, None, "silent zone", 0),
-    # every resident sample, not just the selected program's
-    "all-samples": (("a",), False, None, "All samples", 10),
+    # carries one dangling reference on purpose so this has something to show.
+    # README (integrity.svg).
+    "integrity": (("i",), False, None, "silent zone", 2.0, "README"),
+    # every resident sample, not just the selected program's.
+    # README (all-samples.svg).
+    "all-samples": (("a",), False, None, "All samples", 5.0, "README"),
 }
 
 
@@ -96,7 +116,11 @@ def _text(svg: Path) -> str:
     return raw.replace("&#160;", " ").replace("&quot;", '"')
 
 
-async def shoot(name: str, keys, allow_write: bool, param, settle: int = 0) -> None:
+async def shoot(
+    name: str, keys, allow_write: bool, param, must_contain: str, settle: float = 2.0
+) -> None:
+    import time
+
     app = S3kedApp(DemoBridge(), allow_write=allow_write)
     async with app.run_test(size=SIZE) as pilot:
         await pilot.pause()
@@ -113,21 +137,25 @@ async def shoot(name: str, keys, allow_write: bool, param, settle: int = 0) -> N
         for key in keys:
             await pilot.press(key)
             await pilot.pause()
-        for _ in range(settle):
+        out = OUT / f"{name}.svg"
+        deadline = time.monotonic() + settle
+        while True:
             await pilot.pause()
-        await pilot.pause()
-        app.save_screenshot(str(OUT / f"{name}.svg"))
+            app.save_screenshot(str(out))
+            if must_contain in _text(out) or time.monotonic() >= deadline:
+                return
 
 
 async def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     bad = []
-    for name, (keys, allow_write, param, must_contain, settle) in SHOTS.items():
-        await shoot(name, keys, allow_write, param, settle)
+    for name, (keys, allow_write, param, must_contain, settle, _covered) in SHOTS.items():
+        await shoot(name, keys, allow_write, param, must_contain, settle)
         if must_contain not in _text(OUT / f"{name}.svg"):
             bad.append(f"{name}.svg does not contain {must_contain!r}")
-        print(f"  {name}.svg", "ok" if not bad or bad[-1].split()[0] != f"{name}.svg"
-              else "MISMATCH")
+            print(f"  {name}.svg MISMATCH")
+        else:
+            print(f"  {name}.svg ok")
     if bad:
         print("\n".join(bad), file=sys.stderr)
         return 1
