@@ -16,9 +16,19 @@
 """A sampler stand-in, so the CLI and TUI run with no hardware and no ports.
 
 :class:`DemoBridge` duck-types the part of :class:`s3k.bridge.S3kBridge` the
-application uses. It deliberately does **not** subclass or import it: the
-point is to prove the application never reaches past that surface, and
-inheriting would hide the moment it does.
+application uses. It deliberately does **not** subclass it, and it imports
+nothing from ``s3k.bridge`` at module scope: merely importing this module --
+or constructing the bridge -- never touches the MIDI stack, which is what
+lets ``--demo`` run where no MIDI backend exists.
+
+What it does NOT promise is never importing ``s3k.bridge`` at all. Several
+methods lazily reuse its record and routing helpers on first USE --
+``DeviceStatus`` in :meth:`status`, ``_Volume`` in :meth:`volume_list`,
+``DeviceError`` in :meth:`select_page`, ``_DirectoryEntry`` and the item
+constants in :meth:`hd_directory`, and ``_selector_for`` in the
+parameter accessors -- so the first call loads ``s3k.bridge`` (and with it
+the MIDI backend import). The guarantee is about import time and
+construction, not about use.
 
 This is production code -- ``--demo`` is a shipped mode, not a test fixture --
 and the test suite subclasses it for individual scenarios.
@@ -93,9 +103,7 @@ def _blank_header(region: str) -> bytearray:
     raw = bytearray(p.region_size(region))
     for param in p.region_params(region):
         if param.kind == "text":
-            raw[param.offset : param.end] = bytes(
-                m.encode_name("", param.size)
-            )
+            raw[param.offset : param.end] = bytes(m.encode_name("", param.size))
             continue
         value = param.default if param.default is not None else param.minimum
         if value < 0:
@@ -171,14 +179,15 @@ class DemoBridge:
                 # selectable, and the zone plays silence with nothing on the
                 # machine to say so (§73). A demo where nothing is ever wrong
                 # cannot demonstrate the check that finds it.
-                last = (index == len(self._keygroup_counts) - 1
-                        and kg == self._keygroup_counts[index] - 1)
+                last = (
+                    index == len(self._keygroup_counts) - 1
+                    and kg == self._keygroup_counts[index] - 1
+                )
                 self._write_named(
                     kheader,
                     "keygroup",
                     "SNAME1",
-                    _MISSING_SAMPLE if last
-                    else self._samples[(index + kg) % len(self._samples)],
+                    _MISSING_SAMPLE if last else self._samples[(index + kg) % len(self._samples)],
                 )
                 groups.append(kheader)
             self._keygroup_headers[index] = groups
@@ -262,8 +271,7 @@ class DemoBridge:
     def sample_list(self, *, timeout: Optional[float] = None) -> List[str]:
         return list(self._samples)
 
-    def volume_list(self, *, limit: int = 512,
-                    timeout: Optional[float] = None):
+    def volume_list(self, *, limit: int = 512, timeout: Optional[float] = None):
         """A disk that looks like a disk, without being anyone's disk.
 
         Invented names, deliberately: a real machine's volume list carries the
@@ -288,8 +296,7 @@ class DemoBridge:
     def program_number(self, *, timeout: Optional[float] = None) -> int:
         return getattr(self, "_program_number", 0)
 
-    def select_program_number(self, number: int, *,
-                              timeout: Optional[float] = None) -> int:
+    def select_program_number(self, number: int, *, timeout: Optional[float] = None) -> int:
         if not 0 <= number <= self._PRGNUM_MAX_SELECT:
             raise ValueError(f"program number {number} is out of range")
         self._program_number = number
@@ -304,14 +311,25 @@ class DemoBridge:
         self._item_cursor = index
         return index
 
-    def trigger_load(self, load_type: int = 1, *, item=None,
-                     force: bool = False, timeout: Optional[float] = None):
-        """The demo loads instantly and adds, as the machine does."""
+    def trigger_load(
+        self, load_type: int = 1, *, item=None, force: bool = False, timeout: Optional[float] = None
+    ):
+        """Record a load request. The demo holds no disk and adds nothing.
+
+        Unlike the machine -- which inserts the volume's contents in
+        program-number order (§107) -- this only validates the cursor
+        argument and notes that a load was asked for. Tests that need
+        arrivals use :meth:`arrive`, which builds the headers a load would
+        have brought. In particular a clear-then-load leaves the single
+        survivor behind here, exactly as on hardware before the load lands;
+        nothing here can stand in for the load itself.
+        """
         if item is not None:
             if load_type not in self.CURSOR_LOAD_TYPES:
                 raise ValueError(
                     f"load type {load_type} does not act on the cursor, so "
-                    f"item={item} would be ignored")
+                    f"item={item} would be ignored"
+                )
             self.select_item(item)
         self._loaded = True
 
@@ -325,11 +343,16 @@ class DemoBridge:
     boards: set = set()
 
     MODES = {
-        0: "SINGLE",       1: "SINGLE EDIT",
-        2: "MULTI",        3: "MULTI EDIT",
-        4: "SAMPLE",       5: "SAMPLE EDIT",
-        6: "EFFECTS",      7: "EFFECTS EDIT",
-        8: "GLOBAL",       9: "SAVE",
+        0: "SINGLE",
+        1: "SINGLE EDIT",
+        2: "MULTI",
+        3: "MULTI EDIT",
+        4: "SAMPLE",
+        5: "SAMPLE EDIT",
+        6: "EFFECTS",
+        7: "EFFECTS EDIT",
+        8: "GLOBAL",
+        9: "SAVE",
         10: "LOAD",
     }
 
@@ -339,10 +362,22 @@ class DemoBridge:
     def clear_memory(self, *, timeout: Optional[float] = None):
         samples, programs = len(self._samples), len(self._programs)
         self._samples = []
+        self._sample_headers = []
         # the machine refuses to delete the last program, so the demo does too
         self._programs = self._programs[:1]
-        return {"samples": samples, "programs": max(0, programs - 1),
-                "samples_left": 0, "programs_left": len(self._programs)}
+        self._program_headers = self._program_headers[:1]
+        self._keygroup_counts = self._keygroup_counts[:1]
+        # The headers are keyed by program index alongside the names: leaving
+        # the old ones behind would let the lists and the storage disagree
+        # about how many programs exist and what their keygroups hold.
+        survivor = self._keygroup_headers.get(0, [])
+        self._keygroup_headers = {0: survivor} if self._programs else {}
+        return {
+            "samples": samples,
+            "programs": max(0, programs - 1),
+            "samples_left": 0,
+            "programs_left": len(self._programs),
+        }
 
     def arrive(self, *names: str, program_number: int = 1) -> None:
         """Add programs as a load would, headers and all.
@@ -401,15 +436,13 @@ class DemoBridge:
 
     def renumber_programs(self, *, timeout: Optional[float] = None):
         """The panel's RNUM -> SEQU, in list order. See S3kBridge."""
-        result = {"renumbered": 0, "beyond_range": 0,
-                  "programs": len(self._programs)}
+        result = {"renumbered": 0, "beyond_range": 0, "programs": len(self._programs)}
         # high to low, like the real one -- see S3kBridge.renumber_programs
         for index in reversed(range(len(self._programs))):
             if index > self._PRGNUM_MAX:
                 result["beyond_range"] += 1
                 continue
-            self.set_header_bytes(
-                "program", index, self._PRGNUM_OFFSET, bytes([index]))
+            self.set_header_bytes("program", index, self._PRGNUM_OFFSET, bytes([index]))
             result["renumbered"] += 1
         return result
 
@@ -424,9 +457,14 @@ class DemoBridge:
                 cursor += 1
             else:
                 arrivals.append(position)
-        result = {"programs": len(pairs), "incumbents": len(incumbents),
-                  "arrivals": len(arrivals), "renumbered": 0,
-                  "beyond_range": 0, "unmatched": len(wanted) - cursor}
+        result = {
+            "programs": len(pairs),
+            "incumbents": len(incumbents),
+            "arrivals": len(arrivals),
+            "renumbered": 0,
+            "beyond_range": 0,
+            "unmatched": len(wanted) - cursor,
+        }
         if result["unmatched"]:
             return result
         order = incumbents + arrivals
@@ -434,8 +472,7 @@ class DemoBridge:
             if number > self._PRGNUM_MAX:
                 result["beyond_range"] += 1
                 continue
-            self.set_header_bytes("program", order[number],
-                                  self._PRGNUM_OFFSET, bytes([number]))
+            self.set_header_bytes("program", order[number], self._PRGNUM_OFFSET, bytes([number]))
             result["renumbered"] += 1
         return result
 
@@ -487,11 +524,15 @@ class DemoBridge:
         refuses hides the bug it exists to expose. Which of the two was wrong
         is a detail; that they disagreed is the defect.
         """
-        return {"scsi_drive_id": self._scsi_drive_id, "scsi_local_id": 6,
-                "device_type": self._device_type,
-                "partition": getattr(self, "_partition", 0),
-                "volume": getattr(self, "_volume", 0),
-                "cursor_value": 0, "mode": self._mode}
+        return {
+            "scsi_drive_id": self._scsi_drive_id,
+            "scsi_local_id": 6,
+            "device_type": self._device_type,
+            "partition": getattr(self, "_partition", 0),
+            "volume": getattr(self, "_volume", 0),
+            "cursor_value": 0,
+            "mode": self._mode,
+        }
 
     #: The demo starts where a machine with a disk usually sits.
     _page_mode = 10
@@ -507,12 +548,13 @@ class DemoBridge:
         project has now hidden behind a permissive demo four times.
         """
         from s3k import messages as _m
+
         if mode not in _m.MAIN_MENU_PAGES:
             raise ValueError(f"mode {mode} is not a documented page")
         if mode == 0:
             from s3k.bridge import DeviceError
-            raise DeviceError("device reported an error writing misc byte 91 "
-                              "(code 1)")
+
+            raise DeviceError("device reported an error writing misc byte 91 (code 1)")
         self._page_mode = mode
         return self._page_mode
 
@@ -522,8 +564,7 @@ class DemoBridge:
         out["on_save_page"] = self._page_mode == 9
         return out
 
-    def save_to_new_volume(self, save_type: int = 1, *, name=None,
-                           timeout: Optional[float] = None):
+    def save_to_new_volume(self, save_type: int = 1, *, name=None, timeout: Optional[float] = None):
         """Mirrors S3kBridge.save_to_new_volume (§127).
 
         The demo has no medium, so this records the volume it would have
@@ -533,23 +574,19 @@ class DemoBridge:
         if save_type not in m.LOAD_TYPES:
             raise ValueError(f"save type {save_type} is not documented")
         self.saved = getattr(self, "saved", [])
-        where = self.load_source(timeout=timeout)      # before, as the bridge does
-        self.saved.append({"type": save_type,
-                           "volume": getattr(self, "_volume", 0),
-                           "name": name})
+        where = self.load_source(timeout=timeout)  # before, as the bridge does
+        self.saved.append({"type": save_type, "volume": getattr(self, "_volume", 0), "name": name})
         if name is not None:
             self.rename_volume(name)
             where["name"] = name
         return where
 
-    def save_to_selected_volume(self, save_type: int = 1, *,
-                                timeout: Optional[float] = None):
+    def save_to_selected_volume(self, save_type: int = 1, *, timeout: Optional[float] = None):
         if save_type not in m.LOAD_TYPES:
             raise ValueError(f"save type {save_type} is not documented")
-        where = self.load_source(timeout=timeout)      # before, as the bridge does
+        where = self.load_source(timeout=timeout)  # before, as the bridge does
         self.rewritten = getattr(self, "rewritten", [])
-        self.rewritten.append({"type": save_type,
-                               "volume": getattr(self, "_volume", 0)})
+        self.rewritten.append({"type": save_type, "volume": getattr(self, "_volume", 0)})
         # the machine resets a rewritten volume's name to the default, and
         # the demo must too or the app will look correct here and surprise
         # somebody on hardware
@@ -562,8 +599,7 @@ class DemoBridge:
         self.renames.append(name)
         return name
 
-    def trigger_save(self, save_type: int = 1, *,
-                     timeout: Optional[float] = None):
+    def trigger_save(self, save_type: int = 1, *, timeout: Optional[float] = None):
         return self.save_to_new_volume(save_type, timeout=timeout)
 
     def refresh_media(self, *, timeout: Optional[float] = None):
@@ -580,9 +616,7 @@ class DemoBridge:
         """0-based, like the real one. See S3kBridge.select_volume (§96)."""
         available = len(self.volume_list())
         if available and not 0 <= volume < available:
-            raise ValueError(
-                f"volume {volume} is outside 0-{available - 1} on this "
-                f"partition")
+            raise ValueError(f"volume {volume} is outside 0-{available - 1} on this partition")
         self._volume = volume
         return self.load_source()
 
@@ -590,8 +624,7 @@ class DemoBridge:
         self._partition = max(0, min(7, int(partition)))
         return self.load_source()
 
-    def hd_directory(self, kind: int = 1, *, limit: int = 512,
-                     timeout: Optional[float] = None):
+    def hd_directory(self, kind: int = 1, *, limit: int = 512, timeout: Optional[float] = None):
         """An invented directory, for the same reason the volumes are invented.
 
         A real one lists whatever commercial library the disk holds. A fixture
@@ -617,12 +650,15 @@ class DemoBridge:
             is_prog = i < n_prog
             kind_byte = b.ITEM_PROGRAM if is_prog else b.ITEM_SAMPLE
             size = 900 if is_prog else (380_000 + (i * 47_000) % 300_000)
-            return (bytes(m.encode_name(name, 12)) + b"\x20\x20\x20\x20"
-                    + bytes([kind_byte]) + int(size).to_bytes(3, "little")
-                    + b"\x00\x00\x1e\x09")
+            return (
+                bytes(m.encode_name(name, 12))
+                + b"\x20\x20\x20\x20"
+                + bytes([kind_byte])
+                + int(size).to_bytes(3, "little")
+                + b"\x00\x00\x1e\x09"
+            )
 
-        return [_DirectoryEntry(index=i, name=n, raw=record(i, n))
-                for i, n in enumerate(names)]
+        return [_DirectoryEntry(index=i, name=n, raw=record(i, n)) for i, n in enumerate(names)]
 
     def keygroup_count(self, program: int) -> int:
         """Not part of the real bridge -- a convenience the demo can answer.
@@ -760,7 +796,7 @@ class DemoBridge:
         if not 0 <= program < len(self._programs):
             raise DemoError(f"no program {program}")
         if len(self._programs) == 1:
-            return              # acknowledged and ignored, like the machine
+            return  # acknowledged and ignored, like the machine
         del self._programs[program]
         del self._program_headers[program]
         del self._keygroup_counts[program]
@@ -770,18 +806,14 @@ class DemoBridge:
             if k != program
         }
 
-    def delete_keygroup(
-        self, program: int, keygroup: int, *, confirm: bool = True
-    ) -> None:
+    def delete_keygroup(self, program: int, keygroup: int, *, confirm: bool = True) -> None:
         """DESTRUCTIVE on hardware; here it only edits this instance."""
         groups = self._keygroup_headers.get(program)
         if groups is None or not 0 <= keygroup < len(groups):
             raise DemoError(f"no keygroup {keygroup} in program {program}")
         del groups[keygroup]
         self._keygroup_counts[program] = len(groups)
-        self._write_named(
-            self._program_headers[program], "program", "GROUPS", len(groups)
-        )
+        self._write_named(self._program_headers[program], "program", "GROUPS", len(groups))
 
     def delete_sample(self, sample: int, *, confirm: bool = True) -> None:
         """DESTRUCTIVE on hardware; here it only edits this instance."""
