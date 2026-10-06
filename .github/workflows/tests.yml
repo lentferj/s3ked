@@ -104,6 +104,11 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
+          # vinsynlib is a sibling checkout, not yet a package on an index,
+          # so `pip install -e .` cannot resolve it from PyPI. Installing it
+          # from the checkout above satisfies the dependency. Both this line
+          # and that checkout go away when the library is published.
+          python -m pip install -e ../vinsynlib
           python -m pip install -e ".[dev]"
 
       - name: Run the suite
@@ -140,3 +145,69 @@ jobs:
             echo "::error::unexpected exit status $status"
             exit 1
           fi
+
+  # The static-analysis gate. `make check` = lint, typecheck, audit, test.
+  #
+  # ONE job, not the seven-platform matrix, and that is a deliberate
+  # asymmetry with the job above: ruff, mypy, pip-audit, vulture, deptry and
+  # detect-secrets do not have a platform or a Python-version dimension. Seven
+  # copies of the same answer cost seven times as much runner time and find
+  # nothing a seventh run would have found. The matrix's job is the thing that
+  # genuinely varies, which is whether the package installs and the suite
+  # passes; this job's is whether the source still lints.
+  #
+  # `make check` runs the suite too, so this job is the slow one (~8 min).
+  # That is redundant with the matrix and is left in on purpose: the point of
+  # a single `make check` you can run locally is that it is the same command
+  # here, and splitting it into a local path and a CI path is how the two
+  # drift.
+  checks:
+    runs-on: ubuntu-latest
+    name: checks (ruff, mypy, audit)
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # The shared library, as a SIBLING of this checkout -- not a
+      # subdirectory. `vinsynlib` is a path dependency resolved from
+      # `../vinsynlib` and from nowhere else, so it has to be beside this
+      # repository rather than inside it.
+      - uses: actions/checkout@v7
+        with:
+          repository: lentferj/vinsynlib
+          path: ../vinsynlib
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # Same reason as the matrix job: python-rtmidi is imported at module
+      # scope by s3k.bridge, and on Linux there is no wheel to fall back on.
+      - name: Install ALSA headers
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
+      # `checks` rather than `dev` alone: the tools are in the `checks` extra,
+      # pinned exactly, and a version that drifts from the one the baselines
+      # were measured against reports a different set of findings.
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          # See the matrix job: vinsynlib is a sibling checkout, so `-e .`
+          # cannot take it from an index yet.
+          python -m pip install -e ../vinsynlib
+          python -m pip install -e ".[dev,checks]"
+
+      # `make`, because the command CI runs and the command a developer runs
+      # are then the same string. If `make` is ever absent from the runner
+      # image, that is a finding about this file, not a reason to inline the
+      # six tool invocations and start maintaining a second copy.
+      - name: make check
+        run: make check
+
+      # Reported, not gated -- same reason as in the Makefile. Shown as an
+      # annotation so the drift is visible in the PR rather than only on the
+      # machine that introduced it.
+      - name: Formatter status (reported, not gated)
+        continue-on-error: true
+        run: make format-check
