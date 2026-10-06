@@ -698,6 +698,17 @@ optional_dependencies_dev_groups = ["dev", "checks"]
 # shipped. Adding it to the `bench` extra is defensible for symmetry with
 # numpy, and is left as a maintainer choice -- it would also make `bench`
 # require libjack headers to build, which the FFT-only probes do not.
+# DEP001 as well as DEP003, and that is not belt-and-braces. deptry picks
+# which of the two to report from whether `jack` happens to be importable
+# on the machine: with a JACK binding installed it is "declared only
+# transitively" (DEP003), and without one deptry cannot resolve the module
+# to a distribution at all and calls it missing (DEP001). Leaving only
+# DEP003 made `make check` pass on a developer box that had JACK installed
+# and fail on a clean runner -- the worst way for a gate to be wrong,
+# because the failure arrives somewhere the author is not.
+missing = [
+    "jack",
+]
 transitive = [
     "jack",
 ]

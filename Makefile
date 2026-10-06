@@ -40,7 +40,7 @@ DS_EXCLUDE := (^|/)(\.venv|build|dist|\.git|s3ked\.egg-info|__pycache__|\.pytest
 # CI job and no `make test` run can be broken by its absence. It is
 # deliberately undeclared and must not become a core dependency. pyproject.toml
 # has the full reasoning.
-DEPTRY_IGNORES := DEP003=jack
+DEPTRY_IGNORES := DEP001=jack,DEP003=jack
 
 # Which files the FORMATTER is applied to / checked on.
 #
