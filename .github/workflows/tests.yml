@@ -68,6 +68,23 @@ jobs:
       # workflow triggers on.
       - uses: actions/checkout@v7
 
+      # The shared library, as a SIBLING of this checkout -- not a
+      # subdirectory. `vinsynlib` is a path dependency (see
+      # [tool.uv.sources] in pyproject.toml), so `uv sync` resolves it from
+      # `../vinsynlib` and from nowhere else. Checking it out beside this
+      # repository rather than inside it keeps the path dependency honest: a
+      # copy under the tree would let an edit to the library reach this
+      # project's CI without ever being committed here.
+      #
+      # Until `vinsynlib` is pushed this fails with "repository not found",
+      # which is the useful failure. Without the step the failure is "path
+      # ../vinsynlib does not exist", which points at the dependency
+      # configuration rather than at the missing thing.
+      - uses: actions/checkout@v7
+        with:
+          repository: lentferj/vinsynlib
+          path: ../vinsynlib
+
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
