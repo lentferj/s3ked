@@ -119,7 +119,7 @@ def test_an_older_library_is_named_rather_than_ignored(
 ) -> None:
     """The failure without this check is an AttributeError deep in a call,
     which says nothing about which of the two things needs upgrading."""
-    import vinsynlib
+    import vinsynlib  # noqa: PLC0415
 
     monkeypatch.setattr(vinsynlib, "__version__", "0.0.9")
     problem = entry._diagnose()
@@ -129,7 +129,7 @@ def test_an_older_library_is_named_rather_than_ignored(
 
 
 def test_a_current_library_passes(monkeypatch: Any) -> None:
-    import vinsynlib
+    import vinsynlib  # noqa: PLC0415
 
     wanted = ".".join(str(part) for part in entry.MINIMUM)
     monkeypatch.setattr(vinsynlib, "__version__", wanted)

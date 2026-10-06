@@ -53,7 +53,7 @@ def _diagnose() -> str | None:
     a how-to-install message would be a lie about it.
     """
     try:
-        import vinsynlib
+        import vinsynlib  # noqa: PLC0415
     except ModuleNotFoundError as exc:
         if exc.name and not exc.name.startswith("vinsynlib"):
             raise
@@ -117,7 +117,7 @@ def _run(target: str) -> int:
         sys.stderr.write(problem)
         return 1
 
-    from importlib import import_module
+    from importlib import import_module  # noqa: PLC0415
 
     module, _, attribute = target.partition(":")
     entry = getattr(import_module(module), attribute)

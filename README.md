@@ -14,6 +14,64 @@ for the other five.
 Browse programs, keygroups and samples; read and edit any documented header
 parameter; all from a Textual TUI or a small CLI.
 
+## Support this project
+
+s3ked is free software and always will be. Nothing is behind a paywall, no
+feature is withheld, and none of what follows changes that.
+
+But if it has been useful — if it saved you an evening of mapping zones
+by hand, or got a library onto a machine that had no way of reading it, or
+**best of all, if it has your vintage instrument switched on and in use more often
+than it was, and you are having more fun with it** — then please consider
+supporting the work.
+
+**Because here is what it has actually cost:**
+
+- **Real machines on a real bench.** Much of what these tools know about these
+  formats was measured on hardware rather than read anywhere, because for most
+  of it there is nowhere to read it. That needs the machines — the instruments
+  themselves — and it puts hours of wear on hardware that has been locked up and
+  recovered more than once in the course of it. Some of these instruments were
+  bought specifically to add and verify a format; the others were already here,
+  because the person doing this is a vintage instrument enthusiast first and the
+  projects exist because the instruments were in the room.
+- **Dozens — realistically hundreds — of hours of human time.** Format
+  reverse-engineering is slow: measure, be wrong, measure again. A single
+  parameter law in this README can represent an evening at the bench.
+- **AI assistance, which is a paid service**, used heavily throughout and not
+  cheap at this volume.
+
+**This is support, not a donation — and the distinction is a legal one, not a
+turn of phrase.** The maintainer is based in Germany, where payments like these
+are *not* `Spenden` in the tax sense: they count as **taxable income** for the
+recipient and are **not tax-deductible** for the giver. So this section is
+titled *Support*, deliberately, and no receipt for tax purposes can be issued.
+(That is a statement of how it is handled here, not tax advice.)
+
+If the project saved you the work, you can support it through
+**[GitHub Sponsors](https://github.com/sponsors/lentferj)** — the *Sponsor*
+button at the top of the repository. Payment is handled entirely by GitHub and
+Stripe, so bank and tax details are never handed to the person paying.
+
+**Support is not expected, and it is not the only currency.**
+
+- **Bug reports** — ideally with the bank, preset or disk image that produced
+  them. A tool's failures are usually specific to one file rather than
+  general, and without that file they are very hard to reproduce.
+- **Confirmations from hardware that is not on this bench**, which matters more
+  here than for a single-machine tool. These tools write for whole *families*
+  of instruments, and the bench holds only a subset. Whether a variant accepts
+  what we write is genuinely unknown, and several notes say "on this unit" for
+  that reason. A "loads fine here too", or a "no, mine refuses it", is worth a
+  great deal.
+- **Corrections to the reverse-engineering notes.** The wrong turns are
+  recorded next to the findings in `docs/RESOLUTION_NOTES.md` — retractions
+  included, because a finding that was withdrawn is as useful as one that
+  stood. If any of it is wrong in a way that is still costing someone time,
+  saying so improves the record.
+
+---
+
 ## ⚠️ Use at your own risk — back up first, hardware verification is extensive but partial
 
 s3ked is provided **as is, with absolutely no warranty and no liability** for
@@ -258,7 +316,6 @@ the current partition and, below a divider, the contents of the selected one.
 there sounds:
 
 <img src="docs/screenshots/load.svg" alt="the load screen: load type, add or clear first, and renumber" width="100%">
-
 
 | | |
 |---|---|
