@@ -77,6 +77,7 @@ sample *is* named ``000000000000``, :attr:`Audit.indistinguishable` names it,
 because no zone reference to it can then be told from an empty zone and any
 usage count for it is a lower bound.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -190,12 +191,13 @@ class ZoneRef:
         overlapping keygroup stays reachable and nothing here needs to model
         priority.
         """
-        return (self.hi_vel > 0 and self.lo_vel <= self.hi_vel
-                and self.lo_note <= self.hi_note)
+        return self.hi_vel > 0 and self.lo_vel <= self.hi_vel and self.lo_note <= self.hi_note
 
     def __str__(self) -> str:  # pragma: no cover - display only
-        return (f"program {self.program} ({self.program_name}) "
-                f"keygroup {self.keygroup} zone {self.zone}")
+        return (
+            f"program {self.program} ({self.program_name}) "
+            f"keygroup {self.keygroup} zone {self.zone}"
+        )
 
 
 @dataclass
@@ -219,8 +221,7 @@ class ProgramInfo:
             return False
         if self.pmchan is None or other.pmchan is None:
             return False
-        return (self.pmchan == other.pmchan
-                or self.pmchan == OMNI or other.pmchan == OMNI)
+        return self.pmchan == other.pmchan or self.pmchan == OMNI or other.pmchan == OMNI
 
 
 @dataclass
@@ -236,6 +237,12 @@ class Audit:
     #: distinguished from empty zones, so their usage counts are a lower
     #: bound and they may look like orphans when they are not.
     indistinguishable: List[str] = field(default_factory=list)
+    #: Keygroup/zone reads that failed, as ``(program, keygroup, zone)`` --
+    #: zone 0 is the key-range read, zones 1-4 the velocity zones. A failed
+    #: read is not an empty slot: the range keeps its 0-127 default and the
+    #: zone is skipped, and both are recorded here rather than swallowed, as
+    #: an unread program is recorded in :attr:`unread`.
+    zone_errors: List[Tuple[int, int, int]] = field(default_factory=list)
     #: Every program's bus identity, for :meth:`stacked`.
     programs: List[ProgramInfo] = field(default_factory=list)
 
@@ -256,15 +263,16 @@ class Audit:
         ``include_unreachable=True`` to see them anyway.
         """
         held = self._resident_set()
-        return [ref for ref in self.references
-                if ref.sample.strip() not in held
-                and (include_unreachable or ref.reachable)]
+        return [
+            ref
+            for ref in self.references
+            if ref.sample.strip() not in held and (include_unreachable or ref.reachable)
+        ]
 
     def suppressed(self) -> List[ZoneRef]:
         """Dangling references hidden because their zone cannot sound."""
         reachable = {id(r) for r in self.dangling()}
-        return [r for r in self.dangling(include_unreachable=True)
-                if id(r) not in reachable]
+        return [r for r in self.dangling(include_unreachable=True) if id(r) not in reachable]
 
     def stacked(self) -> List[List[ProgramInfo]]:
         """Groups of programs a single program change fires together.
@@ -293,8 +301,7 @@ class Audit:
                     break
             else:
                 groups.append([info])
-        return sorted([g for g in groups if len(g) > 1],
-                      key=len, reverse=True)
+        return sorted([g for g in groups if len(g) > 1], key=len, reverse=True)
 
     def usage(self, sample: str) -> List[ZoneRef]:
         """Every zone naming ``sample``. The "who uses this" question."""
@@ -354,9 +361,7 @@ class Audit:
         ]
         if bad:
             programs = len({r.program for r in bad})
-            parts.append(
-                f"{len(bad)} DANGLING in {programs} program(s) — these play "
-                f"silence")
+            parts.append(f"{len(bad)} DANGLING in {programs} program(s) — these play silence")
         else:
             parts.append("no dangling references")
         if self.orphans():
@@ -364,16 +369,19 @@ class Audit:
         if self.ambiguous():
             parts.append(f"{len(self.ambiguous())} duplicated sample name(s)")
         if self.suppressed():
-            parts.append(
-                f"{len(self.suppressed())} more in zones that cannot sound "
-                f"(not counted)")
+            parts.append(f"{len(self.suppressed())} more in zones that cannot sound (not counted)")
         if self.unread:
             parts.append(f"{len(self.unread)} program(s) could not be read")
+        if self.zone_errors:
+            parts.append(
+                f"{len(self.zone_errors)} zone read(s) failed (recorded, not treated as empty)"
+            )
         if self.indistinguishable:
             parts.append(
                 f"{len(self.indistinguishable)} sample name(s) encode to the "
                 f"same bytes as an empty zone — usage counts for them are a "
-                f"lower bound")
+                f"lower bound"
+            )
         return "; ".join(parts)
 
 
@@ -384,8 +392,7 @@ class Audit:
 _ZONE_SPAN = m.NAME_LENGTH + 2
 
 
-def _zone_info(bridge, program: int, keygroup: int, offset: int,
-               timeout: Optional[float]):
+def _zone_info(bridge, program: int, keygroup: int, offset: int, timeout: Optional[float]):
     """``(name, lo_vel, hi_vel)``, or ``None`` when nothing is assigned.
 
     Read as raw bytes rather than through ``get_parameter``, because the
@@ -393,15 +400,15 @@ def _zone_info(bridge, program: int, keygroup: int, offset: int,
     ``000000000000`` -- twelve zero bytes decode to that string, not to
     blank.
     """
-    raw = bridge.get_header_bytes("keygroup", program, offset,
-                                  _ZONE_SPAN, selector=keygroup,
-                                  timeout=timeout)
-    name_bytes = raw[:m.NAME_LENGTH]
+    raw = bridge.get_header_bytes(
+        "keygroup", program, offset, _ZONE_SPAN, selector=keygroup, timeout=timeout
+    )
+    name_bytes = raw[: m.NAME_LENGTH]
     if not any(name_bytes):
-        return None          # unwritten; see the module docstring
+        return None  # unwritten; see the module docstring
     name = m.decode_name(list(name_bytes))
     if not name.strip():
-        return None          # twelve spaces: what the machine really stores
+        return None  # twelve spaces: what the machine really stores
     return name, int(raw[m.NAME_LENGTH]), int(raw[m.NAME_LENGTH + 1])
 
 
@@ -434,8 +441,9 @@ def _collides_with_empty(name: str) -> bool:
         return False
 
 
-def keygroups_for_note(bridge, program: int, note: int, *,
-                       timeout: Optional[float] = None) -> List[int]:
+def keygroups_for_note(
+    bridge, program: int, note: int, *, timeout: Optional[float] = None
+) -> List[int]:
     """Which keygroups of `program` sound at `note`.
 
     **The check that a parameter probe should make before it plays a
@@ -459,20 +467,25 @@ def keygroups_for_note(bridge, program: int, note: int, *,
     count = int(bridge.get_parameter(groups_field, program, timeout=timeout))
     covering = []
     for keygroup in range(count):
-        keys = bridge.get_header_bytes("keygroup", program, key_offset, 2,
-                                       selector=keygroup, timeout=timeout)
+        keys = bridge.get_header_bytes(
+            "keygroup", program, key_offset, 2, selector=keygroup, timeout=timeout
+        )
         lo, hi = int(keys[0]), int(keys[1])
         if lo > hi:
-            continue            # inverted: selects nothing (§81)
+            continue  # inverted: selects nothing (§81)
         if lo <= note <= hi:
             covering.append(keygroup)
     return covering
 
 
-def collect(bridge, *, programs: Optional[Sequence[str]] = None,
-            samples: Optional[Sequence[str]] = None,
-            timeout: Optional[float] = None,
-            progress=None) -> Audit:
+def collect(
+    bridge,
+    *,
+    programs: Optional[Sequence[str]] = None,
+    samples: Optional[Sequence[str]] = None,
+    timeout: Optional[float] = None,
+    progress=None,
+) -> Audit:
     """Walk every keygroup of every program and build the cross-reference.
 
     Read-only. Four reads per keygroup plus two per program -- ``GROUPS``,
@@ -488,12 +501,9 @@ def collect(bridge, *, programs: Optional[Sequence[str]] = None,
     would look entirely plausible.
     """
     audit = Audit()
-    audit.resident = list(samples if samples is not None
-                          else bridge.sample_list(timeout=timeout))
-    audit.indistinguishable = [name for name in audit.resident
-                               if _collides_with_empty(name)]
-    names = list(programs if programs is not None
-                 else bridge.program_list(timeout=timeout))
+    audit.resident = list(samples if samples is not None else bridge.sample_list(timeout=timeout))
+    audit.indistinguishable = [name for name in audit.resident if _collides_with_empty(name)]
+    names = list(programs if programs is not None else bridge.program_list(timeout=timeout))
     groups_field = p.lookup(("program", "GROUPS"))
     offsets = [p.lookup(("keygroup", f)).offset for f in ZONE_FIELDS]
     key_offset = p.lookup(("keygroup", "LONOTE")).offset
@@ -506,41 +516,53 @@ def collect(bridge, *, programs: Optional[Sequence[str]] = None,
         # than guessing that two programs do not collide.
         info = ProgramInfo(index=index, name=program_name)
         try:
-            ident = bridge.get_header_bytes("program", index, ident_offset, 2,
-                                            timeout=timeout)
+            ident = bridge.get_header_bytes("program", index, ident_offset, 2, timeout=timeout)
             info.prgnum, info.pmchan = int(ident[0]), int(ident[1])
         except Exception:
             pass
         audit.programs.append(info)
         try:
-            count = int(bridge.get_parameter(groups_field, index,
-                                             timeout=timeout))
+            count = int(bridge.get_parameter(groups_field, index, timeout=timeout))
         except Exception:
             audit.unread.append((index, program_name))
             continue
         for keygroup in range(count):
             # LONOTE and HINOTE are adjacent, so the keygroup's key range is
             # one 2-byte read -- once per keygroup, not once per zone.
+            # A failed range read is recorded, not swallowed: the 0-127
+            # default below keeps the zones walkable, but it is a guess, and
+            # an audit that cannot tell a guess from a reading will mislabel
+            # unreachable zones as reachable.
             try:
-                keys = bridge.get_header_bytes("keygroup", index, key_offset,
-                                               2, selector=keygroup,
-                                               timeout=timeout)
+                keys = bridge.get_header_bytes(
+                    "keygroup", index, key_offset, 2, selector=keygroup, timeout=timeout
+                )
                 lo_note, hi_note = int(keys[0]), int(keys[1])
             except Exception:
+                audit.zone_errors.append((index, keygroup, 0))
                 lo_note, hi_note = 0, 127
             for zone, offset in enumerate(offsets, start=1):
                 try:
                     info = _zone_info(bridge, index, keygroup, offset, timeout)
                 except Exception:
+                    audit.zone_errors.append((index, keygroup, zone))
                     continue
                 if info is None:
                     continue
                 name, lo_vel, hi_vel = info
                 audit.references.append(
-                    ZoneRef(program=index, program_name=program_name,
-                            keygroup=keygroup, zone=zone, sample=name,
-                            lo_vel=lo_vel, hi_vel=hi_vel,
-                            lo_note=lo_note, hi_note=hi_note))
+                    ZoneRef(
+                        program=index,
+                        program_name=program_name,
+                        keygroup=keygroup,
+                        zone=zone,
+                        sample=name,
+                        lo_vel=lo_vel,
+                        hi_vel=hi_vel,
+                        lo_note=lo_note,
+                        hi_note=hi_note,
+                    )
+                )
         if progress is not None:
             progress(index + 1, len(names))
     return audit

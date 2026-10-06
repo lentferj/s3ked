@@ -67,8 +67,13 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional, Tuple
 
 __all__ = [
-    "Scale", "SCALES", "to_physical", "from_physical", "describe",
-    "parse_quantity", "value_from_quantity",
+    "Scale",
+    "SCALES",
+    "to_physical",
+    "from_physical",
+    "describe",
+    "parse_quantity",
+    "value_from_quantity",
 ]
 
 #: Suffixes accepted on input, mapped to (unit, multiplier into the base unit).
@@ -100,10 +105,10 @@ class Scale:
     region: str
     param: str
     unit: str
-    kind: str                      # "exp" | "linear" | "pan" | "reso" | "pole"
+    kind: str  # "exp" | "linear" | "pan" | "reso" | "pole"
     a: float
     b: float
-    fitted: Tuple[int, int]        # the range the law was measured over
+    fitted: Tuple[int, int]  # the range the law was measured over
     r2: float
     #: Set when the law is known to be incompletely specified -- the number
     #: is the best available but its meaning is not yet settled. Rendered with
@@ -139,7 +144,8 @@ class Scale:
             if value >= self.a:
                 raise ValueError(
                     f"{self.param} {value} is at or past self-oscillation "
-                    f"({self.a:.2f}); the field only reaches 15")
+                    f"({self.a:.2f}); the field only reaches 15"
+                )
             return -20.0 * math.log10(1.0 - value / self.a)
         if self.kind == "amplitude":
             # A GAIN proportional to the value, reported in dB. `linear` cannot
@@ -150,7 +156,8 @@ class Scale:
             if value <= 0:
                 raise ValueError(
                     f"{self.param} {value} is zero gain, which is -inf dB; "
-                    f"the field's own minimum is the edge of this scale")
+                    f"the field's own minimum is the edge of this scale"
+                )
             return 20.0 * math.log10(self.a * value)
         if self.kind == "pole":
             # A quantity that runs away as the value approaches ``b``, which
@@ -159,7 +166,8 @@ class Scale:
             if value >= self.b:
                 raise ValueError(
                     f"{self.param} {value} is at or past the pole "
-                    f"({self.b:.2f}); the field only reaches 99")
+                    f"({self.b:.2f}); the field only reaches 99"
+                )
             return self.a * value / (self.b - value)
         raise ValueError(f"unknown scale kind {self.kind!r}")
 
@@ -200,277 +208,346 @@ class Scale:
 #: Measured 2026-08-11 on an S3000XL. RESOLUTION_NOTES §20-§26.
 SCALES: Dict[Tuple[str, str], Scale] = {
     ("keygroup", "FILFRQ"): Scale(
-        "keygroup", "FILFRQ", "Hz", "exp", 6.4597, 0.07100, (44, 92), 0.99984,
+        "keygroup",
+        "FILFRQ",
+        "Hz",
+        "exp",
+        6.4597,
+        0.07100,
+        (44, 92),
+        0.99984,
         bounds="every corner from 44 to 92 was measured. Below 44 the corner drops\nunder the lowest note's fundamental, so no harmonic sits beneath it\nand the fit becomes one-sided; above 92 the source runs out of\nharmonics above the corner and it becomes one-sided the other way.\nThe limit is where the SOURCE has energy either side of the corner,\nnot where the machine stops -- and it is a limit of this sawtooth,\nnot of the method.",
         note="EXTRAPOLATES CORRECTLY TO 0, measured 2026-08-24 (RESOLUTION_NOTES\n"
-             "\u00a7165). The fit stops at 44 because that is where the resonance\n"
-             "tracker stops, not where the filter does. Read instead as absolute\n"
-             "attenuation against FILFRQ 99, the corner descends monotonically\n"
-             "over 41 dB to FILFRQ 0 and this law predicts a 12 dB/octave rolloff\n"
-             "to within ~2 dB the whole way. There is no floor and no endpoint\n"
-             "fact to record -- the law simply keeps working. A sibling project\n"
-             "clamped everything under 40 to one frequency on the strength of a\n"
-             "floor that was an artefact of normalising to a passband which had\n"
-             "itself dropped onto the slope.\n"
-             "One octave per 9.76 units; 7.36% per step, so a step is about\n"
-             "0.81 semitones.\n"
-             "MEASURED FROM THE RESONANCE PEAK, not from a spectral centroid.\n"
-             "Turning FILQ up grows a peak AT the corner; differencing the\n"
-             "spectrum against FILQ 0 at the same FILFRQ cancels the source's\n"
-             "own spectrum and every fixed pole, so what is left locates the\n"
-             "filter and nothing else. See RESOLUTION_NOTES §54.\n"
-             "This REPLACES a law fitted by inverting a spectral centroid,\n"
-             "which read 20-30% high and got worse as the corner rose:\n"
-             "0.28 octaves at FILFRQ 40, 0.40 at 70, 0.52 at 99. A centroid is\n"
-             "an average of everything the source contains, so it sits above\n"
-             "the corner by an amount that depends on the source -- the error\n"
-             "was in the ruler, and it was a slope error, not an offset.\n"
-             "The old ruler also FOLDED (§20): it fell to a minimum and rose\n"
-             "again, so only its rising branch could be inverted and the fold\n"
-             "moved with pitch. A resonance peak does not fold, and the corner\n"
-             "does not move with FILQ (919 Hz at all sixteen settings, §53).\n"
-             "Cross-checks: two independent runs read 919 and 930 Hz at\n"
-             "FILFRQ 70, 1.2% apart. The law was fitted on 62..92 and then\n"
-             "predicted 44, 50 and 56 -- corners it had not seen -- to within\n"
-             "0.2%, 0.5% and 2.2%.\n"
-             "\n"
-             "**§139 MEASURED THE -3 dB CORNER AND GOT A DIFFERENT NUMBER:**\n"
-             "  7.60732 * exp(0.07245 v), from dividing each setting's\n"
-             "  spectrum by the same source wide open, at FILQ 0.\n"
-             "That law is 1.29x ABOVE this one, constant to sd 0.031 across\n"
-             "FILFRQ 40..84 -- so the two disagree by a fixed factor rather\n"
-             "than drifting, and one of them is measuring something other\n"
-             "than what it says. This section argues the resonance peak sits\n"
-             "AT the corner and does not move with FILQ (919 Hz at sixteen\n"
-             "settings, §53), which is what makes the disagreement a puzzle\n"
-             "rather than a definition: a peak that is Q-independent should\n"
-             "not sit 1.29x below the -3 dB point of the same filter.\n"
-             "RESOLVED 2026-08-21 by §145, and this section's own reading is\n"
-             "the part that was wrong: measured on one sweep, the resonance\n"
-             "peak sits at 0.790 of the -3 dB corner (sd 0.039), NOT at it.\n"
-             "Both laws reproduce -- §139 to 1.7%, this one to 3.7% -- so the\n"
-             "1.29x is definitional, and the definition that was wrong is the\n"
-             "claim above that the peak locates the corner. THIS LAW GIVES THE\n"
-             "RESONANCE PEAK. Which to use:\n"
-             "  * a converter mapping a source format's CUTOFF wants §139 --\n"
-             "    every format means the -3 dB point by 'cutoff', and §139\n"
-             "    measures that directly rather than through an indicator;\n"
-             "  * anything asking WHERE THE RESONANCE SITS wants this one.\n"
-             "Both are S3000XL. Neither has been checked on an S1000, and\n"
-             "§139 measured 12 dB/octave here against the S1000's specified\n"
-             "18, so neither should be applied across the generation.",
+        "\u00a7165). The fit stops at 44 because that is where the resonance\n"
+        "tracker stops, not where the filter does. Read instead as absolute\n"
+        "attenuation against FILFRQ 99, the corner descends monotonically\n"
+        "over 41 dB to FILFRQ 0 and this law predicts a 12 dB/octave rolloff\n"
+        "to within ~2 dB the whole way. There is no floor and no endpoint\n"
+        "fact to record -- the law simply keeps working. A sibling project\n"
+        "clamped everything under 40 to one frequency on the strength of a\n"
+        "floor that was an artefact of normalising to a passband which had\n"
+        "itself dropped onto the slope.\n"
+        "One octave per 9.76 units; 7.36% per step, so a step is about\n"
+        "0.81 semitones.\n"
+        "MEASURED FROM THE RESONANCE PEAK, not from a spectral centroid.\n"
+        "Turning FILQ up grows a peak AT the corner; differencing the\n"
+        "spectrum against FILQ 0 at the same FILFRQ cancels the source's\n"
+        "own spectrum and every fixed pole, so what is left locates the\n"
+        "filter and nothing else. See RESOLUTION_NOTES §54.\n"
+        "This REPLACES a law fitted by inverting a spectral centroid,\n"
+        "which read 20-30% high and got worse as the corner rose:\n"
+        "0.28 octaves at FILFRQ 40, 0.40 at 70, 0.52 at 99. A centroid is\n"
+        "an average of everything the source contains, so it sits above\n"
+        "the corner by an amount that depends on the source -- the error\n"
+        "was in the ruler, and it was a slope error, not an offset.\n"
+        "The old ruler also FOLDED (§20): it fell to a minimum and rose\n"
+        "again, so only its rising branch could be inverted and the fold\n"
+        "moved with pitch. A resonance peak does not fold, and the corner\n"
+        "does not move with FILQ (919 Hz at all sixteen settings, §53).\n"
+        "Cross-checks: two independent runs read 919 and 930 Hz at\n"
+        "FILFRQ 70, 1.2% apart. The law was fitted on 62..92 and then\n"
+        "predicted 44, 50 and 56 -- corners it had not seen -- to within\n"
+        "0.2%, 0.5% and 2.2%.\n"
+        "\n"
+        "**§139 MEASURED THE -3 dB CORNER AND GOT A DIFFERENT NUMBER:**\n"
+        "  7.60732 * exp(0.07245 v), from dividing each setting's\n"
+        "  spectrum by the same source wide open, at FILQ 0.\n"
+        "That law is 1.29x ABOVE this one, constant to sd 0.031 across\n"
+        "FILFRQ 40..84 -- so the two disagree by a fixed factor rather\n"
+        "than drifting, and one of them is measuring something other\n"
+        "than what it says. This section argues the resonance peak sits\n"
+        "AT the corner and does not move with FILQ (919 Hz at sixteen\n"
+        "settings, §53), which is what makes the disagreement a puzzle\n"
+        "rather than a definition: a peak that is Q-independent should\n"
+        "not sit 1.29x below the -3 dB point of the same filter.\n"
+        "RESOLVED 2026-08-21 by §145, and this section's own reading is\n"
+        "the part that was wrong: measured on one sweep, the resonance\n"
+        "peak sits at 0.790 of the -3 dB corner (sd 0.039), NOT at it.\n"
+        "Both laws reproduce -- §139 to 1.7%, this one to 3.7% -- so the\n"
+        "1.29x is definitional, and the definition that was wrong is the\n"
+        "claim above that the peak locates the corner. THIS LAW GIVES THE\n"
+        "RESONANCE PEAK. Which to use:\n"
+        "  * a converter mapping a source format's CUTOFF wants §139 --\n"
+        "    every format means the -3 dB point by 'cutoff', and §139\n"
+        "    measures that directly rather than through an indicator;\n"
+        "  * anything asking WHERE THE RESONANCE SITS wants this one.\n"
+        "Both are S3000XL. Neither has been checked on an S1000, and\n"
+        "§139 measured 12 dB/octave here against the S1000's specified\n"
+        "18, so neither should be applied across the generation.",
         endpoints={99: "wide open"},
     ),
     ("keygroup", "KGTUNO"): Scale(
-        "keygroup", "KGTUNO", "cents", "linear", 100.0 / 256.0, 0.0,
-        (-5120, 5120), 0.9998,
+        "keygroup",
+        "KGTUNO",
+        "cents",
+        "linear",
+        100.0 / 256.0,
+        0.0,
+        (-5120, 5120),
+        0.9998,
         bounds="confirmed by PITCH from -5120 to +5120 -- twenty semitones each\n"
-               "way -- against a law first fitted over 0..50 raw, which is only\n"
-               "0..19.5 cents. The field's declared range was 0..50 until the\n"
-               "same measurement widened it to +/-12800: that was the document's\n"
-               "display range in SEMITONES, transcribed as a raw range, and it\n"
-               "made a one-semitone detune impossible to express. Beyond +/-20\n"
-               "semitones the scale is unverified -- the pitch detector tops out,\n"
-               "and whether the sampler transposes that far is a separate\n"
-               "question from whether the field stores it (it does; every value\n"
-               "up to 32767 round-tripped exactly).",
+        "way -- against a law first fitted over 0..50 raw, which is only\n"
+        "0..19.5 cents. The field's declared range was 0..50 until the\n"
+        "same measurement widened it to +/-12800: that was the document's\n"
+        "display range in SEMITONES, transcribed as a raw range, and it\n"
+        "made a one-semitone detune impossible to express. Beyond +/-20\n"
+        "semitones the scale is unverified -- the pitch detector tops out,\n"
+        "and whether the sampler transposes that far is a separate\n"
+        "question from whether the field stores it (it does; every value\n"
+        "up to 32767 round-tripped exactly).",
         note="One raw unit is 1/256 of a semitone, so the low byte is the\n"
-             "binary fraction the document means by \"-50.00 to +50.00\".\n"
-             "Measured: 256 -> +99.8 cents, 512 -> +199.8, 1280 -> +499.9,\n"
-             "2560 -> +999.9, 5120 -> +1999.9, and the negatives match to\n"
-             "0.3 cents. RESOLUTION_NOTES §56.",
+        'binary fraction the document means by "-50.00 to +50.00".\n'
+        "Measured: 256 -> +99.8 cents, 512 -> +199.8, 1280 -> +499.9,\n"
+        "2560 -> +999.9, 5120 -> +1999.9, and the negatives match to\n"
+        "0.3 cents. RESOLUTION_NOTES §56.",
     ),
     ("keygroup", "VTUNO1"): Scale(
-        "keygroup", "VTUNO1", "cents", "linear", 100.0 / 256.0, 0.0, (-5120, 5120),
+        "keygroup",
+        "VTUNO1",
+        "cents",
+        "linear",
+        100.0 / 256.0,
+        0.0,
+        (-5120, 5120),
         0.999,
         bounds="range widened and the scale confirmed by KGTUNO's pitch\nmeasurement over +/-20 semitones (§56); this field shares the\nencoding and the 1/256-semitone unit. Originally: measured at both extremes at a fixed velocity; the intermediate\n"
-               "points are not swept, so this is two points plus a structural\n"
-               "constant rather than a fitted curve.",
+        "points are not swept, so this is two points plus a structural\n"
+        "constant rather than a fitted curve.",
         note="Per-ZONE tuning offset -- a STATIC offset, not a velocity\n"
-             "modulation. The V in these zone field names refers to the\n"
-             "velocity ZONE the field belongs to, not to velocity as a\n"
-             "modulation source: LOVEL1/HIVEL1 define the zone and\n"
-             "VTUNO1/VLOUD1/VFREQ1/VPANO1 are that zone's offsets.\n"
-             "Same exact 100/256 scale as KGTUNO and PTUNO, with which it\n"
-             "shares its spec wording -- measured 0.3878 cents/unit against\n"
-             "the structural 0.390625, 0.7% apart.\n"
-             "Its three companions respond equally strongly at a fixed\n"
-             "velocity: VLOUD1 39.81 dB, VFREQ1 3346 Hz, VPANO1 118.57 dB\n"
-             "across their ranges.",
+        "modulation. The V in these zone field names refers to the\n"
+        "velocity ZONE the field belongs to, not to velocity as a\n"
+        "modulation source: LOVEL1/HIVEL1 define the zone and\n"
+        "VTUNO1/VLOUD1/VFREQ1/VPANO1 are that zone's offsets.\n"
+        "Same exact 100/256 scale as KGTUNO and PTUNO, with which it\n"
+        "shares its spec wording -- measured 0.3878 cents/unit against\n"
+        "the structural 0.390625, 0.7% apart.\n"
+        "Its three companions respond equally strongly at a fixed\n"
+        "velocity: VLOUD1 39.81 dB, VFREQ1 3346 Hz, VPANO1 118.57 dB\n"
+        "across their ranges.",
     ),
     ("program", "PTUNO"): Scale(
-        "program", "PTUNO", "cents", "linear", 100.0 / 256.0, 0.0, (-5120, 5120),
+        "program",
+        "PTUNO",
+        "cents",
+        "linear",
+        100.0 / 256.0,
+        0.0,
+        (-5120, 5120),
         0.9998,
         note="same exact 100/256 scale as KGTUNO, spot-checked at two values",
         bounds="range widened and the scale confirmed by KGTUNO's pitch\nmeasurement over +/-20 semitones (§56); this field shares the\nencoding and the 1/256-semitone unit. Originally: spot-checked rather than swept; KGTUNO carries the evidence.",
     ),
     ("program", "STEREO"): Scale(
-        "program", "STEREO", "dB", "amplitude", 1.0 / 99.0, 0.0, (10, 99),
+        "program",
+        "STEREO",
+        "dB",
+        "amplitude",
+        1.0 / 99.0,
+        0.0,
+        (10, 99),
         0.9999,
         bounds="fitted 10..99 and that IS the field's useful range. §191 swept\n"
-               "60..99 first and then extended down to 10 because 1.76% of\n"
-               "library programs sit below 60 -- 90 of 5,124 on a sibling's\n"
-               "corpus -- where the 60..99 fit would have been extrapolated\n"
-               "15.6 dB past anything measured. Residual is 0.244 dB at the\n"
-               "bottom and under 0.09 dB above 30.",
+        "60..99 first and then extended down to 10 because 1.76% of\n"
+        "library programs sit below 60 -- 90 of 5,124 on a sibling's\n"
+        "corpus -- where the 60..99 fit would have been extrapolated\n"
+        "15.6 dB past anything measured. Residual is 0.244 dB at the\n"
+        "bottom and under 0.09 dB above 30.",
         note="A PLAIN AMPLITUDE SCALER: gain proportional to the value, so\n"
-             "  gain = x/99  and  dB = 20*log10(x/99).\n"
-             "NOT dB-linear, and the difference is not small. The proposal\n"
-             "§191 tested was that STEREO reuses PRLOUD's law,\n"
-             "`dB = 0.642719x - 87.63`; that is wrong by **20.6 dB at x=60**.\n"
-             "Worse, the proposal inherited a PRLOUD slope §37 had already\n"
-             "refuted -- the current one is 0.61872 -- so it was an\n"
-             "extrapolation from a superseded constant onto a different field.\n"
-             "x/99 VERSUS x/100 IS NOT SEPARABLE from this data and §191 says\n"
-             "so: both are ratios to the same reference and the normalisation\n"
-             "cancels. Only the PROPORTIONALITY is established; the\n"
-             "denominator here is a convention, not a measurement.\n"
-             "Entered 2026-09-27. It was measured on hardware 2026-09-08 and\n"
-             "sat outside this table for eighteen days because no `kind` could\n"
-             "express a gain proportional to the value -- `linear` means linear\n"
-             "in the physical unit, which for a level is dB. The `amplitude`\n"
-             "kind was added with it. A measured law with nowhere to live is\n"
-             "the §264 disease in a new form: correct in the prose, absent\n"
-             "from the code."),
+        "  gain = x/99  and  dB = 20*log10(x/99).\n"
+        "NOT dB-linear, and the difference is not small. The proposal\n"
+        "§191 tested was that STEREO reuses PRLOUD's law,\n"
+        "`dB = 0.642719x - 87.63`; that is wrong by **20.6 dB at x=60**.\n"
+        "Worse, the proposal inherited a PRLOUD slope §37 had already\n"
+        "refuted -- the current one is 0.61872 -- so it was an\n"
+        "extrapolation from a superseded constant onto a different field.\n"
+        "x/99 VERSUS x/100 IS NOT SEPARABLE from this data and §191 says\n"
+        "so: both are ratios to the same reference and the normalisation\n"
+        "cancels. Only the PROPORTIONALITY is established; the\n"
+        "denominator here is a convention, not a measurement.\n"
+        "Entered 2026-09-27. It was measured on hardware 2026-09-08 and\n"
+        "sat outside this table for eighteen days because no `kind` could\n"
+        "express a gain proportional to the value -- `linear` means linear\n"
+        "in the physical unit, which for a level is dB. The `amplitude`\n"
+        "kind was added with it. A measured law with nowhere to live is\n"
+        "the §264 disease in a new form: correct in the prose, absent\n"
+        "from the code.",
+    ),
     ("program", "PRLOUD"): Scale(
-        "program", "PRLOUD", "dB", "linear", 0.61872, -0.61872 * 99, (0, 99),
+        "program",
+        "PRLOUD",
+        "dB",
+        "linear",
+        0.61872,
+        -0.61872 * 99,
+        (0, 99),
         0.99965,
         bounds="swept at 28 values with velocity neutralised (V_LOUD 0). It\n"
-               "does NOT saturate: monotonic all the way to 99, no plateau.\n"
-               "That was checked because two runs appeared to show a ceiling\n"
-               "at 80, which turned out to be V_LOUD's boost pushing the\n"
-               "OUTPUT into a limit, not PRLOUD flattening.",
+        "does NOT saturate: monotonic all the way to 99, no plateau.\n"
+        "That was checked because two runs appeared to show a ceiling\n"
+        "at 80, which turned out to be V_LOUD's boost pushing the\n"
+        "OUTPUT into a limit, not PRLOUD flattening.",
         note="relative to PRLOUD 99. The measured intercept was an absolute\n"
-             "level that depended on the rig's gain and meant nothing away\n"
-             "from that bench; the useful quantity is attenuation from full.\n"
-             "Re-measured at 0.61872 dB/unit, r2 0.99965, superseding an\n"
-             "earlier 0.642719 at r2 0.9933 -- the worst fit in this table,\n"
-             "and the reason it was re-examined. The residuals still tilt\n"
-             "(+0.081 dB over the first half, -0.081 over the second), so a\n"
-             "slight curvature remains and the straight line is a good\n"
-             "approximation rather than the true shape.",
+        "level that depended on the rig's gain and meant nothing away\n"
+        "from that bench; the useful quantity is attenuation from full.\n"
+        "Re-measured at 0.61872 dB/unit, r2 0.99965, superseding an\n"
+        "earlier 0.642719 at r2 0.9933 -- the worst fit in this table,\n"
+        "and the reason it was re-examined. The residuals still tilt\n"
+        "(+0.081 dB over the first half, -0.081 over the second), so a\n"
+        "slight curvature remains and the straight line is a good\n"
+        "approximation rather than the true shape.",
     ),
     ("keygroup", "SUSTN1"): Scale(
-        "keygroup", "SUSTN1", "dB", "linear", 0.60676, -0.60676 * 99, (40, 99),
+        "keygroup",
+        "SUSTN1",
+        "dB",
+        "linear",
+        0.60676,
+        -0.60676 * 99,
+        (40, 99),
         0.99993,
         bounds="fitted 40..99, every point verified to have at least 6 dB of\n"
-               "headroom to the output ceiling and 22 dB above the noise\n"
-               "floor, both measured in the same session. Below 40 the level\n"
-               "approaches the floor; 0 is separately known to be silent.",
+        "headroom to the output ceiling and 22 dB above the noise\n"
+        "floor, both measured in the same session. Below 40 the level\n"
+        "approaches the floor; 0 is separately known to be silent.",
         note="linear in dB, NOT in amplitude; a half-amplitude sustain is 89.\n"
-             "Re-measured with headroom verified at BOTH ends after an audit\n"
-             "found earlier sweeps ran into an output ceiling. The original\n"
-             "0.60832 survives that check to 0.26%, so the ceiling did not\n"
-             "materially bite here -- only the topmost point sat near it.\n"
-             "A control run at PRLOUD 70 gave 0.57888, wrong by 4.6% in the\n"
-             "other direction because its low end was in the noise floor. A\n"
-             "ceiling and a floor both FLATTEN a curve, from opposite ends,\n"
-             "so two such runs do not bracket the truth -- they both\n"
-             "understate the slope and the answer lies outside them.\n"
-             "Residual halves +0.005/-0.004 dB, the flattest in this table.",
+        "Re-measured with headroom verified at BOTH ends after an audit\n"
+        "found earlier sweeps ran into an output ceiling. The original\n"
+        "0.60832 survives that check to 0.26%, so the ceiling did not\n"
+        "materially bite here -- only the topmost point sat near it.\n"
+        "A control run at PRLOUD 70 gave 0.57888, wrong by 4.6% in the\n"
+        "other direction because its low end was in the noise floor. A\n"
+        "ceiling and a floor both FLATTEN a curve, from opposite ends,\n"
+        "so two such runs do not bracket the truth -- they both\n"
+        "understate the slope and the answer lies outside them.\n"
+        "Residual halves +0.005/-0.004 dB, the flattest in this table.",
         endpoints={0: "silent"},
     ),
     ("program", "LFORAT"): Scale(
-        "program", "LFORAT", "Hz", "linear", 0.11867, -0.04, (10, 99), 0.9995,
+        "program",
+        "LFORAT",
+        "Hz",
+        "linear",
+        0.11867,
+        -0.04,
+        (10, 99),
+        0.9995,
         bounds="below 10 the LFO period exceeds the capture window, so a rate\ncannot be counted rather than the machine doing anything odd.",
         note="LFO1, which drives pitch",
     ),
     ("keygroup", "ATTAK1"): Scale(
-        "keygroup", "ATTAK1", "s", "exp", 0.000201173, 0.10844, (55, 90),
+        "keygroup",
+        "ATTAK1",
+        "s",
+        "exp",
+        0.000201173,
+        0.10844,
+        (55, 90),
         0.99988,
         bounds="swept 55..90. Below 55 the whole rise crosses in fewer than\n"
-               "thirteen analysis windows; above 90 it outlasts the capture.\n"
-               "Both are limits of the rig, not of the machine.",
+        "thirteen analysis windows; above 90 it outlasts the capture.\n"
+        "Both are limits of the rig, not of the machine.",
         note="A genuine RISE TIME, and the only envelope stage that has one.\n"
-             "The attack is a linear ramp in AMPLITUDE -- r2 0.9982 against\n"
-             "0.9578 square-law, 0.9343 linear-in-dB and 0.9302 exponential,\n"
-             "consistent to within 0.001 across eight values. That is the\n"
-             "classic analog pairing: linear attack, exponential decay.\n"
-             "It is a time rather than a rate BECAUSE the amplitude attack\n"
-             "always travels the same distance, zero to peak. A decay's\n"
-             "distance depends on the sustain level, which is why those are\n"
-             "rates. The earlier fit (0.00023924, exp 0.10463) is withdrawn:\n"
-             "it was 19% low at value 90.\n"
-             "Note the exponent, 0.11175, is NOT the 0.0977 the decays share.\n"
-             "Attack and decay are different laws, not one law twice.",
+        "The attack is a linear ramp in AMPLITUDE -- r2 0.9982 against\n"
+        "0.9578 square-law, 0.9343 linear-in-dB and 0.9302 exponential,\n"
+        "consistent to within 0.001 across eight values. That is the\n"
+        "classic analog pairing: linear attack, exponential decay.\n"
+        "It is a time rather than a rate BECAUSE the amplitude attack\n"
+        "always travels the same distance, zero to peak. A decay's\n"
+        "distance depends on the sustain level, which is why those are\n"
+        "rates. The earlier fit (0.00023924, exp 0.10463) is withdrawn:\n"
+        "it was 19% low at value 90.\n"
+        "Note the exponent, 0.11175, is NOT the 0.0977 the decays share.\n"
+        "Attack and decay are different laws, not one law twice.",
         endpoints={0: "fastest"},
     ),
     ("keygroup", "DECAY1"): Scale(
-        "keygroup", "DECAY1", "dB/s", "exp", 23525.6, -0.09776, (25, 90),
+        "keygroup",
+        "DECAY1",
+        "dB/s",
+        "exp",
+        23525.6,
+        -0.09776,
+        (25, 90),
         0.99998,
         bounds="swept 25..90, re-measured 2026-09-20 (§259) on looped white\n"
-               "noise at 60+ dB of span per point. The old 45..85 said the\n"
-               "fall below 45 'crosses in too few analysis windows to time' --\n"
-               "true of the window that was used, not of the field: a 0.67 ms\n"
-               "window gives 71 windows at byte 30. The limit was the\n"
-               "estimator's resolution and it moved when the estimator did.\n"
-               "Byte 20 still fails (r2 0.948, -28.8%) and is where the real\n"
-               "floor sits -- but NOT because the estimator runs out of room:\n"
-               "run over a constructed 2370 dB/s decay it returns -0.67% at\n"
-               "r2 0.99906, and -0.77% with a 6 ms attack overlapping the\n"
-               "fit. The departure is in the machine, not the instrument, and\n"
-               "is unexplained. Above 90 is extrapolation: 96 came in 10.8%\n"
-               "high on the run's best per-curve r2, also not an estimator\n"
-               "artefact (the control returns +0.16% there), also unexplained.",
+        "noise at 60+ dB of span per point. The old 45..85 said the\n"
+        "fall below 45 'crosses in too few analysis windows to time' --\n"
+        "true of the window that was used, not of the field: a 0.67 ms\n"
+        "window gives 71 windows at byte 30. The limit was the\n"
+        "estimator's resolution and it moved when the estimator did.\n"
+        "Byte 20 still fails (r2 0.948, -28.8%) and is where the real\n"
+        "floor sits -- but NOT because the estimator runs out of room:\n"
+        "run over a constructed 2370 dB/s decay it returns -0.67% at\n"
+        "r2 0.99906, and -0.77% with a 6 ms attack overlapping the\n"
+        "fit. The departure is in the machine, not the instrument, and\n"
+        "is unexplained. Above 90 is extrapolation: 96 came in 10.8%\n"
+        "high on the run's best per-curve r2, also not an estimator\n"
+        "artefact (the control returns +0.16% there), also unexplained.",
         note="A RATE, not a duration. The stage slews at this many decibels\n"
-             "per second, so it takes span/rate seconds to cross whatever\n"
-             "distance it is given -- divide the distance by this to convert\n"
-             "a target time. Every individual curve fits a straight line in\n"
-             "dB at r2 0.999 to 1.000, so the ramp model is confirmed value\n"
-             "by value rather than on average, which is exactly what the\n"
-             "retracted exponential model never managed: it sat at 0.945\n"
-             "everywhere, and flat mediocrity is bias rather than noise.\n"
-             "Per-curve r2 is source-dependent: 0.999-1.000 on §30's source,\n"
-             "0.9966-0.9995 on white noise (§259), which is the source's own\n"
-             "1.25 dB wobble showing and is still far above what a threshold\n"
-             "crossing survives on the same material.\n"
-             "The CONSTANTS ARE §30'S AND ARE DELIBERATELY UNCHANGED: §259\n"
-             "re-fitted them at 0.09728/23172 over 25..99, 0.49% away, which\n"
-             "is inside the scatter. Churning a shipped constant that\n"
-             "reproduced is a cost with no measured gain -- mpc2emu depends\n"
-             "on this one. What changed is the RANGE, which was wrong.",
+        "per second, so it takes span/rate seconds to cross whatever\n"
+        "distance it is given -- divide the distance by this to convert\n"
+        "a target time. Every individual curve fits a straight line in\n"
+        "dB at r2 0.999 to 1.000, so the ramp model is confirmed value\n"
+        "by value rather than on average, which is exactly what the\n"
+        "retracted exponential model never managed: it sat at 0.945\n"
+        "everywhere, and flat mediocrity is bias rather than noise.\n"
+        "Per-curve r2 is source-dependent: 0.999-1.000 on §30's source,\n"
+        "0.9966-0.9995 on white noise (§259), which is the source's own\n"
+        "1.25 dB wobble showing and is still far above what a threshold\n"
+        "crossing survives on the same material.\n"
+        "The CONSTANTS ARE §30'S AND ARE DELIBERATELY UNCHANGED: §259\n"
+        "re-fitted them at 0.09728/23172 over 25..99, 0.49% away, which\n"
+        "is inside the scatter. Churning a shipped constant that\n"
+        "reproduced is a cost with no measured gain -- mpc2emu depends\n"
+        "on this one. What changed is the RANGE, which was wrong.",
         endpoints={0: "fastest"},
     ),
     ("keygroup", "RELSE1"): Scale(
-        "keygroup", "RELSE1", "dB/s", "exp", 23042.3, -0.09754, (45, 99),
+        "keygroup",
+        "RELSE1",
+        "dB/s",
+        "exp",
+        23042.3,
+        -0.09754,
+        (45, 99),
         0.99996,
         bounds="45..99, re-measured 2026-08-24 (RESOLUTION_NOTES §158). The\n"
-               "earlier window was 55..70 and both of its limits were the\n"
-               "RIG: a 2 s capture tail at the slow end, and a fall crossing\n"
-               "the range in 30-42 analysis windows at the fast end. Fitting\n"
-               "the SLOPE in dB/s over whatever span sits above the run's own\n"
-               "floor, with a 30 s tail where needed, removed both. Eleven\n"
-               "points from 50 to 99, spans of ~37 dB, every per-point r2\n"
-               "above 0.9995. The 45 at the bottom comes from a SECOND pass\n"
-               "at 0.5 ms hop and is weaker -- r2 0.993 at 45 and 0.996 at\n"
-               "50 -- so 45..49 is measured but not to the standard of the\n"
-               "rest, and 40 was rejected outright at 0.974 and -10%.\n"
-               "BELOW 45 IS STILL UNMEASURED and this law is unvalidated\n"
-               "there. At 35 and below the fitted rate stops depending on the\n"
-               "setting -- 194, 192, 209, 155, 256, 305 dB/s for 0, 5, 10, 15,\n"
-               "20, 25 -- and the per-point r2 collapses to 0.51-0.73. That is\n"
-               "the rig's own tail being measured, not the envelope: the\n"
-               "release is over in a millisecond or two and nothing of it\n"
-               "survives above the floor.",
+        "earlier window was 55..70 and both of its limits were the\n"
+        "RIG: a 2 s capture tail at the slow end, and a fall crossing\n"
+        "the range in 30-42 analysis windows at the fast end. Fitting\n"
+        "the SLOPE in dB/s over whatever span sits above the run's own\n"
+        "floor, with a 30 s tail where needed, removed both. Eleven\n"
+        "points from 50 to 99, spans of ~37 dB, every per-point r2\n"
+        "above 0.9995. The 45 at the bottom comes from a SECOND pass\n"
+        "at 0.5 ms hop and is weaker -- r2 0.993 at 45 and 0.996 at\n"
+        "50 -- so 45..49 is measured but not to the standard of the\n"
+        "rest, and 40 was rejected outright at 0.974 and -10%.\n"
+        "BELOW 45 IS STILL UNMEASURED and this law is unvalidated\n"
+        "there. At 35 and below the fitted rate stops depending on the\n"
+        "setting -- 194, 192, 209, 155, 256, 305 dB/s for 0, 5, 10, 15,\n"
+        "20, 25 -- and the per-point r2 collapses to 0.51-0.73. That is\n"
+        "the rig's own tail being measured, not the envelope: the\n"
+        "release is over in a millisecond or two and nothing of it\n"
+        "survives above the floor.",
         note="A RATE, not a duration: decibels per second, so the time taken\n"
-             "is span/rate. The span is the level the note had reached when\n"
-             "the key was let go, so a release 'time' is not a property of\n"
-             "this value alone.\n"
-             "MEASURED, not assumed (RESOLUTION_NOTES §34). Sweeping SUSTN1\n"
-             "with this value held: the level at note-off tracks the SUSTN1\n"
-             "dB law to within 0.33 dB, the rate holds to CV 0.6%, and the\n"
-             "fall time divided by 0.60832*SUSTN1 holds to CV 0.9% while the\n"
-             "fall time alone varies 35%. So for a note released from its\n"
-             "sustain, span = 0.60832 * SUSTN1 dB.\n"
-             "That run is the calibration's first real cross-validation: it\n"
-             "predicts data from two laws fitted on separate sweeps, neither\n"
-             "of them fitted to it.\n"
-             "THE OLD 55..70 FIT EXTRAPOLATED CORRECTLY, which is worth\n"
-             "recording because the opposite was assumed. Re-measured across\n"
-             "45..99 it was wrong by at most 4.1%, and that worst case sits\n"
-             "at RELSE1 99 -- twenty-nine units above the top of its own\n"
-             "window. The constants here barely move; what changed is that\n"
-             "the range is now measured rather than trusted.",
+        "is span/rate. The span is the level the note had reached when\n"
+        "the key was let go, so a release 'time' is not a property of\n"
+        "this value alone.\n"
+        "MEASURED, not assumed (RESOLUTION_NOTES §34). Sweeping SUSTN1\n"
+        "with this value held: the level at note-off tracks the SUSTN1\n"
+        "dB law to within 0.33 dB, the rate holds to CV 0.6%, and the\n"
+        "fall time divided by 0.60832*SUSTN1 holds to CV 0.9% while the\n"
+        "fall time alone varies 35%. So for a note released from its\n"
+        "sustain, span = 0.60832 * SUSTN1 dB.\n"
+        "That run is the calibration's first real cross-validation: it\n"
+        "predicts data from two laws fitted on separate sweeps, neither\n"
+        "of them fitted to it.\n"
+        "THE OLD 55..70 FIT EXTRAPOLATED CORRECTLY, which is worth\n"
+        "recording because the opposite was assumed. Re-measured across\n"
+        "45..99 it was wrong by at most 4.1%, and that worst case sits\n"
+        "at RELSE1 99 -- twenty-nine units above the top of its own\n"
+        "window. The constants here barely move; what changed is that\n"
+        "the range is now measured rather than trusted.",
         endpoints={0: "fastest"},
     ),
     # --- the filter envelope ------------------------------------------------
@@ -479,635 +556,809 @@ SCALES: Dict[Tuple[str, str], Scale] = {
     # source's own brightness, so it compresses the axis it is supposed to be
     # reading. See RESOLUTION_NOTES §28.
     ("keygroup", "ATTAK2"): Scale(
-        "keygroup", "ATTAK2", "s", "exp", 0.001363, 0.09703, (40, 85), 0.999807,
+        "keygroup",
+        "ATTAK2",
+        "s",
+        "exp",
+        0.001363,
+        0.09703,
+        (40, 85),
+        0.999807,
         bounds="40..85 at two drive levels. Below 40 the rise completes inside\n"
-               "the 0.14 s detector latency; above 85 it outlasts an 8 s\n"
-               "capture -- 99 would need about 30 s.\n"
-               "RE-EXAMINED at the bottom 2026-08-24 (§164) with a corner\n"
-               "tracker whose floor is 10 ms rather than 140. Byte 0 is\n"
-               "instant to within that, and the law\'s own prediction for it\n"
-               "is 1.4 ms, so rendering 0 as exactly zero is safe. The law\n"
-               "reaches 10 ms at byte 21, so 0..20 is indistinguishable from\n"
-               "instant by measurement AND by the law. 30 measured 30 ms\n"
-               "against 25 predicted. The fit is NOT widened: this rig\'s\n"
-               "floor and the fit\'s floor are too close to leave room, and\n"
-               "the points below 40 scatter (1.20 and 0.74) rather than\n"
-               "trend. 58% of corpus keygroups carry byte 0 and 15.7% carry\n"
-               "byte 30, so what is outside the fit is mostly inaudible.",
+        "the 0.14 s detector latency; above 85 it outlasts an 8 s\n"
+        "capture -- 99 would need about 30 s.\n"
+        "RE-EXAMINED at the bottom 2026-08-24 (§164) with a corner\n"
+        "tracker whose floor is 10 ms rather than 140. Byte 0 is\n"
+        "instant to within that, and the law's own prediction for it\n"
+        "is 1.4 ms, so rendering 0 as exactly zero is safe. The law\n"
+        "reaches 10 ms at byte 21, so 0..20 is indistinguishable from\n"
+        "instant by measurement AND by the law. 30 measured 30 ms\n"
+        "against 25 predicted. The fit is NOT widened: this rig's\n"
+        "floor and the fit's floor are too close to leave room, and\n"
+        "the points below 40 scatter (1.20 and 0.74) rather than\n"
+        "trend. 58% of corpus keygroups carry byte 0 and 15.7% carry\n"
+        "byte 30, so what is outside the fit is mostly inaudible.",
         note="Seconds for the filter envelope to traverse its FULL 0..99 range.\n"
-             "Re-measured 2026-08-12 with the resonance tracker (§58). §28 read\n"
-             "this through a spectral centroid and left it provisional over a\n"
-             "THREEFOLD disagreement between MODVFILT1 18 and 25, recorded as\n"
-             "depth-dependence. It was not: swept at MODVFILT1 5 and 10 the\n"
-             "times agree to 1.00 +/- 0.01 across nine values while the spans\n"
-             "differ by exactly the drive ratio. The depth-dependence was a\n"
-             "CEILING -- the corner saturating at the top of the filter's own\n"
-             "range -- and the provisional mark comes off.\n"
-             "IDENTICAL TO ENV3R1, which is the same measurement over the same\n"
-             "distance: 0.200/0.290/0.560/1.250/3.010 s against\n"
-             "0.200/0.300/0.550/1.250/3.010 at values 40/50/60/70/80. Two\n"
-             "envelopes, one time base.\n"
-             "IT IS A RATE, settled in §67 by varying the distance: with\n"
-             "ENV2L1, ENV2L2 and SUSTN2 swept together the time tracked the\n"
-             "distance 4.47x against 4.76x at ATTAK2 65, and 4.56x against\n"
-             "4.76x at 75, with seconds-per-octave constant to 9% and 4%.\n"
-             "Both fixed settings agree, which the two failed attempts did\n"
-             "not. §28 had read it as a duration on a fixed distance, which\n"
-             "cannot tell the two apart.\n"
-             "So a phase takes  full_time * (distance / 99), as for every\n"
-             "other stage in both envelopes.",
+        "Re-measured 2026-08-12 with the resonance tracker (§58). §28 read\n"
+        "this through a spectral centroid and left it provisional over a\n"
+        "THREEFOLD disagreement between MODVFILT1 18 and 25, recorded as\n"
+        "depth-dependence. It was not: swept at MODVFILT1 5 and 10 the\n"
+        "times agree to 1.00 +/- 0.01 across nine values while the spans\n"
+        "differ by exactly the drive ratio. The depth-dependence was a\n"
+        "CEILING -- the corner saturating at the top of the filter's own\n"
+        "range -- and the provisional mark comes off.\n"
+        "IDENTICAL TO ENV3R1, which is the same measurement over the same\n"
+        "distance: 0.200/0.290/0.560/1.250/3.010 s against\n"
+        "0.200/0.300/0.550/1.250/3.010 at values 40/50/60/70/80. Two\n"
+        "envelopes, one time base.\n"
+        "IT IS A RATE, settled in §67 by varying the distance: with\n"
+        "ENV2L1, ENV2L2 and SUSTN2 swept together the time tracked the\n"
+        "distance 4.47x against 4.76x at ATTAK2 65, and 4.56x against\n"
+        "4.76x at 75, with seconds-per-octave constant to 9% and 4%.\n"
+        "Both fixed settings agree, which the two failed attempts did\n"
+        "not. §28 had read it as a duration on a fixed distance, which\n"
+        "cannot tell the two apart.\n"
+        "So a phase takes  full_time * (distance / 99), as for every\n"
+        "other stage in both envelopes.",
         endpoints={0: "instant"},
     ),
     ("keygroup", "DECAY2"): Scale(
-        "keygroup", "DECAY2", "s", "exp", 0.002464, 0.09844, (40, 80), 0.999972,
+        "keygroup",
+        "DECAY2",
+        "s",
+        "exp",
+        0.002464,
+        0.09844,
+        (40, 80),
+        0.999972,
         bounds="40..80. Above 80 the fall outlasts the capture; at 90 the span\n"
-               "had already collapsed from 1.63 octaves to 0.97, which is the\n"
-               "truncation showing rather than the machine changing.",
+        "had already collapsed from 1.63 octaves to 0.97, which is the\n"
+        "truncation showing rather than the machine changing.",
         note="Seconds to traverse the FULL 0..99 range, so a phase covering\n"
-             "part of it takes  full_time * (distance / 99). About twice\n"
-             "ATTAK2 at the same value.\n"
-             "Re-measured 2026-08-12 with the resonance tracker (§58); the\n"
-             "previous law was 25200 * exp(-0.09796 v) FILFRQ-units/s, read\n"
-             "through a spectral centroid. Its RATE-not-duration finding\n"
-             "survives -- that came from varying the span by 72% and watching\n"
-             "the rate hold to 1.9%, a relative comparison a biased ruler\n"
-             "distorts far less than an absolute one.",
+        "part of it takes  full_time * (distance / 99). About twice\n"
+        "ATTAK2 at the same value.\n"
+        "Re-measured 2026-08-12 with the resonance tracker (§58); the\n"
+        "previous law was 25200 * exp(-0.09796 v) FILFRQ-units/s, read\n"
+        "through a spectral centroid. Its RATE-not-duration finding\n"
+        "survives -- that came from varying the span by 72% and watching\n"
+        "the rate hold to 1.9%, a relative comparison a biased ruler\n"
+        "distorts far less than an absolute one.",
         endpoints={0: "fastest"},
     ),
     ("keygroup", "RELSE2"): Scale(
-        "keygroup", "RELSE2", "s", "exp", 0.001344, 0.09692, (40, 80), 0.999975,
+        "keygroup",
+        "RELSE2",
+        "s",
+        "exp",
+        0.001344,
+        0.09692,
+        (40, 80),
+        0.999975,
         bounds="40..80. Measured after note-off, with the recording tail raised\n"
-               "to 10 s and RELSE1 parked at 99 so the amplitude outlasts the\n"
-               "filter release -- otherwise the note falls into the noise while\n"
-               "the corner is still moving.",
+        "to 10 s and RELSE1 parked at 99 so the amplitude outlasts the\n"
+        "filter release -- otherwise the note falls into the noise while\n"
+        "the corner is still moving.",
         note="Seconds to traverse the FULL 0..99 range, released to ENV2L4;\n"
-             "a shorter traverse takes proportionally less. That\n"
-             "proportionality is MEASURED for this stage (§163) and not\n"
-             "inherited from §67, which established it for ATTAK2 and\n"
-             "generalised in a sentence: distance varied 2.02x at two fixed\n"
-             "RELSE2 settings moved the TIME 1.93x and 1.87x while the RATE\n"
-             "held to 11% and 15%. The generalisation was not safe to assume --\n"
-             "§63 has envelope 3\'s release scaling at 0.762 of its own decay\n"
-             "where envelope 1\'s is 1.004 (§162), so stages need not agree.\n"
-             "Re-measured 2026-08-12 (§59); the previous law was\n"
-             "61190 * exp(-0.10123 v) FILFRQ-units/s, read through a spectral\n"
-             "centroid, over 58..76.\n"
-             "THE ATTACK AND THE RELEASE ARE ONE LAW, across both envelopes:\n"
-             "  ATTAK2  0.001363 * exp(0.09703 v)\n"
-             "  RELSE2  0.001344 * exp(0.09692 v)\n"
-             "  ENV3R1  0.001392 * exp(0.09669 v)\n"
-             "coefficients within 3.6%, exponents within 0.35%, predictions\n"
-             "2.2% apart at value 70. The DECAYS are about twice as slow --\n"
-             "DECAY2 1.9-2.0x and ENV3R3 2.0-2.3x -- so the family is one time\n"
-             "base with the decay stages running at half rate, not five\n"
-             "separate calibrations.",
+        "a shorter traverse takes proportionally less. That\n"
+        "proportionality is MEASURED for this stage (§163) and not\n"
+        "inherited from §67, which established it for ATTAK2 and\n"
+        "generalised in a sentence: distance varied 2.02x at two fixed\n"
+        "RELSE2 settings moved the TIME 1.93x and 1.87x while the RATE\n"
+        "held to 11% and 15%. The generalisation was not safe to assume --\n"
+        "§63 has envelope 3's release scaling at 0.762 of its own decay\n"
+        "where envelope 1's is 1.004 (§162), so stages need not agree.\n"
+        "Re-measured 2026-08-12 (§59); the previous law was\n"
+        "61190 * exp(-0.10123 v) FILFRQ-units/s, read through a spectral\n"
+        "centroid, over 58..76.\n"
+        "THE ATTACK AND THE RELEASE ARE ONE LAW, across both envelopes:\n"
+        "  ATTAK2  0.001363 * exp(0.09703 v)\n"
+        "  RELSE2  0.001344 * exp(0.09692 v)\n"
+        "  ENV3R1  0.001392 * exp(0.09669 v)\n"
+        "coefficients within 3.6%, exponents within 0.35%, predictions\n"
+        "2.2% apart at value 70. The DECAYS are about twice as slow --\n"
+        "DECAY2 1.9-2.0x and ENV3R3 2.0-2.3x -- so the family is one time\n"
+        "base with the decay stages running at half rate, not five\n"
+        "separate calibrations.",
         endpoints={0: "fastest"},
     ),
     ("keygroup", "K_DAR1"): Scale(
-        "keygroup", "K_DAR1", "x per semitone", "exp", 1.0, -0.0015286,
-        (-50, 50), 0.9960,
+        "keygroup",
+        "K_DAR1",
+        "x per semitone",
+        "exp",
+        1.0,
+        -0.0015286,
+        (-50, 50),
+        0.9960,
         bounds="the full -50..50 was swept, at notes 48/56/64/72/84.",
         note="Key scaling of the amplitude DECAY rate. The `K_` prefix in this\n"
-             "group means KEY, not keygroup, which makes K_DAR2 and K_DAR3 its\n"
-             "likely companions.\n"
-             "  rate = base * exp(-0.0015286 * K_DAR1 * (note - 64)) dB/s\n"
-             "The value here is the multiplier per semitone per unit of depth.\n"
-             "**Referenced to note 64**, and unusually this is visible in the\n"
-             "raw table rather than fitted: every depth from -50 to +50 reads\n"
-             "25.3 dB/s at note 64, and the K_DAR1 0 row is flat at 25.3 across\n"
-             "36 semitones. Second key-driven field to pivot there after\n"
-             "K_FREQ, so §43's rule now rests on two independent measurements.\n"
-             "At full depth the decay rate changes by a factor of 0.40 per\n"
-             "octave -- positive depth makes high notes decay slower.\n"
-             "It is the ONLY responder among six envelope scaling fields:\n"
-             "V_REL1, O_REL1, V_ATT2, V_REL2 and V_ENV2 are all inert (§47).\n"
-             "THE RELEASE SCALES THE SAME WAY, measured separately (§162):\n"
-             "-0.001535 against this -0.0015286, a ratio of 1.004, so one\n"
-             "coefficient covers both phases. That is NOT true of envelope 3,\n"
-             "whose release scales at 0.762 of its decay (§63), so it had to\n"
-             "be measured rather than assumed.\n"
-             "DO NOT USE THIS LAW FOR SMALL DEPTHS. At K_DAR1 -2 the machine\n"
-             "quantises: 9.5% slower below the pivot and NOTHING above it\n"
-             "(15.24/15.22/15.22 dB/s at notes 64/76/88 against a 15.224\n"
-             "base), where the law predicts a smooth rise. The field acts on\n"
-             "one side of the pivot and is inert on the other, which no\n"
-             "smooth law expresses.\n"
-             "The exponential also COMPRESSES: every off-pivot residual is\n"
-             "negative, symmetrically in all four quadrants of (sign of\n"
-             "K_DAR1) x (side of the pivot), reaching -9.8% at full depth\n"
-             "four octaves out. Under +-20 depth the error is below 8%.",
+        "group means KEY, not keygroup, which makes K_DAR2 and K_DAR3 its\n"
+        "likely companions.\n"
+        "  rate = base * exp(-0.0015286 * K_DAR1 * (note - 64)) dB/s\n"
+        "The value here is the multiplier per semitone per unit of depth.\n"
+        "**Referenced to note 64**, and unusually this is visible in the\n"
+        "raw table rather than fitted: every depth from -50 to +50 reads\n"
+        "25.3 dB/s at note 64, and the K_DAR1 0 row is flat at 25.3 across\n"
+        "36 semitones. Second key-driven field to pivot there after\n"
+        "K_FREQ, so §43's rule now rests on two independent measurements.\n"
+        "At full depth the decay rate changes by a factor of 0.40 per\n"
+        "octave -- positive depth makes high notes decay slower.\n"
+        "It is the ONLY responder among six envelope scaling fields:\n"
+        "V_REL1, O_REL1, V_ATT2, V_REL2 and V_ENV2 are all inert (§47).\n"
+        "THE RELEASE SCALES THE SAME WAY, measured separately (§162):\n"
+        "-0.001535 against this -0.0015286, a ratio of 1.004, so one\n"
+        "coefficient covers both phases. That is NOT true of envelope 3,\n"
+        "whose release scales at 0.762 of its decay (§63), so it had to\n"
+        "be measured rather than assumed.\n"
+        "DO NOT USE THIS LAW FOR SMALL DEPTHS. At K_DAR1 -2 the machine\n"
+        "quantises: 9.5% slower below the pivot and NOTHING above it\n"
+        "(15.24/15.22/15.22 dB/s at notes 64/76/88 against a 15.224\n"
+        "base), where the law predicts a smooth rise. The field acts on\n"
+        "one side of the pivot and is inert on the other, which no\n"
+        "smooth law expresses.\n"
+        "The exponential also COMPRESSES: every off-pivot residual is\n"
+        "negative, symmetrically in all four quadrants of (sign of\n"
+        "K_DAR1) x (side of the pivot), reaching -9.8% at full depth\n"
+        "four octaves out. Under +-20 depth the error is below 8%.",
     ),
     ("keygroup", "K_DAR3"): Scale(
-        "keygroup", "K_DAR3", "x per semitone", "exp", 1.0, 0.0015617,
-        (-20, 20), 0.99,
+        "keygroup",
+        "K_DAR3",
+        "x per semitone",
+        "exp",
+        1.0,
+        0.0015617,
+        (-20, 20),
+        0.99,
         bounds="-20..+20, with the SOUND held at note 48 by KGTUNO while the\n"
-               "NOTE swept 48..68 across the pivot (§62). The coefficient here\n"
-               "is phase 3's; the release scales more weakly, at 0.0011903.",
+        "NOTE swept 48..68 across the pivot (§62). The coefficient here\n"
+        "is phase 3's; the release scales more weakly, at 0.0011903.",
         note="Key scaling of envelope 3, and it does exactly what its\n"
-             "description says -- 'dependence of envelope 3 release and DECAY\n"
-             "rate on key'. It scales PHASE 3 and the RELEASE, and leaves\n"
-             "PHASE 2 alone:\n"
-             "  phase 3    coefficient 0.0015617   pivot 63.5\n"
-             "  release    coefficient 0.0011903   pivot 64.0\n"
-             "  phase 2    coefficient 0.0000451   no effect -- 30x smaller\n"
-             "             than phase 3's and inside its own control\n"
-             "Phase 3's coefficient is within 2% of K_DAR1's 0.0015286 and 7%\n"
-             "of K_DAR2's 0.0014603, so all three envelopes scale with the key\n"
-             "by one law. The release's is 24% lower, which is a real\n"
-             "difference rather than scatter: both its depths agree on it.\n"
-             "The first attempt at this measured PHASE 2 and found nothing --\n"
-             "route live, detector working, aimed at a stage the field does\n"
-             "not govern. That reading was CORRECT for phase 2 and would have\n"
-             "been recorded as 'K_DAR3 is inert', which is the §48 error one\n"
-             "layer in. A negative needs the right stage as well as the right\n"
-             "route.",
+        "description says -- 'dependence of envelope 3 release and DECAY\n"
+        "rate on key'. It scales PHASE 3 and the RELEASE, and leaves\n"
+        "PHASE 2 alone:\n"
+        "  phase 3    coefficient 0.0015617   pivot 63.5\n"
+        "  release    coefficient 0.0011903   pivot 64.0\n"
+        "  phase 2    coefficient 0.0000451   no effect -- 30x smaller\n"
+        "             than phase 3's and inside its own control\n"
+        "Phase 3's coefficient is within 2% of K_DAR1's 0.0015286 and 7%\n"
+        "of K_DAR2's 0.0014603, so all three envelopes scale with the key\n"
+        "by one law. The release's is 24% lower, which is a real\n"
+        "difference rather than scatter: both its depths agree on it.\n"
+        "The first attempt at this measured PHASE 2 and found nothing --\n"
+        "route live, detector working, aimed at a stage the field does\n"
+        "not govern. That reading was CORRECT for phase 2 and would have\n"
+        "been recorded as 'K_DAR3 is inert', which is the §48 error one\n"
+        "layer in. A negative needs the right stage as well as the right\n"
+        "route.",
     ),
     ("keygroup", "V_REL3"): Scale(
-        "keygroup", "V_REL3", "x", "linear", 1.0, 0.0, (-50, 50), 0.99,
+        "keygroup",
+        "V_REL3",
+        "x",
+        "linear",
+        1.0,
+        0.0,
+        (-50, 50),
+        0.99,
         bounds="tested at -50, 0 and +50 against note-on velocities 20 and\n"
-               "120, with ENV3R4 at 50 (~0.28 s of release) and ENV3L4 0.\n"
-               "At full depth one end runs past an 8 s capture, so the size\n"
-               "of the effect is bounded below rather than measured.",
+        "120, with ENV3R4 at 50 (~0.28 s of release) and ENV3L4 0.\n"
+        "At full depth one end runs past an 8 s capture, so the size\n"
+        "of the effect is bounded below rather than measured.",
         note="Note-ON velocity scales envelope 3's RELEASE, bipolar:\n"
-             "  V_REL3 +50   0.150 s at velocity 20, past the window at 120\n"
-             "  V_REL3   0   0.290 and 0.280 -- the control, ratio 1.04\n"
-             "  V_REL3 -50   the sense inverted\n"
-             "More than a tenfold swing; the exact factor is not measured\n"
-             "because the slow end left the capture. That is the field\n"
-             "working too well to ratio, and it is recorded as a bound.\n"
-             "The depth-0 control also does the orthogonality work: note-on\n"
-             "velocity alone does not touch the release, so what moves at\n"
-             "depth is this field and not velocity by some other path.",
+        "  V_REL3 +50   0.150 s at velocity 20, past the window at 120\n"
+        "  V_REL3   0   0.290 and 0.280 -- the control, ratio 1.04\n"
+        "  V_REL3 -50   the sense inverted\n"
+        "More than a tenfold swing; the exact factor is not measured\n"
+        "because the slow end left the capture. That is the field\n"
+        "working too well to ratio, and it is recorded as a bound.\n"
+        "The depth-0 control also does the orthogonality work: note-on\n"
+        "velocity alone does not touch the release, so what moves at\n"
+        "depth is this field and not velocity by some other path.",
     ),
     ("keygroup", "O_REL3"): Scale(
-        "keygroup", "O_REL3", "x", "linear", 1.0, 0.0, (-50, 50), 0.99,
+        "keygroup",
+        "O_REL3",
+        "x",
+        "linear",
+        1.0,
+        0.0,
+        (-50, 50),
+        0.99,
         bounds="tested at -50, 0 and +50 against note-OFF velocities 20 and\n"
-               "120. Measuring it at all required the rig to send a note-off\n"
-               "velocity, which it did not do before 2026-08-12.",
+        "120. Measuring it at all required the rig to send a note-off\n"
+        "velocity, which it did not do before 2026-08-12.",
         note="Note-OFF velocity scales envelope 3's RELEASE, bipolar, and it\n"
-             "is the cleanest of the four velocity scalers:\n"
-             "  O_REL3 +50   1.440 s at off-velocity 20, 0.150 s at 120\n"
-             "  O_REL3   0   0.290 and 0.290 -- the control, ratio 1.00\n"
-             "  O_REL3 -50   0.160 s and 1.830 s, the sense inverted\n"
-             "A tenfold swing each way. Higher note-off velocity shortens the\n"
-             "release at positive depth.\n"
-             "**Few controllers send a note-off velocity**, so a converter\n"
-             "should treat this as reachable but rarely driven, and must not\n"
-             "assume a default of 0 means the field is inert -- 0 is simply\n"
-             "one end of its range.",
+        "is the cleanest of the four velocity scalers:\n"
+        "  O_REL3 +50   1.440 s at off-velocity 20, 0.150 s at 120\n"
+        "  O_REL3   0   0.290 and 0.290 -- the control, ratio 1.00\n"
+        "  O_REL3 -50   0.160 s and 1.830 s, the sense inverted\n"
+        "A tenfold swing each way. Higher note-off velocity shortens the\n"
+        "release at positive depth.\n"
+        "**Few controllers send a note-off velocity**, so a converter\n"
+        "should treat this as reachable but rarely driven, and must not\n"
+        "assume a default of 0 means the field is inert -- 0 is simply\n"
+        "one end of its range.",
     ),
     ("keygroup", "V_ENV3"): Scale(
-        "keygroup", "V_ENV3", "x", "linear", 1.0, 0.0, (-50, 50), 0.99,
+        "keygroup",
+        "V_ENV3",
+        "x",
+        "linear",
+        1.0,
+        0.0,
+        (-50, 50),
+        0.99,
         bounds="tested at -50, 0 and +50 against velocities 20 and 120. The\n"
-               "shape between those depths is not measured -- this entry\n"
-               "records that the field works and in which direction, not a\n"
-               "curve.",
+        "shape between those depths is not measured -- this entry\n"
+        "records that the field works and in which direction, not a\n"
+        "curve.",
         note="Note-on velocity scales envelope 3's AMOUNT, bipolar:\n"
-             "  V_ENV3 +50   span 0.515 octaves at velocity 20, 2.242 at 120\n"
-             "  V_ENV3   0   1.674 and 1.684 -- the control, ratio 0.99\n"
-             "  V_ENV3 -50   2.391 and 0.290, the sense inverted\n"
-             "Envelope 3 reaches the filter only as matrix source 14, so this\n"
-             "scales whatever that route is driving.",
+        "  V_ENV3 +50   span 0.515 octaves at velocity 20, 2.242 at 120\n"
+        "  V_ENV3   0   1.674 and 1.684 -- the control, ratio 0.99\n"
+        "  V_ENV3 -50   2.391 and 0.290, the sense inverted\n"
+        "Envelope 3 reaches the filter only as matrix source 14, so this\n"
+        "scales whatever that route is driving.",
     ),
     ("keygroup", "V_ATT3"): Scale(
-        "keygroup", "V_ATT3", "x", "linear", 1.0, 0.0, (-50, 50), 0.99,
+        "keygroup",
+        "V_ATT3",
+        "x",
+        "linear",
+        1.0,
+        0.0,
+        (-50, 50),
+        0.99,
         bounds="tested at -50, 0 and +50 against velocities 20 and 120, with\n"
-               "ENV3R1 at 70 so there is about 1.25 s of rise to scale.",
+        "ENV3R1 at 70 so there is about 1.25 s of rise to scale.",
         note="Note-on velocity scales envelope 3's ATTACK, bipolar and very\n"
-             "strong:\n"
-             "  V_ATT3 +50   rise 0.160 s at velocity 20, 5.920 s at 120\n"
-             "  V_ATT3   0   1.110 and 1.250 -- the control, ratio 0.89\n"
-             "  V_ATT3 -50   5.920 and 0.140, the sense inverted\n"
-             "A 37-fold swing at full depth. The control is 0.89 rather than\n"
-             "1.00, so an effect smaller than about 11% could not be claimed\n"
-             "from this run; the measured effects are 30-fold and 42-fold.\n"
-             "The first attempt read 0.000 s at every velocity and depth,\n"
-             "because ENV3R1 was 0 and there was no rise for velocity to\n"
-             "scale. Its control came back NaN, which is the only reason that\n"
-             "was not written down as an inert field.",
+        "strong:\n"
+        "  V_ATT3 +50   rise 0.160 s at velocity 20, 5.920 s at 120\n"
+        "  V_ATT3   0   1.110 and 1.250 -- the control, ratio 0.89\n"
+        "  V_ATT3 -50   5.920 and 0.140, the sense inverted\n"
+        "A 37-fold swing at full depth. The control is 0.89 rather than\n"
+        "1.00, so an effect smaller than about 11% could not be claimed\n"
+        "from this run; the measured effects are 30-fold and 42-fold.\n"
+        "The first attempt read 0.000 s at every velocity and depth,\n"
+        "because ENV3R1 was 0 and there was no rise for velocity to\n"
+        "scale. Its control came back NaN, which is the only reason that\n"
+        "was not written down as an inert field.",
     ),
     ("keygroup", "K_DAR2"): Scale(
-        "keygroup", "K_DAR2", "x per semitone", "exp", 1.0, 0.0014603,
-        (-20, 20), 0.99584,
+        "keygroup",
+        "K_DAR2",
+        "x per semitone",
+        "exp",
+        1.0,
+        0.0014603,
+        (-20, 20),
+        0.99584,
         bounds="-20..+20 at notes 24/30/36/42/48. The DEPTH is narrow because\n"
-               "at +/-50 these notes span a 400-fold range of decay times and\n"
-               "no single DECAY2 holds that inside a measurable window. The\n"
-               "NOTES are low because the corner tracker's resolution is the\n"
-               "harmonic spacing -- 3.5% of the corner at note 24, 14% at 48,\n"
-               "56% at 72 -- so anything read through the filter lives in the\n"
-               "bottom two octaves. §48 could use notes 48..84 for K_DAR1\n"
-               "because it measured the amplitude envelope in dB, which has no\n"
-               "comb.",
+        "at +/-50 these notes span a 400-fold range of decay times and\n"
+        "no single DECAY2 holds that inside a measurable window. The\n"
+        "NOTES are low because the corner tracker's resolution is the\n"
+        "harmonic spacing -- 3.5% of the corner at note 24, 14% at 48,\n"
+        "56% at 72 -- so anything read through the filter lives in the\n"
+        "bottom two octaves. §48 could use notes 48..84 for K_DAR1\n"
+        "because it measured the amplitude envelope in dB, which has no\n"
+        "comb.",
         note="Key scaling of the filter envelope's DECAY, and the companion to\n"
-             "K_DAR1 that its note predicted.\n"
-             "  time = base * exp(+0.0014603 * K_DAR2 * (note - 64))\n"
-             "The sign is positive where K_DAR1's is negative because this is\n"
-             "a TIME and that was a RATE; they are the same behaviour.\n"
-             "PREDICTED BEFORE MEASUREMENT (§61) from K_DAR1's coefficient:\n"
-             "time(24)/time(48) of 0.48 at depth +20 and 2.08 at -20, measured\n"
-             "0.50 and 2.16 -- 4% off both. The fitted coefficient lands 4.5%\n"
-             "from K_DAR1's, so the two envelopes scale with the key by the\n"
-             "same law.\n"
-             "The control is exact: at K_DAR2 0 the decay reads 0.670..0.680 s\n"
-             "across 24 semitones, a spread of 1.015x.\n"
-             "The pivot was taken on trust from §48 for one day and is now\n"
-             "MEASURED at note 63.6 (§62), by holding the SOUND at note 48\n"
-             "with KGTUNO while the NOTE swept 48..68 across the pivot. That\n"
-             "works because key scaling reads the MIDI note and not the\n"
-             "sounding pitch -- two conditions that sound identical and differ\n"
-             "only in note number gave 1.95 at depth +20 and exactly 1.00 at\n"
-             "depth 0.",
+        "K_DAR1 that its note predicted.\n"
+        "  time = base * exp(+0.0014603 * K_DAR2 * (note - 64))\n"
+        "The sign is positive where K_DAR1's is negative because this is\n"
+        "a TIME and that was a RATE; they are the same behaviour.\n"
+        "PREDICTED BEFORE MEASUREMENT (§61) from K_DAR1's coefficient:\n"
+        "time(24)/time(48) of 0.48 at depth +20 and 2.08 at -20, measured\n"
+        "0.50 and 2.16 -- 4% off both. The fitted coefficient lands 4.5%\n"
+        "from K_DAR1's, so the two envelopes scale with the key by the\n"
+        "same law.\n"
+        "The control is exact: at K_DAR2 0 the decay reads 0.670..0.680 s\n"
+        "across 24 semitones, a spread of 1.015x.\n"
+        "The pivot was taken on trust from §48 for one day and is now\n"
+        "MEASURED at note 63.6 (§62), by holding the SOUND at note 48\n"
+        "with KGTUNO while the NOTE swept 48..68 across the pivot. That\n"
+        "works because key scaling reads the MIDI note and not the\n"
+        "sounding pitch -- two conditions that sound identical and differ\n"
+        "only in note number gave 1.95 at depth +20 and exactly 1.00 at\n"
+        "depth 0.",
     ),
     ("keygroup", "K_FREQ"): Scale(
-        "keygroup", "K_FREQ", "semitones/octave", "linear", 1.0, 0.0, (-30, 99),
+        "keygroup",
+        "K_FREQ",
+        "semitones/octave",
+        "linear",
+        1.0,
+        0.0,
+        (-30, 99),
         0.99890,
         bounds="-30..99, in three passes. 0..12 at three notes with its own\n"
-               "ruler rebuilt in the same session; then to the top of the\n"
-               "byte on 2026-08-17 (\u00a7108), linear all the way to 99; then\n"
-               "-5..-30 on 2026-08-24 (\u00a7167), 96-103% of the law with no\n"
-               "knee. WAS (0, 12) until 2026-08-25, which rendered every\n"
-               "measured value outside the DOCUMENTED range as an\n"
-               "extrapolation -- including the -18 the library actually\n"
-               "uses. A fit range is what was measured, not what the\n"
-               "source document prints.",
+        "ruler rebuilt in the same session; then to the top of the\n"
+        "byte on 2026-08-17 (\u00a7108), linear all the way to 99; then\n"
+        "-5..-30 on 2026-08-24 (\u00a7167), 96-103% of the law with no\n"
+        "knee. WAS (0, 12) until 2026-08-25, which rendered every\n"
+        "measured value outside the DOCUMENTED range as an\n"
+        "extrapolation -- including the -18 the library actually\n"
+        "uses. A fit range is what was measured, not what the\n"
+        "source document prints.",
         note="Keyboard tracking of the filter, and the value IS semitones of\n"
-             "corner shift per octave of key -- exactly as the document says,\n"
-             "with 12 being 1:1. Measured 9.2 FILFRQ units per octave at\n"
-             "K_FREQ 12 against 9.39 for true 1:1, so 98%.\n"
-             "  shift (FILFRQ units) = 0.06386 * K_FREQ * (note - 64)\n"
-             "**Referenced to note 64, not to middle C and not to the sample\n"
-             "root.** Slopes of +0.1310, +0.5362 and +0.8973 units per step at\n"
-             "notes 66, 72 and 78 extrapolate to zero shift at note 63.8\n"
-             "(r2 0.99890). Assuming note 60 was what made this look like 8.4\n"
-             "semitones per octave rather than 12.\n"
-             "That reference is the MIDI range's centre, and it is shared:\n"
-             "V_LOUD and V_ATT1 both pivot at velocity 64. Three fields, two\n"
-             "source types, one rule -- modulation is referenced to the middle\n"
-             "of the controller's range. It predicts where MWLDEP, PRSDEP and\n"
-             "the per-zone velocity fields will pivot, so it can be refuted.\n"
-             "The pivot was later measured DIRECTLY rather than extrapolated\n"
-             "to (§43, 2026-08-17): a single-keygroup program spanning keys\n"
-             "24-108, so three notes either side of the pivot share one\n"
-             "keygroup, one filter and one sample, and only the note varies.\n"
-             "  note 52   K_FREQ 0->22   -57.3 dB   (closes)\n"
-             "  note 64   K_FREQ 0->22    +0.0 dB   (the pivot)\n"
-             "  note 76   K_FREQ 0->22   +17.0 dB   (opens)\n"
-             "Zero at 64 to the resolution available, from a different\n"
-             "program, bank and sample -- so 64 is a CONSTANT, not a\n"
-             "per-program value. The measured 64 and the fitted 63.8 agree\n"
-             "within either method's resolution.\n"
-             "EFFECTIVE FAR BEYOND THE DOCUMENTED 0..12 (§108, measured\n"
-             "2026-08-17). Swept to the top of the byte at a note eight\n"
-             "semitones above the pivot: the corner rises linearly to\n"
-             "K_FREQ 99, at 0.508-0.602 FILFRQ units per step against the\n"
-             "0.511 this law predicts. No saturation anywhere in range. So\n"
-             "12 is where tracking reaches 1:1 -- a musically meaningful\n"
-             "point, not a limit -- and params.py's 0..12 was the DOCUMENTED\n"
-             "range rather than the effective one. WIDENED 2026-08-25 to\n"
-             "-30..99, the measured span: leaving it transcribed meant a\n"
-             "converter clamped 32.6% of real keygroups onto its floor, and\n"
-             "encode_field refused every value this note calls effective.\n"
-             "The negative half is \u00a7167; the S1000 document's '+/-24' is a\n"
-             "display range like the S2800 sheet's 0..12.",
+        "corner shift per octave of key -- exactly as the document says,\n"
+        "with 12 being 1:1. Measured 9.2 FILFRQ units per octave at\n"
+        "K_FREQ 12 against 9.39 for true 1:1, so 98%.\n"
+        "  shift (FILFRQ units) = 0.06386 * K_FREQ * (note - 64)\n"
+        "**Referenced to note 64, not to middle C and not to the sample\n"
+        "root.** Slopes of +0.1310, +0.5362 and +0.8973 units per step at\n"
+        "notes 66, 72 and 78 extrapolate to zero shift at note 63.8\n"
+        "(r2 0.99890). Assuming note 60 was what made this look like 8.4\n"
+        "semitones per octave rather than 12.\n"
+        "That reference is the MIDI range's centre, and it is shared:\n"
+        "V_LOUD and V_ATT1 both pivot at velocity 64. Three fields, two\n"
+        "source types, one rule -- modulation is referenced to the middle\n"
+        "of the controller's range. It predicts where MWLDEP, PRSDEP and\n"
+        "the per-zone velocity fields will pivot, so it can be refuted.\n"
+        "The pivot was later measured DIRECTLY rather than extrapolated\n"
+        "to (§43, 2026-08-17): a single-keygroup program spanning keys\n"
+        "24-108, so three notes either side of the pivot share one\n"
+        "keygroup, one filter and one sample, and only the note varies.\n"
+        "  note 52   K_FREQ 0->22   -57.3 dB   (closes)\n"
+        "  note 64   K_FREQ 0->22    +0.0 dB   (the pivot)\n"
+        "  note 76   K_FREQ 0->22   +17.0 dB   (opens)\n"
+        "Zero at 64 to the resolution available, from a different\n"
+        "program, bank and sample -- so 64 is a CONSTANT, not a\n"
+        "per-program value. The measured 64 and the fitted 63.8 agree\n"
+        "within either method's resolution.\n"
+        "EFFECTIVE FAR BEYOND THE DOCUMENTED 0..12 (§108, measured\n"
+        "2026-08-17). Swept to the top of the byte at a note eight\n"
+        "semitones above the pivot: the corner rises linearly to\n"
+        "K_FREQ 99, at 0.508-0.602 FILFRQ units per step against the\n"
+        "0.511 this law predicts. No saturation anywhere in range. So\n"
+        "12 is where tracking reaches 1:1 -- a musically meaningful\n"
+        "point, not a limit -- and params.py's 0..12 was the DOCUMENTED\n"
+        "range rather than the effective one. WIDENED 2026-08-25 to\n"
+        "-30..99, the measured span: leaving it transcribed meant a\n"
+        "converter clamped 32.6% of real keygroups onto its floor, and\n"
+        "encode_field refused every value this note calls effective.\n"
+        "The negative half is \u00a7167; the S1000 document's '+/-24' is a\n"
+        "display range like the S2800 sheet's 0..12.",
     ),
     ("keygroup", "VLOUD1"): Scale(
-        "keygroup", "VLOUD1", "dB", "linear", 0.60576, -20.1778, (-50, 20),
+        "keygroup",
+        "VLOUD1",
+        "dB",
+        "linear",
+        0.60576,
+        -20.1778,
+        (-50, 20),
         0.999896,
         bounds="-50..+20, every 5 units, at PRLOUD 70 with V_LOUD and the\n"
-               "filter neutralised. ABOVE +20 IT SATURATES: +30..+50 sit\n"
-               "within 1.09 dB of each other at -5.65 dB, which is §37's\n"
-               "output ceiling reached from the zone offset rather than from\n"
-               "the program volume. The ceiling moves with PRLOUD, so the\n"
-               "usable range of this field does too -- it is not a property\n"
-               "of VLOUD1 alone. The same distinction as §116's depth: the\n"
-               "RATE is constant, the reachable RANGE moves with the base.",
+        "filter neutralised. ABOVE +20 IT SATURATES: +30..+50 sit\n"
+        "within 1.09 dB of each other at -5.65 dB, which is §37's\n"
+        "output ceiling reached from the zone offset rather than from\n"
+        "the program volume. The ceiling moves with PRLOUD, so the\n"
+        "usable range of this field does too -- it is not a property\n"
+        "of VLOUD1 alone. The same distinction as §116's depth: the\n"
+        "RATE is constant, the reachable RANGE moves with the base.",
         note="The per-ZONE loudness offset, and the field an AKAI converter\n"
-             "uses to balance velocity layers against one another. §51 gave\n"
-             "its span (39.81 dB) and no law; this is the law.\n"
-             "  dB = 0.60576 * VLOUD1 - 20.1778\n"
-             "ONE LEVEL SCALE, THREE FIELDS. Measured slopes in dB per unit:\n"
-             "  PRLOUD   0.61872 (§- existing)   0.60857 (re-measured 2026-08-17)\n"
-             "  V_LOUD   0.596862\n"
-             "  VLOUD1   0.60576\n"
-             "Program loudness, velocity-to-loudness and zone loudness all\n"
-             "move about 0.6 dB per unit. That is the same kind of shared\n"
-             "constant as §43's pivot on 64, and it predicts that any further\n"
-             "level field on this machine will use it -- which is how it can\n"
-             "be refuted.",
+        "uses to balance velocity layers against one another. §51 gave\n"
+        "its span (39.81 dB) and no law; this is the law.\n"
+        "  dB = 0.60576 * VLOUD1 - 20.1778\n"
+        "ONE LEVEL SCALE, THREE FIELDS. Measured slopes in dB per unit:\n"
+        "  PRLOUD   0.61872 (§- existing)   0.60857 (re-measured 2026-08-17)\n"
+        "  V_LOUD   0.596862\n"
+        "  VLOUD1   0.60576\n"
+        "Program loudness, velocity-to-loudness and zone loudness all\n"
+        "move about 0.6 dB per unit. That is the same kind of shared\n"
+        "constant as §43's pivot on 64, and it predicts that any further\n"
+        "level field on this machine will use it -- which is how it can\n"
+        "be refuted.",
     ),
     ("keygroup", "FILQ"): Scale(
-        "keygroup", "FILQ", "dB", "reso", 15.84, 1.067, (0, 15), 0.999975,
+        "keygroup",
+        "FILQ",
+        "dB",
+        "reso",
+        15.84,
+        1.067,
+        (0, 15),
+        0.999975,
         bounds="the full 0..15, every value measured. The law is fitted to the\n"
-               "DAMPING, which is linear across the whole range, so there is no\n"
-               "sub-range where it holds better.",
+        "DAMPING, which is linear across the whole range, so there is no\n"
+        "sub-range where it holds better.",
         note="FILQ sets the damping of one pole pair, and it does so LINEARLY:\n"
-             "  z = 0.46864 - 0.029587 * FILQ    r2 0.999975\n"
-             "Damping reaches zero at FILQ 15.84 -- past the top of the field,\n"
-             "so the machine stops just short of self-oscillation. Q runs from\n"
-             "1.07 at FILQ 0 to about 20 at FILQ 15, and the boost at the\n"
-             "corner is -20 log10(1 - FILQ/15.84) dB: +3.3 at 5, +8.7 at 10,\n"
-             "+25.5 at 15. The last three steps are worth more than the first\n"
-             "ten put together, which is what makes the field feel abrupt.\n"
-             "Measured by holding the corner still and sliding the harmonic\n"
-             "comb across it with the NOTE (K_FREQ 0), differencing every\n"
-             "harmonic against the same harmonic at FILQ 0. The fit is to the\n"
-             "whole transfer function -- 2985 points -- not to the height of\n"
-             "the peak, and because it is a RATIO any fixed non-resonant poles\n"
-             "cancel exactly, so it isolates the pair FILQ actually moves.\n"
-             "Two runs with different note sets agree: fc 919 vs 918 Hz, slope\n"
-             "-0.029587 vs -0.029688, zero at 15.84 vs 15.93.\n"
-             "The corner does NOT move with FILQ: 919 Hz at every setting.\n"
-             "It does sit BELOW the corner the FILFRQ law gives -- 919 Hz\n"
-             "measured against 1229 nominal at FILFRQ 70, 0.42 octaves down.\n"
-             "That REPLICATES the earlier 0.41 octaves at FILFRQ 77 (1570 vs\n"
-             "2093), so the offset is a property of the machine and not of one\n"
-             "operating point: the two fields do not share a frequency\n"
-             "reference and a converter must not assume they do. The FILFRQ\n"
-             "law was fitted by inverting a spectral centroid, which is not\n"
-             "the corner, and a resonance peak locates it far better -- see\n"
-             "RESOLUTION_NOTES for the re-derivation this calls for.\n"
-             "Reading the peak height directly under-reads it -- 23.2 dB\n"
-             "observed at FILQ 15 against 25.5 from the fit -- because at Q 20\n"
-             "the peak is 46 Hz wide and a harmonic comb steps past it. That\n"
-             "is the same trap as the first two attempts, and the reason the\n"
-             "law is fitted to damping instead of to peak height.",
+        "  z = 0.46864 - 0.029587 * FILQ    r2 0.999975\n"
+        "Damping reaches zero at FILQ 15.84 -- past the top of the field,\n"
+        "so the machine stops just short of self-oscillation. Q runs from\n"
+        "1.07 at FILQ 0 to about 20 at FILQ 15, and the boost at the\n"
+        "corner is -20 log10(1 - FILQ/15.84) dB: +3.3 at 5, +8.7 at 10,\n"
+        "+25.5 at 15. The last three steps are worth more than the first\n"
+        "ten put together, which is what makes the field feel abrupt.\n"
+        "Measured by holding the corner still and sliding the harmonic\n"
+        "comb across it with the NOTE (K_FREQ 0), differencing every\n"
+        "harmonic against the same harmonic at FILQ 0. The fit is to the\n"
+        "whole transfer function -- 2985 points -- not to the height of\n"
+        "the peak, and because it is a RATIO any fixed non-resonant poles\n"
+        "cancel exactly, so it isolates the pair FILQ actually moves.\n"
+        "Two runs with different note sets agree: fc 919 vs 918 Hz, slope\n"
+        "-0.029587 vs -0.029688, zero at 15.84 vs 15.93.\n"
+        "The corner does NOT move with FILQ: 919 Hz at every setting.\n"
+        "It does sit BELOW the corner the FILFRQ law gives -- 919 Hz\n"
+        "measured against 1229 nominal at FILFRQ 70, 0.42 octaves down.\n"
+        "That REPLICATES the earlier 0.41 octaves at FILFRQ 77 (1570 vs\n"
+        "2093), so the offset is a property of the machine and not of one\n"
+        "operating point: the two fields do not share a frequency\n"
+        "reference and a converter must not assume they do. The FILFRQ\n"
+        "law was fitted by inverting a spectral centroid, which is not\n"
+        "the corner, and a resonance peak locates it far better -- see\n"
+        "RESOLUTION_NOTES for the re-derivation this calls for.\n"
+        "Reading the peak height directly under-reads it -- 23.2 dB\n"
+        "observed at FILQ 15 against 25.5 from the fit -- because at Q 20\n"
+        "the peak is 46 Hz wide and a harmonic comb steps past it. That\n"
+        "is the same trap as the first two attempts, and the reason the\n"
+        "law is fitted to damping instead of to peak height.",
     ),
     ("keygroup", "ENV3R1"): Scale(
-        "keygroup", "ENV3R1", "s", "exp", 0.001392, 0.09669, (40, 90), 0.999936,
+        "keygroup",
+        "ENV3R1",
+        "s",
+        "exp",
+        0.001392,
+        0.09669,
+        (40, 90),
+        0.999936,
         bounds="below 40 the phase completes inside the detector's 0.14 s\n"
-               "latency; above 90 the sweep outruns a 9 s capture (20 s at 99).\n"
-               "Both ends are the rig, not the machine.",
+        "latency; above 90 the sweep outruns a 9 s capture (20 s at 99).\n"
+        "Both ends are the rig, not the machine.",
         note="Seconds for the envelope to traverse its FULL 0..99 level range.\n"
-             "ENV3R1 sets a RATE, not a duration -- measured by holding it fixed\n"
-             "and sweeping the distance (ENV3L1): the time tracked the distance\n"
-             "5.05x against 5.39x at R1 70, and 4.95x against 5.11x at R1 80,\n"
-             "with seconds-per-octave constant to 3% across the sweep. So a\n"
-             "phase takes  full_time * (distance / 99).\n"
-             "HIGHER IS SLOWER, despite the table calling it 'Attack rate':\n"
-             "0.067 s at 40, 0.46 s at 60, 3.2 s at 80, 20 s at 99. The rate\n"
-             "falls 9.2% per step and halves every 7.2 steps.\n"
-             "Envelope 3 has no fixed destination -- it reaches the filter only\n"
-             "as assignable-matrix source 14 (§48). Measured there, with the\n"
-             "corner read from the resonance peak (§57), which is why this is\n"
-             "in seconds rather than in the octaves the old centroid ruler\n"
-             "would have given.",
+        "ENV3R1 sets a RATE, not a duration -- measured by holding it fixed\n"
+        "and sweeping the distance (ENV3L1): the time tracked the distance\n"
+        "5.05x against 5.39x at R1 70, and 4.95x against 5.11x at R1 80,\n"
+        "with seconds-per-octave constant to 3% across the sweep. So a\n"
+        "phase takes  full_time * (distance / 99).\n"
+        "HIGHER IS SLOWER, despite the table calling it 'Attack rate':\n"
+        "0.067 s at 40, 0.46 s at 60, 3.2 s at 80, 20 s at 99. The rate\n"
+        "falls 9.2% per step and halves every 7.2 steps.\n"
+        "Envelope 3 has no fixed destination -- it reaches the filter only\n"
+        "as assignable-matrix source 14 (§48). Measured there, with the\n"
+        "corner read from the resonance peak (§57), which is why this is\n"
+        "in seconds rather than in the octaves the old centroid ruler\n"
+        "would have given.",
     ),
     ("keygroup", "ENV3R2"): Scale(
-        "keygroup", "ENV3R2", "s", "exp", 0.002565, 0.09762, (40, 80), 0.999833,
+        "keygroup",
+        "ENV3R2",
+        "s",
+        "exp",
+        0.002565,
+        0.09762,
+        (40, 80),
+        0.999833,
         bounds="40..80, with value 70 excluded as a single bad take -- it read\n"
-               "0.010 s between neighbours at 1.04 and 2.80, with the largest\n"
-               "span in the set. Excluded as an outlier and named as one\n"
-               "rather than quietly dropped.",
+        "0.010 s between neighbours at 1.04 and 2.80, with the largest\n"
+        "span in the set. Excluded as an outlier and named as one\n"
+        "rather than quietly dropped.",
         note="Seconds for a full 0..99 traverse, phase 2 of envelope 3.\n"
-             "PREDICTED BEFORE IT WAS MEASURED (§60): §59's structure said a\n"
-             "falling stage should join the decays at about 2.22 s at value\n"
-             "70, and it measured 2.38 -- 7% off, on a law fitted to five\n"
-             "other fields. It sits with DECAY2 (2.42 s) and ENV3R3 (2.49 s).\n"
-             "Two detector faults had to be cleared first, and both were\n"
-             "caught by their own signature rather than by inspection. The\n"
-             "fall time read 0.020 s at EVERY setting because the minimum was\n"
-             "taken over the whole track, and with an instant attack that\n"
-             "minimum is the base corner in the opening frame -- so 90%-below\n"
-             "-peak was satisfied before the fall began. Then the spans\n"
-             "collapsed 2.10 -> 1.40 -> 0.56 because phase 2 happens DURING\n"
-             "the note and the note was 1.5 s, inherited from a release probe\n"
-             "where 1.5 was right.",
+        "PREDICTED BEFORE IT WAS MEASURED (§60): §59's structure said a\n"
+        "falling stage should join the decays at about 2.22 s at value\n"
+        "70, and it measured 2.38 -- 7% off, on a law fitted to five\n"
+        "other fields. It sits with DECAY2 (2.42 s) and ENV3R3 (2.49 s).\n"
+        "Two detector faults had to be cleared first, and both were\n"
+        "caught by their own signature rather than by inspection. The\n"
+        "fall time read 0.020 s at EVERY setting because the minimum was\n"
+        "taken over the whole track, and with an instant attack that\n"
+        "minimum is the base corner in the opening frame -- so 90%-below\n"
+        "-peak was satisfied before the fall began. Then the spans\n"
+        "collapsed 2.10 -> 1.40 -> 0.56 because phase 2 happens DURING\n"
+        "the note and the note was 1.5 s, inherited from a release probe\n"
+        "where 1.5 was right.",
     ),
     ("keygroup", "ENV3R4"): Scale(
-        "keygroup", "ENV3R4", "s", "exp", 0.001515, 0.09549, (40, 80), 0.999973,
+        "keygroup",
+        "ENV3R4",
+        "s",
+        "exp",
+        0.001515,
+        0.09549,
+        (40, 80),
+        0.999973,
         bounds="40..80, measured after note-off with the recording tail and\n"
-               "the analysis window BOTH raised to 10 s, and RELSE1 at 99 so\n"
-               "the amplitude outlasts the filter release.",
+        "the analysis window BOTH raised to 10 s, and RELSE1 at 99 so\n"
+        "the amplitude outlasts the filter release.",
         note="Seconds for a full 0..99 traverse, the release phase of\n"
-             "envelope 3.\n"
-             "PREDICTED BEFORE IT WAS MEASURED (§60): §59's structure said a\n"
-             "release should join the attack law at about 1.20 s at value 70,\n"
-             "and it measured 1.21 -- 1% off. It sits with ATTAK2, RELSE2 and\n"
-             "ENV3R1, all within 1.21..1.25 s at that value.\n"
-             "So the grouping really is by STAGE TYPE and not by envelope:\n"
-             "attack and release share one rate, the falling stages run at\n"
-             "about half of it, across both envelopes and all seven fields.",
+        "envelope 3.\n"
+        "PREDICTED BEFORE IT WAS MEASURED (§60): §59's structure said a\n"
+        "release should join the attack law at about 1.20 s at value 70,\n"
+        "and it measured 1.21 -- 1% off. It sits with ATTAK2, RELSE2 and\n"
+        "ENV3R1, all within 1.21..1.25 s at that value.\n"
+        "So the grouping really is by STAGE TYPE and not by envelope:\n"
+        "attack and release share one rate, the falling stages run at\n"
+        "about half of it, across both envelopes and all seven fields.",
     ),
     ("keygroup", "ENV3R3"): Scale(
-        "keygroup", "ENV3R3", "s", "exp", 0.003815, 0.09258, (10, 85), 0.999802,
+        "keygroup",
+        "ENV3R3",
+        "s",
+        "exp",
+        0.003815,
+        0.09258,
+        (10, 85),
+        0.999802,
         bounds="above 85 the fall outruns a 9 s capture (36 s at 99). The low\n"
-               "end is fine here because the measured phase was a FALL from a\n"
-               "level already reached, so no attack had to complete first.",
+        "end is fine here because the measured phase was a FALL from a\n"
+        "level already reached, so no attack had to complete first.",
         note="Seconds to traverse the full 0..99 level range, as ENV3R1.\n"
-             "Also a rate, also higher-is-slower: 0.16 s at 40, 0.99 s at 60,\n"
-             "6.3 s at 80, 36 s at 99 -- about 2.7x slower than ENV3R1 at the\n"
-             "same value, while their exponents agree to 4.3%, so the two\n"
-             "phases share a time base and differ in scale.\n"
-             "ENV3R2 and ENV3R4 are NOT measured. They are presumably the same\n"
-             "family, and presuming is what §48 did about envelope 3 being\n"
-             "inert.",
+        "Also a rate, also higher-is-slower: 0.16 s at 40, 0.99 s at 60,\n"
+        "6.3 s at 80, 36 s at 99 -- about 2.7x slower than ENV3R1 at the\n"
+        "same value, while their exponents agree to 4.3%, so the two\n"
+        "phases share a time base and differ in scale.\n"
+        "ENV3R2 and ENV3R4 are NOT measured. They are presumably the same\n"
+        "family, and presuming is what §48 did about envelope 3 being\n"
+        "inert.",
     ),
     ("keygroup", "SUSTN2"): Scale(
-        "keygroup", "SUSTN2", "%", "linear", 100.0 / 99.0, 0.0, (0, 99), 0.99978,
+        "keygroup",
+        "SUSTN2",
+        "%",
+        "linear",
+        100.0 / 99.0,
+        0.0,
+        (0, 99),
+        0.99978,
         bounds="the whole field. §28 stopped at 70 because its centroid ruler\n"
-               "ran out of resolution once the corner passed the source\n"
-               "bandwidth; the resonance tracker has no such limit here.",
+        "ran out of resolution once the corner passed the source\n"
+        "bandwidth; the resonance tracker has no such limit here.",
         note="Percent of the filter envelope's full amount, and LINEAR in\n"
-             "OCTAVES: 0.40, 0.80, 1.21, 1.64, 2.05 octaves at 20, 40, 60, 80,\n"
-             "99 with MODVFILT1 10. Its sibling SUSTN1 is linear in dB, so both\n"
-             "envelopes are linear in the log domain, each in its own.\n"
-             "In absolute terms the shift is\n"
-             "  octaves = 0.002075 * SUSTN2 * MODVFILT1\n"
-             "which needs the depth as well and so cannot be rendered from this\n"
-             "value alone. §28 gave 0.024645 FILFRQ-units for the same product,\n"
-             "which is 0.002524 octaves -- 22% high, and high in the same\n"
-             "direction as everything else that ruler measured (§54).\n"
-             "Envelope 3 scales differently: 0.002685 octaves per unit of\n"
-             "level x depth against this 0.002075. Measured, not explained.",
+        "OCTAVES: 0.40, 0.80, 1.21, 1.64, 2.05 octaves at 20, 40, 60, 80,\n"
+        "99 with MODVFILT1 10. Its sibling SUSTN1 is linear in dB, so both\n"
+        "envelopes are linear in the log domain, each in its own.\n"
+        "In absolute terms the shift is\n"
+        "  octaves = 0.002075 * SUSTN2 * MODVFILT1\n"
+        "which needs the depth as well and so cannot be rendered from this\n"
+        "value alone. §28 gave 0.024645 FILFRQ-units for the same product,\n"
+        "which is 0.002524 octaves -- 22% high, and high in the same\n"
+        "direction as everything else that ruler measured (§54).\n"
+        "Envelope 3 scales differently: 0.002685 octaves per unit of\n"
+        "level x depth against this 0.002075. Measured, not explained.",
     ),
     ("program", "V_LOUD"): Scale(
-        "program", "V_LOUD", "dB", "linear", 0.009474 * 63, 0.0, (-50, 50),
+        "program",
+        "V_LOUD",
+        "dB",
+        "linear",
+        0.009474 * 63,
+        0.0,
+        (-50, 50),
         0.99999,
         bounds="the full -50..50 was swept, at every velocity from 1 to 127\n"
-               "for one depth. The number here summarises a two-variable law\n"
-               "-- see the note for the form that actually applies.",
+        "for one depth. The number here summarises a two-variable law\n"
+        "-- see the note for the form that actually applies.",
         note="Velocity sensitivity, and the value here is the dB of BOOST at\n"
-             "full velocity relative to the pivot. The law is a gain about a\n"
-             "pivot, not an attenuation below a knee:\n"
-             "  gain_dB = 0.009474 * V_LOUD * (velocity - 64)\n"
-             "so velocity above 64 makes the program LOUDER than PRLOUD\n"
-             "alone would suggest, and below 64 quieter. Linear in raw\n"
-             "velocity at r2 0.999992 over every value from 1 to 127, with\n"
-             "residuals showing no tilt (+0.003 dB first half, -0.003 second).\n"
-             "Every velocity produces a distinct level: no internal\n"
-             "quantisation, the machine uses all 127.\n"
-             "The slope is exactly proportional to V_LOUD -- 0.4741 dB per\n"
-             "velocity unit at 50 against 0.2366 at 25.\n"
-             "At V_LOUD 0 velocity does nothing at all, measured flat to\n"
-             "0.00 dB, so this field is the whole of the sensitivity.\n"
-             "**The flat top seen above velocity 66 is an OUTPUT CEILING,\n"
-             "not part of the law.** It moves with PRLOUD -- velocity 66 at\n"
-             "PRLOUD 99, 90 at 80, past 100 at 60 -- because a louder program\n"
-             "reaches the ceiling sooner. A converter must expect clipping\n"
-             "when PRLOUD is high and V_LOUD positive.\n"
-             "This is the one field here not linear in a perceptual domain.",
+        "full velocity relative to the pivot. The law is a gain about a\n"
+        "pivot, not an attenuation below a knee:\n"
+        "  gain_dB = 0.009474 * V_LOUD * (velocity - 64)\n"
+        "so velocity above 64 makes the program LOUDER than PRLOUD\n"
+        "alone would suggest, and below 64 quieter. Linear in raw\n"
+        "velocity at r2 0.999992 over every value from 1 to 127, with\n"
+        "residuals showing no tilt (+0.003 dB first half, -0.003 second).\n"
+        "Every velocity produces a distinct level: no internal\n"
+        "quantisation, the machine uses all 127.\n"
+        "The slope is exactly proportional to V_LOUD -- 0.4741 dB per\n"
+        "velocity unit at 50 against 0.2366 at 25.\n"
+        "At V_LOUD 0 velocity does nothing at all, measured flat to\n"
+        "0.00 dB, so this field is the whole of the sensitivity.\n"
+        "**The flat top seen above velocity 66 is an OUTPUT CEILING,\n"
+        "not part of the law.** It moves with PRLOUD -- velocity 66 at\n"
+        "PRLOUD 99, 90 at 80, past 100 at 60 -- because a louder program\n"
+        "reaches the ceiling sooner. A converter must expect clipping\n"
+        "when PRLOUD is high and V_LOUD positive.\n"
+        "This is the one field here not linear in a perceptual domain.",
     ),
     ("program", "PANRAT"): Scale(
-        "program", "PANRAT", "Hz", "linear", 0.11880, 0.0, (1, 40), 0.999939,
+        "program",
+        "PANRAT",
+        "Hz",
+        "linear",
+        0.11880,
+        0.0,
+        (1, 40),
+        0.999939,
         bounds="fitted 1..40, §257's own ladder on this rig. 40..99 is\n"
-               "extrapolation HERE but is measured elsewhere: mpc2emu swept\n"
-               "10..99 (9 points, r2 0.999984) and got 0.11913, and LFO1's own\n"
-               "LFORAT is fitted 10..99 at 0.11867. The three slopes agree\n"
-               "within 0.6 %, so the extrapolation is corroborated rather than\n"
-               "assumed.\n"
-               "FORCED THROUGH THE ORIGIN: zero rate at zero is definitional,\n"
-               "and the free fit's intercept was +0.0108 Hz against mpc2emu's\n"
-               "-0.0055 -- opposite signs, both within noise of zero.\n"
-               "Residual on the §257 ladder: rms 5.8 %, worst +13.8 % at\n"
-               "PANRAT 1, the smallest rung, where 0.0002 Hz of error is 0.1 %\n"
-               "of the value at 40. A single low point could not have settled\n"
-               "this slope, and the through-origin form costs accuracy there\n"
-               "to buy a physically correct value at zero.",
+        "extrapolation HERE but is measured elsewhere: mpc2emu swept\n"
+        "10..99 (9 points, r2 0.999984) and got 0.11913, and LFO1's own\n"
+        "LFORAT is fitted 10..99 at 0.11867. The three slopes agree\n"
+        "within 0.6 %, so the extrapolation is corroborated rather than\n"
+        "assumed.\n"
+        "FORCED THROUGH THE ORIGIN: zero rate at zero is definitional,\n"
+        "and the free fit's intercept was +0.0108 Hz against mpc2emu's\n"
+        "-0.0055 -- opposite signs, both within noise of zero.\n"
+        "Residual on the §257 ladder: rms 5.8 %, worst +13.8 % at\n"
+        "PANRAT 1, the smallest rung, where 0.0002 Hz of error is 0.1 %\n"
+        "of the value at 40. A single low point could not have settled\n"
+        "this slope, and the through-origin form costs accuracy there\n"
+        "to buy a physically correct value at zero.",
         note="LFO2's rate, and it is LFO1's LAW -- the two LFOs share one\n"
-             "rate scale.\n"
-             "  rate = 0.11880 * PANRAT Hz\n"
-             "**CORRECTED 2026-09-23. This entry shipped 0.23708 -- exactly\n"
-             "2.002x the truth -- from §52's 'LFO2 = 2 x LFO1', and the\n"
-             "evidence against it was already inside this entry, labelled as\n"
-             "noise.** The old bounds text recorded that above 80 the rate\n"
-             "'collapses to exactly HALF the extrapolation (ratios 0.502,\n"
-             "0.501, 0.500, 0.504)' and called it a detector artefact. Those\n"
-             "four readings were the honest ones.\n"
-             "The mechanism is understood now: §52 measured LFO2 THROUGH THE\n"
-             "FILTER, and a bipolar sweep presents two brightness excursions\n"
-             "per cycle to a detector responding to magnitude rather than\n"
-             "sign, so a filter-side measurement reads double. Measured\n"
-             "through PAN, where balance is signed, the rate is LFO1's.\n"
-             "Three independent routes: this project's §257 (0.11840),\n"
-             "mpc2emu's §AKAILFO2RATE (0.11913, and the falsification there is\n"
-             "an ABSENCE -- at PANRAT 37 the predicted 8.77 Hz sits 40.7 dB\n"
-             "below the 4.67 Hz peak, so there is no energy where the old law\n"
-             "says the LFO should be), and LFO1's own 0.11867.\n"
-             "A fourth, structural and independent of all three: E-mu's AKAI\n"
-             "importer uses ONE table (0x48b24) for both AKAI LFO rate bytes,\n"
-             "0x21 and 0x1D. One table cannot serve two scales differing by a\n"
-             "factor of two. (That table is NOT Hz-faithful -- its implied\n"
-             "curve has local slopes 0.152/0.188/0.137 across the range where\n"
-             "the AKAI is linear -- so it corroborates the SHARED SCALE and\n"
-             "not the value.)\n"
-             "**LFO2 DOES REACH PAN** -- §39 said the pan LFO does nothing,\n"
-             "§52 retracted half of that as 'only its route to pan is dead',\n"
-             "and §181 retracted THAT half too on 2026-09-06. Pan has a\n"
-             "modulation matrix neither earlier section touched: sources at\n"
-             "MODSPAN1/2/3 (76/77/78), amounts at MODVPAN1/2/3 (89/90/91).\n"
-             "§39 swept PANDEP, which is LFO2's own output DEPTH, not the\n"
-             "matrix amount -- so the amount was never set. This entry\n"
-             "asserted the retracted claim until 2026-09-23, and a test pinned\n"
-             "it, seventeen days after §181.\n"
-             "LFO2 is also assignable-matrix source 8, and routed to the\n"
-             "filter it works perfectly. Its four companions work too:\n"
-             "PANDEP gates the depth, PANDEL delays the growth, LFO2WAVE\n"
-             "changes the shape, and LFO2TRIG mode 1 locks the phase to\n"
-             "note-on (sd 54 Hz across five notes against 307..471 for the\n"
-             "free-running modes).",
+        "rate scale.\n"
+        "  rate = 0.11880 * PANRAT Hz\n"
+        "**CORRECTED 2026-09-23. This entry shipped 0.23708 -- exactly\n"
+        "2.002x the truth -- from §52's 'LFO2 = 2 x LFO1', and the\n"
+        "evidence against it was already inside this entry, labelled as\n"
+        "noise.** The old bounds text recorded that above 80 the rate\n"
+        "'collapses to exactly HALF the extrapolation (ratios 0.502,\n"
+        "0.501, 0.500, 0.504)' and called it a detector artefact. Those\n"
+        "four readings were the honest ones.\n"
+        "The mechanism is understood now: §52 measured LFO2 THROUGH THE\n"
+        "FILTER, and a bipolar sweep presents two brightness excursions\n"
+        "per cycle to a detector responding to magnitude rather than\n"
+        "sign, so a filter-side measurement reads double. Measured\n"
+        "through PAN, where balance is signed, the rate is LFO1's.\n"
+        "Three independent routes: this project's §257 (0.11840),\n"
+        "mpc2emu's §AKAILFO2RATE (0.11913, and the falsification there is\n"
+        "an ABSENCE -- at PANRAT 37 the predicted 8.77 Hz sits 40.7 dB\n"
+        "below the 4.67 Hz peak, so there is no energy where the old law\n"
+        "says the LFO should be), and LFO1's own 0.11867.\n"
+        "A fourth, structural and independent of all three: E-mu's AKAI\n"
+        "importer uses ONE table (0x48b24) for both AKAI LFO rate bytes,\n"
+        "0x21 and 0x1D. One table cannot serve two scales differing by a\n"
+        "factor of two. (That table is NOT Hz-faithful -- its implied\n"
+        "curve has local slopes 0.152/0.188/0.137 across the range where\n"
+        "the AKAI is linear -- so it corroborates the SHARED SCALE and\n"
+        "not the value.)\n"
+        "**LFO2 DOES REACH PAN** -- §39 said the pan LFO does nothing,\n"
+        "§52 retracted half of that as 'only its route to pan is dead',\n"
+        "and §181 retracted THAT half too on 2026-09-06. Pan has a\n"
+        "modulation matrix neither earlier section touched: sources at\n"
+        "MODSPAN1/2/3 (76/77/78), amounts at MODVPAN1/2/3 (89/90/91).\n"
+        "§39 swept PANDEP, which is LFO2's own output DEPTH, not the\n"
+        "matrix amount -- so the amount was never set. This entry\n"
+        "asserted the retracted claim until 2026-09-23, and a test pinned\n"
+        "it, seventeen days after §181.\n"
+        "LFO2 is also assignable-matrix source 8, and routed to the\n"
+        "filter it works perfectly. Its four companions work too:\n"
+        "PANDEP gates the depth, PANDEL delays the growth, LFO2WAVE\n"
+        "changes the shape, and LFO2TRIG mode 1 locks the phase to\n"
+        "note-on (sd 54 Hz across five notes against 307..471 for the\n"
+        "free-running modes).",
     ),
     ("program", "LFODEP"): Scale(
-        "program", "LFODEP", "cents", "linear", 19.4932, 0.0, (0, 99), 0.99949,
+        "program",
+        "LFODEP",
+        "cents",
+        "linear",
+        19.4932,
+        0.0,
+        (0, 99),
+        0.99949,
         bounds="the full range was usable, which is unusual here -- most\n"
-               "bounds in this table are limits of the rig rather than the\n"
-               "machine, and this one has neither.",
+        "bounds in this table are limits of the rig rather than the\n"
+        "machine, and this one has neither.",
         note="CONDITIONAL ON `L_PTCH`, NOW MEASURED -- read this first.\n"
-             "Keygroup offset 150, `L_PTCH`, GATES and SCALES this route.\n"
-             "  rms_cents = 0.13127 * LFODEP * L_PTCH     (§160)\n"
-             "L_PTCH 0 is silent however large LFODEP is. The two compose as\n"
-             "a PRODUCT to within about 9% -- the honest figure, from the\n"
-             "same product reached from different settings (30x10 against\n"
-             "6x50 agree to 8.6%), not the 4.2% spread of k.\n"
-             "The sweep behind the 19.4932 figure never set L_PTCH and\n"
-             "neither §35 nor §44 recorded it. Inverting the product law\n"
-             "puts it at 52.5 reading the LFO as a sine or 42.9 as a\n"
-             "triangle, against a field maximum of 50 -- so that calibration\n"
-             "ran at or near MAXIMUM routing, and 19.4932 is close to the\n"
-             "full-routing case. Scaling it by L_PTCH/50 is therefore about\n"
-             "right, but prefer the product law above, which is measured on\n"
-             "both axes.\n"
-             "The RMS form is waveform-independent, which is the estimator's\n"
-             "whole point; only converting to peak-to-peak needs a shape, and\n"
-             "that is where the 50-versus-43 ambiguity sits.\n"
-             "Peak-to-peak vibrato depth on LFO1, which drives pitch (§25).\n"
-
-
-             "LINEAR in cents at r2 0.9997 against 0.8663 for exponential --\n"
-             "not close. Full depth is ~1930 cents peak to peak, so +/-9.6\n"
-             "semitones, a wider range than the panel suggests.\n"
-             "Cents rather than hertz because a ratio is independent of the\n"
-             "note played and of the rig's tuning.\n"
-             "Forced through the origin: LFODEP 0 is no vibrato by\n"
-             "definition, so the free fit's -17.4 cent intercept is bias --\n"
-             "the same correction as KGTUNO and FILQ.\n"
-             "Note what it joins: linear in CENTS is linear in the log\n"
-             "domain, as SUSTN1 is linear in dB and SUSTN2 in octaves. Three\n"
-             "independent level-like fields, all linear in their perceptual\n"
-             "domain.",
+        "Keygroup offset 150, `L_PTCH`, GATES and SCALES this route.\n"
+        "  rms_cents = 0.13127 * LFODEP * L_PTCH     (§160)\n"
+        "L_PTCH 0 is silent however large LFODEP is. The two compose as\n"
+        "a PRODUCT to within about 9% -- the honest figure, from the\n"
+        "same product reached from different settings (30x10 against\n"
+        "6x50 agree to 8.6%), not the 4.2% spread of k.\n"
+        "The sweep behind the 19.4932 figure never set L_PTCH and\n"
+        "neither §35 nor §44 recorded it. Inverting the product law\n"
+        "puts it at 52.5 reading the LFO as a sine or 42.9 as a\n"
+        "triangle, against a field maximum of 50 -- so that calibration\n"
+        "ran at or near MAXIMUM routing, and 19.4932 is close to the\n"
+        "full-routing case. Scaling it by L_PTCH/50 is therefore about\n"
+        "right, but prefer the product law above, which is measured on\n"
+        "both axes.\n"
+        "The RMS form is waveform-independent, which is the estimator's\n"
+        "whole point; only converting to peak-to-peak needs a shape, and\n"
+        "that is where the 50-versus-43 ambiguity sits.\n"
+        "Peak-to-peak vibrato depth on LFO1, which drives pitch (§25).\n"
+        "LINEAR in cents at r2 0.9997 against 0.8663 for exponential --\n"
+        "not close. Full depth is ~1930 cents peak to peak, so +/-9.6\n"
+        "semitones, a wider range than the panel suggests.\n"
+        "Cents rather than hertz because a ratio is independent of the\n"
+        "note played and of the rig's tuning.\n"
+        "Forced through the origin: LFODEP 0 is no vibrato by\n"
+        "definition, so the free fit's -17.4 cent intercept is bias --\n"
+        "the same correction as KGTUNO and FILQ.\n"
+        "Note what it joins: linear in CENTS is linear in the log\n"
+        "domain, as SUSTN1 is linear in dB and SUSTN2 in octaves. Three\n"
+        "independent level-like fields, all linear in their perceptual\n"
+        "domain.",
     ),
     ("program", "MWLDEP"): Scale(
-        "program", "MWLDEP", "cents", "linear", 19.5299, 0.0, (0, 99), 0.99968,
+        "program",
+        "MWLDEP",
+        "cents",
+        "linear",
+        19.5299,
+        0.0,
+        (0, 99),
+        0.99968,
         bounds="the full range was usable, at wheel 127.",
         note="Mod wheel into LFO1, so peak-to-peak vibrato in cents. The value\n"
-             "here is the depth at a FULL wheel; the wheel scales it linearly\n"
-             "at 15.2001 cents per wheel unit (r2 0.99989).\n"
-             "  cents_pp = 1930 * (MWLDEP/99) * (wheel/127)\n"
-             "**No pivot.** The wheel is proportional to its value, 0.50 of\n"
-             "full depth at wheel 64. That REFUTES the §43 rule for unipolar\n"
-             "controllers: velocity and note pivot on 64 because each has an\n"
-             "inherent centre, while a wheel rests at zero and a pivot there\n"
-             "would mean a wheel at rest applying maximum modulation.",
+        "here is the depth at a FULL wheel; the wheel scales it linearly\n"
+        "at 15.2001 cents per wheel unit (r2 0.99989).\n"
+        "  cents_pp = 1930 * (MWLDEP/99) * (wheel/127)\n"
+        "**No pivot.** The wheel is proportional to its value, 0.50 of\n"
+        "full depth at wheel 64. That REFUTES the §43 rule for unipolar\n"
+        "controllers: velocity and note pivot on 64 because each has an\n"
+        "inherent centre, while a wheel rests at zero and a pivot there\n"
+        "would mean a wheel at rest applying maximum modulation.",
     ),
     ("program", "PRSDEP"): Scale(
-        "program", "PRSDEP", "cents", "linear", 19.50, 0.0, (0, 99), 0.9995,
+        "program",
+        "PRSDEP",
+        "cents",
+        "linear",
+        19.50,
+        0.0,
+        (0, 99),
+        0.9995,
         bounds="measured at pressure 127 across 0..99.",
         note="Channel pressure into LFO1. Same law and same scale as MWLDEP:\n"
-             "  cents_pp = 1930 * (PRSDEP/99) * (pressure/127)\n"
-             "15.20 cents per pressure unit at PRSDEP 99, matching the wheel's\n"
-             "15.2001 to three figures.\n"
-             "**Pressure must arrive DURING the note.** Sent before note-on it\n"
-             "does nothing at all, which an earlier run read as the field being\n"
-             "inert. It is not: sent 0.4 s after note-on it is linear across\n"
-             "the whole controller range. That was my timing, not the machine.",
+        "  cents_pp = 1930 * (PRSDEP/99) * (pressure/127)\n"
+        "15.20 cents per pressure unit at PRSDEP 99, matching the wheel's\n"
+        "15.2001 to three figures.\n"
+        "**Pressure must arrive DURING the note.** Sent before note-on it\n"
+        "does nothing at all, which an earlier run read as the field being\n"
+        "inert. It is not: sent 0.4 s after note-on it is linear across\n"
+        "the whole controller range. That was my timing, not the machine.",
     ),
     ("program", "VELDEP"): Scale(
-        "program", "VELDEP", "cents", "linear", 19.48, 0.0, (0, 99), 0.9996,
+        "program",
+        "VELDEP",
+        "cents",
+        "linear",
+        19.48,
+        0.0,
+        (0, 99),
+        0.9996,
         bounds="measured at velocity 127 across 0..99.",
         note="Velocity into LFO1 depth, same law again:\n"
-             "  cents_pp = 1930 * (VELDEP/99) * (velocity/127)\n"
-             "So all four LFO1 depth sources -- LFODEP, MWLDEP, PRSDEP and\n"
-             "VELDEP -- are linear and reach the SAME full-scale depth of\n"
-             "about 1930 cents peak-to-peak, within 0.2% of each other.\n"
-             "Note this one does NOT pivot on 64 either, despite velocity\n"
-             "being the source: it is the DEPTH route rather than a bipolar\n"
-             "modulation, so it scales from zero like the wheel. V_LOUD and\n"
-             "V_ATT1 pivot; VELDEP does not.",
+        "  cents_pp = 1930 * (VELDEP/99) * (velocity/127)\n"
+        "So all four LFO1 depth sources -- LFODEP, MWLDEP, PRSDEP and\n"
+        "VELDEP -- are linear and reach the SAME full-scale depth of\n"
+        "about 1930 cents peak-to-peak, within 0.2% of each other.\n"
+        "Note this one does NOT pivot on 64 either, despite velocity\n"
+        "being the source: it is the DEPTH route rather than a bipolar\n"
+        "modulation, so it scales from zero like the wheel. V_LOUD and\n"
+        "V_ATT1 pivot; VELDEP does not.",
     ),
     ("program", "LFODEL"): Scale(
-        "program", "LFODEL", "s", "pole", 0.06905, 103.41, (0, 99), 0.999555,
+        "program",
+        "LFODEL",
+        "s",
+        "pole",
+        0.06905,
+        103.41,
+        (0, 99),
+        0.999555,
         bounds="the whole field, all fourteen points measured. Below LFODEL 20\n"
-               "the delay is under the 0.008 s time resolution and reads zero,\n"
-               "which is the right answer to two decimal places.",
+        "the delay is under the 0.008 s time resolution and reads zero,\n"
+        "which is the right answer to two decimal places.",
         note="Delay before LFO1's vibrato begins:\n"
-             "  seconds = 0.06905 * LFODEL / (103.41 - LFODEL)\n"
-             "It runs away toward a pole at 103.4 -- past the field's own top,\n"
-             "so the machine never reaches it, but the last few steps are very\n"
-             "much steeper than the first: 0.065 s at 50, 0.24 s at 80, 0.46 s\n"
-             "at 90, 1.55 s at 99. Same shape as FILQ (§53), which also runs\n"
-             "to a pole sited just past the end of its range.\n"
-             "THERE IS NO FADE-IN. §31 assumed the delay was followed by a\n"
-             "ramp and that its detector measured the two as a sum. Measured\n"
-             "two ways here -- a 5%-of-final threshold, and a straight line\n"
-             "fitted to the rising edge and extrapolated back to zero -- the\n"
-             "estimates agree to -0.010 +/- 0.016 s over thirteen settings.\n"
-             "The vibrato starts abruptly, so delay is the whole story.\n"
-             "The 0.187 s the detector reports at LFODEL 0 is its own latency,\n"
-             "not the machine's: it is the swing window, and subtracting it is\n"
-             "justified because fitting the offset freely returns 0.188 s.",
+        "  seconds = 0.06905 * LFODEL / (103.41 - LFODEL)\n"
+        "It runs away toward a pole at 103.4 -- past the field's own top,\n"
+        "so the machine never reaches it, but the last few steps are very\n"
+        "much steeper than the first: 0.065 s at 50, 0.24 s at 80, 0.46 s\n"
+        "at 90, 1.55 s at 99. Same shape as FILQ (§53), which also runs\n"
+        "to a pole sited just past the end of its range.\n"
+        "THERE IS NO FADE-IN. §31 assumed the delay was followed by a\n"
+        "ramp and that its detector measured the two as a sum. Measured\n"
+        "two ways here -- a 5%-of-final threshold, and a straight line\n"
+        "fitted to the rising edge and extrapolated back to zero -- the\n"
+        "estimates agree to -0.010 +/- 0.016 s over thirteen settings.\n"
+        "The vibrato starts abruptly, so delay is the whole story.\n"
+        "The 0.187 s the detector reports at LFODEL 0 is its own latency,\n"
+        "not the machine's: it is the swing window, and subtracting it is\n"
+        "justified because fitting the offset freely returns 0.188 s.",
         endpoints={0: "no delay"},
     ),
     ("program", "PANPOS"): Scale(
-        "program", "PANPOS", "dB", "pan", 1.2124, -0.54, (-45, 45), 0.9996,
+        "program",
+        "PANPOS",
+        "dB",
+        "pan",
+        1.2124,
+        -0.54,
+        (-45, 45),
+        0.9996,
         bounds="the last five units each side approach a hard mute, where a ratio of\ntwo levels stops being meaningful; both are separately known.",
         note="constant-power law; +/-50 is hard left/right",
         endpoints={-50: "hard left", 50: "hard right"},
@@ -1137,8 +1388,13 @@ def to_physical(region: str, param: str, value: float):
 def from_physical(region: str, param: str, physical: float):
     """The parameter value that produces *physical*, and whether it is in range.
 
-    Returns ``(value, exact)`` with *value* rounded and clamped to the
-    parameter's own limits, or None where no law was measured.
+    Returns ``(value, exact)`` with *value* rounded to the nearest integer
+    but NOT clamped: this function has no access to the parameter's own
+    limits, so a quantity outside what the field can hold comes back as a
+    value outside what the field can hold, with ``exact`` False. The caller
+    clamps -- ``cli._value_from_quantity`` does, against
+    ``minimum``/``maximum``, and says so out loud. Returns None where no law
+    was measured.
     """
     s = scale_for(region, param)
     if s is None:
@@ -1183,14 +1439,9 @@ def value_from_quantity(region: str, param: str, text: str):
     quantity, unit = parsed
     s = scale_for(region, param)
     if s is None:
-        raise ValueError(
-            f"{param} has no measured scale; give a raw value in "
-            f"{param}'s own units"
-        )
+        raise ValueError(f"{param} has no measured scale; give a raw value in {param}'s own units")
     if unit != s.unit:
-        raise ValueError(
-            f"{param} was measured in {s.unit}, not {unit}"
-        )
+        raise ValueError(f"{param} was measured in {s.unit}, not {unit}")
     got = from_physical(region, param, quantity)
     if got is None:
         raise ValueError(f"{quantity} {unit} is not reachable for {param}")
@@ -1220,12 +1471,15 @@ def describe(region: str, param: str, value: float) -> str:
         mark = "!" + mark
 
     if unit == "Hz":
-        text = (f"{physical / 1000:.2f} kHz" if physical >= 1000
-                else f"{physical:.0f} Hz" if physical >= 10
-                else f"{physical:.2f} Hz")
+        text = (
+            f"{physical / 1000:.2f} kHz"
+            if physical >= 1000
+            else f"{physical:.0f} Hz"
+            if physical >= 10
+            else f"{physical:.2f} Hz"
+        )
     elif unit == "s":
-        text = (f"{physical * 1000:.0f} ms" if physical < 1
-                else f"{physical:.2f} s")
+        text = f"{physical * 1000:.0f} ms" if physical < 1 else f"{physical:.2f} s"
     elif unit == "dB":
         text = f"{physical:+.1f} dB"
         if s.kind == "reso":

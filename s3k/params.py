@@ -275,9 +275,7 @@ def _p(
     requires: str = "",
 ) -> Parameter:
     if size % elements:
-        raise ValueError(
-            f"{name}: {size} bytes does not divide into {elements} elements"
-        )
+        raise ValueError(f"{name}: {size} bytes does not divide into {elements} elements")
     return Parameter(
         region=region,
         offset=offset,
@@ -313,10 +311,10 @@ _PARAMS: List[Parameter] = [
         readonly=True,
         desc="Block identifier",
         notes="Not in the source document, which starts the program header at "
-              "offset 1. Added from hardware 2026-08-10: every program block "
-              "read from an S3000XL carries 0x01 here, matching the keygroup's "
-              "KGIDENT (0x02) and the sample's SHIDENT (0x03), both of which "
-              "the document does list. See RESOLUTION_NOTES §14.",
+        "offset 1. Added from hardware 2026-08-10: every program block "
+        "read from an S3000XL carries 0x01 here, matching the keygroup's "
+        "KGIDENT (0x02) and the sample's SHIDENT (0x03), both of which "
+        "the document does list. See RESOLUTION_NOTES §14.",
     ),
     _p(
         "program",
@@ -328,7 +326,7 @@ _PARAMS: List[Parameter] = [
         16383,
         kind="address",
         desc="Block address of first keygroup (internal use)",
-        notes="range as written: \"Block address\"",
+        notes='range as written: "Block address"',
     ),
     _p(
         "program",
@@ -341,11 +339,11 @@ _PARAMS: List[Parameter] = [
         kind="text",
         desc="Name of program",
         notes="Offset and width CONFIRMED against the machine's own firmware "
-              "2026-09-21 (§258): the delete-on-duplicate-name search at "
-              "0x34ABC does mov di,3 / mov cx,0x0C / repz cmpsb over each "
-              "resident program. The firmware is not a document, so this is "
-              "independent of the transcription rather than another reading "
-              "of it.",
+        "2026-09-21 (§258): the delete-on-duplicate-name search at "
+        "0x34ABC does mov di,3 / mov cx,0x0C / repz cmpsb over each "
+        "resident program. The firmware is not a document, so this is "
+        "independent of the transcription rather than another reading "
+        "of it.",
     ),
     _p(
         "program",
@@ -358,44 +356,44 @@ _PARAMS: List[Parameter] = [
         desc="MIDI program number After sending data to this parameter, Miscellaneous function BTSORT should be triggered to resort the list of programs into order and to flag active programs.",
         display_offset=1,
         notes="0-BASED IN THE REGISTER, 1-BASED ON THE PANEL -- the same convention "
-              "as keygroups, FX slots, volume and V-curve. Measured 2026-08-14: the "
-              "panel's RNUM->SEQU renumbered fifteen resident programs and showed "
-              "them 1..15, while the same fifteen read back over SysEx as 0..14. "
-              "CONFIRMED AGAIN 2026-09-25 on the §265 disc: a program storing 120 "
-              "displays as 121, verified three ways (the card image, a SysEx read, "
-              "and the panel). display_offset was 0 here until 2026-09-25 even "
-              "though bridge.renumber_programs' docstring has stated the convention "
-              "since August -- the fact was in the prose and contradicted in the "
-              "table, so every program number s3ked reports is one BELOW the "
-              "machine's own screen. "
-              "STILL 0 DELIBERATELY: display_offset is NOT cosmetic here -- it is "
-              "applied in _decode_one and subtracted in encode_field, so setting it "
-              "changes what get_parameter RETURNS and what set_parameter STORES. "
-              "renumber_programs is safe either way (it writes raw bytes via "
-              "set_header_bytes), but the API contract for this field would move, "
-              "so the change was made deliberately, on 2026-09-26, with the caller "
-              "audit below and a full suite run. RESOLUTION_NOTES §267. "
-              "CALLER AUDIT: the RAW paths are unaffected because they bypass "
-              "decode_field -- analysis.collect reads PRGNUM/PMCHAN as two "
-              "bytes via get_header_bytes, bridge.program_numbers likewise, "
-              "renumber_programs writes bytes([index]) through "
-              "set_header_bytes, and app._activate_program_worker reads raw "
-              "and adds one by hand for the status line, commented \"1-based, "
-              "because that is what the machine\'s own display says\". So the "
-              "app ALREADY displayed this field 1-based in one place while the "
-              "parameter pane showed the stored byte; this makes the pane "
-              "agree with both the panel and that status line. Only "
-              "probes/pandepgate.py and probes/lfofilter.py read it through "
-              "get_parameter and fed it to select_program_number, which takes "
-              "the 0-based number -- both switched to raw reads. "
-              "MAXIMUM CORRECTED 0..128 -> 0..127 in the same change, because "
-              "display_offset made an old oddity dangerous: 0..128 is 129 "
-              "values for a 7-bit MIDI program number, and with the offset the "
-              "pane would have accepted a displayed 129, stored 128, past "
-              "bridge._PRGNUM_MAX of 127 which select_program_number and "
-              "renumber_programs both enforce. Without the offset it merely "
-              "permitted one value too many; with it, it permits an out-of-range "
-              "write through a pane that looks correct."
+        "as keygroups, FX slots, volume and V-curve. Measured 2026-08-14: the "
+        "panel's RNUM->SEQU renumbered fifteen resident programs and showed "
+        "them 1..15, while the same fifteen read back over SysEx as 0..14. "
+        "CONFIRMED AGAIN 2026-09-25 on the §265 disc: a program storing 120 "
+        "displays as 121, verified three ways (the card image, a SysEx read, "
+        "and the panel). display_offset was 0 here until 2026-09-25 even "
+        "though bridge.renumber_programs' docstring has stated the convention "
+        "since August -- the fact was in the prose and contradicted in the "
+        "table, so every program number s3ked reports is one BELOW the "
+        "machine's own screen. "
+        "STILL 0 DELIBERATELY: display_offset is NOT cosmetic here -- it is "
+        "applied in _decode_one and subtracted in encode_field, so setting it "
+        "changes what get_parameter RETURNS and what set_parameter STORES. "
+        "renumber_programs is safe either way (it writes raw bytes via "
+        "set_header_bytes), but the API contract for this field would move, "
+        "so the change was made deliberately, on 2026-09-26, with the caller "
+        "audit below and a full suite run. RESOLUTION_NOTES §267. "
+        "CALLER AUDIT: the RAW paths are unaffected because they bypass "
+        "decode_field -- analysis.collect reads PRGNUM/PMCHAN as two "
+        "bytes via get_header_bytes, bridge.program_numbers likewise, "
+        "renumber_programs writes bytes([index]) through "
+        "set_header_bytes, and app._activate_program_worker reads raw "
+        'and adds one by hand for the status line, commented "1-based, '
+        "because that is what the machine's own display says\". So the "
+        "app ALREADY displayed this field 1-based in one place while the "
+        "parameter pane showed the stored byte; this makes the pane "
+        "agree with both the panel and that status line. Only "
+        "probes/pandepgate.py and probes/lfofilter.py read it through "
+        "get_parameter and fed it to select_program_number, which takes "
+        "the 0-based number -- both switched to raw reads. "
+        "MAXIMUM CORRECTED 0..128 -> 0..127 in the same change, because "
+        "display_offset made an old oddity dangerous: 0..128 is 129 "
+        "values for a 7-bit MIDI program number, and with the offset the "
+        "pane would have accepted a displayed 129, stored 128, past "
+        "bridge._PRGNUM_MAX of 127 which select_program_number and "
+        "renumber_programs both enforce. Without the offset it merely "
+        "permitted one value too many; with it, it permits an out-of-range "
+        "write through a pane that looks correct.",
     ),
     _p(
         "program",
@@ -407,7 +405,7 @@ _PARAMS: List[Parameter] = [
         255,
         values={255: "OMNI"},
         desc="MIDI channel",
-        notes="range as written: \"255 signifies OMNI, 0 to 15 indicate MIDI channel\"",
+        notes='range as written: "255 signifies OMNI, 0 to 15 indicate MIDI channel"',
     ),
     _p(
         "program",
@@ -419,7 +417,7 @@ _PARAMS: List[Parameter] = [
         31,
         display_offset=1,
         desc="Depth of polyphony",
-        notes="range as written: \"0 to 31 (these represent polyphony values of 1 to 32)\"",
+        notes='range as written: "0 to 31 (these represent polyphony values of 1 to 32)"',
     ),
     _p(
         "program",
@@ -431,7 +429,7 @@ _PARAMS: List[Parameter] = [
         3,
         values={0: "low", 1: "norm", 2: "high", 3: "hold"},
         desc="Priority of voices playing this program",
-        notes="range as written: \"0=low, 1=norm, 2=high, 3=hold\"",
+        notes='range as written: "0=low, 1=norm, 2=high, 3=hold"',
     ),
     _p(
         "program",
@@ -442,7 +440,7 @@ _PARAMS: List[Parameter] = [
         21,
         127,
         desc="Lower limit of play range",
-        notes="range as written: \"21 to 127 represents A1 to G8\"",
+        notes='range as written: "21 to 127 represents A1 to G8"',
     ),
     _p(
         "program",
@@ -453,7 +451,7 @@ _PARAMS: List[Parameter] = [
         21,
         127,
         desc="Upper limit of play range",
-        notes="range as written: \"21 to 127 represents A1 to G8\"",
+        notes='range as written: "21 to 127 represents A1 to G8"',
     ),
     _p(
         "program",
@@ -464,7 +462,7 @@ _PARAMS: List[Parameter] = [
         0,
         0,
         desc="Not used",
-        notes="range as written: \"fixed value in the specification\"",
+        notes='range as written: "fixed value in the specification"',
     ),
     _p(
         "program",
@@ -476,7 +474,7 @@ _PARAMS: List[Parameter] = [
         255,
         values={255: "off"},
         desc="Individual output routing. This parameter also controls send to effects section.",
-        notes="range as written: \"255 indicates OFF On S3200: 0 to 7 indicates outputs 1 to 8, 8 indicates FX, 9 indicates RVB and 10 indicates R+F. On S3000: 0 to 7 indicates outputs 1 to 8, 8 indicates FX. On S2800: 0 and 1 indicates outputs 1 and 2, 2 indicates FX.\"",
+        notes='range as written: "255 indicates OFF On S3200: 0 to 7 indicates outputs 1 to 8, 8 indicates FX, 9 indicates RVB and 10 indicates R+F. On S3000: 0 to 7 indicates outputs 1 to 8, 8 indicates FX. On S2800: 0 and 1 indicates outputs 1 and 2, 2 indicates FX."',
     ),
     _p(
         "program",
@@ -527,7 +525,7 @@ _PARAMS: List[Parameter] = [
         0,
         0,
         desc="Not used",
-        notes="range as written: \"fixed value in the specification\"",
+        notes='range as written: "fixed value in the specification"',
     ),
     _p(
         "program",
@@ -538,7 +536,7 @@ _PARAMS: List[Parameter] = [
         0,
         0,
         desc="Not used",
-        notes="range as written: \"fixed value in the specification\"",
+        notes='range as written: "fixed value in the specification"',
     ),
     _p("program", 29, "PANRAT", 1, "program.pan", 0, 99, desc="Speed of LFO2"),
     _p("program", 30, "PANDEP", 1, "program.pan", 0, 99, desc="Depth of LFO2"),
@@ -561,7 +559,7 @@ _PARAMS: List[Parameter] = [
         0,
         0,
         desc="Not used",
-        notes="range as written: \"fixed value in the specification\"",
+        notes='range as written: "fixed value in the specification"',
     ),
     _p("program", 33, "LFORAT", 1, "program.lfo", 0, 99, desc="Speed of LFO1"),
     _p("program", 34, "LFODEP", 1, "program.lfo", 0, 99, desc="Depth of LFO1"),
@@ -615,7 +613,7 @@ _PARAMS: List[Parameter] = [
         24,
         unit="semitones",
         desc="Range of increase of Pitch by bendwheel",
-        notes="range as written: \"0 to 24 semitones\"",
+        notes='range as written: "0 to 24 semitones"',
     ),
     _p(
         "program",
@@ -627,7 +625,7 @@ _PARAMS: List[Parameter] = [
         12,
         unit="semitones",
         desc="Amount of control of Pitch by Pressure",
-        notes="range as written: \"-12 to +12 semitones\"",
+        notes='range as written: "-12 to +12 semitones"',
     ),
     _p(
         "program",
@@ -639,7 +637,7 @@ _PARAMS: List[Parameter] = [
         1,
         values={0: "OFF", 1: "ON"},
         desc="Keygroup crossfade enable",
-        notes="range as written: \"0 represents OFF, 1 represents ON\"",
+        notes='range as written: "0 represents OFF, 1 represents ON"',
     ),
     _p(
         "program",
@@ -651,7 +649,7 @@ _PARAMS: List[Parameter] = [
         99,
         readonly=True,
         desc="Number of keygroups. To change the number of keygroups in a program, the KDATA and DELK commands should be used.",
-        notes="range as written: \"1 to 99 (Read-only)\"; read-only",
+        notes='range as written: "1 to 99 (Read-only)"; read-only',
     ),
     _p(
         "program",
@@ -674,13 +672,13 @@ _PARAMS: List[Parameter] = [
         unit="cents",
         elements=12,
         desc="Key temperament C, C#, D, D# etc.",
-        notes="range as written: \"-50 to +50 cents\" -- and that range is PER "
-              "SEMITONE. Twelve independent signed bytes, one for each note of "
-              "the octave starting at C, not one twelve-byte number. Modelled "
-              "as a scalar until 2026-08-12, which meant writing -5 cents "
-              "stored FB FF FF FF FF FF FF FF FF FF FF FF: C at -5 and every "
-              "other note at -1. The only field in this table with this shape. "
-              "RESOLUTION_NOTES §66.",
+        notes='range as written: "-50 to +50 cents" -- and that range is PER '
+        "SEMITONE. Twelve independent signed bytes, one for each note of "
+        "the octave starting at C, not one twelve-byte number. Modelled "
+        "as a scalar until 2026-08-12, which meant writing -5 cents "
+        "stored FB FF FF FF FF FF FF FF FF FF FF FF: C at -5 and every "
+        "other note at -1. The only field in this table with this shape. "
+        "RESOLUTION_NOTES §66.",
     ),
     _p(
         "program",
@@ -691,7 +689,7 @@ _PARAMS: List[Parameter] = [
         0,
         0,
         desc="Not used",
-        notes="range as written: \"fixed value in the specification\"",
+        notes='range as written: "fixed value in the specification"',
     ),
     _p(
         "program",
@@ -702,7 +700,7 @@ _PARAMS: List[Parameter] = [
         0,
         0,
         desc="Not used",
-        notes="range as written: \"fixed value in the specification\"",
+        notes='range as written: "fixed value in the specification"',
     ),
     _p(
         "program",
@@ -713,7 +711,7 @@ _PARAMS: List[Parameter] = [
         1,
         1,
         desc="Not used",
-        notes="range as written: \"fixed value in the specification\"",
+        notes='range as written: "fixed value in the specification"',
     ),
     _p(
         "program",
@@ -725,7 +723,7 @@ _PARAMS: List[Parameter] = [
         1,
         values={0: "OFF", 1: "ON"},
         desc="Enable de-synchronisation of LFO1 across notes",
-        notes="range as written: \"0 represents OFF, 1 represents ON\"",
+        notes='range as written: "0 represents OFF, 1 represents ON"',
     ),
     _p(
         "program",
@@ -736,7 +734,7 @@ _PARAMS: List[Parameter] = [
         0,
         0,
         desc="Not used",
-        notes="range as written: \"fixed value in the specification\"",
+        notes='range as written: "fixed value in the specification"',
     ),
     _p(
         "program",
@@ -748,7 +746,7 @@ _PARAMS: List[Parameter] = [
         1,
         values={0: "OLDEST", 1: "QUIETEST"},
         desc="Criterion by which voices are stolen",
-        notes="range as written: \"0 represents OLDEST, 1 represents QUIETEST\"",
+        notes='range as written: "0 represents OLDEST, 1 represents QUIETEST"',
     ),
     _p(
         "program",
@@ -800,7 +798,7 @@ _PARAMS: List[Parameter] = [
         0,
         0,
         desc="Not used",
-        notes="range as written: \"fixed value in the specification\"",
+        notes='range as written: "fixed value in the specification"',
     ),
     _p(
         "program",
@@ -811,7 +809,7 @@ _PARAMS: List[Parameter] = [
         0,
         0,
         desc="Not used",
-        notes="range as written: \"fixed value in the specification\"",
+        notes='range as written: "fixed value in the specification"',
     ),
     _p(
         "program",
@@ -822,7 +820,7 @@ _PARAMS: List[Parameter] = [
         0,
         0,
         desc="Not used",
-        notes="range as written: \"fixed value in the specification\"",
+        notes='range as written: "fixed value in the specification"',
     ),
     _p(
         "program",
@@ -843,7 +841,7 @@ _PARAMS: List[Parameter] = [
         0,
         0,
         desc="Not used",
-        notes="range as written: \"fixed value in the specification\"",
+        notes='range as written: "fixed value in the specification"',
     ),
     _p(
         "program",
@@ -855,7 +853,7 @@ _PARAMS: List[Parameter] = [
         1,
         values={0: "OFF", 1: "ON"},
         desc="Mono legato mode enable",
-        notes="range as written: \"0 represents OFF, 1 represents ON\"",
+        notes='range as written: "0 represents OFF, 1 represents ON"',
     ),
     _p(
         "program",
@@ -867,7 +865,7 @@ _PARAMS: List[Parameter] = [
         12,
         unit="semitones",
         desc="Range of decrease of Pitch by bendwheel",
-        notes="range as written: \"0 to 12 semitones\"",
+        notes='range as written: "0 to 12 semitones"',
     ),
     _p(
         "program",
@@ -879,7 +877,7 @@ _PARAMS: List[Parameter] = [
         1,
         values={0: "NORMAL", 1: "HELD"},
         desc="Bending of held notes",
-        notes="range as written: \"0 represents NORMAL mode, 1 represents HELD mode\"",
+        notes='range as written: "0 represents NORMAL mode, 1 represents HELD mode"',
     ),
     _p(
         "program",
@@ -891,7 +889,7 @@ _PARAMS: List[Parameter] = [
         50,
         unit="semitones",
         desc="Shift pitch of incoming MIDI",
-        notes="range as written: \"-50 to +50 semitones\"",
+        notes='range as written: "-50 to +50 semitones"',
     ),
     _p(
         "program",
@@ -903,7 +901,7 @@ _PARAMS: List[Parameter] = [
         255,
         values=MOD_SOURCES,
         desc="First source of assignable modulation of pan position",
-        notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
+        notes='range as written: "See "Values used to represent Modulation Sources" above"',
     ),
     _p(
         "program",
@@ -915,7 +913,7 @@ _PARAMS: List[Parameter] = [
         255,
         values=MOD_SOURCES,
         desc="Second source of assignable modulation of pan",
-        notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
+        notes='range as written: "See "Values used to represent Modulation Sources" above"',
     ),
     _p(
         "program",
@@ -927,7 +925,7 @@ _PARAMS: List[Parameter] = [
         255,
         values=MOD_SOURCES,
         desc="Third source of assignable modulation of pan",
-        notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
+        notes='range as written: "See "Values used to represent Modulation Sources" above"',
     ),
     _p(
         "program",
@@ -939,7 +937,7 @@ _PARAMS: List[Parameter] = [
         255,
         values=MOD_SOURCES,
         desc="First source of assignable modulation of loudness",
-        notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
+        notes='range as written: "See "Values used to represent Modulation Sources" above"',
     ),
     _p(
         "program",
@@ -951,7 +949,7 @@ _PARAMS: List[Parameter] = [
         255,
         values=MOD_SOURCES,
         desc="Second source of assignable modulation of loudness",
-        notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
+        notes='range as written: "See "Values used to represent Modulation Sources" above"',
     ),
     _p(
         "program",
@@ -963,7 +961,7 @@ _PARAMS: List[Parameter] = [
         255,
         values=MOD_SOURCES,
         desc="Source of assignable modulation of LFO1 speed",
-        notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
+        notes='range as written: "See "Values used to represent Modulation Sources" above"',
     ),
     _p(
         "program",
@@ -975,7 +973,7 @@ _PARAMS: List[Parameter] = [
         255,
         values=MOD_SOURCES,
         desc="Source of assignable modulation of LFO1 depth",
-        notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
+        notes='range as written: "See "Values used to represent Modulation Sources" above"',
     ),
     _p(
         "program",
@@ -987,7 +985,7 @@ _PARAMS: List[Parameter] = [
         255,
         values=MOD_SOURCES,
         desc="Source of assignable modulation of LFO1 delay",
-        notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
+        notes='range as written: "See "Values used to represent Modulation Sources" above"',
     ),
     _p(
         "program",
@@ -999,7 +997,7 @@ _PARAMS: List[Parameter] = [
         255,
         values=MOD_SOURCES,
         desc="First source of assignable modulation of filter frequency",
-        notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
+        notes='range as written: "See "Values used to represent Modulation Sources" above"',
     ),
     _p(
         "program",
@@ -1011,7 +1009,7 @@ _PARAMS: List[Parameter] = [
         255,
         values=MOD_SOURCES,
         desc="Second source of assignable modulation of filter frequency",
-        notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
+        notes='range as written: "See "Values used to represent Modulation Sources" above"',
     ),
     _p(
         "program",
@@ -1023,7 +1021,7 @@ _PARAMS: List[Parameter] = [
         255,
         values=MOD_SOURCES,
         desc="Third source of assignable modulation of filter frequency",
-        notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
+        notes='range as written: "See "Values used to represent Modulation Sources" above"',
     ),
     _p(
         "program",
@@ -1035,7 +1033,7 @@ _PARAMS: List[Parameter] = [
         255,
         values=MOD_SOURCES,
         desc="Source of assignable modulation of pitch",
-        notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
+        notes='range as written: "See "Values used to represent Modulation Sources" above"',
     ),
     _p(
         "program",
@@ -1047,7 +1045,7 @@ _PARAMS: List[Parameter] = [
         255,
         values=MOD_SOURCES,
         desc="Third source of assignable modulation of loudness",
-        notes="range as written: \"See \"Values used to represent Modulation Sources\" above\"",
+        notes='range as written: "See "Values used to represent Modulation Sources" above"',
     ),
     _p(
         "program",
@@ -1138,7 +1136,7 @@ _PARAMS: List[Parameter] = [
         0,
         255,
         desc="LFO1 waveform",
-        notes="range as written: \"0 represents Triangle, 1 represents Sawtooth, 2 represents Square\". MEASURED and confirmed on hardware (RESOLUTION_NOTES §46) by reading the pitch track, which IS the waveform since LFO1 drives pitch. Value 3 is a FOURTH shape absent from the SysEx documents: symmetric like a triangle but spending half as long near its centre, so neither triangle nor square. Identified 2026-08-31 as RANDOM, from the S3000XL manual p.80. The measured 0.16 middle-third occupancy rules out a UNIFORM distribution, which would read 0.33 like the triangle -- so its RMS-to-peak factor is NOT 1/sqrt(3), and is not yet measured.",
+        notes='range as written: "0 represents Triangle, 1 represents Sawtooth, 2 represents Square". MEASURED and confirmed on hardware (RESOLUTION_NOTES §46) by reading the pitch track, which IS the waveform since LFO1 drives pitch. Value 3 is a FOURTH shape absent from the SysEx documents: symmetric like a triangle but spending half as long near its centre, so neither triangle nor square. Identified 2026-08-31 as RANDOM, from the S3000XL manual p.80. The measured 0.16 middle-third occupancy rules out a UNIFORM distribution, which would read 0.33 like the triangle -- so its RMS-to-peak factor is NOT 1/sqrt(3), and is not yet measured.',
     ),
     _p(
         "program",
@@ -1149,21 +1147,21 @@ _PARAMS: List[Parameter] = [
         0,
         255,
         desc="LFO2 waveform",
-        notes="range as written: \"0 represents Triangle, 1 represents Sawtooth, 2 represents Square\". "
-              "OFFSET CONFIRMED TWO WAYS, 2026-09-25. (a) Functional: RESOLUTION_NOTES "
-              "§52 drove this byte with LFO2 routed to the filter and the measured "
-              "modulation SHAPE changed -- wave 0 middle-third 0.27 against 0.09/0.01/0.05. "
-              "(b) Corpus, independent of every document: mpc2emu scanned 4,433 programs "
-              "and byte 98 holds 4 distinct values {0,1,2,3}, 96.5%% on 0, matching byte 97 "
-              "(LFO1WAVE) {0,1,2,3} at 98.6%% on 0. Two adjacent byte-wide fields with the "
-              "same four-value distribution are the two LFOs' waveforms; no out-of-range "
-              "value appears, which would have disproved the alignment. "
-              "VALUE 3 EXISTS HERE (1.8%% of the corpus, ABOVE both 1 at 1.1%% and 2 at "
-              "0.5%%) and is absent from the SysEx documents, exactly as for LFO1. "
-              "LFO1's 3 is MEASURED as RANDOM (§46, and the S3000XL manual p.80). "
-              "LFO2's 3 is NOT measured -- that the two enums are identical is an "
-              "inference from the shared distribution, strong but untested, and the "
-              "cheap falsifier is one shape read off LFO2 at wave 3.",
+        notes='range as written: "0 represents Triangle, 1 represents Sawtooth, 2 represents Square". '
+        "OFFSET CONFIRMED TWO WAYS, 2026-09-25. (a) Functional: RESOLUTION_NOTES "
+        "§52 drove this byte with LFO2 routed to the filter and the measured "
+        "modulation SHAPE changed -- wave 0 middle-third 0.27 against 0.09/0.01/0.05. "
+        "(b) Corpus, independent of every document: mpc2emu scanned 4,433 programs "
+        "and byte 98 holds 4 distinct values {0,1,2,3}, 96.5%% on 0, matching byte 97 "
+        "(LFO1WAVE) {0,1,2,3} at 98.6%% on 0. Two adjacent byte-wide fields with the "
+        "same four-value distribution are the two LFOs' waveforms; no out-of-range "
+        "value appears, which would have disproved the alignment. "
+        "VALUE 3 EXISTS HERE (1.8%% of the corpus, ABOVE both 1 at 1.1%% and 2 at "
+        "0.5%%) and is absent from the SysEx documents, exactly as for LFO1. "
+        "LFO1's 3 is MEASURED as RANDOM (§46, and the S3000XL manual p.80). "
+        "LFO2's 3 is NOT measured -- that the two enums are identical is an "
+        "inference from the shared distribution, strong but untested, and the "
+        "cheap falsifier is one shape read off LFO2 at wave 3.",
     ),
     _p(
         "program",
@@ -1175,7 +1173,7 @@ _PARAMS: List[Parameter] = [
         255,
         values=MOD_SOURCES,
         desc="First source of assignable modulation of filter 2 frequency (only used on S3200).",
-        notes="range as written: \"See \"Values used to represent Modulation sources\" above\"",
+        notes='range as written: "See "Values used to represent Modulation sources" above"',
     ),
     _p(
         "program",
@@ -1187,7 +1185,7 @@ _PARAMS: List[Parameter] = [
         255,
         values=MOD_SOURCES,
         desc="Second source of assignable modulation of filter 2 frequency (only used on S3200).",
-        notes="range as written: \"See \"Values used to represent Modulation sources\" above\"",
+        notes='range as written: "See "Values used to represent Modulation sources" above"',
     ),
     _p(
         "program",
@@ -1199,7 +1197,7 @@ _PARAMS: List[Parameter] = [
         255,
         values=MOD_SOURCES,
         desc="Third source of assignable modulation of filter 2 frequency (only used on S3200).",
-        notes="range as written: \"See \"Values used to represent Modulation sources\" above\"",
+        notes='range as written: "See "Values used to represent Modulation sources" above"',
     ),
     _p(
         "program",
@@ -1219,6 +1217,7 @@ _PARAMS: List[Parameter] = [
         "program.general",
         0,
         72057594037927935,
+        readonly=True,
         desc="Not used",
     ),
     _p(
@@ -1262,8 +1261,17 @@ _PARAMS: List[Parameter] = [
         desc="Effects Bus Select 0 = OFF 1 = FX1 2 = FX2 3 = RV3 4 = RV4",
         models="S2000/S3000XL/S3200XL",
     ),
-    _p("program", 114, "PFXSLEV", 1, "program.output", 0, 99, desc="Not used", models="S2000/S3000XL/S3200XL"),
-
+    _p(
+        "program",
+        114,
+        "PFXSLEV",
+        1,
+        "program.output",
+        0,
+        99,
+        desc="Not used",
+        models="S2000/S3000XL/S3200XL",
+    ),
     # -- KEYGROUP HEADER ------------------------------------------------------
     _p(
         "keygroup",
@@ -1273,8 +1281,9 @@ _PARAMS: List[Parameter] = [
         "keygroup.general",
         2,
         2,
+        readonly=True,
         desc="Block identifier (internal use)",
-        notes="range as written: \"fixed value in the specification\"",
+        notes='range as written: "fixed value in the specification"',
     ),
     _p(
         "keygroup",
@@ -1286,7 +1295,7 @@ _PARAMS: List[Parameter] = [
         16383,
         kind="address",
         desc="Next keygroup block address (internal use)",
-        notes="range as written: \"Block address\"",
+        notes='range as written: "Block address"',
     ),
     _p(
         "keygroup",
@@ -1297,7 +1306,7 @@ _PARAMS: List[Parameter] = [
         21,
         127,
         desc="Lower limit of keyrange",
-        notes="range as written: \"21 to 127 represents A1 to G8\"",
+        notes='range as written: "21 to 127 represents A1 to G8"',
     ),
     _p(
         "keygroup",
@@ -1308,7 +1317,7 @@ _PARAMS: List[Parameter] = [
         21,
         127,
         desc="Upper limit of keyrange",
-        notes="range as written: \"21 to 127 represents A1 to G8\"",
+        notes='range as written: "21 to 127 represents A1 to G8"',
     ),
     _p(
         "keygroup",
@@ -1341,22 +1350,22 @@ _PARAMS: List[Parameter] = [
         99,
         unit="semitones",
         desc="Key follow of filter frequency",
-        notes="range as written: \"0 to 12 semitones\" -- a DISPLAY range transcribed as a "
-              "value range, the same error \u00a756 found on KGTUNO. The S1000 document "
-              "gives the field properly: \"Key>Filter freq (+/-24 semitones/octave)\" -- "
-              "sign, unit and a bound the S2800 sheet omits. MEASURED on hardware "
-              "2026-08-24: the field is SIGNED and clamps at NEITHER 12 nor 24. "
-              "Octaves of corner per octave of key: 0.994 at 12, 1.491 at 18, "
-              "1.845 at 22, 2.449 at 30, 3.288 at 40, and -0.435 / -1.547 / "
-              "-2.441 at -5 / -18 / -30 -- every point 96-103% of K_FREQ/12 with "
-              "no knee anywhere (\u00a7166, \u00a7167). Declared -30..+40 because that is what "
-              "was visited: the POSITIVE side was already swept to 99 and found "
-              "linear on 2026-08-17 (\u00a7108, recorded in scales.py), and \u00a7167 added "
-              "-30 on the negative side. No wall exists in -30..99. TWO predictions "
-              "on this field were wrong: a number being round, or being written in "
-              "a spec, says nothing about whether firmware enforces it. The law is "
-              "\u00a743: shift in FILFRQ units = 0.06386 * K_FREQ * (note - 64), and the "
-              "pivot on note 64 is MEASURED, stated in no document.",
+        notes='range as written: "0 to 12 semitones" -- a DISPLAY range transcribed as a '
+        "value range, the same error \u00a756 found on KGTUNO. The S1000 document "
+        'gives the field properly: "Key>Filter freq (+/-24 semitones/octave)" -- '
+        "sign, unit and a bound the S2800 sheet omits. MEASURED on hardware "
+        "2026-08-24: the field is SIGNED and clamps at NEITHER 12 nor 24. "
+        "Octaves of corner per octave of key: 0.994 at 12, 1.491 at 18, "
+        "1.845 at 22, 2.449 at 30, 3.288 at 40, and -0.435 / -1.547 / "
+        "-2.441 at -5 / -18 / -30 -- every point 96-103% of K_FREQ/12 with "
+        "no knee anywhere (\u00a7166, \u00a7167). Declared -30..+40 because that is what "
+        "was visited: the POSITIVE side was already swept to 99 and found "
+        "linear on 2026-08-17 (\u00a7108, recorded in scales.py), and \u00a7167 added "
+        "-30 on the negative side. No wall exists in -30..99. TWO predictions "
+        "on this field were wrong: a number being round, or being written in "
+        "a spec, says nothing about whether firmware enforces it. The law is "
+        "\u00a743: shift in FILFRQ units = 0.06386 * K_FREQ * (note - 64), and the "
+        "pivot on note 64 is MEASURED, stated in no document.",
     ),
     _p(
         "keygroup",
@@ -1367,7 +1376,7 @@ _PARAMS: List[Parameter] = [
         0,
         0,
         desc="Not used",
-        notes="range as written: \"fixed value in the specification\"",
+        notes='range as written: "fixed value in the specification"',
     ),
     _p(
         "keygroup",
@@ -1378,7 +1387,7 @@ _PARAMS: List[Parameter] = [
         0,
         0,
         desc="Not used",
-        notes="range as written: \"fixed value in the specification\"",
+        notes='range as written: "fixed value in the specification"',
     ),
     _p(
         "keygroup",
@@ -1389,7 +1398,7 @@ _PARAMS: List[Parameter] = [
         0,
         0,
         desc="Not used",
-        notes="range as written: \"fixed value in the specification\"",
+        notes='range as written: "fixed value in the specification"',
     ),
     _p(
         "keygroup",
@@ -1574,7 +1583,7 @@ _PARAMS: List[Parameter] = [
         0,
         0,
         desc="Not used",
-        notes="range as written: \"fixed value in the specification\"",
+        notes='range as written: "fixed value in the specification"',
     ),
     _p(
         "keygroup",
@@ -1586,7 +1595,7 @@ _PARAMS: List[Parameter] = [
         1,
         values={0: "OFF", 1: "ON"},
         desc="Velocity zone crossfade",
-        notes="range as written: \"0 represents OFF, 1 represents ON\"",
+        notes='range as written: "0 represents OFF, 1 represents ON"',
     ),
     _p(
         "keygroup",
@@ -1597,7 +1606,7 @@ _PARAMS: List[Parameter] = [
         0,
         0,
         desc="Not used",
-        notes="range as written: \"fixed value in the specification\"",
+        notes='range as written: "fixed value in the specification"',
     ),
     _p(
         "keygroup",
@@ -1699,9 +1708,15 @@ _PARAMS: List[Parameter] = [
         "keygroup.zone.1",
         0,
         4,
-        values={0: "As sample", 1: "Loop in release", 2: "Loop til release", 3: "No loops", 4: "Play to sample end"},
+        values={
+            0: "As sample",
+            1: "Loop in release",
+            2: "Loop til release",
+            3: "No loops",
+            4: "Play to sample end",
+        },
         desc="Type of sample playback in velocity zone 1",
-        notes="range as written: \"0 = As sample 1 = Loop in release 2 = Loop til release 3 = No loops 4 = Play to sample end\"",
+        notes='range as written: "0 = As sample 1 = Loop in release 2 = Loop til release 3 = No loops 4 = Play to sample end"',
     ),
     _p(
         "keygroup",
@@ -1733,7 +1748,7 @@ _PARAMS: List[Parameter] = [
         16383,
         kind="address",
         desc="Calculated sample header block address (internal) ;Velocity zone 2",
-        notes="range as written: \"Block address\"",
+        notes='range as written: "Block address"',
     ),
     _p(
         "keygroup",
@@ -1815,9 +1830,15 @@ _PARAMS: List[Parameter] = [
         "keygroup.zone.2",
         0,
         4,
-        values={0: "As sample", 1: "Loop in release", 2: "Loop til release", 3: "No loops", 4: "Play to sample end"},
+        values={
+            0: "As sample",
+            1: "Loop in release",
+            2: "Loop til release",
+            3: "No loops",
+            4: "Play to sample end",
+        },
         desc="Type of sample playback in velocity zone 2",
-        notes="range as written: \"0 = As sample 1 = Loop in release 2 = Loop til release 3 = No loops 4 = Play to sample end\"",
+        notes='range as written: "0 = As sample 1 = Loop in release 2 = Loop til release 3 = No loops 4 = Play to sample end"',
     ),
     _p(
         "keygroup",
@@ -1849,7 +1870,7 @@ _PARAMS: List[Parameter] = [
         16383,
         kind="address",
         desc="Calculated sample header block address (internal) ;Velocity zone 3",
-        notes="range as written: \"Block address\"",
+        notes='range as written: "Block address"',
     ),
     _p(
         "keygroup",
@@ -1931,9 +1952,15 @@ _PARAMS: List[Parameter] = [
         "keygroup.zone.3",
         0,
         4,
-        values={0: "As sample", 1: "Loop in release", 2: "Loop til release", 3: "No loops", 4: "Play to sample end"},
+        values={
+            0: "As sample",
+            1: "Loop in release",
+            2: "Loop til release",
+            3: "No loops",
+            4: "Play to sample end",
+        },
         desc="Type of sample playback in velocity zone 3",
-        notes="range as written: \"0 = As sample 1 = Loop in release 2 = Loop til release 3 = No loops 4 = Play to sample end\"",
+        notes='range as written: "0 = As sample 1 = Loop in release 2 = Loop til release 3 = No loops 4 = Play to sample end"',
     ),
     _p(
         "keygroup",
@@ -1965,7 +1992,7 @@ _PARAMS: List[Parameter] = [
         16383,
         kind="address",
         desc="Calculated sample header block address (internal) ;Velocity zone 4",
-        notes="range as written: \"Block address\"",
+        notes='range as written: "Block address"',
     ),
     _p(
         "keygroup",
@@ -2047,9 +2074,15 @@ _PARAMS: List[Parameter] = [
         "keygroup.zone.4",
         0,
         4,
-        values={0: "As sample", 1: "Loop in release", 2: "Loop til release", 3: "No loops", 4: "Play to sample end"},
+        values={
+            0: "As sample",
+            1: "Loop in release",
+            2: "Loop til release",
+            3: "No loops",
+            4: "Play to sample end",
+        },
         desc="Type of sample playback in velocity zone 4",
-        notes="range as written: \"0 = As sample 1 = Loop in release 2 = Loop til release 3 = No loops 4 = Play to sample end\"",
+        notes='range as written: "0 = As sample 1 = Loop in release 2 = Loop til release 3 = No loops 4 = Play to sample end"',
     ),
     _p(
         "keygroup",
@@ -2081,7 +2114,7 @@ _PARAMS: List[Parameter] = [
         16383,
         kind="address",
         desc="Calculated sample header block address (internal) ;Keygroup common",
-        notes="range as written: \"Block address\"",
+        notes='range as written: "Block address"',
     ),
     _p(
         "keygroup",
@@ -2103,7 +2136,7 @@ _PARAMS: List[Parameter] = [
         1,
         values={0: "OFF", 1: "ON"},
         desc="Remain in attack phase until first loop encountered ;More Zone stuff",
-        notes="range as written: \"0 represents OFF, 1 represents ON\"",
+        notes='range as written: "0 represents OFF, 1 represents ON"',
     ),
     _p(
         "keygroup",
@@ -2115,7 +2148,7 @@ _PARAMS: List[Parameter] = [
         1,
         values={0: "TRACK", 1: "CONST"},
         desc="Constant pitch flag for velocity zone 1",
-        notes="range as written: \"0 represents TRACK, 1 represents CONST\"",
+        notes='range as written: "0 represents TRACK, 1 represents CONST"',
     ),
     _p(
         "keygroup",
@@ -2127,7 +2160,7 @@ _PARAMS: List[Parameter] = [
         1,
         values={0: "TRACK", 1: "CONST"},
         desc="Constant pitch flag for velocity zone 2",
-        notes="range as written: \"0 represents TRACK, 1 represents CONST\"",
+        notes='range as written: "0 represents TRACK, 1 represents CONST"',
     ),
     _p(
         "keygroup",
@@ -2139,7 +2172,7 @@ _PARAMS: List[Parameter] = [
         1,
         values={0: "TRACK", 1: "CONST"},
         desc="Constant pitch flag for velocity zone 3",
-        notes="range as written: \"0 represents TRACK, 1 represents CONST\"",
+        notes='range as written: "0 represents TRACK, 1 represents CONST"',
     ),
     _p(
         "keygroup",
@@ -2151,7 +2184,7 @@ _PARAMS: List[Parameter] = [
         1,
         values={0: "TRACK", 1: "CONST"},
         desc="Constant pitch flag for velocity zone 4",
-        notes="range as written: \"0 represents TRACK, 1 represents CONST\"",
+        notes='range as written: "0 represents TRACK, 1 represents CONST"',
     ),
     _p(
         "keygroup",
@@ -2162,7 +2195,7 @@ _PARAMS: List[Parameter] = [
         0,
         10,
         desc="Individual output offset for velocity zone 1",
-        notes="range as written: \"0 to 10 for S3000, S3200; 0 to 4 for S2800\"",
+        notes='range as written: "0 to 10 for S3000, S3200; 0 to 4 for S2800"',
     ),
     _p(
         "keygroup",
@@ -2173,7 +2206,7 @@ _PARAMS: List[Parameter] = [
         0,
         10,
         desc="Individual output offset for velocity zone 2",
-        notes="range as written: \"0 to 10 for S3000, S3200; 0 to 4 for S2800\"",
+        notes='range as written: "0 to 10 for S3000, S3200; 0 to 4 for S2800"',
     ),
     _p(
         "keygroup",
@@ -2184,7 +2217,7 @@ _PARAMS: List[Parameter] = [
         0,
         10,
         desc="Individual output offset for velocity zone 3",
-        notes="range as written: \"0 to 10 for S3000, S3200; 0 to 4 for S2800\"",
+        notes='range as written: "0 to 10 for S3000, S3200; 0 to 4 for S2800"',
     ),
     _p(
         "keygroup",
@@ -2195,7 +2228,7 @@ _PARAMS: List[Parameter] = [
         0,
         10,
         desc="Individual output offset for velocity zone 4",
-        notes="range as written: \"0 to 10 for S3000, S3200; 0 to 4 for S2800\"",
+        notes='range as written: "0 to 10 for S3000, S3200; 0 to 4 for S2800"',
     ),
     _p(
         "keygroup",
@@ -2206,7 +2239,7 @@ _PARAMS: List[Parameter] = [
         -9999,
         9999,
         desc="Start point dependence on note-on velocity for sample in velocity zone 1",
-        notes="range as written: \"-9999 to +9999 data points\"",
+        notes='range as written: "-9999 to +9999 data points"',
     ),
     _p(
         "keygroup",
@@ -2217,7 +2250,7 @@ _PARAMS: List[Parameter] = [
         -9999,
         9999,
         desc="Start point dependence on note-on velocity for sample in velocity zone 2",
-        notes="range as written: \"-9999 to +9999 data points\"",
+        notes='range as written: "-9999 to +9999 data points"',
     ),
     _p(
         "keygroup",
@@ -2228,7 +2261,7 @@ _PARAMS: List[Parameter] = [
         -9999,
         9999,
         desc="Start point dependence on note-on velocity for sample in velocity zone 3",
-        notes="range as written: \"-9999 to +9999 data points\"",
+        notes='range as written: "-9999 to +9999 data points"',
     ),
     _p(
         "keygroup",
@@ -2239,7 +2272,7 @@ _PARAMS: List[Parameter] = [
         -9999,
         9999,
         desc="Start point dependence on note-on velocity for sample in velocity zone 4",
-        notes="range as written: \"-9999 to +9999 data points\"",
+        notes='range as written: "-9999 to +9999 data points"',
     ),
     _p(
         "keygroup",
@@ -2250,7 +2283,7 @@ _PARAMS: List[Parameter] = [
         0,
         0,
         desc="Not used",
-        notes="range as written: \"fixed value in the specification\"",
+        notes='range as written: "fixed value in the specification"',
     ),
     _p(
         "keygroup",
@@ -2322,21 +2355,21 @@ _PARAMS: List[Parameter] = [
         99,
         desc="Amount of control of loudness by assignable keygroup source",
         notes="MAXIMUM CORRECTED -50..50 -> -50..99 on 2026-09-27, on hardware "
-              "evidence. The transcribed range refused a value the machine "
-              "accepts and acts on: mpc2emu's LFO2CAL disc carries MODVAMP3=99 "
-              "on program 103 and the sampler produces 13.045 dB of tremolo "
-              "there, on the same product-2000 contour as 40 and 50 do "
-              "(spread 1.3%% across four splits, §272). A range that blocks a "
-              "demonstrated value is not a conservative range, it is a wrong "
-              "one -- set_parameter would have refused to write what the disc "
-              "already holds. "
-              "THE NEGATIVE HALF IS UNTESTED and is left at -50 deliberately: "
-              "only +99 is demonstrated, nothing here has driven this field "
-              "below zero, and widening both ends on the evidence for one "
-              "would be the inference this project keeps being caught making. "
-              "MODVAMP1/MODVAMP2 are NOT changed -- they are program-scope "
-              "slots 1 and 2, no value above 50 has been seen on either, and "
-              "assuming they share slot 3's range is untested.",
+        "evidence. The transcribed range refused a value the machine "
+        "accepts and acts on: mpc2emu's LFO2CAL disc carries MODVAMP3=99 "
+        "on program 103 and the sampler produces 13.045 dB of tremolo "
+        "there, on the same product-2000 contour as 40 and 50 do "
+        "(spread 1.3%% across four splits, §272). A range that blocks a "
+        "demonstrated value is not a conservative range, it is a wrong "
+        "one -- set_parameter would have refused to write what the disc "
+        "already holds. "
+        "THE NEGATIVE HALF IS UNTESTED and is left at -50 deliberately: "
+        "only +99 is demonstrated, nothing here has driven this field "
+        "below zero, and widening both ends on the evidence for one "
+        "would be the inference this project keeps being caught making. "
+        "MODVAMP1/MODVAMP2 are NOT changed -- they are program-scope "
+        "slots 1 and 2, no value above 50 has been seen on either, and "
+        "assuming they share slot 3's range is untested.",
     ),
     _p(
         "keygroup",
@@ -2403,7 +2436,7 @@ _PARAMS: List[Parameter] = [
         0,
         5,
         desc="Keygroup override Effects Bus select 0 = PRG (use the global program header selection) 1 = OFF 2 = FX1 3 = FX2 4 = RV3 5 = RV4",
-        notes="the specification documents this byte twice: earlier as PFXCHAN (with the program header's enumeration) and again here, with a leading \"0 = PRG\" that shifts every later value by one. The later definition is used, and RESOLUTION_NOTES §211 settles it: under the earlier reading, 0 would mean OFF, so the ~51,780 keygroups holding 0 across the library corpus would each override their program to no effects and the 23.3% of programs that select a bus could never be heard. \"0 = PRG\" is the only reading under which the program-level field can function. Settled by corpus coherence, NOT by hardware -- readback returns whatever was written under either enumeration",
+        notes='the specification documents this byte twice: earlier as PFXCHAN (with the program header\'s enumeration) and again here, with a leading "0 = PRG" that shifts every later value by one. The later definition is used, and RESOLUTION_NOTES §211 settles it: under the earlier reading, 0 would mean OFF, so the ~51,780 keygroups holding 0 across the library corpus would each override their program to no effects and the 23.3% of programs that select a bus could never be heard. "0 = PRG" is the only reading under which the program-level field can function. Settled by corpus coherence, NOT by hardware -- readback returns whatever was written under either enumeration',
     ),
     _p(
         "keygroup",
@@ -2414,7 +2447,7 @@ _PARAMS: List[Parameter] = [
         0,
         99,
         desc="Keygroup override Effects Send level",
-        notes="the specification documents this byte twice: earlier as PFXSLEV (with the program header's enumeration) and again here, with a leading \"0 = PRG\" that shifts every later value by one. The later definition is used, and RESOLUTION_NOTES §211 settles it: under the earlier reading, 0 would mean OFF, so the ~51,780 keygroups holding 0 across the library corpus would each override their program to no effects and the 23.3% of programs that select a bus could never be heard. \"0 = PRG\" is the only reading under which the program-level field can function. Settled by corpus coherence, NOT by hardware -- readback returns whatever was written under either enumeration",
+        notes='the specification documents this byte twice: earlier as PFXSLEV (with the program header\'s enumeration) and again here, with a leading "0 = PRG" that shifts every later value by one. The later definition is used, and RESOLUTION_NOTES §211 settles it: under the earlier reading, 0 would mean OFF, so the ~51,780 keygroups holding 0 across the library corpus would each override their program to no effects and the 23.3% of programs that select a bus could never be heard. "0 = PRG" is the only reading under which the program-level field can function. Settled by corpus coherence, NOT by hardware -- readback returns whatever was written under either enumeration',
     ),
     _p(
         "keygroup",
@@ -2424,6 +2457,7 @@ _PARAMS: List[Parameter] = [
         "keygroup.general",
         0,
         1099511627775,
+        readonly=True,
         desc="Not used",
     ),
     _p(
@@ -2436,7 +2470,7 @@ _PARAMS: List[Parameter] = [
         1,
         values={0: "-6dB", 1: "0dB"},
         desc="Route audio through second LSI",
-        notes="range as written: \"0 = -6dB, 1 = 0dB\"",
+        notes='range as written: "0 = -6dB, 1 = 0dB"',
     ),
     _p(
         "keygroup",
@@ -2448,7 +2482,7 @@ _PARAMS: List[Parameter] = [
         1,
         values={0: "-6dB", 1: "0dB"},
         desc="Make-up gain of second filter",
-        notes="range as written: \"0 = -6dB, 1 = 0dB\"",
+        notes='range as written: "0 = -6dB, 1 = 0dB"',
         requires="IB304F",
         models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
     ),
@@ -2462,7 +2496,7 @@ _PARAMS: List[Parameter] = [
         3,
         values={0: "Low-pass", 1: "Band-pass", 2: "High-pass", 3: "EQ"},
         desc="Mode of second filter",
-        notes="range as written: \"0 = Low-pass, 1 = Band-pass, 2 = High-pass, 3 = EQ\"",
+        notes='range as written: "0 = Low-pass, 1 = Band-pass, 2 = High-pass, 3 = EQ"',
         requires="IB304F",
         models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
     ),
@@ -2554,7 +2588,7 @@ _PARAMS: List[Parameter] = [
         24,
         unit="semitones",
         desc="Second filter key follow",
-        notes="range as written: \"-24 to +24 semitones\"",
+        notes='range as written: "-24 to +24 semitones"',
         requires="IB304F",
         models="S3200 (second LSI fitted as standard), or an S3000XL/S2000 with the optional IB304F filter board. The fields exist in the header on every model; without the board they do nothing -- the machine answers `2nd filter board IB304F not fitted!` at the panel. RESOLUTION_NOTES §19.",
     ),
@@ -2700,7 +2734,6 @@ _PARAMS: List[Parameter] = [
         50,
         desc="Scaling of envelope 3 by note-on velocity",
     ),
-
     # -- SAMPLE HEADER --------------------------------------------------------
     _p(
         "sample",
@@ -2708,10 +2741,11 @@ _PARAMS: List[Parameter] = [
         "SHIDENT",
         1,
         "sample.general",
-        0,
-        255,
+        3,
+        3,
+        readonly=True,
         desc="Block identifier",
-        notes="range as written: \"3 (Fixed)\"",
+        notes='range as written: "3 (Fixed)"',
     ),
     _p(
         "sample",
@@ -2722,7 +2756,7 @@ _PARAMS: List[Parameter] = [
         0,
         255,
         desc="Sample bandwidth",
-        notes="range as written: \"0 represents 10kHz, 1 represents 20kHz\"",
+        notes='range as written: "0 represents 10kHz, 1 represents 20kHz"',
     ),
     _p(
         "sample",
@@ -2733,7 +2767,7 @@ _PARAMS: List[Parameter] = [
         21,
         127,
         desc="Original pitch",
-        notes="range as written: \"21 to 127 represents A1 to G8\"",
+        notes='range as written: "21 to 127 represents A1 to G8"',
     ),
     _p(
         "sample",
@@ -2746,9 +2780,9 @@ _PARAMS: List[Parameter] = [
         kind="text",
         desc="Sample name",
         notes="Offset and width CONFIRMED against the machine's own firmware "
-              "2026-09-21 (§258), by the sample-side twin of the program name "
-              "search -- 0x34A9A over 0x72F6 and cursor 0x74C7, same "
-              "12-byte compare at offset 3.",
+        "2026-09-21 (§258), by the sample-side twin of the program name "
+        "search -- 0x34A9A over 0x72F6 and cursor 0x74C7, same "
+        "12-byte compare at offset 3.",
     ),
     _p(
         "sample",
@@ -2759,10 +2793,9 @@ _PARAMS: List[Parameter] = [
         0,
         255,
         desc="Sample rate validity",
-        notes="range as written: \"0 indicates rate is invalid, 128 indicates rate is valid\"",
+        notes='range as written: "0 indicates rate is invalid, 128 indicates rate is valid"',
     ),
-    _p("sample", 16, "SLOOPS", 1, "sample.loop", 0, 255, readonly=True,
-        desc="Number of loops"),
+    _p("sample", 16, "SLOOPS", 1, "sample.loop", 0, 255, readonly=True, desc="Number of loops"),
     _p(
         "sample",
         17,
@@ -2793,9 +2826,14 @@ _PARAMS: List[Parameter] = [
         "sample.general",
         0,
         3,
-        values={0: "Normal looping", 1: "Loop until release", 2: "No looping", 3: "Play to sample end"},
+        values={
+            0: "Normal looping",
+            1: "Loop until release",
+            2: "No looping",
+            3: "Play to sample end",
+        },
         desc="Playback type",
-        notes="range as written: \"0 = Normal looping 1 = Loop until release 2 = No looping 3 = Play to sample end\"",
+        notes='range as written: "0 = Normal looping 1 = Loop until release 2 = No looping 3 = Play to sample end"',
     ),
     _p(
         "sample",
@@ -2817,7 +2855,7 @@ _PARAMS: List[Parameter] = [
         268435455,
         kind="address",
         desc="Absolute start address in memory of sample",
-        notes="range as written: \"Absolute location in Wave memory\"",
+        notes='range as written: "Absolute location in Wave memory"',
     ),
     _p(
         "sample",
@@ -2828,7 +2866,7 @@ _PARAMS: List[Parameter] = [
         0,
         4294967295,
         desc="Length of sample",
-        notes="range as written: \"Number of data points from start of sample\"",
+        notes='range as written: "Number of data points from start of sample"',
     ),
     _p(
         "sample",
@@ -2839,7 +2877,7 @@ _PARAMS: List[Parameter] = [
         0,
         4294967295,
         desc="Offset from start of sample from which playback commences",
-        notes="range as written: \"Number of data points from start of sample\"",
+        notes='range as written: "Number of data points from start of sample"',
     ),
     _p(
         "sample",
@@ -2850,7 +2888,7 @@ _PARAMS: List[Parameter] = [
         0,
         4294967295,
         desc="Offset from start of sample from which playback ceases ;First Loop",
-        notes="range as written: \"Number of data points from start of sample\"",
+        notes='range as written: "Number of data points from start of sample"',
     ),
     _p(
         "sample",
@@ -2861,19 +2899,19 @@ _PARAMS: List[Parameter] = [
         0,
         4294967295,
         desc="Position in sample of first loop point",
-        notes="range as written: \"Number of data points from start of sample\". "
-              "THIS IS THE LOOP'S **END**, NOT ITS START -- §136, confirmed on "
-              "hardware at correlation 1.000000 over 352800 frames. LLNGTH1 "
-              "measures BACKWARDS from it, so the loop is "
-              "[LOOPAT1 - LLNGTH1, LOOPAT1]. The desc above, and the source "
-              "document's own wording, both read naturally as the start; "
-              "getting it backwards is what produced silent and degraded "
-              "loops in a sibling project, which wrote the intended start "
-              "here and asked for a negative region on 100% of its output. "
-              "Recorded here 2026-09-23 after AKAISDS -- a downstream "
-              "consumer of this table -- reported that reading params.py "
-              "alone gives the wrong answer. The finding was ours and "
-              "hardware-verified; it had simply never reached the data.",
+        notes='range as written: "Number of data points from start of sample". '
+        "THIS IS THE LOOP'S **END**, NOT ITS START -- §136, confirmed on "
+        "hardware at correlation 1.000000 over 352800 frames. LLNGTH1 "
+        "measures BACKWARDS from it, so the loop is "
+        "[LOOPAT1 - LLNGTH1, LOOPAT1]. The desc above, and the source "
+        "document's own wording, both read naturally as the start; "
+        "getting it backwards is what produced silent and degraded "
+        "loops in a sibling project, which wrote the intended start "
+        "here and asked for a negative region on 100% of its output. "
+        "Recorded here 2026-09-23 after AKAISDS -- a downstream "
+        "consumer of this table -- reported that reading params.py "
+        "alone gives the wrong answer. The finding was ours and "
+        "hardware-verified; it had simply never reached the data.",
     ),
     _p(
         "sample",
@@ -2885,19 +2923,19 @@ _PARAMS: List[Parameter] = [
         281474976710655,
         desc="First loop length",
         notes="**32.16 FIXED POINT, not a plain frame count.** Confirmed on "
-              "hardware 2026-09-23 (§261): the six bytes are little-endian "
-              "[16-bit fraction][32-bit frames], so raw = frames * 65536 + "
-              "fraction. A ROM SINE of SLNGTH 256 reads df 8f a8 00 00 00 = "
-              "11046879 raw = 168 frames + 0.5620. Read as a plain count that "
-              "is 43000x the whole sample. The fraction is load-bearing: a "
-              "single-cycle waveform needs sub-frame loop precision to hold "
-              "pitch, which is why the field carries 16 bits of it -- and why "
-              "it is 6 bytes where SLOCAT, SLNGTH, SSTART, SMPEND and LOOPAT1 "
-              "are all 4. §136 cites this field at 0x2c while it starts at "
-              "0x2a: 0x2c is where the 32-bit frame count begins, and §136's "
-              "quoted \'LLNGTH 44100\' was that decoded frame count, not the "
-              "raw field. Writing a plain frame count here gives a loop 65536x "
-              "too short -- AKAISDS hit exactly that and reported it.",
+        "hardware 2026-09-23 (§261): the six bytes are little-endian "
+        "[16-bit fraction][32-bit frames], so raw = frames * 65536 + "
+        "fraction. A ROM SINE of SLNGTH 256 reads df 8f a8 00 00 00 = "
+        "11046879 raw = 168 frames + 0.5620. Read as a plain count that "
+        "is 43000x the whole sample. The fraction is load-bearing: a "
+        "single-cycle waveform needs sub-frame loop precision to hold "
+        "pitch, which is why the field carries 16 bits of it -- and why "
+        "it is 6 bytes where SLOCAT, SLNGTH, SSTART, SMPEND and LOOPAT1 "
+        "are all 4. §136 cites this field at 0x2c while it starts at "
+        "0x2a: 0x2c is where the 32-bit frame count begins, and §136's "
+        "quoted 'LLNGTH 44100' was that decoded frame count, not the "
+        "raw field. Writing a plain frame count here gives a loop 65536x "
+        "too short -- AKAISDS hit exactly that and reported it.",
     ),
     _p(
         "sample",
@@ -2910,7 +2948,7 @@ _PARAMS: List[Parameter] = [
         unit="ms",
         values={0: "no loop", 9999: "hold"},
         desc="Dwell time of first loop ;Second Loop",
-        notes="range as written: \"0 represents No Loop, 9999 = Hold, 1 to 9998 represents Dwell time in milliseconds\"",
+        notes='range as written: "0 represents No Loop, 9999 = Hold, 1 to 9998 represents Dwell time in milliseconds"',
     ),
     _p(
         "sample",
@@ -2921,7 +2959,7 @@ _PARAMS: List[Parameter] = [
         0,
         4294967295,
         desc="Position in sample of second loop point",
-        notes="range as written: \"Number of data points from start of sample\"",
+        notes='range as written: "Number of data points from start of sample"',
     ),
     _p(
         "sample",
@@ -2945,7 +2983,7 @@ _PARAMS: List[Parameter] = [
         unit="ms",
         values={0: "no loop", 9999: "hold"},
         desc="Dwell time of second loop ;Third Loop",
-        notes="range as written: \"0 represents No Loop, 9999 = Hold, 1 to 9998 represents Dwell time in milliseconds\"",
+        notes='range as written: "0 represents No Loop, 9999 = Hold, 1 to 9998 represents Dwell time in milliseconds"',
     ),
     _p(
         "sample",
@@ -2956,7 +2994,7 @@ _PARAMS: List[Parameter] = [
         0,
         4294967295,
         desc="Position in sample of third loop point",
-        notes="range as written: \"Number of data points from start of sample\"",
+        notes='range as written: "Number of data points from start of sample"',
     ),
     _p(
         "sample",
@@ -2980,7 +3018,7 @@ _PARAMS: List[Parameter] = [
         unit="ms",
         values={0: "no loop", 9999: "hold"},
         desc="Dwell time of third loop ;Fourth Loop",
-        notes="range as written: \"0 represents No Loop, 9999 = Hold, 1 to 9998 represents Dwell time in milliseconds\"",
+        notes='range as written: "0 represents No Loop, 9999 = Hold, 1 to 9998 represents Dwell time in milliseconds"',
     ),
     _p(
         "sample",
@@ -2991,7 +3029,7 @@ _PARAMS: List[Parameter] = [
         0,
         4294967295,
         desc="Position in sample of fourth loop point",
-        notes="range as written: \"Number of data points from start of sample\"",
+        notes='range as written: "Number of data points from start of sample"',
     ),
     _p(
         "sample",
@@ -3015,7 +3053,7 @@ _PARAMS: List[Parameter] = [
         unit="ms",
         values={0: "no loop", 9999: "hold"},
         desc="Dwell time of fourth loop",
-        notes="range as written: \"0 represents No Loop, 9999 = Hold, 1 to 9998 represents Dwell time in milliseconds\"",
+        notes='range as written: "0 represents No Loop, 9999 = Hold, 1 to 9998 represents Dwell time in milliseconds"',
     ),
     _p(
         "sample",
@@ -3057,8 +3095,7 @@ _PARAMS: List[Parameter] = [
         4294967295,
         desc="Relative loop factors for loop 4",
     ),
-    _p("sample", 134, "SSPARE", 1, "sample.general", 0, 255, readonly=True,
-        desc="Used internally"),
+    _p("sample", 134, "SSPARE", 1, "sample.general", 0, 255, readonly=True, desc="Used internally"),
     _p("sample", 135, "SWCOMM", 1, "sample.general", 0, 255, desc="Not used"),
     _p(
         "sample",
@@ -3070,7 +3107,7 @@ _PARAMS: List[Parameter] = [
         16383,
         kind="address",
         desc="Address of stereo partner (internal use)",
-        notes="range as written: \"Block address\"",
+        notes='range as written: "Block address"',
     ),
     _p("sample", 138, "SSRATE", 2, "sample.data", 0, 65535, desc="Sample rate"),
     _p(
@@ -3088,27 +3125,82 @@ _PARAMS: List[Parameter] = [
     # MULTIDATA; the item index is unused (reserved) for this section.
     # "This header currently holds little useful information" -- the spec's own
     # assessment, and it is right: a name, four effect assignments, a filename.
-    _p("multi", 3, "MULTINAME", 12, "multi.general", 0, 0, kind="text",
-        models="S2000/S3000XL/S3200XL", desc="The filename of the multi file"),
-    _p("multi", 16, "FX1", 1, "multi.effects", 0, 204, models="S2000/S3000XL/S3200XL",
+    _p(
+        "multi",
+        3,
+        "MULTINAME",
+        12,
+        "multi.general",
+        0,
+        0,
+        kind="text",
+        models="S2000/S3000XL/S3200XL",
+        desc="The filename of the multi file",
+    ),
+    _p(
+        "multi",
+        16,
+        "FX1",
+        1,
+        "multi.effects",
+        0,
+        204,
+        models="S2000/S3000XL/S3200XL",
         display_offset=1,
         desc="Effects setup for effects channel FX1 (the setup carries its own reverb)",
-        notes="measured on hardware 2026-09-10 (§215, corrected by §217): accepts 0-204. The spec gives no range, so 0..255 was the byte. The maximum is 204 because writing 205 PANICS the machine to 'Internal Error - divide overflow', takes the whole SysEx surface down with it, and STORES THE BYTE ANYWAY. There is no error reply -- the device stops answering mid-transaction, so a write of 205 times out rather than being refused. §215's 'refused band 205-238' and its crash at 239 were both wrong: everything after 205 in that scan was a dead machine answering incoherently, and 239 in isolation writes cleanly and reads back 239. Values above 204 must not be offered. PANEL READ 2026-09-10 (§216): the EFFECTS/REVERB SELECT page shows 38 CLEAR DETUNE for byte 37 and 1 REVERB EQ 1 for byte 0, so the panel is 1-based and the byte is 0-based -- the POLYPH convention, confirmed twice inside one photograph"),
-    _p("multi", 17, "FX2", 1, "multi.effects", 0, 204, models="S2000/S3000XL/S3200XL",
+        notes="measured on hardware 2026-09-10 (§215, corrected by §217): accepts 0-204. The spec gives no range, so 0..255 was the byte. The maximum is 204 because writing 205 PANICS the machine to 'Internal Error - divide overflow', takes the whole SysEx surface down with it, and STORES THE BYTE ANYWAY. There is no error reply -- the device stops answering mid-transaction, so a write of 205 times out rather than being refused. §215's 'refused band 205-238' and its crash at 239 were both wrong: everything after 205 in that scan was a dead machine answering incoherently, and 239 in isolation writes cleanly and reads back 239. Values above 204 must not be offered. PANEL READ 2026-09-10 (§216): the EFFECTS/REVERB SELECT page shows 38 CLEAR DETUNE for byte 37 and 1 REVERB EQ 1 for byte 0, so the panel is 1-based and the byte is 0-based -- the POLYPH convention, confirmed twice inside one photograph",
+    ),
+    _p(
+        "multi",
+        17,
+        "FX2",
+        1,
+        "multi.effects",
+        0,
+        204,
+        models="S2000/S3000XL/S3200XL",
         display_offset=1,
         desc="Effects setup for effects channel FX2 (the setup carries its own reverb)",
-        notes="measured on hardware 2026-09-10 (§215, corrected by §217): accepts 0-204. The spec gives no range, so 0..255 was the byte. The maximum is 204 because writing 205 PANICS the machine to 'Internal Error - divide overflow', takes the whole SysEx surface down with it, and STORES THE BYTE ANYWAY. There is no error reply -- the device stops answering mid-transaction, so a write of 205 times out rather than being refused. §215's 'refused band 205-238' and its crash at 239 were both wrong: everything after 205 in that scan was a dead machine answering incoherently, and 239 in isolation writes cleanly and reads back 239. Values above 204 must not be offered. PANEL READ 2026-09-10 (§216): the EFFECTS/REVERB SELECT page shows 38 CLEAR DETUNE for byte 37 and 1 REVERB EQ 1 for byte 0, so the panel is 1-based and the byte is 0-based -- the POLYPH convention, confirmed twice inside one photograph"),
-    _p("multi", 18, "FX3", 1, "multi.effects", 0, 204, models="S2000/S3000XL/S3200XL",
+        notes="measured on hardware 2026-09-10 (§215, corrected by §217): accepts 0-204. The spec gives no range, so 0..255 was the byte. The maximum is 204 because writing 205 PANICS the machine to 'Internal Error - divide overflow', takes the whole SysEx surface down with it, and STORES THE BYTE ANYWAY. There is no error reply -- the device stops answering mid-transaction, so a write of 205 times out rather than being refused. §215's 'refused band 205-238' and its crash at 239 were both wrong: everything after 205 in that scan was a dead machine answering incoherently, and 239 in isolation writes cleanly and reads back 239. Values above 204 must not be offered. PANEL READ 2026-09-10 (§216): the EFFECTS/REVERB SELECT page shows 38 CLEAR DETUNE for byte 37 and 1 REVERB EQ 1 for byte 0, so the panel is 1-based and the byte is 0-based -- the POLYPH convention, confirmed twice inside one photograph",
+    ),
+    _p(
+        "multi",
+        18,
+        "FX3",
+        1,
+        "multi.effects",
+        0,
+        204,
+        models="S2000/S3000XL/S3200XL",
         display_offset=1,
         desc="Reverb for reverb channel RV3 -- a REVERB, not an effects setup",
-        notes="measured on hardware 2026-09-10 (§215, corrected by §217): accepts 0-204. The spec gives no range, so 0..255 was the byte. The maximum is 204 because writing 205 PANICS the machine to 'Internal Error - divide overflow', takes the whole SysEx surface down with it, and STORES THE BYTE ANYWAY. There is no error reply -- the device stops answering mid-transaction, so a write of 205 times out rather than being refused. §215's 'refused band 205-238' and its crash at 239 were both wrong: everything after 205 in that scan was a dead machine answering incoherently, and 239 in isolation writes cleanly and reads back 239. Values above 204 must not be offered. PANEL READ 2026-09-10 (§216): the EFFECTS/REVERB SELECT page shows 38 CLEAR DETUNE for byte 37 and 1 REVERB EQ 1 for byte 0, so the panel is 1-based and the byte is 0-based -- the POLYPH convention, confirmed twice inside one photograph. The 0-204 domain was measured on FX1, which indexes the EFFECTS list; RV3/RV4 index the REVERB list and their domain is INHERITED, not measured -- §215's own rule says an unmeasured range is an unmeasured claim, so treat this bound as provisional for RV3/RV4"),
-    _p("multi", 19, "FX4", 1, "multi.effects", 0, 204, models="S2000/S3000XL/S3200XL",
+        notes="measured on hardware 2026-09-10 (§215, corrected by §217): accepts 0-204. The spec gives no range, so 0..255 was the byte. The maximum is 204 because writing 205 PANICS the machine to 'Internal Error - divide overflow', takes the whole SysEx surface down with it, and STORES THE BYTE ANYWAY. There is no error reply -- the device stops answering mid-transaction, so a write of 205 times out rather than being refused. §215's 'refused band 205-238' and its crash at 239 were both wrong: everything after 205 in that scan was a dead machine answering incoherently, and 239 in isolation writes cleanly and reads back 239. Values above 204 must not be offered. PANEL READ 2026-09-10 (§216): the EFFECTS/REVERB SELECT page shows 38 CLEAR DETUNE for byte 37 and 1 REVERB EQ 1 for byte 0, so the panel is 1-based and the byte is 0-based -- the POLYPH convention, confirmed twice inside one photograph. The 0-204 domain was measured on FX1, which indexes the EFFECTS list; RV3/RV4 index the REVERB list and their domain is INHERITED, not measured -- §215's own rule says an unmeasured range is an unmeasured claim, so treat this bound as provisional for RV3/RV4",
+    ),
+    _p(
+        "multi",
+        19,
+        "FX4",
+        1,
+        "multi.effects",
+        0,
+        204,
+        models="S2000/S3000XL/S3200XL",
         display_offset=1,
         desc="Reverb for reverb channel RV4 -- a REVERB, not an effects setup",
-        notes="measured on hardware 2026-09-10 (§215, corrected by §217): accepts 0-204. The spec gives no range, so 0..255 was the byte. The maximum is 204 because writing 205 PANICS the machine to 'Internal Error - divide overflow', takes the whole SysEx surface down with it, and STORES THE BYTE ANYWAY. There is no error reply -- the device stops answering mid-transaction, so a write of 205 times out rather than being refused. §215's 'refused band 205-238' and its crash at 239 were both wrong: everything after 205 in that scan was a dead machine answering incoherently, and 239 in isolation writes cleanly and reads back 239. Values above 204 must not be offered. PANEL READ 2026-09-10 (§216): the EFFECTS/REVERB SELECT page shows 38 CLEAR DETUNE for byte 37 and 1 REVERB EQ 1 for byte 0, so the panel is 1-based and the byte is 0-based -- the POLYPH convention, confirmed twice inside one photograph. The 0-204 domain was measured on FX1, which indexes the EFFECTS list; RV3/RV4 index the REVERB list and their domain is INHERITED, not measured -- §215's own rule says an unmeasured range is an unmeasured claim, so treat this bound as provisional for RV3/RV4"),
-    _p("multi", 20, "FXFILENAME", 12, "multi.general", 0, 0, kind="text",
-        models="S2000/S3000XL/S3200XL", desc="The filename of the associated fx file"),
-
+        notes="measured on hardware 2026-09-10 (§215, corrected by §217): accepts 0-204. The spec gives no range, so 0..255 was the byte. The maximum is 204 because writing 205 PANICS the machine to 'Internal Error - divide overflow', takes the whole SysEx surface down with it, and STORES THE BYTE ANYWAY. There is no error reply -- the device stops answering mid-transaction, so a write of 205 times out rather than being refused. §215's 'refused band 205-238' and its crash at 239 were both wrong: everything after 205 in that scan was a dead machine answering incoherently, and 239 in isolation writes cleanly and reads back 239. Values above 204 must not be offered. PANEL READ 2026-09-10 (§216): the EFFECTS/REVERB SELECT page shows 38 CLEAR DETUNE for byte 37 and 1 REVERB EQ 1 for byte 0, so the panel is 1-based and the byte is 0-based -- the POLYPH convention, confirmed twice inside one photograph. The 0-204 domain was measured on FX1, which indexes the EFFECTS list; RV3/RV4 index the REVERB list and their domain is INHERITED, not measured -- §215's own rule says an unmeasured range is an unmeasured claim, so treat this bound as provisional for RV3/RV4",
+    ),
+    _p(
+        "multi",
+        20,
+        "FXFILENAME",
+        12,
+        "multi.general",
+        0,
+        0,
+        kind="text",
+        models="S2000/S3000XL/S3200XL",
+        desc="The filename of the associated fx file",
+    ),
     # -- MULTI PART -----------------------------------------------------------
     # Selector 1; the item index is the multi part number (0-15).
     #
@@ -3116,73 +3208,193 @@ _PARAMS: List[Parameter] = [
     # all twelve of them, across two independently transcribed documents. That
     # is the strongest cross-check this project has (RESOLUTION_NOTES §8): a
     # multi part IS a program header, with only a subset of fields meaningful.
-    _p("multipart", 3, "PRNAME", 12, "multipart.general", 0, 0, kind="text",
-        readonly=True, models="S2000/S3000XL/S3200XL",
+    _p(
+        "multipart",
+        3,
+        "PRNAME",
+        12,
+        "multipart.general",
+        0,
+        0,
+        kind="text",
+        readonly=True,
+        models="S2000/S3000XL/S3200XL",
         desc="Name of the program used for this multi part. To assign programs "
-             "to parts it is better to use MIDI program change commands",
+        "to parts it is better to use MIDI program change commands",
         notes="MEASURED 2026-09-13 (§232): the byte ACCEPTS a write -- a "
-              "resident program's name written to an empty part read back "
-              "byte-exact and restored. So `readonly` here is ours, not the "
-              "machine's: Akai's sentence about program change is advice "
-              "about the better route, not a statement that the field "
-              "refuses, and it was transcribed as if it were one. The flag "
-              "stays for now because what has NOT been shown is that the "
-              "part then PLAYS that program -- §91 records that index and "
-              "PRGNUM are unrelated, and if the machine resolves a part to a "
-              "program by number at note time then a written name changes "
-              "nothing. A field that accepts a value which has no effect is "
-              "worse than a locked one. MEASURED 2026-09-13 (§233): "
-              "writing it does NOT make the part play -- the part stayed at "
-              "the noise floor, -80.6 dBFS against a control part sounding at "
-              "-30.8 on the same run, with the control re-read at the end to "
-              "prove the route stayed live. So the field REPORTS the "
-              "assignment and does not control it, Akai's sentence is right, "
-              "and readonly stays -- now on a measurement rather than on a "
-              "transcription. The documented route, a program change on the "
-              "part's own channel, is not wired in s3ked and the bridge has "
-              "no channel-voice sender."),
-    _p("multipart", 16, "PMCHAN", 1, "multipart.midi", 0, 255,
-        values={255: "OMNI"}, models="S2000/S3000XL/S3200XL",
+        "resident program's name written to an empty part read back "
+        "byte-exact and restored. So `readonly` here is ours, not the "
+        "machine's: Akai's sentence about program change is advice "
+        "about the better route, not a statement that the field "
+        "refuses, and it was transcribed as if it were one. The flag "
+        "stays for now because what has NOT been shown is that the "
+        "part then PLAYS that program -- §91 records that index and "
+        "PRGNUM are unrelated, and if the machine resolves a part to a "
+        "program by number at note time then a written name changes "
+        "nothing. A field that accepts a value which has no effect is "
+        "worse than a locked one. MEASURED 2026-09-13 (§233): "
+        "writing it does NOT make the part play -- the part stayed at "
+        "the noise floor, -80.6 dBFS against a control part sounding at "
+        "-30.8 on the same run, with the control re-read at the end to "
+        "prove the route stayed live. So the field REPORTS the "
+        "assignment and does not control it, Akai's sentence is right, "
+        "and readonly stays -- now on a measurement rather than on a "
+        "transcription. The documented route, a program change on the "
+        "part's own channel, is not wired in s3ked and the bridge has "
+        "no channel-voice sender.",
+    ),
+    _p(
+        "multipart",
+        16,
+        "PMCHAN",
+        1,
+        "multipart.midi",
+        0,
+        255,
+        values={255: "OMNI"},
+        models="S2000/S3000XL/S3200XL",
         desc="MIDI channel this part responds to, irrespective of part number",
         notes='range as written: "255 signifies OMNI, 0 to 15 indicate MIDI '
-              'channel". MEASURED 2026-08-18 (§134): the register STORES any '
-              'value to 255 -- 22 was written and read back verbatim -- but '
-              'the panel displays 22 as "Ch 16", so it is CLAMPED IN USE. '
-              'The declared range describes what the register holds, not what '
-              'the machine acts on; the same distinction K_FREQ is suspected '
-              'of and this one is demonstrated'),
-    _p("multipart", 18, "PRIORT", 1, "multipart.midi", 0, 3,
-        values={0: "low", 1: "norm", 2: "high", 3: "hold"}, models="S2000/S3000XL/S3200XL",
-        desc="Priority of voices playing this part"),
-    _p("multipart", 19, "PLAYLO", 1, "multipart.midi", 21, 127, models="S2000/S3000XL/S3200XL",
-        desc="Lower limit of play range"),
-    _p("multipart", 20, "PLAYHI", 1, "multipart.midi", 21, 127, models="S2000/S3000XL/S3200XL",
-        desc="Upper limit of play range"),
-    _p("multipart", 22, "OUTPUT", 1, "multipart.output", 0, 255, models="S2000/S3000XL/S3200XL",
+        'channel". MEASURED 2026-08-18 (§134): the register STORES any '
+        "value to 255 -- 22 was written and read back verbatim -- but "
+        'the panel displays 22 as "Ch 16", so it is CLAMPED IN USE. '
+        "The declared range describes what the register holds, not what "
+        "the machine acts on; the same distinction K_FREQ is suspected "
+        "of and this one is demonstrated",
+    ),
+    _p(
+        "multipart",
+        18,
+        "PRIORT",
+        1,
+        "multipart.midi",
+        0,
+        3,
+        values={0: "low", 1: "norm", 2: "high", 3: "hold"},
+        models="S2000/S3000XL/S3200XL",
+        desc="Priority of voices playing this part",
+    ),
+    _p(
+        "multipart",
+        19,
+        "PLAYLO",
+        1,
+        "multipart.midi",
+        21,
+        127,
+        models="S2000/S3000XL/S3200XL",
+        desc="Lower limit of play range",
+    ),
+    _p(
+        "multipart",
+        20,
+        "PLAYHI",
+        1,
+        "multipart.midi",
+        21,
+        127,
+        models="S2000/S3000XL/S3200XL",
+        desc="Upper limit of play range",
+    ),
+    _p(
+        "multipart",
+        22,
+        "OUTPUT",
+        1,
+        "multipart.output",
+        0,
+        255,
+        models="S2000/S3000XL/S3200XL",
         desc="Individual output routing",
-        notes="the source leaves this Range field blank (OCR reads \"Rsngs:\"); "
-              "see the program header's OUTPUT for the model-dependent meanings"),
-    _p("multipart", 23, "STEREO", 1, "multipart.output", 0, 99, models="S2000/S3000XL/S3200XL",
+        notes='the source leaves this Range field blank (OCR reads "Rsngs:"); '
+        "see the program header's OUTPUT for the model-dependent meanings",
+    ),
+    _p(
+        "multipart",
+        23,
+        "STEREO",
+        1,
+        "multipart.output",
+        0,
+        99,
+        models="S2000/S3000XL/S3200XL",
         desc="Left and right output levels",
         notes='the PANEL labels this field "Lev", not "Stereo" (§134): a '
-              'planted 61 appeared under Lev. The name here is the Akai '
-              "document's and is kept, because this table is a transcription "
-              'and renaming it would silently diverge from the source -- but '
-              'anything user-facing should say Lev, which is what the person '
-              'at the machine sees'),
-    _p("multipart", 24, "PANPOS", 1, "multipart.output", -50, 50, models="S2000/S3000XL/S3200XL",
-        desc="Balance between left and right outputs"),
-    _p("multipart", 70, "VOSCL", 1, "multipart.output", 0, 99, models="S2000/S3000XL/S3200XL",
-        desc="Level sent to individual outputs"),
-    _p("multipart", 75, "TRANSPOSE", 1, "multipart.midi", -50, 50,
-        unit="semitones", models="S2000/S3000XL/S3200XL", desc="Shift pitch of incoming MIDI"),
-    _p("multipart", 113, "PFXCHAN", 1, "multipart.output", 0, 4,
-        values={0: 'OFF', 1: 'FX1', 2: 'FX2', 3: 'RV3', 4: 'RV4'}, models="S2000/S3000XL/S3200XL", desc="Effects bus select"),
-    _p("multipart", 114, "PFXSLEV", 1, "multipart.output", 0, 99, models="S2000/S3000XL/S3200XL",
-        desc="Effects send level"),
-    _p("multipart", 115, "PTUNOCM", 1, "multipart.pitch", -50, 50, unit="cents",
-        models="S2000/S3000XL/S3200XL", desc="Tune offset in cents, used in MULTI mode only"),
-
+        "planted 61 appeared under Lev. The name here is the Akai "
+        "document's and is kept, because this table is a transcription "
+        "and renaming it would silently diverge from the source -- but "
+        "anything user-facing should say Lev, which is what the person "
+        "at the machine sees",
+    ),
+    _p(
+        "multipart",
+        24,
+        "PANPOS",
+        1,
+        "multipart.output",
+        -50,
+        50,
+        models="S2000/S3000XL/S3200XL",
+        desc="Balance between left and right outputs",
+    ),
+    _p(
+        "multipart",
+        70,
+        "VOSCL",
+        1,
+        "multipart.output",
+        0,
+        99,
+        models="S2000/S3000XL/S3200XL",
+        desc="Level sent to individual outputs",
+    ),
+    _p(
+        "multipart",
+        75,
+        "TRANSPOSE",
+        1,
+        "multipart.midi",
+        -50,
+        50,
+        unit="semitones",
+        models="S2000/S3000XL/S3200XL",
+        desc="Shift pitch of incoming MIDI",
+    ),
+    _p(
+        "multipart",
+        113,
+        "PFXCHAN",
+        1,
+        "multipart.output",
+        0,
+        4,
+        values={0: "OFF", 1: "FX1", 2: "FX2", 3: "RV3", 4: "RV4"},
+        models="S2000/S3000XL/S3200XL",
+        desc="Effects bus select",
+    ),
+    _p(
+        "multipart",
+        114,
+        "PFXSLEV",
+        1,
+        "multipart.output",
+        0,
+        99,
+        models="S2000/S3000XL/S3200XL",
+        desc="Effects send level",
+    ),
+    _p(
+        "multipart",
+        115,
+        "PTUNOCM",
+        1,
+        "multipart.pitch",
+        -50,
+        50,
+        unit="cents",
+        models="S2000/S3000XL/S3200XL",
+        desc="Tune offset in cents, used in MULTI mode only",
+    ),
 ]
 
 #: Every parameter, keyed by ``(region, offset)``.
@@ -3194,9 +3406,7 @@ PARAMETERS: Dict[Tuple[str, int], Parameter] = {p.key: p for p in _PARAMS}
 #: the program and keygroup headers, and Reserved appears in both too -- so
 #: the region has to be part of the key. :func:`lookup` accepts a bare name
 #: and resolves it when it is unambiguous.
-PARAMETERS_BY_NAME: Dict[Tuple[str, str], Parameter] = {
-    (p.region, p.name): p for p in _PARAMS
-}
+PARAMETERS_BY_NAME: Dict[Tuple[str, str], Parameter] = {(p.region, p.name): p for p in _PARAMS}
 
 _BY_BARE_NAME: Dict[str, List[Parameter]] = {}
 for _p_ in _PARAMS:
@@ -3219,9 +3429,7 @@ def lookup(ref, region: Optional[str] = None) -> Parameter:
             try:
                 return PARAMETERS[(first, second)]
             except KeyError:
-                raise KeyError(
-                    f"no parameter at offset {second} in the {first} header"
-                ) from None
+                raise KeyError(f"no parameter at offset {second} in the {first} header") from None
         try:
             return PARAMETERS_BY_NAME[(first, second.upper())]
         except KeyError:
@@ -3240,8 +3448,7 @@ def lookup(ref, region: Optional[str] = None) -> Parameter:
     if len(candidates) > 1:
         where = ", ".join(sorted(x.region for x in candidates))
         raise KeyError(
-            f"{name!r} is ambiguous -- it exists in the {where} structures; "
-            f"pass region= to choose"
+            f"{name!r} is ambiguous -- it exists in the {where} structures; pass region= to choose"
         )
     return candidates[0]
 
@@ -3250,9 +3457,7 @@ def region_params(region: str) -> List[Parameter]:
     """Every parameter in *region*, in offset order."""
     if region not in REGIONS:
         raise KeyError(f"unknown region {region!r}; expected one of {REGIONS}")
-    return sorted(
-        (p for p in _PARAMS if p.region == region), key=lambda p: p.offset
-    )
+    return sorted((p for p in _PARAMS if p.region == region), key=lambda p: p.offset)
 
 
 def group_params(prefix: str) -> List[Parameter]:
@@ -3271,9 +3476,7 @@ def group_params(prefix: str) -> List[Parameter]:
 
 def groups(region: Optional[str] = None) -> List[str]:
     """Distinct group names, optionally limited to one region."""
-    return sorted(
-        {p.group for p in _PARAMS if region is None or p.region == region}
-    )
+    return sorted({p.group for p in _PARAMS if region is None or p.region == region})
 
 
 # --- value presentation ----------------------------------------------------
@@ -3329,9 +3532,7 @@ def decode_field(param: Parameter, data: bytes) -> object:
     RESOLUTION_NOTES §18). Here it was caught by a rehearsal instead.
     """
     if len(data) != param.size:
-        raise ValueError(
-            f"{param.name}: expected {param.size} bytes, got {len(data)}"
-        )
+        raise ValueError(f"{param.name}: expected {param.size} bytes, got {len(data)}")
     if param.kind == "text":
         from s3k.messages import decode_name
 
@@ -3339,7 +3540,7 @@ def decode_field(param: Parameter, data: bytes) -> object:
     if param.is_array:
         width = param.element_size
         return tuple(
-            _decode_one(param, data[i * width:(i + 1) * width], width)
+            _decode_one(param, data[i * width : (i + 1) * width], width)
             for i in range(param.elements)
         )
     return _decode_one(param, data, param.size)
@@ -3367,12 +3568,8 @@ def encode_field(param: Parameter, value) -> bytes:
                 f"what silently corrupted the other {param.elements - 1}."
             )
         if len(value) != param.elements:
-            raise ValueError(
-                f"{param.name}: expected {param.elements} values, "
-                f"got {len(value)}"
-            )
-        return b"".join(_encode_one(param, v, param.element_size)
-                        for v in value)
+            raise ValueError(f"{param.name}: expected {param.elements} values, got {len(value)}")
+        return b"".join(_encode_one(param, v, param.element_size) for v in value)
     return _encode_one(param, value, param.size)
 
 
@@ -3390,9 +3587,7 @@ def _encode_one(param: Parameter, value, width: int) -> bytes:
         # the field accepts.
         low = param.minimum + param.display_offset
         high = param.maximum + param.display_offset
-        raise ValueError(
-            f"{param.name}: {value} is outside {low}..{high}"
-        )
+        raise ValueError(f"{param.name}: {value} is outside {low}..{high}")
     if number < 0:
         # The headers store small signed quantities (pan, transpose, tuning)
         # as two's complement in the field's own width. The spec states the
@@ -3400,9 +3595,7 @@ def _encode_one(param: Parameter, value, width: int) -> bytes:
         # transcription is being interpreted rather than copied.
         number += 1 << (8 * width)
     if not 0 <= number < (1 << (8 * width)):
-        raise ValueError(
-            f"{param.name}: value {value} does not fit in {width} byte(s)"
-        )
+        raise ValueError(f"{param.name}: value {value} does not fit in {width} byte(s)")
     return number.to_bytes(width, "little")
 
 
@@ -3456,7 +3649,7 @@ def describe_value(param: Parameter, value) -> str:
             from s3k.scales import describe as _describe
 
             physical = _describe(param.region, param.name, number)
-        except Exception:                       # never break a display pane
+        except Exception:  # never break a display pane
             physical = ""
 
         if param.unit and physical:
