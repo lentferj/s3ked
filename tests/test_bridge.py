@@ -14,11 +14,13 @@ Two layers of fake, matching the two things worth testing separately:
   every exchange rather than being asserted against hand-written bytes.
 """
 
+import sys
 import time
 
 import pytest
 
 from s3k import bridge as bridge_mod
+from s3k import config
 from s3k import messages as m
 from s3k import params as p
 from s3k.bridge import (
@@ -90,9 +92,7 @@ def _sampler(headers=None, *, channel=0, fail=()):
                 exclusive_channel=ch,
             ).encode()
         if command == m.Command.RPLIST:
-            return m.ProgramList(
-                names=["BASS ROUND", "PAD WIDE"], exclusive_channel=ch
-            ).encode()
+            return m.ProgramList(names=["BASS ROUND", "PAD WIDE"], exclusive_channel=ch).encode()
         if command == m.Command.RSLIST:
             return m.SampleList(names=["KICK 1"], exclusive_channel=ch).encode()
         if command in (
@@ -117,9 +117,7 @@ def _sampler(headers=None, *, channel=0, fail=()):
                 # 0, which the bounds guard then correctly refused to index
                 # into -- a fixture claiming something impossible.
                 blank[p.lookup(("program", "GROUPS")).offset] = 4
-            raw = store.setdefault(
-                (region, request.index, request.selector), blank
-            )
+            raw = store.setdefault((region, request.index, request.selector), blank)
             return m.HeaderData(
                 command=command + 1,
                 index=request.index,
@@ -135,9 +133,7 @@ def _sampler(headers=None, *, channel=0, fail=()):
                 m.Command.KHEADER: "keygroup",
                 m.Command.SHEADER: "sample",
             }[command]
-            raw = store.setdefault(
-                (region, data.index, data.selector), bytearray(p.HEADER_SIZE)
-            )
+            raw = store.setdefault((region, data.index, data.selector), bytearray(p.HEADER_SIZE))
             raw[data.offset : data.offset + len(data.data)] = data.data
             return m.Reply(code=m.ReplyCode.OK, exclusive_channel=ch).encode()
         if command in (m.Command.DELP, m.Command.DELK, m.Command.DELS):
@@ -223,7 +219,7 @@ def test_keygroup_parameter_uses_the_selector():
 def test_get_header_decodes_every_field_in_one_request():
     device = FakeDevice(_sampler())
     bridge = S3kBridge(device, device, "fake", timeout=0.5)
-    bridge.program_list()                      # warm the bounds cache
+    bridge.program_list()  # warm the bounds cache
     device.sent.clear()
     header = bridge.get_header("program", 0)
     assert len(header) == len(p.region_params("program"))
@@ -266,6 +262,50 @@ def test_set_parameter_refuses_read_only():
         bridge.set_parameter(("program", "GROUPS"), 0, 4)
 
 
+def test_an_offset_past_the_header_is_refused_before_anything_is_sent():
+    """Offset 200 of a 192-byte header answers with data from past it (§11)."""
+    device = FakeDevice(_sampler())
+    bridge = S3kBridge(device, device, "fake", timeout=0.5)
+    with pytest.raises(ValueError, match="past the header"):
+        bridge.get_header_bytes("program", 0, 200, 4)
+    assert device.sent == [], "a refused read must not reach the wire"
+
+
+def test_an_offset_plus_count_past_the_header_is_refused():
+    """Offset 190 with count 4 ends at 194, past the 192-byte header."""
+    device = FakeDevice(_sampler())
+    bridge = S3kBridge(device, device, "fake", timeout=0.5)
+    with pytest.raises(ValueError, match="past the header"):
+        bridge.get_header_bytes("program", 0, 190, 4)
+    assert device.sent == [], "a refused read must not reach the wire"
+
+
+def test_a_header_read_ending_exactly_at_the_end_is_allowed():
+    """Offset 188 with count 4 ends at 192: the last legal window."""
+    device = FakeDevice(_sampler())
+    bridge = S3kBridge(device, device, "fake", timeout=0.5)
+    bridge.get_header_bytes("program", 0, 188, 4)
+    assert len(device.sent) == 2, "one list read, then the header read"
+
+
+def test_a_negative_offset_or_count_is_refused():
+    device = FakeDevice(_sampler())
+    bridge = S3kBridge(device, device, "fake", timeout=0.5)
+    with pytest.raises(ValueError, match="past the header"):
+        bridge.get_header_bytes("program", 0, -1, 4)
+    with pytest.raises(ValueError, match="past the header"):
+        bridge.get_header_bytes("program", 0, 0, -4)
+    assert device.sent == [], "a refused read must not reach the wire"
+
+
+def test_a_write_past_the_header_is_refused_before_anything_is_sent():
+    device = FakeDevice(_sampler())
+    bridge = S3kBridge(device, device, "fake", timeout=0.5)
+    with pytest.raises(ValueError, match="past the header"):
+        bridge.set_header_bytes("program", 0, 190, b"\x00" * 4)
+    assert device.sent == [], "a refused write must not reach the wire"
+
+
 def test_set_parameter_refuses_internal_address():
     bridge = _bridge_with(_sampler())
     with pytest.raises(ValueError, match="internal block address"):
@@ -287,7 +327,7 @@ def test_unconfirmed_write_does_not_wait():
     """
     device = FakeDevice(_sampler())
     bridge = S3kBridge(device, device, "fake", timeout=0.05)
-    bridge.program_list()                      # warm the count
+    bridge.program_list()  # warm the count
     device.sent.clear()
     bridge.set_header_bytes("program", 0, 18, b"\x02", confirm=False)
     assert len(device.sent) == 1
@@ -457,6 +497,17 @@ class _FakePort:
 
 
 def _install(monkeypatch, cls, ports):
+    """Put a fake rtmidi in front of both the bridge and the library.
+
+    Two modules, two reasons. `s3k.bridge` still imports rtmidi at module
+    scope for the code that OPENS a port -- MultiIn, _open_out, _open_in --
+    so a test of those needs it there. The port *enumeration* is now
+    `vinsynlib.midi.list_ports`, which imports rtmidi lazily inside the
+    call, so a test of that needs it in the library. Patching only one of
+    the two left `list_ports` talking to the real MIDI stack and returning
+    whatever this host actually has, which is a test that passes or fails
+    depending on the machine.
+    """
     cls.PORTS = ports
     cls.deleted = 0
 
@@ -465,6 +516,7 @@ def _install(monkeypatch, cls, ports):
         MidiIn = cls
 
     monkeypatch.setattr(bridge_mod, "rtmidi", FakeRtmidi)
+    monkeypatch.setitem(sys.modules, "rtmidi", FakeRtmidi)
     return cls
 
 
@@ -478,6 +530,11 @@ def test_enumeration_deletes_every_transient_port(monkeypatch):
 
     Without this, one autodetect sweep on a busy host can exhaust the
     sequencer's client slots.
+
+    Now the family's property rather than this project's: the library's
+    list_ports closes both clients with a finally. Pinned here because this
+    is the host with thirty-odd MIDI ports that the exhaustion would happen
+    on.
     """
     cls = _install(monkeypatch, type("P", (_FakePort,), {}), ["A"])
     bridge_mod.list_ports()
@@ -487,7 +544,7 @@ def test_enumeration_deletes_every_transient_port(monkeypatch):
 def test_bidirectional_ports_intersects_inputs_and_outputs(monkeypatch):
     # The fake serves one port list to both MidiIn and MidiOut, so every port
     # here is bidirectional; what this pins is that the result is the
-    # intersection in *output* order, not one list or the other verbatim.
+    # intersection and not one list or the other verbatim.
     class OutOnly(_FakePort):
         def get_ports(self):
             return ["Shared", "OutOnly"]
@@ -501,6 +558,7 @@ def test_bidirectional_ports_intersects_inputs_and_outputs(monkeypatch):
         MidiIn = InOnly
 
     monkeypatch.setattr(bridge_mod, "rtmidi", FakeRtmidi)
+    monkeypatch.setitem(sys.modules, "rtmidi", FakeRtmidi)
     assert bridge_mod.bidirectional_ports() == ["Shared"]
 
 
@@ -514,6 +572,7 @@ def test_missing_backend_is_distinct_from_no_ports(monkeypatch):
         MidiIn = Exploding
 
     monkeypatch.setattr(bridge_mod, "rtmidi", FakeRtmidi)
+    monkeypatch.setitem(sys.modules, "rtmidi", FakeRtmidi)
     with pytest.raises(MidiUnavailable):
         bridge_mod.list_ports()
 
@@ -631,24 +690,24 @@ def test_autodetect_needs_ports(monkeypatch):
 
 def test_port_cache_round_trip(tmp_path):
     path = str(tmp_path / "config.toml")
-    assert bridge_mod.load_last_ports(path) is None
-    bridge_mod.save_last_ports("Out A", "In B", path)
-    assert bridge_mod.load_last_ports(path) == ("Out A", "In B")
+    assert config.load_last_ports(path) is None
+    config.save_last_ports("Out A", "In B", path)
+    assert config.load_last_ports(path) == ("Out A", "In B")
 
 
 def test_config_writes_preserve_unrelated_keys(tmp_path):
     """Two independent settings share this file; neither may clobber the other."""
     path = str(tmp_path / "config.toml")
-    bridge_mod.save_exclusive_channel(7, path)
-    bridge_mod.save_last_ports("Out", "In", path)
-    assert bridge_mod.load_exclusive_channel(path) == 7
-    assert bridge_mod.load_last_ports(path) == ("Out", "In")
+    config.save_exclusive_channel(7, path)
+    config.save_last_ports("Out", "In", path)
+    assert config.load_exclusive_channel(path) == 7
+    assert config.load_last_ports(path) == ("Out", "In")
 
 
 def test_unreadable_config_is_not_fatal(tmp_path):
     path = tmp_path / "config.toml"
     path.write_text("this is not valid toml {{{", encoding="utf-8")
-    assert bridge_mod.load_last_ports(str(path)) is None
+    assert config.load_last_ports(str(path)) is None
 
 
 def test_multi_in_requires_a_match(monkeypatch):
@@ -659,9 +718,11 @@ def test_multi_in_requires_a_match(monkeypatch):
 
 # --- the disk's volume list -------------------------------------------------
 
+
 def _volume_record(name: str, kind: int = 3) -> bytes:
     """One 16-byte VOLLIST record: 12 charset bytes, then the type and pad."""
     from s3k import messages as m
+
     return bytes(m.encode_name(name, 12)) + bytes([kind, 0, 0, 0])
 
 
@@ -684,11 +745,15 @@ def _disk(names, per_read=16):
         def send_and_receive(self, frame, timeout=None):
             self.reads += 1
             start = _requested_index(frame)
-            page = records[start:start + per_read]
-            page += [bytes(16)] * (per_read - len(page))   # zeros past the end
+            page = records[start : start + per_read]
+            page += [bytes(16)] * (per_read - len(page))  # zeros past the end
             return m.HeaderData(
-                command=m.Command.VOLLIST, index=start, selector=0,
-                offset=0, data=b"".join(page), exclusive_channel=0,
+                command=m.Command.VOLLIST,
+                index=start,
+                selector=0,
+                offset=0,
+                data=b"".join(page),
+                exclusive_channel=0,
             ).encode()
 
     return Fake()
@@ -735,9 +800,11 @@ def test_volume_indices_are_the_numbers_to_address_a_volume_by():
 
 # --- the loaded volume's directory ------------------------------------------
 
+
 def _dir_record(name: str, tail: bytes = b"\x73\x96\x60\x10\xb3\x03\x1e\x09") -> bytes:
     """24 bytes: name, a blank four-byte extension, then eight undocumented."""
     from s3k import messages as m
+
     return bytes(m.encode_name(name, 12)) + b"\x20\x20\x20\x20" + tail
 
 
@@ -765,8 +832,12 @@ def _directory(records, counted=None):
             entry = frame[5] | (frame[6] << 7)
             data = records[entry] if entry < len(records) else records[-1]
             return m.HeaderData(
-                command=m.Command.HDDIR, index=entry, selector=1,
-                offset=0, data=data, exclusive_channel=0,
+                command=m.Command.HDDIR,
+                index=entry,
+                selector=1,
+                offset=0,
+                data=data,
+                exclusive_channel=0,
             ).encode()
 
     return Fake()
@@ -796,7 +867,7 @@ def test_the_directory_stops_when_a_record_repeats():
     the bytes that look like a location, so two real files cannot explain it.
     """
     a, bb, c = _dir_record("ONE"), _dir_record("TWO"), _dir_record("THREE")
-    bridge = _directory([a, bb, c, bb])          # the echo repeats entry 1
+    bridge = _directory([a, bb, c, bb])  # the echo repeats entry 1
 
     entries = bridge.hd_directory(1)
     assert [e.name for e in entries] == ["ONE", "TWO", "THREE"]
@@ -814,15 +885,21 @@ def test_a_directory_entry_decodes_its_type_and_size():
     from s3k import bridge as b, messages as m
 
     def record(name, kind, size):
-        return (bytes(m.encode_name(name, 12)) + b"\x20\x20\x20\x20"
-                + bytes([kind]) + int(size).to_bytes(3, "little")
-                + b"\x00\x00\x1e\x09")
+        return (
+            bytes(m.encode_name(name, 12))
+            + b"\x20\x20\x20\x20"
+            + bytes([kind])
+            + int(size).to_bytes(3, "little")
+            + b"\x00\x00\x1e\x09"
+        )
 
-    entries = _directory([
-        record("A PROGRAM", b.ITEM_PROGRAM, 900),
-        record("A SAMPLE", b.ITEM_SAMPLE, 250_010),
-        bytes(24),
-    ]).hd_directory(1)
+    entries = _directory(
+        [
+            record("A PROGRAM", b.ITEM_PROGRAM, 900),
+            record("A SAMPLE", b.ITEM_SAMPLE, 250_010),
+            bytes(24),
+        ]
+    ).hd_directory(1)
 
     prog, samp = entries
     assert prog.is_program and not prog.is_sample
@@ -842,6 +919,7 @@ def test_the_overhead_is_the_measured_one_not_a_guess():
     derived from any document.
     """
     from s3k import bridge as b
+
     assert b.SAMPLE_FILE_OVERHEAD == 150
 
 
@@ -851,21 +929,27 @@ def test_summing_a_volume_answers_whether_it_fits():
 
     def sample(name, words):
         size = words * 2 + b.SAMPLE_FILE_OVERHEAD
-        return (bytes(m.encode_name(name, 12)) + b"\x20\x20\x20\x20"
-                + bytes([b.ITEM_SAMPLE]) + size.to_bytes(3, "little")
-                + b"\x00\x00\x1e\x09")
+        return (
+            bytes(m.encode_name(name, 12))
+            + b"\x20\x20\x20\x20"
+            + bytes([b.ITEM_SAMPLE])
+            + size.to_bytes(3, "little")
+            + b"\x00\x00\x1e\x09"
+        )
 
     # 3 bytes of size caps one FILE at ~16.7 MB; a volume exceeds RAM by
     # having many, which is exactly how the 58.7 MB volume did it.
-    entries = _directory([sample(f"S{i:02d}", 800_000) for i in range(12)]
-                         + [bytes(24)]).hd_directory(1)
+    entries = _directory(
+        [sample(f"S{i:02d}", 800_000) for i in range(12)] + [bytes(24)]
+    ).hd_directory(1)
 
     needed = sum(e.audio_words for e in entries)
     assert needed == 9_600_000
     assert needed <= 16_777_216, "this one fits"
 
-    entries = _directory([sample(f"S{i:02d}", 800_000) for i in range(24)]
-                         + [bytes(24)]).hd_directory(1)
+    entries = _directory(
+        [sample(f"S{i:02d}", 800_000) for i in range(24)] + [bytes(24)]
+    ).hd_directory(1)
     assert sum(e.audio_words for e in entries) > 16_777_216, "this one does not"
 
 
@@ -878,12 +962,14 @@ def test_the_size_field_is_three_bytes_so_a_file_caps_near_16_MB():
     8.4 million sample words, or 3.2 minutes of mono audio at 44.1 kHz.
     """
     from s3k import bridge as b
+
     assert (1 << 24) - 1 == 16_777_215
     biggest_words = ((1 << 24) - 1 - b.SAMPLE_FILE_OVERHEAD) // 2
     assert 8_388_000 < biggest_words < 8_389_000
 
 
 # --- the load source --------------------------------------------------------
+
 
 def _misc_machine(initial):
     """A device whose miscellaneous byte bank can be read and written."""
@@ -898,8 +984,12 @@ def _misc_machine(initial):
         def send_and_receive(self, frame, timeout=None):
             index = frame[5] | (frame[6] << 7)
             return m.HeaderData(
-                command=m.Command.MISCDATA, index=index, selector=1, offset=0,
-                data=bytes([self.bytes.get(index, 0)]), exclusive_channel=0,
+                command=m.Command.MISCDATA,
+                index=index,
+                selector=1,
+                offset=0,
+                data=bytes([self.bytes.get(index, 0)]),
+                exclusive_channel=0,
             ).encode()
 
         def _drain(self):
@@ -919,8 +1009,13 @@ def _misc_machine(initial):
 def test_load_source_reads_the_panel_fields():
     bridge = _misc_machine({0: 1, 2: 2, 4: 3, 11: 4, 12: 6, 49: 1, 91: 10})
     assert bridge.load_source() == {
-        "scsi_drive_id": 4, "scsi_local_id": 6, "device_type": 1,
-        "partition": 2, "volume": 3, "cursor_value": 1, "mode": 10,
+        "scsi_drive_id": 4,
+        "scsi_local_id": 6,
+        "device_type": 1,
+        "partition": 2,
+        "volume": 3,
+        "cursor_value": 1,
+        "mode": 10,
     }
 
 
@@ -968,8 +1063,7 @@ def test_the_volume_is_selectable_and_this_test_used_to_say_otherwise():
     assert hasattr(b.S3kBridge, "select_volume")
     params = inspect.signature(b.S3kBridge.select_volume).parameters
     assert "volume" in params
-    assert "cannot be moved remotely" not in (
-        b.S3kBridge.select_partition.__doc__ or "")
+    assert "cannot be moved remotely" not in (b.S3kBridge.select_partition.__doc__ or "")
 
 
 def test_select_mode_reports_what_the_register_reads_not_the_ack():
@@ -984,6 +1078,7 @@ def test_select_mode_reports_what_the_register_reads_not_the_ack():
     class Contrary(_misc_machine({91: 10}).__class__):
         def _receive(self, timeout=None, accept=None):
             from s3k import messages as m
+
             return m.Reply(code=m.ReplyCode.ERROR, exclusive_channel=0).encode()
 
     bridge = Contrary()
@@ -1010,8 +1105,11 @@ def _misc_bank(*, error_on=(), ignore=()):
         if command == m.Command.RMISCDATA:
             request = m.HeaderRequest.decode(frame)
             return m.HeaderData(
-                command=m.Command.MISCDATA, index=request.index, selector=1,
-                offset=0, data=bytes([store.get(request.index, 0)]),
+                command=m.Command.MISCDATA,
+                index=request.index,
+                selector=1,
+                offset=0,
+                data=bytes([store.get(request.index, 0)]),
                 exclusive_channel=channel,
             ).encode()
         if command == m.Command.MISCDATA:
@@ -1030,7 +1128,7 @@ def test_a_selection_write_believes_the_register_not_the_reply():
     handler, store = _misc_bank(error_on={2, 4})
     bridge = _bridge_with(handler)
 
-    bridge.select_partition(5)          # must not raise
+    bridge.select_partition(5)  # must not raise
     assert store[2] == 5
 
 
@@ -1100,8 +1198,7 @@ def test_a_stale_count_does_not_refuse_a_valid_read():
     def sampler(frame):
         channel, command, _payload = m.parse_frame(frame)
         if command == m.Command.RPLIST:
-            return m.ProgramList(names=list(programs),
-                                 exclusive_channel=channel).encode()
+            return m.ProgramList(names=list(programs), exclusive_channel=channel).encode()
         return _sampler()(frame)
 
     device = FakeDevice(sampler)
@@ -1109,8 +1206,8 @@ def test_a_stale_count_does_not_refuse_a_valid_read():
     bridge.get_header_bytes("program", 0, 4, 2)
     assert bridge._counts["program"] == 1
 
-    programs.append("TWO")            # added at the panel; nothing told us
-    bridge.get_header_bytes("program", 1, 4, 2)   # must not raise
+    programs.append("TWO")  # added at the panel; nothing told us
+    bridge.get_header_bytes("program", 1, 4, 2)  # must not raise
     assert bridge._counts["program"] == 2, "the refusal path re-read the count"
 
 
@@ -1148,9 +1245,8 @@ def _fx_machine(entries=("REVERB EQ 1", "RICH CHORUS", "FX TEMPLATE")):
     """
     from s3k import messages as m
 
-    store = {i: bytearray(m.encode_name(n)) + bytearray(116)
-             for i, n in enumerate(entries)}
-    junk = bytearray([0xC1, 0x88, 0xA2] + [0] * 125)   # not valid charset
+    store = {i: bytearray(m.encode_name(n)) + bytearray(116) for i, n in enumerate(entries)}
+    junk = bytearray([0xC1, 0x88, 0xA2] + [0] * 125)  # not valid charset
 
     def handler(frame):
         channel, command, _payload = m.parse_frame(frame)
@@ -1158,14 +1254,17 @@ def _fx_machine(entries=("REVERB EQ 1", "RICH CHORUS", "FX TEMPLATE")):
             request = m.HeaderRequest.decode(frame)
             raw = store.get(request.index, junk)
             return m.HeaderData(
-                command=m.Command.FXDATA, index=request.index,
-                selector=request.selector, offset=request.offset,
-                data=bytes(raw[request.offset:request.offset + request.count]),
-                exclusive_channel=channel).encode()
+                command=m.Command.FXDATA,
+                index=request.index,
+                selector=request.selector,
+                offset=request.offset,
+                data=bytes(raw[request.offset : request.offset + request.count]),
+                exclusive_channel=channel,
+            ).encode()
         if command == m.Command.FXDATA:
             data = m.HeaderData.decode(frame)
             raw = store.setdefault(data.index, bytearray(128))
-            raw[data.offset:data.offset + len(data.data)] = data.data
+            raw[data.offset : data.offset + len(data.data)] = data.data
             return m.Reply(code=m.ReplyCode.OK, exclusive_channel=channel).encode()
         return None
 
@@ -1176,9 +1275,8 @@ def test_fx_names_enumerates_a_preset_list():
     from s3k import messages as m
 
     handler, _store = _fx_machine()
-    bridge = _bridge_with(handler, boards=['EB16'])
-    assert bridge.fx_names(m.FxSelector.FX_ENTRY) == [
-        "REVERB EQ 1", "RICH CHORUS", "FX TEMPLATE"]
+    bridge = _bridge_with(handler, boards=["EB16"])
+    assert bridge.fx_names(m.FxSelector.FX_ENTRY) == ["REVERB EQ 1", "RICH CHORUS", "FX TEMPLATE"]
 
 
 def test_fx_names_stops_where_the_charset_does():
@@ -1191,7 +1289,7 @@ def test_fx_names_stops_where_the_charset_does():
     from s3k import messages as m
 
     handler, _store = _fx_machine()
-    bridge = _bridge_with(handler, boards=['EB16'])
+    bridge = _bridge_with(handler, boards=["EB16"])
     names = bridge.fx_names(m.FxSelector.FX_ENTRY, limit=40)
     assert len(names) == 3, "must not run on into the junk"
     assert all("?" not in n for n in names)
@@ -1202,9 +1300,8 @@ def test_fx_names_honours_an_explicit_limit():
     from s3k import messages as m
 
     handler, _store = _fx_machine()
-    bridge = _bridge_with(handler, boards=['EB16'])
-    assert bridge.fx_names(m.FxSelector.FX_ENTRY, limit=2) == [
-        "REVERB EQ 1", "RICH CHORUS"]
+    bridge = _bridge_with(handler, boards=["EB16"])
+    assert bridge.fx_names(m.FxSelector.FX_ENTRY, limit=2) == ["REVERB EQ 1", "RICH CHORUS"]
 
 
 def test_fx_bytes_round_trips_a_write():
@@ -1213,10 +1310,9 @@ def test_fx_bytes_round_trips_a_write():
     from s3k import messages as m
 
     handler, store = _fx_machine()
-    bridge = _bridge_with(handler, boards=['EB16'])
+    bridge = _bridge_with(handler, boards=["EB16"])
 
-    bridge.set_fx_bytes(m.FxSelector.FX_ENTRY, bytes(m.encode_name("NEW NAME")),
-                        1, 0)
+    bridge.set_fx_bytes(m.FxSelector.FX_ENTRY, bytes(m.encode_name("NEW NAME")), 1, 0)
     assert bridge.fx_names(m.FxSelector.FX_ENTRY)[1] == "NEW NAME"
     assert bytes(store[1][:12]) == bytes(m.encode_name("NEW NAME"))
 
@@ -1232,14 +1328,20 @@ def test_fx_bytes_refuses_a_short_reply():
         if command == m.Command.RFXDATA:
             request = m.HeaderRequest.decode(frame)
             return m.HeaderData(
-                command=m.Command.FXDATA, index=request.index,
-                selector=request.selector, offset=request.offset,
-                data=b"\x01\x02", exclusive_channel=channel).encode()
+                command=m.Command.FXDATA,
+                index=request.index,
+                selector=request.selector,
+                offset=request.offset,
+                data=b"\x01\x02",
+                exclusive_channel=channel,
+            ).encode()
         return None
 
-    bridge = _bridge_with(stingy, boards=['EB16'])
+    bridge = _bridge_with(stingy, boards=["EB16"])
     with pytest.raises(DeviceError, match="asked for"):
         bridge.fx_bytes(m.FxSelector.FX_ENTRY, 0, 0, 12)
+
+
 def test_an_unparseable_config_is_left_alone_rather_than_overwritten(tmp_path, capsys):
     """One hand-typed bracket must not cost every other setting.
 
@@ -1247,14 +1349,18 @@ def test_an_unparseable_config_is_left_alone_rather_than_overwritten(tmp_path, c
     that has some turns the next save into a blind overwrite. Found in the
     sibling eosed and present here identically.
     """
-    import s3k.bridge as bridge_mod
+    from s3k import config
 
-    bridge_mod._warned_unreadable = False
+    # The warn-once flag is per-Settings now, not a module global shared by
+    # every save in the process -- which is closer to the intent and behaves
+    # the same for one application. Reset it so an earlier test's warning
+    # cannot suppress this one.
+    config.settings._warned = False
     path = tmp_path / "config.toml"
-    original = 'exclusive_channel = 3\nthis line is [broken\n'
+    original = "exclusive_channel = 3\nthis line is [broken\n"
     path.write_text(original, encoding="utf-8")
 
-    bridge_mod.save_last_ports("Out", "In", str(path))
+    config.save_last_ports("Out", "In", str(path))
 
     assert path.read_text(encoding="utf-8") == original
     assert "could not be parsed" in capsys.readouterr().err
@@ -1262,18 +1368,16 @@ def test_an_unparseable_config_is_left_alone_rather_than_overwritten(tmp_path, c
 
 def test_a_missing_config_is_still_created(tmp_path):
     """Conflating missing with unreadable is the bug; the fix must not too."""
-    import s3k.bridge as bridge_mod
 
     path = tmp_path / "config.toml"
-    bridge_mod.save_exclusive_channel(5, str(path))
-    assert bridge_mod.load_exclusive_channel(str(path)) == 5
+    config.save_exclusive_channel(5, str(path))
+    assert config.load_exclusive_channel(str(path)) == 5
 
 
 def test_config_is_written_as_utf8_whatever_the_locale(tmp_path, monkeypatch):
     """A byte-level assertion would pass on a UTF-8 host with the bug present,
     so assert the call names its encoding instead."""
     import builtins
-    import s3k.bridge as bridge_mod
 
     real_open, seen = builtins.open, []
 
@@ -1283,20 +1387,18 @@ def test_config_is_written_as_utf8_whatever_the_locale(tmp_path, monkeypatch):
         return real_open(file, mode, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "open", recording_open)
-    bridge_mod.save_exclusive_channel(2, str(tmp_path / "config.toml"))
+    config.save_exclusive_channel(2, str(tmp_path / "config.toml"))
 
     assert seen and all(e == "utf-8" for e in seen), seen
 
 
 def test_unrelated_settings_survive_each_others_saves(tmp_path):
-    import s3k.bridge as bridge_mod
-
     path = str(tmp_path / "config.toml")
-    bridge_mod.save_last_ports("Out", "In", path)
-    bridge_mod.save_exclusive_channel(7, path)
+    config.save_last_ports("Out", "In", path)
+    config.save_exclusive_channel(7, path)
 
-    assert bridge_mod.load_last_ports(path) == ("Out", "In")
-    assert bridge_mod.load_exclusive_channel(path) == 7
+    assert config.load_last_ports(path) == ("Out", "In")
+    assert config.load_exclusive_channel(path) == 7
 
 
 # --- expansion boards: fields that can crash a machine without them ---------
@@ -1304,9 +1406,15 @@ def test_unrelated_settings_survive_each_others_saves(tmp_path):
 
 def _quiet_bridge(**kw):
     class Dev:
-        def send_message(self, *a, **k): pass
-        def get_message(self): return None
-        def close_port(self): pass
+        def send_message(self, *a, **k):
+            pass
+
+        def get_message(self):
+            return None
+
+        def close_port(self):
+            pass
+
     return S3kBridge(Dev(), Dev(), "fake", timeout=0.02, **kw)
 
 
@@ -1346,7 +1454,7 @@ def test_declaring_the_board_lifts_the_fence():
     except BoardNotFitted:
         raise AssertionError("still fenced with the board declared")
     except Exception:
-        pass          # no device answers; the fence is what is under test
+        pass  # no device answers; the fence is what is under test
 
 
 def test_base_machine_fields_are_never_fenced():
@@ -1377,38 +1485,38 @@ def test_exactly_the_documented_fields_carry_a_requirement():
 
     tagged = {q.name for q in p.region_params("keygroup") if q.requires}
     assert tagged == {
-        "FLT2GAIN", "FLT2MODE", "FLT2Q", "TONEFREQ", "TONESLOP",
-        "FIL2FR", "K_FRQ2",
+        "FLT2GAIN",
+        "FLT2MODE",
+        "FLT2Q",
+        "TONEFREQ",
+        "TONESLOP",
+        "FIL2FR",
+        "K_FRQ2",
     }
-    assert all(q.requires == "IB304F"
-               for q in p.region_params("keygroup") if q.requires)
+    assert all(q.requires == "IB304F" for q in p.region_params("keygroup") if q.requires)
 
 
 def test_boards_round_trip_through_the_config(tmp_path):
-    import s3k.bridge as bridge_mod
-
     path = str(tmp_path / "config.toml")
-    assert bridge_mod.load_boards(path) == set()
+    assert config.load_boards(path) == set()
 
-    bridge_mod.save_boards({"IB304F"}, path)
-    assert bridge_mod.load_boards(path) == {"IB304F"}
+    config.save_boards({"IB304F"}, path)
+    assert config.load_boards(path) == {"IB304F"}
 
-    bridge_mod.save_boards({"IB304F", "EB16"}, path)
-    assert bridge_mod.load_boards(path) == {"IB304F", "EB16"}
+    config.save_boards({"IB304F", "EB16"}, path)
+    assert config.load_boards(path) == {"IB304F", "EB16"}
 
-    bridge_mod.save_boards(set(), path)
-    assert bridge_mod.load_boards(path) == set(), "must be un-declarable too"
+    config.save_boards(set(), path)
+    assert config.load_boards(path) == set(), "must be un-declarable too"
 
 
 def test_declaring_boards_does_not_disturb_other_settings(tmp_path):
-    import s3k.bridge as bridge_mod
-
     path = str(tmp_path / "config.toml")
-    bridge_mod.save_exclusive_channel(4, path)
-    bridge_mod.save_boards({"EB16"}, path)
+    config.save_exclusive_channel(4, path)
+    config.save_boards({"EB16"}, path)
 
-    assert bridge_mod.load_exclusive_channel(path) == 4
-    assert bridge_mod.load_boards(path) == {"EB16"}
+    assert config.load_exclusive_channel(path) == 4
+    assert config.load_boards(path) == {"EB16"}
 
 
 def test_the_effects_structure_is_fenced_without_the_eb16():
@@ -1439,7 +1547,8 @@ def test_every_load_type_the_register_takes_is_named():
     assert sorted(m.LOAD_TYPES) == list(range(8))
     assert m.LOAD_TYPES[0] == "ENTIRE VOLUME"
     assert m.LOAD_TYPES[1] == "ALL PROGS+SAMPLES", (
-        "1 is the only value that loads, so it is the one s3ked ever fires")
+        "1 is the only value that loads, so it is the one s3ked ever fires"
+    )
     assert len(set(m.LOAD_TYPES.values())) == 8
 
 
@@ -1449,8 +1558,7 @@ def test_load_type_name_does_not_invent_a_name():
 
     class Fake:
         LOAD_TYPES = m.LOAD_TYPES
-        load_type_name = __import__(
-            "s3k.bridge", fromlist=["S3kBridge"]).S3kBridge.load_type_name
+        load_type_name = __import__("s3k.bridge", fromlist=["S3kBridge"]).S3kBridge.load_type_name
 
         def __init__(self, value):
             self._value = value
@@ -1478,8 +1586,13 @@ def test_a_reply_to_somebody_elses_question_is_skipped():
 
     stale = m.ProgramList(names=["LEFTOVER"], exclusive_channel=0).encode()
     wanted = m.Status(
-        version_major=1, version_minor=0, max_blocks=1, free_blocks=1,
-        max_words=1, free_words=1, exclusive_channel_setting=0,
+        version_major=1,
+        version_minor=0,
+        max_blocks=1,
+        free_blocks=1,
+        max_words=1,
+        free_words=1,
+        exclusive_channel_setting=0,
         exclusive_channel=0,
     ).encode()
 
@@ -1510,27 +1623,120 @@ def test_every_response_is_its_request_plus_one():
     from s3k import messages as m
 
     pairs = [
-        ("RSTAT", "STAT"), ("RPLIST", "PLIST"), ("RSLIST", "SLIST"),
-        ("RPDATA", "PDATA"), ("RKDATA", "KDATA"), ("RSDATA", "SDATA"),
-        ("RPHEADER", "PHEADER"), ("RKHEADER", "KHEADER"),
-        ("RSHEADER", "SHEADER"), ("RFXDATA", "FXDATA"),
+        ("RSTAT", "STAT"),
+        ("RPLIST", "PLIST"),
+        ("RSLIST", "SLIST"),
+        ("RPDATA", "PDATA"),
+        ("RKDATA", "KDATA"),
+        ("RSDATA", "SDATA"),
+        ("RPHEADER", "PHEADER"),
+        ("RKHEADER", "KHEADER"),
+        ("RSHEADER", "SHEADER"),
+        ("RFXDATA", "FXDATA"),
     ]
     for request, response in pairs:
-        assert int(getattr(m.Command, request)) + 1 == int(
-            getattr(m.Command, response)
-        ), f"{request}/{response} breaks the +1 pairing"
+        assert int(getattr(m.Command, request)) + 1 == int(getattr(m.Command, response)), (
+            f"{request}/{response} breaks the +1 pairing"
+        )
 
 
 def test_a_write_only_accepts_an_acknowledgement():
-    """A data frame where an ack belongs is somebody else's answer."""
+    """A data frame where an ack belongs is somebody else's answer.
+
+    ``set_header_bytes`` and the deletes wait with ``accept=_ONLY_REPLY``;
+    anything else on the wire must be skipped, not taken as the ack.
+    """
     from s3k import bridge as b
 
     assert b._ONLY_REPLY == frozenset({0x16})
 
+    def wrong_opcode(frame):
+        ch, _command, _payload = m.parse_frame(frame)
+        return m.Status(
+            version_major=2,
+            version_minor=0,
+            max_blocks=1022,
+            free_blocks=900,
+            max_words=8388608,
+            free_words=4194304,
+            exclusive_channel_setting=ch,
+            exclusive_channel=ch,
+        ).encode()
 
-def test_install_clean_exit_leaves_an_existing_handler_alone():
-    """A host application's own shutdown beats ours."""
+    device = FakeDevice(wrong_opcode)
+    bridge = S3kBridge(device, device, "fake", timeout=0.05)
+    with pytest.raises(TimeoutError):
+        bridge.set_header_bytes("program", 0, 18, b"\x02", _bounds=False)
+    assert bridge.stale_replies >= 1, "the stranger's frame must be counted"
+
+
+def test_a_delete_only_accepts_an_acknowledgement():
+    """The same filter guards the destructive path."""
+    from s3k import bridge as b
+
+    def wrong_opcode(frame):
+        ch, _command, _payload = m.parse_frame(frame)
+        return m.Status(
+            version_major=2,
+            version_minor=0,
+            max_blocks=1022,
+            free_blocks=900,
+            max_words=8388608,
+            free_words=4194304,
+            exclusive_channel_setting=ch,
+            exclusive_channel=ch,
+        ).encode()
+
+    device = FakeDevice(wrong_opcode)
+    bridge = S3kBridge(device, device, "fake", timeout=0.05)
+    with pytest.raises(TimeoutError):
+        bridge.delete_program(0)
+    assert bridge.stale_replies >= 1, "the stranger's frame must be counted"
+
+
+def test_install_clean_exit_raises_system_exit_so_finally_runs():
+    """SIGTERM must unwind, not end the process where it stands.
+
+    The property is the family's now (vinsynlib.midi.install_clean_exit) and
+    the test is kept here because this is where the reason it exists is
+    recorded: running this project under `timeout` killed it mid-exchange
+    several times in a row, and the machine stopped answering RSTAT on any
+    port until it was power cycled.
+    """
     import signal
+
+    import pytest
+    from s3k import bridge as b
+
+    previous = signal.getsignal(signal.SIGTERM)
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    try:
+        b.install_clean_exit()
+        handler = signal.getsignal(signal.SIGTERM)
+        assert callable(handler)
+        with pytest.raises(SystemExit) as caught:
+            handler(signal.SIGTERM, None)
+        assert caught.value.code == 128 + int(signal.SIGTERM)
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
+def test_install_clean_exit_over_an_existing_handler_replaces_it():
+    """The family installs over an existing handler; s3ked no longer opts out.
+
+    The copy this project carried left an already-installed handler alone, on
+    the reasoning that "a host application that has its own shutdown is better
+    at this than we are". That reasoning still holds and the behaviour no
+    longer implements it -- one behaviour for the family beat a per-tool
+    exception. It was written for a host that did not exist here: s3ked is a
+    whole terminal application, and there is nothing embedding it.
+
+    Pinned deliberately rather than deleted, because it is the one property
+    that went the other way and a future change here should have to think
+    about it rather than trip over it.
+    """
+    import signal
+
     from s3k import bridge as b
 
     def mine(signum, frame):
@@ -1540,26 +1746,7 @@ def test_install_clean_exit_leaves_an_existing_handler_alone():
     signal.signal(signal.SIGTERM, mine)
     try:
         b.install_clean_exit()
-        assert signal.getsignal(signal.SIGTERM) is mine
-    finally:
-        signal.signal(signal.SIGTERM, previous)
-
-
-def test_install_clean_exit_raises_system_exit_so_finally_runs():
-    """SIGTERM must unwind, not end the process where it stands."""
-    import signal
-    import pytest
-    from s3k import bridge as b
-
-    previous = signal.getsignal(signal.SIGTERM)
-    signal.signal(signal.SIGTERM, signal.SIG_DFL)
-    try:
-        b.install_clean_exit(signals=(signal.SIGTERM,))
-        handler = signal.getsignal(signal.SIGTERM)
-        assert callable(handler)
-        with pytest.raises(SystemExit) as caught:
-            handler(signal.SIGTERM, None)
-        assert caught.value.code == 128 + int(signal.SIGTERM)
+        assert signal.getsignal(signal.SIGTERM) is not mine
     finally:
         signal.signal(signal.SIGTERM, previous)
 
@@ -1599,7 +1786,7 @@ def test_the_directory_length_comes_from_the_machine_not_the_data():
 
     `word[6]` is the machine's own entry count and cannot run past an end.
     """
-    phantom = bytes(12) + b"    " + bytes([0x00, 162, 0, 0, 218, 6, 0x1e, 4])
+    phantom = bytes(12) + b"    " + bytes([0x00, 162, 0, 0, 218, 6, 0x1E, 4])
     records = [_dir_record("PROG A"), _dir_record("PROG B"), phantom]
 
     # the heuristic alone takes the bait, which is the bug being fixed
@@ -1627,6 +1814,9 @@ def test_the_clean_exit_signals_all_exist_on_this_platform():
     never got the chance to run. The Linux box it was written on could not
     have shown it; the CI matrix did, on the first push after the signal
     handling landed.
+
+    The constant stays after the installing moved to the library, because
+    the module-level lookup is still here and this is the test for it.
     """
     import signal
     from s3k import bridge as b
@@ -1635,6 +1825,31 @@ def test_the_clean_exit_signals_all_exist_on_this_platform():
     for number in b.CLEAN_EXIT_SIGNALS:
         assert number in set(signal.Signals), number
     assert signal.SIGTERM in b.CLEAN_EXIT_SIGNALS
+
+
+def test_the_shared_clean_exit_does_not_name_a_signal_it_may_not_have():
+    """The trap above, moved: the library installs on SIGINT and SIGTERM.
+
+    Neither is optional on any platform this project supports, so the
+    failure mode being guarded against -- naming a signal that does not
+    exist, at import time, where nothing can catch it -- cannot recur here.
+    Stated rather than assumed, because the guard is now a property of code
+    in another repository.
+    """
+    import signal
+
+    from vinsynlib import midi
+
+    # Installed, and callable, with no platform-dependent lookup anywhere.
+    previous_term = signal.getsignal(signal.SIGTERM)
+    previous_int = signal.getsignal(signal.SIGINT)
+    try:
+        midi.install_clean_exit()
+        assert callable(signal.getsignal(signal.SIGTERM))
+        assert callable(signal.getsignal(signal.SIGINT))
+    finally:
+        signal.signal(signal.SIGTERM, previous_term)
+        signal.signal(signal.SIGINT, previous_int)
 
 
 def test_install_clean_exit_survives_a_platform_without_sighup(monkeypatch):
@@ -1665,20 +1880,28 @@ def test_the_directory_reads_both_generations():
     from s3k import bridge as b, messages as m
 
     def record(name, kind, extension):
-        return (bytes(m.encode_name(name, 12)) + extension
-                + bytes([kind]) + (900).to_bytes(3, "little")
-                + b"\x00\x00\x1e\x09")
+        return (
+            bytes(m.encode_name(name, 12))
+            + extension
+            + bytes([kind])
+            + (900).to_bytes(3, "little")
+            + b"\x00\x00\x1e\x09"
+        )
 
-    s1000 = _directory([
-        record("OLD PROG", 0x70, b"\x20\x20\x20\x20"),
-        record("OLD SAMP", 0x73, b"\x20\x20\x20\x20"),
-        bytes(24),
-    ]).hd_directory(1)
-    s3000 = _directory([
-        record("NEW PROG", 0xF0, b"\x00\x00\x00\x00"),
-        record("NEW SAMP", 0xF3, b"\x00\x00\x00\x00"),
-        bytes(24),
-    ]).hd_directory(1)
+    s1000 = _directory(
+        [
+            record("OLD PROG", 0x70, b"\x20\x20\x20\x20"),
+            record("OLD SAMP", 0x73, b"\x20\x20\x20\x20"),
+            bytes(24),
+        ]
+    ).hd_directory(1)
+    s3000 = _directory(
+        [
+            record("NEW PROG", 0xF0, b"\x00\x00\x00\x00"),
+            record("NEW SAMP", 0xF3, b"\x00\x00\x00\x00"),
+            bytes(24),
+        ]
+    ).hd_directory(1)
 
     for entries, label in ((s1000, "S1000"), (s3000, "S3000")):
         assert len(entries) == 2, f"{label}: {entries}"
@@ -1698,7 +1921,150 @@ def test_an_all_zero_record_still_ends_the_walk():
     """Accepting a NUL extension must not make the terminator look real."""
     from s3k import bridge as b, messages as m
 
-    good = (bytes(m.encode_name("ONLY ONE", 12)) + b"\x00\x00\x00\x00"
-            + bytes([0xF3]) + (900).to_bytes(3, "little") + b"\x00\x00\x1e\x09")
+    good = (
+        bytes(m.encode_name("ONLY ONE", 12))
+        + b"\x00\x00\x00\x00"
+        + bytes([0xF3])
+        + (900).to_bytes(3, "little")
+        + b"\x00\x00\x1e\x09"
+    )
     entries = _directory([good, bytes(24), bytes(24)]).hd_directory(1)
     assert len(entries) == 1, entries
+
+
+# --- renumber and clear-memory, against the shipped bridge -------------------
+#
+# The same behaviours are also exercised through DemoBridge in test_app.py,
+# where the app is the subject and the demo is only the stand-in. What those
+# cannot show is that the SHIPPED methods do it: the demo re-implements each
+# one, so a demo-only test passes while the real path raises. These drive a
+# real S3kBridge against a stateful scripted device instead.
+
+
+class _ResidentDevice:
+    """Programs with PRGNUM bytes, behind the real codec.
+
+    Arrivals are INSERTED in program-number order, the way a load combs them
+    into the incumbents (§107) -- not appended. Equal numbers keep arrival
+    order, incumbent in front.
+    """
+
+    def __init__(self, pairs, samples=()):
+        self.pairs = [list(item) for item in pairs]
+        self.samples = list(samples)
+        self.device = FakeDevice(self._handler)
+
+    def _handler(self, frame):
+        ch, command, _payload = m.parse_frame(frame)
+        if command == m.Command.RPLIST:
+            return m.ProgramList(
+                names=[name for name, _number in self.pairs],
+                exclusive_channel=ch,
+            ).encode()
+        if command == m.Command.RSLIST:
+            return m.SampleList(names=list(self.samples), exclusive_channel=ch).encode()
+        if command == m.Command.RPHEADER:
+            request = m.HeaderRequest.decode(frame)
+            raw = bytearray(p.HEADER_SIZE)
+            raw[0] = bridge_mod.BLOCK_IDENT["program"]
+            raw[S3kBridge._PRGNUM_OFFSET] = self.pairs[request.index][1]
+            return m.HeaderData(
+                command=m.Command.PHEADER,
+                index=request.index,
+                selector=request.selector,
+                offset=request.offset,
+                data=bytes(raw[request.offset : request.offset + request.count]),
+                exclusive_channel=ch,
+            ).encode()
+        if command == m.Command.PHEADER:
+            data = m.HeaderData.decode(frame)
+            start = S3kBridge._PRGNUM_OFFSET - data.offset
+            if 0 <= start < len(data.data):
+                self.pairs[data.index][1] = data.data[start]
+            return m.Reply(code=m.ReplyCode.OK, exclusive_channel=ch).encode()
+        if command == m.Command.DELP:
+            program = m.DeleteProgram.decode(frame).program
+            if len(self.pairs) > 1:
+                del self.pairs[program]  # the last one is kept, like hardware
+            return m.Reply(code=m.ReplyCode.OK, exclusive_channel=ch).encode()
+        if command == m.Command.DELS:
+            sample = m.DeleteSample.decode(frame).sample
+            del self.samples[sample]
+            return m.Reply(code=m.ReplyCode.OK, exclusive_channel=ch).encode()
+        return None
+
+    def bridge(self):
+        return S3kBridge(self.device, self.device, "fake", timeout=0.5)
+
+
+def test_the_shipped_renumber_gives_every_program_a_distinct_number():
+    resident = _ResidentDevice([(f"V1 {c}", 0) for c in "ABCDE"])
+    bridge = resident.bridge()
+
+    assert bridge.program_numbers() == [0, 0, 0, 0, 0]
+    result = bridge.renumber_programs()
+
+    assert result["renumbered"] == 5
+    assert result["beyond_range"] == 0
+    assert bridge.program_numbers() == [0, 1, 2, 3, 4]
+
+
+def test_the_shipped_resident_pairs_carry_names_and_numbers():
+    resident = _ResidentDevice([("V1 A", 0), ("V1 B", 1)])
+    assert resident.bridge().resident_pairs() == [("V1 A", 0), ("V1 B", 1)]
+
+
+def test_the_shipped_renumber_after_load_gives_arrivals_a_contiguous_range():
+    """§107: a load combs arrivals into the incumbents in number order, so
+    numbering by position would hand the second volume 2, 4, 6 -- the
+    subsequence match is what finds who arrived."""
+    resident = _ResidentDevice([("V1 A", 0), ("V1 B", 1), ("V1 C", 2)])
+    bridge = resident.bridge()
+    before = bridge.resident_pairs()
+
+    # a second volume, authored from 0, lands combed in rather than appended
+    for name, number in (("V2 A", 0), ("V2 B", 1), ("V2 C", 2)):
+        at = len(resident.pairs)
+        for position, (_name, existing) in enumerate(resident.pairs):
+            if existing > number:
+                at = position
+                break
+        resident.pairs.insert(at, [name, number])
+
+    result = bridge.renumber_after_load(before)
+
+    assert result["unmatched"] == 0, result
+    assert result["incumbents"] == 3
+    assert result["arrivals"] == 3
+    got = dict(bridge.resident_pairs())
+    assert [got["V2 A"], got["V2 B"], got["V2 C"]] == [3, 4, 5], got
+    assert [got["V1 A"], got["V1 B"], got["V1 C"]] == [0, 1, 2], got
+
+
+def test_the_shipped_renumber_after_load_refuses_a_stale_snapshot():
+    resident = _ResidentDevice([("V1 A", 0), ("V1 B", 1)])
+    bridge = resident.bridge()
+    before = bridge.resident_pairs()
+
+    numbers = bridge.program_numbers()
+    result = bridge.renumber_after_load(before + [("GONE", 9)])
+
+    assert result["unmatched"] == 1, result
+    assert result["renumbered"] == 0
+    assert bridge.program_numbers() == numbers, "it must not touch anything"
+
+
+def test_the_shipped_clear_memory_empties_everything_but_one_program():
+    """The delete-everything path, synthetically: samples all go, programs
+    stop at the last one the machine refuses to delete."""
+    resident = _ResidentDevice(
+        [("V1 A", 0), ("V1 B", 1), ("V1 C", 2)],
+        samples=["KICK 1", "SNARE 1"],
+    )
+    result = resident.bridge().clear_memory()
+
+    assert result["samples"] == 2
+    assert result["programs"] == 3, "two real deletes plus the final acknowledged-and-ignored one"
+    assert result["samples_left"] == 0
+    assert result["programs_left"] == 1
+    assert [name for name, _number in resident.pairs] == ["V1 C"]

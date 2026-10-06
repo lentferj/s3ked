@@ -60,11 +60,15 @@ from textual.widgets import (
     Label,
     Static,
 )
+from vinsynlib.cli import add_common_arguments, make_parser, validate_common
+from vinsynlib.keys import legend_from_bindings as _legend_from_bindings
+from vinsynlib.keys import wrap_blocks as _wrap_blocks
+from vinsynlib.ui.hints import KeyHints as _KeyHints
 
 from s3k import messages as m
 from s3k import params as p
 
-__all__ = ["S3kedApp", "main"]
+__all__ = ["KeyHints", "S3kedApp", "legend_blocks", "main", "wrap_blocks"]
 
 
 @dataclass(frozen=True)
@@ -110,7 +114,7 @@ class ConfirmScreen(ModalScreen[bool]):
         self.dismiss(False)
 
 
-class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
+class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool, int, Optional[int]]]]):
     """How to load: onto what is resident, or onto an emptied machine.
 
     Three things could be asked here and only two can be answered.
@@ -157,10 +161,14 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
     #: (§97), so these load the row selected in the Disk pane.
     CURSOR_TYPES = frozenset({4, 5})
 
-    def __init__(self, *, resident_programs: int = 0,
-                 load_type: Optional[int] = None,
-                 item: Optional[int] = None,
-                 item_label: str = "") -> None:
+    def __init__(
+        self,
+        *,
+        resident_programs: int = 0,
+        load_type: Optional[int] = None,
+        item: Optional[int] = None,
+        item_label: str = "",
+    ) -> None:
         super().__init__()
         self.clear_first = False
         self.renumber = False
@@ -183,9 +191,11 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
             yield Label("", id="loadopts-where")
             yield Label("", id="loadopts-renumber")
             yield Label("")
-            yield Label("[b]t[/b] type   [b]a[/b] add   [b]c[/b] clear first"
-                        "   [b]n[/b] renumber   [b]enter[/b] go   "
-                        "[b]esc[/b] cancel")
+            yield Label(
+                "[b]t[/b] type   [b]a[/b] add   [b]c[/b] clear first"
+                "   [b]n[/b] renumber   [b]enter[/b] go   "
+                "[b]esc[/b] cancel"
+            )
 
     def on_mount(self) -> None:
         self._redraw()
@@ -201,33 +211,37 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
         elif self.panel_type == self.load_type:
             note = "[dim]— as on the panel[/dim]"
         else:
-            note = (f"[dim]— panel: "
-                    f"{m.LOAD_TYPES.get(self.panel_type, self.panel_type)}"
-                    f"[/dim]")
+            note = f"[dim]— panel: {m.LOAD_TYPES.get(self.panel_type, self.panel_type)}[/dim]"
         self.query_one("#loadopts-what", Label).update(
-            rf"  [dim]what:[/dim]  [b]{name}[/b]  \[[b]t[/b]] {note}")
+            rf"  [dim]what:[/dim]  [b]{name}[/b]  \[[b]t[/b]] {note}"
+        )
         cursor_note = ""
         if self.load_type in self.CURSOR_TYPES:
             cursor_note = (
                 f"  [dim]item:[/dim]  [b]{self.item_label}[/b]"
-                if self.item is not None else
-                "  [b]no item selected[/b] — pick a row in the Disk pane")
+                if self.item is not None
+                else "  [b]no item selected[/b] — pick a row in the Disk pane"
+            )
         self.query_one("#loadopts-cursor", Label).update(cursor_note)
 
         mark = lambda on: "[b]>[/b]" if on else " "
         self.query_one("#loadopts-where", Label).update(
             f"  [dim]where:[/dim]  {mark(not self.clear_first)} [b]a[/b]dd to "
-            f"what is resident    {mark(self.clear_first)} [b]c[/b]lear first")
+            f"what is resident    {mark(self.clear_first)} [b]c[/b]lear first"
+        )
 
         if self.clear_first:
-            note = ("  [dim]clear deletes every sample and program; one "
-                    "program survives[/dim]")
+            note = "  [dim]clear deletes every sample and program; one program survives[/dim]"
         elif self.renumber:
-            note = ("  [dim]renumber:[/dim] [b]on[/b] — every program gets a "
-                    "distinct number, in list order")
+            note = (
+                "  [dim]renumber:[/dim] [b]on[/b] — every program gets a "
+                "distinct number, in list order"
+            )
         else:
-            note = ("  [dim]renumber:[/dim] off — loaded programs keep their "
-                    "own numbers and may collide")
+            note = (
+                "  [dim]renumber:[/dim] off — loaded programs keep their "
+                "own numbers and may collide"
+            )
         self.query_one("#loadopts-renumber", Label).update(note)
 
     def action_next_type(self) -> None:
@@ -256,14 +270,17 @@ class LoadOptionsScreen(ModalScreen[Optional[Tuple[bool, bool]]]):
     def action_go(self) -> None:
         if self.load_type in self.CURSOR_TYPES and self.item is None:
             self.app.notify_status(
-                "that type loads one item — select one in the Disk pane",
-                refused=True)
+                "that type loads one item — select one in the Disk pane", refused=True
+            )
             return
-        self.dismiss((self.clear_first,
-                      self.renumber and not self.clear_first,
-                      self.load_type,
-                      self.item if self.load_type in self.CURSOR_TYPES
-                      else None))
+        self.dismiss(
+            (
+                self.clear_first,
+                self.renumber and not self.clear_first,
+                self.load_type,
+                self.item if self.load_type in self.CURSOR_TYPES else None,
+            )
+        )
 
     def action_cancel(self) -> None:
         self.dismiss(None)
@@ -308,9 +325,7 @@ class MasterScreen(ModalScreen[Optional[str]]):
             for key, (_action, description) in self._ACTIONS.items():
                 yield Label(f"  [b]{key}[/b]  {description}")
             yield Label("", id="master-armed")
-            yield Label(
-                "Press a number to arm, [b]Enter[/b] to fire, [b]Esc[/b] to cancel."
-            )
+            yield Label("Press a number to arm, [b]Enter[/b] to fire, [b]Esc[/b] to cancel.")
 
     def on_key(self, event) -> None:
         if event.key in self._ACTIONS:
@@ -341,8 +356,7 @@ class MasterScreen(ModalScreen[Optional[str]]):
     def _flash_once(self) -> None:
         self._flash_on = not self._flash_on
         try:
-            self.query_one("#master-armed", Label).set_class(
-                self._flash_on, "-flash")
+            self.query_one("#master-armed", Label).set_class(self._flash_on, "-flash")
         except Exception:
             self._stop_flashing()
 
@@ -382,40 +396,28 @@ def _gloss(param) -> str:
     # mid-word reads as corruption rather than as abbreviation.
     if len(text) <= _GLOSS_WIDTH:
         return text
-    cut = text[:_GLOSS_WIDTH - 1]
+    cut = text[: _GLOSS_WIDTH - 1]
     if " " in cut:
-        cut = cut[:cut.rindex(" ")]
+        cut = cut[: cut.rindex(" ")]
     return cut + "…"
 
 
-#: Separator between key hints in the legend, matching k2kremote and eosed.
+#: Separator between key hints in the legend, matching the family.
 _LEGEND_SEP = " · "
 
 
 def wrap_blocks(blocks, width: int, sep: str = _LEGEND_SEP) -> str:
     """Pack ``blocks`` into lines no wider than ``width``, joined by ``sep``.
 
-    Ported from the sibling k2kremote via eosed (same author,
-    GPL-2.0-or-later), which solved the identical problem for their own key
-    legends. Breaks happen only *between* blocks, so a hint like
-    ``l Load volume`` is never split mid-label; a block wider than ``width``
-    on its own simply takes its own line rather than being cut.
+    Re-exported from :func:`vinsynlib.keys.wrap_blocks`, which every tool in
+    this family now uses. Kept as a name because it is part of this module's
+    published surface and because three tests call it directly.
     """
-    lines, current = [], ""
-    for block in blocks:
-        candidate = block if not current else current + sep + block
-        if width and len(candidate) > width and current:
-            lines.append(current)
-            current = block
-        else:
-            current = candidate
-    if current:
-        lines.append(current)
-    return "\n".join(lines)
+    return _wrap_blocks(blocks, width, sep)
 
 
-class KeyHints(Static):
-    """The key legend, folded to the terminal's width over as many lines as it needs.
+class KeyHints(_KeyHints):
+    """The legend, folded to the terminal's width over as many lines as it needs.
 
     **Replaces Textual's ``Footer``**, which is hardcoded to one line and
     truncates rather than wrapping. At 80x24 -- the smallest size this project
@@ -424,31 +426,68 @@ class KeyHints(Static):
     undiscoverable to anyone who had not read the README. Neither
     ``height: auto`` nor a grid layout changes that; both were measured.
 
-    The approach is k2kremote's and eosed's, ported rather than reinvented:
-    one line on a wide terminal, more on a narrow one, and nothing ever
-    hidden.
+    The widget is now the family's (:class:`vinsynlib.ui.hints.KeyHints`),
+    which is k2kremote's and eosed's approach arrived at four times over and
+    is now written once. What this subclass adds is the one thing the shared
+    widget does not do: ``set_blocks``.
+
+    The right column shows one of two things -- the parameter table or the
+    disk browser -- and half the keys change with it, so the legend changes
+    with it. That was worth a method here. It was NOT worth the widget: the
+    copy this file carried was the same forty lines as four other projects',
+    and the shared one is the same widget with the same folding and the same
+    reason for it.
     """
 
-    DEFAULT_CSS = "KeyHints { height: auto; }"
-
-    def __init__(self, blocks, *, id=None):
-        super().__init__(id=id)
-        self._blocks = list(blocks)
-
-    def on_mount(self) -> None:
-        self._render_hints()
-
-    def on_resize(self, event) -> None:
-        self._render_hints()
-
     def set_blocks(self, blocks) -> None:
-        """Replace the legend. The right column shows one of two things and
-        half the keys change with it, so the hints change too."""
+        """Replace the legend, in place.
+
+        Named to match what it replaces: this is the whole reason for the
+        subclass, and a reader who finds it should not have to go looking
+        through the rest of the class to work out why it is here.
+        """
         self._blocks = list(blocks)
         self._render_hints()
 
-    def _render_hints(self) -> None:
-        self.update(wrap_blocks(self._blocks, self.size.width))
+
+def legend_blocks(bindings) -> List[str]:
+    """The legend's blocks for a class's ``BINDINGS``.
+
+    The family's :func:`vinsynlib.keys.legend_from_bindings`, so the list is
+    built from the bindings that actually exist rather than from a second
+    list kept in step with them by hand. ``show=False`` entries are dropped,
+    the way ``Footer`` dropped them.
+
+    ``PRESS_NAMES`` rather than nothing: the library prints a binding's key
+    name, and Textual's name for the help key is ``question_mark``, which is
+    a name for a key rather than the key. The family hands that translation
+    in as a parameter for exactly this case.
+    """
+    return _legend_from_bindings(bindings, press_names=PRESS_NAMES)
+
+
+#: Textual key *names* that should not reach a user verbatim. A binding may
+#: list several keys -- "plus,equals_sign" -- which is exactly what to
+#: dispatch on and exactly the wrong thing to print.
+PRESS_NAMES = {
+    "equals_sign": "=",
+    "plus": "+",
+    "minus": "-",
+    "pageup": "PgUp",
+    "pagedown": "PgDn",
+    "question_mark": "?",
+}
+
+
+def _key_text(binding) -> str:
+    """One binding's key, as somebody would type it.
+
+    The first key of a multi-key binding, translated out of Textual's
+    vocabulary. Without this the help screen reads "plus,equals_sign Value
+    +1", which is a name for a key rather than the key.
+    """
+    first = binding.key.split(",", maxsplit=1)[0]
+    return PRESS_NAMES.get(first, first)
 
 
 class ReportScreen(ModalScreen[None]):
@@ -499,8 +538,7 @@ class SourceScreen(ModalScreen[None]):
 
     BINDINGS = [Binding("escape", "cancel", "Cancel")]
 
-    def __init__(self, source: Dict[str, int],
-                 device_types: Dict[int, str]) -> None:
+    def __init__(self, source: Dict[str, int], device_types: Dict[int, str]) -> None:
         super().__init__()
         self.source = dict(source or {})
         # passed in rather than imported: app.py must not import s3k.bridge,
@@ -516,11 +554,12 @@ class SourceScreen(ModalScreen[None]):
             yield Label(self._drive_row(), id="source-drive")
             yield Label(self._device_row(), id="source-device")
             yield Label(self._partition_row(), id="source-partition")
-            yield Label("  Volume          [dim]settable — Enter on a row in "
-                        "the Disk pane[/dim]", id="source-volume")
+            yield Label(
+                "  Volume          [dim]settable — Enter on a row in the Disk pane[/dim]",
+                id="source-volume",
+            )
             yield Label("")
-            yield Label("[b]Volumes on this drive and partition[/b]",
-                        id="source-vols-title")
+            yield Label("[b]Volumes on this drive and partition[/b]", id="source-vols-title")
             # Cheap enough to re-read on every change: the volume list pages
             # sixteen records a request, so a 30-volume disc is two round
             # trips. The DIRECTORY is the expensive one -- one request per
@@ -528,19 +567,23 @@ class SourceScreen(ModalScreen[None]):
             with VerticalScroll(id="source-vols"):
                 yield Label("", id="source-vols-body")
             yield Label("")
-            yield Label("[dim]Each key writes to the machine at once. The "
-                        "directory is re-read when\n  this closes, not after "
-                        "every change.[/dim]")
+            yield Label(
+                "[dim]Each key writes to the machine at once. The "
+                "directory is re-read when\n  this closes, not after "
+                "every change.[/dim]"
+            )
             yield Label("[b]Esc[/b] close", id="source-close")
 
     #: Device types for which a SCSI id means anything. The floppy is not on
     #: the bus, so its id is inert -- changing it moves nothing, which reads
     #: as a broken key unless the screen says why.
-    _SCSI_DEVICES = (1, 2)          # hard, flash
+    _SCSI_DEVICES = (1, 2)  # hard, flash
 
     def _drive_row(self) -> str:
-        row = (f"  SCSI drive      [b]{self.source.get('scsi_drive_id', '?')}"
-               f"[/b]        press [b]0[/b]-[b]7[/b]")
+        row = (
+            f"  SCSI drive      [b]{self.source.get('scsi_drive_id', '?')}"
+            f"[/b]        press [b]0[/b]-[b]7[/b]"
+        )
         if self.source.get("device_type") not in self._SCSI_DEVICES:
             row += "  [dim]— ignored while the device is FLOPPY[/dim]"
         return row
@@ -548,8 +591,9 @@ class SourceScreen(ModalScreen[None]):
     def _device_row(self) -> str:
         kind = self.source.get("device_type")
         name = self.device_types.get(kind, f"? ({kind})")
-        return (f"  Device          [b]{name}[/b]"
-                "     [b]f[/b] floppy   [b]h[/b] hard   [b]x[/b] flash")
+        return (
+            f"  Device          [b]{name}[/b]     [b]f[/b] floppy   [b]h[/b] hard   [b]x[/b] flash"
+        )
 
     def _partition_row(self) -> str:
         part = self.source.get("partition")
@@ -557,8 +601,9 @@ class SourceScreen(ModalScreen[None]):
         # \[ is Rich's escape for a literal bracket. Writing [b][[/b] renders
         # "[/b]" instead: Rich reads [[ as the escape and the /b] falls
         # through as plain text.
-        return (f"  Partition       [b]{shown}[/b]"
-                "        [b]\\[[/b] and [b]][/b] here, or in the panes")
+        return (
+            f"  Partition       [b]{shown}[/b]        [b]\\[[/b] and [b]][/b] here, or in the panes"
+        )
 
     def update_volumes(self, volumes) -> None:
         """List what is on the drive and partition now selected.
@@ -585,8 +630,7 @@ class SourceScreen(ModalScreen[None]):
             body.update("  [dim]nothing on this partition[/dim]")
         else:
             title.update(f"[b]Volumes here[/b]  [dim]({len(volumes)})[/dim]")
-            body.update("\n".join(
-                f"  [b]v{v.index}[/b]  {v.name.strip()}" for v in volumes))
+            body.update("\n".join(f"  [b]v{v.index}[/b]  {v.name.strip()}" for v in volumes))
 
     def update_source(self, source: Dict[str, int]) -> None:
         """Re-render the rows from what the machine now reports."""
@@ -595,8 +639,7 @@ class SourceScreen(ModalScreen[None]):
         try:
             self.query_one("#source-drive", Label).update(self._drive_row())
             self.query_one("#source-device", Label).update(self._device_row())
-            self.query_one("#source-partition", Label).update(
-                self._partition_row())
+            self.query_one("#source-partition", Label).update(self._partition_row())
         except Exception:
             pass
 
@@ -659,7 +702,8 @@ class LoadingScreen(ModalScreen[None]):
                     f"[dim]The cleared machine keeps one program — the last "
                     f"cannot be deleted — so it is\n  parked as "
                     f"[b]{S3kedApp.CLEARED_MARKER}[/b] and removed when you "
-                    f"close this.[/dim]")
+                    f"close this.[/dim]"
+                )
                 yield Label("")
             yield Label("[b]Esc[/b] — then the lists refresh")
 
@@ -699,13 +743,14 @@ class BoardsScreen(ModalScreen[Optional[set]]):
             for key, (name, what) in self._BOARDS.items():
                 yield Label(self._row(key, name, what), id=f"board-{name}")
             yield Label("")
-            yield Label("[dim]Fields behind an undeclared board are refused, "
-                        "for reading and writing\n  alike. The machine cannot "
-                        "be asked which are fitted, so this is a\n  declaration "
-                        "— and a wrong one is how a sampler gets "
-                        "crashed.[/dim]")
-            yield Label("[b]1[/b]/[b]2[/b] toggle    [b]enter[/b] save    "
-                        "[b]esc[/b] cancel")
+            yield Label(
+                "[dim]Fields behind an undeclared board are refused, "
+                "for reading and writing\n  alike. The machine cannot "
+                "be asked which are fitted, so this is a\n  declaration "
+                "— and a wrong one is how a sampler gets "
+                "crashed.[/dim]"
+            )
+            yield Label("[b]1[/b]/[b]2[/b] toggle    [b]enter[/b] save    [b]esc[/b] cancel")
 
     def _row(self, key: str, name: str, what: str) -> str:
         mark = "[b]fitted[/b]" if name in self.fitted else "[dim]not fitted[/dim]"
@@ -716,7 +761,8 @@ class BoardsScreen(ModalScreen[Optional[set]]):
             name = self._BOARDS[event.key][0]
             self.fitted ^= {name}
             self.query_one(f"#board-{name}", Label).update(
-                self._row(event.key, name, self._BOARDS[event.key][1]))
+                self._row(event.key, name, self._BOARDS[event.key][1])
+            )
             event.stop()
         elif event.key == "enter":
             self.dismiss(self.fitted)
@@ -760,21 +806,29 @@ class MenuScreen(ModalScreen[Optional[int]]):
             for key, (value, name) in self._CHOICES.items():
                 yield Label(f"  [b]{key}[/b]  {name}  [dim]({value})[/dim]")
             yield Label("")
-            yield Label("[dim]EDIT is a modifier, not a page: eight buttons, "
-                        "seven modes, and EDIT\n  combines with four of them "
-                        "— which is the eleven the manual counts.[/dim]")
-            yield Label("[b]Esc[/b] close  [dim]— the page changes as you "
-                        "press, and this stays open[/dim]")
+            yield Label(
+                "[dim]EDIT is a modifier, not a page: eight buttons, "
+                "seven modes, and EDIT\n  combines with four of them "
+                "— which is the eleven the manual counts.[/dim]"
+            )
+            yield Label(
+                "[b]Esc[/b] close  [dim]— the page changes as you press, and this stays open[/dim]"
+            )
 
     #: All eleven, keyed 0-9 then a for LOAD. The order is the register's
     #: own, which is also the panel's: base/edit pairs, then the three
     #: disk-and-system pages.
     _CHOICES = {
-        "0": (0, "SINGLE"),   "1": (1, "SINGLE EDIT"),
-        "2": (2, "MULTI"),    "3": (3, "MULTI EDIT"),
-        "4": (4, "SAMPLE"),   "5": (5, "SAMPLE EDIT"),
-        "6": (6, "EFFECTS"),  "7": (7, "EFFECTS EDIT"),
-        "8": (8, "GLOBAL"),   "9": (9, "SAVE"),
+        "0": (0, "SINGLE"),
+        "1": (1, "SINGLE EDIT"),
+        "2": (2, "MULTI"),
+        "3": (3, "MULTI EDIT"),
+        "4": (4, "SAMPLE"),
+        "5": (5, "SAMPLE EDIT"),
+        "6": (6, "EFFECTS"),
+        "7": (7, "EFFECTS EDIT"),
+        "8": (8, "GLOBAL"),
+        "9": (9, "SAVE"),
         "a": (10, "LOAD"),
     }
 
@@ -797,8 +851,7 @@ class MenuScreen(ModalScreen[Optional[int]]):
         self.current = current
         here = self.modes.get(current, f"unnamed ({current})")
         try:
-            self.query_one("#menu-here", Label).update(
-                f"  now showing: [b]{here}[/b]")
+            self.query_one("#menu-here", Label).update(f"  now showing: [b]{here}[/b]")
         except Exception:
             pass
 
@@ -870,10 +923,14 @@ class VolumeNameScreen(ModalScreen[Optional[str]]):
     def compose(self) -> ComposeResult:
         with Vertical(id="edit-box"):
             yield Label("[b]Name the volume[/b]")
-            yield Label("Applied after the save, as a second operation — "
-                        "the machine names it itself first.", id="edit-desc")
-            yield Label(f"up to {m.NAME_LENGTH} characters, "
-                        "upper case, from the Akai character set")
+            yield Label(
+                "Applied after the save, as a second operation — "
+                "the machine names it itself first.",
+                id="edit-desc",
+            )
+            yield Label(
+                f"up to {m.NAME_LENGTH} characters, upper case, from the Akai character set"
+            )
             yield Input(value=self.current, id="edit-input")
 
     def on_mount(self) -> None:
@@ -925,12 +982,16 @@ class SaveOptionsScreen(ModalScreen[Optional[Tuple[int, bool, Optional[str]]]]):
     #: everything resident.
     CURSOR_TYPES = frozenset({4, 5})
 
-    def __init__(self, *, save_type: int = 0,
-                 volume: Optional[int] = None,
-                 volume_count: Optional[int] = None,
-                 volume_name: str = "",
-                 resident_programs: int = 0,
-                 resident_samples: int = 0) -> None:
+    def __init__(
+        self,
+        *,
+        save_type: int = 0,
+        volume: Optional[int] = None,
+        volume_count: Optional[int] = None,
+        volume_name: str = "",
+        resident_programs: int = 0,
+        resident_samples: int = 0,
+    ) -> None:
         super().__init__()
         self.save_type = save_type if save_type in self.OFFERED_TYPES else 0
         self.rewrite = False
@@ -948,10 +1009,12 @@ class SaveOptionsScreen(ModalScreen[Optional[Tuple[int, bool, Optional[str]]]]):
             # one who needs it. The second line is the specific hazard rather
             # than a general caution -- every other operation in this app
             # touches RAM, and this one is the first that does not.
-            yield Static("⚠  EXPERIMENTAL — writes to the DISC, and there is "
-                         "no undo\n   the registers are measured (§127); this "
-                         "screen has never fired one at real media",
-                         id="savewarn")
+            yield Static(
+                "⚠  EXPERIMENTAL — writes to the DISC, and there is "
+                "no undo\n   the registers are measured (§127); this "
+                "screen has never fired one at real media",
+                id="savewarn",
+            )
             yield Label("[b]Save[/b]")
             yield Label("")
             yield Label("", id="saveopts-what")
@@ -959,9 +1022,11 @@ class SaveOptionsScreen(ModalScreen[Optional[Tuple[int, bool, Optional[str]]]]):
             yield Label("", id="saveopts-name")
             yield Label("", id="saveopts-warn")
             yield Label("")
-            yield Label("[b]t[/b] type   [b]w[/b] new volume   "
-                        "[b]r[/b] rewrite selected   [b]e[/b] name   "
-                        "[b]enter[/b] go   [b]esc[/b] cancel")
+            yield Label(
+                "[b]t[/b] type   [b]w[/b] new volume   "
+                "[b]r[/b] rewrite selected   [b]e[/b] name   "
+                "[b]enter[/b] go   [b]esc[/b] cancel"
+            )
 
     def on_mount(self) -> None:
         self._redraw()
@@ -970,44 +1035,47 @@ class SaveOptionsScreen(ModalScreen[Optional[Tuple[int, bool, Optional[str]]]]):
         name = m.LOAD_TYPES.get(self.save_type, "unnamed")
         extra = ""
         if self.save_type == 0:
-            extra = ("[dim]— effects, multi, drum inputs and take list "
-                     "too[/dim]")
+            extra = "[dim]— effects, multi, drum inputs and take list too[/dim]"
         elif self.save_type == 1:
             extra = "[dim]— programs and samples only[/dim]"
         elif self.save_type in self.CURSOR_TYPES:
             extra = "[dim]— the row selected in the Disk pane[/dim]"
         self.query_one("#saveopts-what", Label).update(
-            rf"  [dim]what:[/dim]  [b]{name}[/b]  \[[b]t[/b]] {extra}")
+            rf"  [dim]what:[/dim]  [b]{name}[/b]  \[[b]t[/b]] {extra}"
+        )
 
         mark = lambda on: "[b]>[/b]" if on else " "
         if self.rewrite:
-            target = (f"volume {self.volume + 1}"
-                      + (f" [b]{self.volume_name}[/b]" if self.volume_name else "")
-                      if self.volume is not None else "the selected volume")
+            target = (
+                f"volume {self.volume + 1}"
+                + (f" [b]{self.volume_name}[/b]" if self.volume_name else "")
+                if self.volume is not None
+                else "the selected volume"
+            )
         else:
-            nxt = ("" if self.volume_count is None
-                   else f" (slot {self.volume_count + 1})")
+            nxt = "" if self.volume_count is None else f" (slot {self.volume_count + 1})"
             target = f"a new volume{nxt}"
         self.query_one("#saveopts-where", Label).update(
             f"  [dim]where:[/dim]  {mark(not self.rewrite)} ne[b]w[/b] volume"
             f"    {mark(self.rewrite)} [b]r[/b]ewrite selected"
-            f"\n  [dim]target:[/dim]  {target}")
+            f"\n  [dim]target:[/dim]  {target}"
+        )
 
         if self.new_name:
             shown = f"[b]{self.new_name}[/b]"
         elif self.rewrite:
-            shown = ("[dim]machine resets it to VOLUME nnn — "
-                     "press e to set one[/dim]")
+            shown = "[dim]machine resets it to VOLUME nnn — press e to set one[/dim]"
         else:
             shown = "[dim]machine names it VOLUME nnn — press e to set one[/dim]"
-        self.query_one("#saveopts-name", Label).update(
-            f"  [dim]name:[/dim]   {shown}")
+        self.query_one("#saveopts-name", Label).update(f"  [dim]name:[/dim]   {shown}")
 
         warn = ""
         if self.rewrite:
-            warn = ("  [b]This overwrites a volume that exists.[/b] There is "
-                    "no undo,\n  and the volume's name is reset even if the "
-                    "save is a subset.")
+            warn = (
+                "  [b]This overwrites a volume that exists.[/b] There is "
+                "no undo,\n  and the volume's name is reset even if the "
+                "save is a subset."
+            )
         self.query_one("#saveopts-warn", Label).update(warn)
 
     def action_next_type(self) -> None:
@@ -1043,12 +1111,12 @@ class SaveOptionsScreen(ModalScreen[Optional[Tuple[int, bool, Optional[str]]]]):
                 return
             self.new_name = value
             self._redraw()
+
         self.app.push_screen(VolumeNameScreen(self.new_name or ""), took)
 
     def action_go(self) -> None:
         if self.resident_programs == 0 and self.resident_samples == 0:
-            self.app.notify_status(
-                "nothing resident to save", refused=True)
+            self.app.notify_status("nothing resident to save", refused=True)
             return
         self.dismiss((self.save_type, self.rewrite, self.new_name))
 
@@ -1136,6 +1204,7 @@ class S3kedApp(App):
         Binding("g", "menu", "Main menu"),
         Binding("B", "boards", "Boards fitted"),
         Binding("i", "integrity", "Integrity"),
+        Binding("question_mark", "help", "Help"),
         Binding("a", "all_samples", "All samples"),
         Binding("u", "usage", "Who uses"),
         # Tab moves between the three SOURCE panes only, and `right` drops
@@ -1167,8 +1236,9 @@ class S3kedApp(App):
     _SOURCE_PANES = ("programs", "keygroups", "samples")
     _MULTI_PANES = ("multi-parts",)
 
-    def __init__(self, bridge, *, allow_write: bool = False,
-                 config_path: Optional[str] = None) -> None:
+    def __init__(
+        self, bridge, *, allow_write: bool = False, config_path: Optional[str] = None
+    ) -> None:
         super().__init__()
         self.bridge = bridge
         self.allow_write = allow_write
@@ -1195,9 +1265,6 @@ class S3kedApp(App):
         #: (name, PRGNUM) of everything resident before a load, so the
         #: arrivals can be identified afterwards rather than guessed at.
         self._before_load = None
-        #: Set by a refresh so _apply_program can put the parameter pane back
-        #: where it was, rather than dragging it to the program view.
-        self._restore_context = None
         #: True while a table is being repopulated by us. Filling a DataTable
         #: fires row-highlighted events, and the programs branch of that
         #: handler has no has-focus guard -- by design, so arrowing a program
@@ -1210,9 +1277,12 @@ class S3kedApp(App):
         #: its event, the handler runs after the guard has been cleared, and
         #: the reload lands anyway. Comparing state works whenever it runs.
         self._loaded_program = None
-        #: Set for the duration of a nudge's write, so _after_write can
-        #: collapse a run into one undo entry and skip the catalog re-read.
-        self._nudging = None
+        #: Outstanding nudge runs, keyed by (region, index, keygroup, name),
+        #: so _after_write can collapse a run into one undo entry and skip
+        #: the catalog re-read. Keyed per field rather than a single slot: a
+        #: second nudge -- or an edit completing -- while one is in flight
+        #: must not consume or overwrite another field's run.
+        self._nudging: Dict[Tuple[str, int, int, str], bool] = {}
         #: Serial number of the most recent parameter-pane request. Each pane
         #: is filled by a worker doing a MIDI round trip, so tabbing quickly
         #: puts several in flight at once -- and without this the pane showed
@@ -1249,14 +1319,11 @@ class S3kedApp(App):
         yield Header()
         with Horizontal(id="panes"):
             with Vertical(id="left"):
-                yield Static("Programs", classes="pane-title",
-                             id="programs-title")
+                yield Static("Programs", classes="pane-title", id="programs-title")
                 yield DataTable(id="programs", cursor_type="row")
-                yield Static("Keygroups", classes="pane-title",
-                             id="keygroups-title")
+                yield Static("Keygroups", classes="pane-title", id="keygroups-title")
                 yield DataTable(id="keygroups", cursor_type="row")
-                yield Static("Samples used", classes="pane-title",
-                             id="progsamples-title")
+                yield Static("Samples used", classes="pane-title", id="progsamples-title")
                 yield DataTable(id="samples", cursor_type="row")
                 # The multi REPLACES the three program-centric panes rather
                 # than sharing the screen with them. They are alternatives:
@@ -1280,10 +1347,12 @@ class S3kedApp(App):
                 yield DataTable(id="volumes", cursor_type="row")
         yield Static("", id="status")
         # Not Footer(): it is one line and truncates. See KeyHints.
-        yield KeyHints(
-            [f"{b.key} {b.description}"
-             for b in self.BINDINGS if b.description and b.show],
-            id="keyhints")
+        #
+        # Built from BINDINGS rather than written out: a hand-written legend
+        # is a second list to keep in step, and it drifts. Both this and
+        # _refresh_key_hints go through legend_blocks, so they cannot
+        # disagree about which keys exist.
+        yield KeyHints(legend_blocks(self.BINDINGS), id="keyhints")
 
     def on_mount(self) -> None:
         self.title = "s3ked"
@@ -1294,8 +1363,7 @@ class S3kedApp(App):
         self.query_one("#disk-title", Static).update("Disk — press [b]d[/b]")
         # The right column starts on Parameters. Both sets of widgets exist
         # from the start so nothing has to be built on the way in.
-        for widget_id in ("disk-title", "volumes",
-                          "multi-title", "multi-parts"):
+        for widget_id in ("disk-title", "volumes", "multi-title", "multi-parts"):
             self.query_one(f"#{widget_id}").display = False
         for table_id, columns in (
             ("multi-parts", ("", "section", "program", "ch")),
@@ -1353,9 +1421,21 @@ class S3kedApp(App):
     def _apply_catalog(
         self, programs: List[str], samples: List[str], announce: bool = True
     ) -> None:
+        table = self.query_one("#programs", DataTable)
+        # Capture the selection BEFORE clear(): rebuilding resets the cursor
+        # to row 0, so reading it afterwards always said "program 0" -- and
+        # since every parameter write ends with a catalog reload, editing a
+        # keygroup field bounced the pane back to program 0's parameters
+        # immediately afterwards, and a second edit went somewhere else
+        # entirely. Clamped to the last row rather than to 0, so a list that
+        # shrank keeps the nearest survivor instead of jumping to the top.
+        selected = self._selected_program()
+        if selected is None:
+            selected = 0
+        if programs:
+            selected = min(selected, len(programs) - 1)
         self._programs = programs
         self._samples = samples
-        table = self.query_one("#programs", DataTable)
         self._refilling = True
         try:
             table.clear()
@@ -1370,26 +1450,18 @@ class S3kedApp(App):
         # confirmation -- the catalog reload finishes last, so without this
         # the user only ever sees the program count.
         if announce:
-            self.notify_status(
-                f"{len(programs)} program(s), {len(samples)} sample(s)"
-            )
+            self.notify_status(f"{len(programs)} program(s), {len(samples)} sample(s)")
         if not programs:
             return
-        # Keep the selection. This re-selected program 0 unconditionally, and
-        # since every parameter write ends with a catalog reload, editing a
-        # keygroup field bounced the pane back to program 0's parameters
-        # immediately afterwards -- so a second edit went somewhere else
-        # entirely. The same class as the disk pane's cursor jumping to v0:
-        # a refresh must not move the user.
-        selected = self._selected_program() or 0
-        if selected >= len(programs):
-            selected = 0
+        # Keep the selection: restore the cursor to the captured row and load
+        # that same program, so a refresh never moves the user and a later
+        # write cannot land on a program the cursor no longer names.
         table.move_cursor(row=selected)
         region, index, keygroup = self._param_context
         self._load_program(selected, restore=(region, index, keygroup))
 
     @work(thread=True)
-    def _load_program_worker(self, index: int, token: int = 0) -> None:
+    def _load_program_worker(self, index: int, token: int = 0, restore=None) -> None:
         try:
             with self._bridge_lock:
                 header = self.bridge.get_header("program", index)
@@ -1397,8 +1469,7 @@ class S3kedApp(App):
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"error: {exc}")
             return
-        self.call_from_thread(self._apply_program, index, header,
-                              keygroups, token)
+        self.call_from_thread(self._apply_program, index, header, keygroups, token, restore)
 
     def _read_keygroups(self, program: int, header) -> List[dict]:
         """Each keygroup's key range and the samples its zones name.
@@ -1421,26 +1492,27 @@ class S3kedApp(App):
         size = p.REGION_SIZES["keygroup"]
         lo_off = p.lookup(("keygroup", "LONOTE")).offset
         hi_off = p.lookup(("keygroup", "HINOTE")).offset
-        zone_offs = [p.lookup(("keygroup", n)).offset
-                     for n in ("SNAME1", "SNAME2", "SNAME3", "SNAME4")]
+        zone_offs = [
+            p.lookup(("keygroup", n)).offset for n in ("SNAME1", "SNAME2", "SNAME3", "SNAME4")
+        ]
         out: List[dict] = []
         for kg in range(count):
             try:
-                raw = self.bridge.get_header_bytes(
-                    "keygroup", program, 0, size, selector=kg)
+                raw = self.bridge.get_header_bytes("keygroup", program, 0, size, selector=kg)
             except Exception:
                 out.append({"lo": -1, "hi": -1, "samples": [], "read": False})
                 continue
             names = []
             for off in zone_offs:
-                chunk = raw[off:off + m.NAME_LENGTH]
+                chunk = raw[off : off + m.NAME_LENGTH]
                 if not any(chunk):
-                    continue                     # unwritten
+                    continue  # unwritten
                 name = m.decode_name(list(chunk))
-                if name.strip():                 # twelve spaces = unassigned
+                if name.strip():  # twelve spaces = unassigned
                     names.append(name.strip())
-            out.append({"lo": int(raw[lo_off]), "hi": int(raw[hi_off]),
-                        "samples": names, "read": True})
+            out.append(
+                {"lo": int(raw[lo_off]), "hi": int(raw[hi_off]), "samples": names, "read": True}
+            )
         return out
 
     def _load_program(self, index: int, restore=None) -> None:
@@ -1449,12 +1521,16 @@ class S3kedApp(App):
         ``restore`` is the ``_param_context`` to put back afterwards, used by
         a refresh so that re-reading the catalog does not drag the parameter
         pane back to the program view while somebody is editing a keygroup.
-        """
-        self._restore_context = restore
-        self._load_program_worker(index, self._claim_param_pane())
 
-    def _apply_program(self, index: int, header: Dict[str, object],
-                       keygroups=None, token: int = 0) -> None:
+        ``restore`` travels WITH the request -- through the worker into
+        ``_apply_program`` -- rather than in an instance field, so two
+        overlapping loads cannot overwrite each other's context.
+        """
+        self._load_program_worker(index, self._claim_param_pane(), restore)
+
+    def _apply_program(
+        self, index: int, header: Dict[str, object], keygroups=None, token: int = 0, restore=None
+    ) -> None:
         """Fill the keygroup pane and the samples-used pane for one program.
 
         The panes are program-centric on purpose. The samples pane used to be
@@ -1463,6 +1539,10 @@ class S3kedApp(App):
         program-first, so the pane now lists what the selected program
         references and says which of those the machine does not hold.
         """
+        if token and token != self._param_request:
+            return  # a later request has already claimed the pane; a
+            # stale overlapping load must change NOTHING, not
+            # even the keygroup/sample/title state below
         self._keygroups = int(header.get("GROUPS", 0) or 0)
         self._program_keygroups = list(keygroups or ())
         # A new program has no keygroup selected yet, so the pane goes back
@@ -1475,16 +1555,14 @@ class S3kedApp(App):
         table = self.query_one("#keygroups", DataTable)
         table.clear()
         for kg in range(self._keygroups):
-            row = (self._program_keygroups[kg]
-                   if kg < len(self._program_keygroups) else None)
+            row = self._program_keygroups[kg] if kg < len(self._program_keygroups) else None
             if row is None or not row["read"]:
                 table.add_row(str(kg), "?")
                 continue
             lo, hi = row["lo"], row["hi"]
             # An inverted range selects nothing, measured (§81). Printing it
             # as a range would read as a keygroup spanning it backwards.
-            span = (f"{p.note_name(lo)}–{p.note_name(hi)}"
-                    + ("  (dead)" if lo > hi else ""))
+            span = f"{p.note_name(lo)}–{p.note_name(hi)}" + ("  (dead)" if lo > hi else "")
             table.add_row(str(kg), span)
 
         self._fill_program_samples()
@@ -1495,10 +1573,6 @@ class S3kedApp(App):
         # and somebody asked for it. Only the PARAMETER pane is gated, because
         # that is the one a later request may already have claimed.
         self._loaded_program = index
-        restore = getattr(self, "_restore_context", None)
-        self._restore_context = None
-        if token and token != self._param_request:
-            return
         self._show_params("program", header, index)
         if restore and restore[0] != "program":
             self._restore_param_context(*restore)
@@ -1543,16 +1617,17 @@ class S3kedApp(App):
         only view of what the machine actually holds. `u` and the audit both
         still read the full list; nothing showed it.
         """
-        order = (["keygroup"] if self._samples_keygroup is not None else []) \
-            + ["program", "all"]
+        order = (["keygroup"] if self._samples_keygroup is not None else []) + ["program", "all"]
         at = order.index(self._samples_scope) if self._samples_scope in order else 0
         self._samples_scope = order[(at + 1) % len(order)]
         self._fill_program_samples()
-        self.notify_status({
-            "keygroup": f"samples: keygroup {self._samples_keygroup} only",
-            "program": "samples: what this program uses",
-            "all": "samples: everything resident",
-        }[self._samples_scope])
+        self.notify_status(
+            {
+                "keygroup": f"samples: keygroup {self._samples_keygroup} only",
+                "program": "samples: what this program uses",
+                "all": "samples: everything resident",
+            }[self._samples_scope]
+        )
 
     def _fill_all_samples(self) -> None:
         """Every resident sample, marking the ones this program references.
@@ -1565,17 +1640,12 @@ class S3kedApp(App):
         """
         table = self.query_one("#samples", DataTable)
         table.clear()
-        used = {
-            name
-            for row in self._program_keygroups
-            for name in row.get("samples", ())
-        }
+        used = {name for row in self._program_keygroups for name in row.get("samples", ())}
         for name in self._samples:
-            table.add_row(name, "used" if name.strip() in
-                          {u.strip() for u in used} else "")
+            table.add_row(name, "used" if name.strip() in {u.strip() for u in used} else "")
         self.query_one("#progsamples-title", Static).update(
-            f"All samples  [dim]({len(self._samples)} resident — "
-            f"[b]a[/b] for this program)[/dim]")
+            f"All samples  [dim]({len(self._samples)} resident — [b]a[/b] for this program)[/dim]"
+        )
 
     def _fill_program_samples(self) -> None:
         """What this program references, and which of it the machine lacks.
@@ -1605,7 +1675,7 @@ class S3kedApp(App):
         rows = self._program_keygroups
         one = self._samples_keygroup
         if self._samples_scope == "keygroup" and one is not None:
-            rows = rows[one:one + 1] if one < len(rows) else []
+            rows = rows[one : one + 1] if one < len(rows) else []
 
         used: List[str] = []
         for row in rows:
@@ -1622,30 +1692,35 @@ class S3kedApp(App):
 
         title = self.query_one("#progsamples-title", Static)
         hint = "  [dim]([b]a[/b] to change scope)[/dim]"
-        what = (f"Samples used — keygroup {one}"
-                if self._samples_scope == "keygroup" and one is not None
-                else "Samples used")
+        what = (
+            f"Samples used — keygroup {one}"
+            if self._samples_scope == "keygroup" and one is not None
+            else "Samples used"
+        )
         if missing:
-            title.update(
-                f"{what} — {len(missing)} MISSING of {len(used)}{hint}")
+            title.update(f"{what} — {len(missing)} MISSING of {len(used)}{hint}")
         else:
             title.update(f"{what} — {len(used)}{hint}")
 
-    def _show_params(self, region: str, values: Dict[str, object],
-                     index: int = 0, keygroup: int = 0) -> None:
+    def _show_params(
+        self, region: str, values: Dict[str, object], index: int = 0, keygroup: int = 0
+    ) -> None:
         self._param_values = values
         self._param_context = (region, index, keygroup)
-        self._param_rows = p.region_params(region)
         table = self.query_one("#parameters", DataTable)
         # Keep the cursor on the same PARAMETER across a rebuild. clear()
         # resets it to row 0, and this runs after every write -- so an edit
         # bounced the cursor onto PRIDENT, a read-only block address, and a
         # held nudge stepped its field once and then refused for as long as
         # the key was down. Remembered by NAME, since the row set changes
-        # with the region.
+        # with the region -- and read off the OLD rows first: reading the new
+        # ones at the old cursor names an unrelated parameter that happens
+        # to sit at that row in the new region.
         was_on = None
-        if 0 <= table.cursor_row < len(self._param_rows):
-            was_on = self._param_rows[table.cursor_row].name
+        old_rows = self._param_rows
+        if 0 <= table.cursor_row < len(old_rows):
+            was_on = old_rows[table.cursor_row].name
+        self._param_rows = p.region_params(region)
         table.clear()
         for param in self._param_rows:
             table.add_row(
@@ -1709,7 +1784,7 @@ class S3kedApp(App):
                 try:
                     self.bridge.refresh_media()
                 except Exception:
-                    pass        # older machine, or no disk: fall through
+                    pass  # older machine, or no disk: fall through
                 volumes = self.bridge.volume_list()
                 try:
                     entries = self.bridge.hd_directory(1)
@@ -1732,10 +1807,14 @@ class S3kedApp(App):
             with self._bridge_lock:
                 programs = self.bridge.program_list()
                 samples = self.bridge.sample_list()
+                try:
+                    status = self.bridge.status()
+                except Exception:
+                    status = None
         except Exception:
             programs = samples = None
-        self.call_from_thread(self._show_volumes, volumes, entries, source,
-                              source_error)
+            status = None
+        self.call_from_thread(self._show_volumes, volumes, entries, source, source_error, status)
         if programs is not None:
             self.call_from_thread(self._refresh_catalog_lists, programs, samples)
 
@@ -1747,18 +1826,31 @@ class S3kedApp(App):
         self._programs, self._samples = list(programs), list(samples)
         table = self.query_one("#programs", DataTable)
         row = table.cursor_row
+        if row is None:
+            row = 0
+        if self._programs:
+            row = min(row, len(self._programs) - 1)
         self._refilling = True
         try:
             table.clear()
             for index, name in enumerate(self._programs):
                 table.add_row(str(index), name)
-            if row is not None and row < table.row_count:
+            if self._programs:
                 table.move_cursor(row=row)
         finally:
             self._refilling = False
         self.notify_status(
             f"catalog changed while you were away: {previous} → "
-            f"{len(self._programs)} program(s), {len(self._samples)} sample(s)")
+            f"{len(self._programs)} program(s), {len(self._samples)} sample(s)"
+        )
+        if not self._programs:
+            return
+        # The list changed under us -- from the front panel, or a load -- so
+        # the derived panes may describe a program that moved or is gone.
+        # RowHighlighted is suppressed during the refill above, so reload the
+        # selected program explicitly rather than leaving stale panes up.
+        region, index, keygroup = self._param_context
+        self._load_program(row, restore=(region, index, keygroup))
 
     @staticmethod
     def _describe_source(source) -> str:
@@ -1772,7 +1864,8 @@ class S3kedApp(App):
         if not source:
             return ""
         device = {0: "FLOPPY", 1: "HARD", 2: "FLASH"}.get(
-            source.get("device_type"), f"DEV{source.get('device_type')}")
+            source.get("device_type"), f"DEV{source.get('device_type')}"
+        )
         letter = chr(65 + source.get("partition", 0))
         volume = source.get("volume")
         shown = f" vol {volume + 1:03d}" if volume is not None else ""
@@ -1792,8 +1885,7 @@ class S3kedApp(App):
         changes the device belongs behind the same gate as an edit.
         """
         if not self.allow_write:
-            self.notify_status(
-                "write gate is locked — press w to arm it", refused=True)
+            self.notify_status("write gate is locked — press w to arm it", refused=True)
             return
         self._step_partition_worker(delta)
 
@@ -1854,15 +1946,17 @@ class S3kedApp(App):
         if sample is not None:
             where = audit.usage(sample)
             body = (
-                "\n".join(f"  program {r.program} ({r.program_name})  "
-                           f"keygroup {r.keygroup}  zone {r.zone}"
-                           for r in where[:24])
-                or "  nothing uses it")
-            extra = (f"\n  … and {len(where) - 24} more" if len(where) > 24
-                     else "")
-            self.push_screen(ReportScreen(
-                f"Uses of [b]{sample}[/b]", body + extra,
-                f"{len(where)} zone(s)"))
+                "\n".join(
+                    f"  program {r.program} ({r.program_name})  "
+                    f"keygroup {r.keygroup}  zone {r.zone}"
+                    for r in where[:24]
+                )
+                or "  nothing uses it"
+            )
+            extra = f"\n  … and {len(where) - 24} more" if len(where) > 24 else ""
+            self.push_screen(
+                ReportScreen(f"Uses of [b]{sample}[/b]", body + extra, f"{len(where)} zone(s)")
+            )
             return
 
         dangling = audit.dangling()
@@ -1871,10 +1965,11 @@ class S3kedApp(App):
             for program, refs in audit.programs_playing_silence().items():
                 names = sorted({r.sample for r in refs})
                 lines.append(
-                    f"  program {program} ({refs[0].program_name}): "
-                    f"{len(refs)} silent zone(s)")
-                lines.append(f"      naming {', '.join(names[:4])}"
-                             + (" …" if len(names) > 4 else ""))
+                    f"  program {program} ({refs[0].program_name}): {len(refs)} silent zone(s)"
+                )
+                lines.append(
+                    f"      naming {', '.join(names[:4])}" + (" …" if len(names) > 4 else "")
+                )
             body = "\n".join(lines)
         else:
             body = "  Every zone names a sample the machine holds."
@@ -1889,8 +1984,9 @@ class S3kedApp(App):
         # exactly what it looks like.
         if not self.allow_write:
             self.notify_status(
-                "write gate is locked — press w to arm it before changing "
-                "the load source", refused=True)
+                "write gate is locked — press w to arm it before changing the load source",
+                refused=True,
+            )
             return
         self.notify_status("reading the load source…")
         self._open_source()
@@ -1904,8 +2000,8 @@ class S3kedApp(App):
                 source = self.bridge.load_source()
         except Exception as exc:
             self.call_from_thread(
-                self.notify_status, f"load source unavailable: {exc}",
-                refused=True)
+                self.notify_status, f"load source unavailable: {exc}", refused=True
+            )
             return
         self.call_from_thread(self._show_source, source)
 
@@ -1921,9 +2017,7 @@ class S3kedApp(App):
                 self._source_dirty = False
                 self.action_disk()
 
-        self.push_screen(
-            SourceScreen(source, self.bridge.DEVICE_TYPES), closed
-        )
+        self.push_screen(SourceScreen(source, self.bridge.DEVICE_TYPES), closed)
 
     @work(thread=True)
     def _source_volumes_worker(self) -> None:
@@ -1962,12 +2056,10 @@ class S3kedApp(App):
                     source = self.bridge.select_device(value)
                 else:
                     current = self.bridge.load_source()["partition"]
-                    source = self.bridge.select_partition(
-                        max(0, min(7, current + value)))
+                    source = self.bridge.select_partition(max(0, min(7, current + value)))
             volumes = self._volumes_after_a_source_change()
         except Exception as exc:
-            self.call_from_thread(self.notify_status, f"{what}: {exc}",
-                                  refused=True)
+            self.call_from_thread(self.notify_status, f"{what}: {exc}", refused=True)
             return
         self.call_from_thread(self._refresh_source_dialog, source, volumes)
 
@@ -2015,7 +2107,8 @@ class S3kedApp(App):
         self.notify_status(
             f"source: SCSI {source.get('scsi_drive_id')}, "
             f"{self.bridge.DEVICE_TYPES.get(source.get('device_type'), '?')}, "
-            f"partition {chr(65 + part) if isinstance(part, int) else '?'}")
+            f"partition {chr(65 + part) if isinstance(part, int) else '?'}"
+        )
 
     @work(thread=True)
     def _select_source_worker(self, what: str, value: int) -> None:
@@ -2033,8 +2126,8 @@ class S3kedApp(App):
             # the machine is the authority, not the acknowledgement -- writing
             # byte[4] is acked and ignored, and writing mode 0 errors and works
             self.call_from_thread(
-                self.notify_status,
-                f"{what}: asked for {value}, machine reads {got}")
+                self.notify_status, f"{what}: asked for {value}, machine reads {got}"
+            )
             return
         self.call_from_thread(self.action_disk)
 
@@ -2062,8 +2155,35 @@ class S3kedApp(App):
                 return
             self.notify_status(f"boards fitted: {shown} — saved")
 
-        self.push_screen(BoardsScreen(getattr(self.bridge, "boards", set())),
-                         chosen)
+        self.push_screen(BoardsScreen(getattr(self.bridge, "boards", set())), chosen)
+
+    def action_help(self) -> None:
+        """Show this screen.
+
+        Added with the family's shared `? help` key, which s3ked did not
+        have. The key itself is the reason: a user who learns `? help` in
+        any other tool of this family should not find it absent here, and the
+        spec's editor tier lists it.
+
+        The body is assembled from BINDINGS rather than written out, for the
+        same reason the legend is: a hand-written key list is a second list to
+        keep in step with the first, and it drifts. Anything that is not a
+        keystroke -- what the panes are, when writes are refused -- is prose
+        underneath, because prose is what it is.
+        """
+        rows = [
+            f"{_key_text(binding)}  {binding.description}"
+            for binding in self.BINDINGS
+            if isinstance(binding, Binding) and binding.show
+        ]
+        body = "\n".join(rows)
+        self.push_screen(
+            ReportScreen(
+                "s3ked keys",
+                body,
+                f"{len(rows)} keys; z/Z undo, h history, w the write gate",
+            )
+        )
 
     def action_menu(self) -> None:
         """Move the machine to another main-menu page."""
@@ -2074,8 +2194,9 @@ class S3kedApp(App):
         # exactly what it looks like.
         if not self.allow_write:
             self.notify_status(
-                "write gate is locked — press w to arm it before changing "
-                "the main menu", refused=True)
+                "write gate is locked — press w to arm it before changing the main menu",
+                refused=True,
+            )
             return
         self.notify_status("reading the current page…")
         self._open_menu()
@@ -2091,9 +2212,7 @@ class S3kedApp(App):
             with self._bridge_lock:
                 current = self.bridge.mode()
         except Exception as exc:
-            self.call_from_thread(
-                self.notify_status, f"main menu unavailable: {exc}",
-                refused=True)
+            self.call_from_thread(self.notify_status, f"main menu unavailable: {exc}", refused=True)
             return
         self.call_from_thread(self._show_menu, current)
 
@@ -2123,8 +2242,10 @@ class S3kedApp(App):
         name = self.bridge.MODES.get(got, str(got))
         self.call_from_thread(
             self.notify_status,
-            f"main menu: {name}" if got == value
-            else f"main menu: asked for {value}, machine shows {name}")
+            f"main menu: {name}"
+            if got == value
+            else f"main menu: asked for {value}, machine shows {name}",
+        )
         # The dialog is still up, so it repaints from the read-back.
         self.call_from_thread(self._refresh_menu_screen, got)
 
@@ -2260,8 +2381,7 @@ class S3kedApp(App):
         the shape; the copy without a compiler behind it is the one that
         rots.
         """
-        blocks = [f"{b.key} {b.description}"
-                  for b in self.BINDINGS if b.description and b.show]
+        blocks = legend_blocks(self.BINDINGS)
         if self._disk_showing:
             blocks = list(self._DISK_HINTS) + blocks
         try:
@@ -2293,8 +2413,7 @@ class S3kedApp(App):
             self.action_disk()
             return
         if not self.allow_write:
-            self.notify_status(
-                "write gate is locked — press w to arm it", refused=True)
+            self.notify_status("write gate is locked — press w to arm it", refused=True)
             return
         if not self._disk_entries:
             self.notify_status("nothing read yet — press d")
@@ -2326,9 +2445,14 @@ class S3kedApp(App):
         if item is not None and current_type not in LoadOptionsScreen.CURSOR_TYPES:
             current_type = 4 if label.startswith("prog") else 5
         self.push_screen(
-            LoadOptionsScreen(resident_programs=len(self._programs),
-                              load_type=current_type,
-                              item=item, item_label=label), chosen)
+            LoadOptionsScreen(
+                resident_programs=len(self._programs),
+                load_type=current_type,
+                item=item,
+                item_label=label,
+            ),
+            chosen,
+        )
 
     def _selected_disk_item(self):
         """Which directory entry the Disk pane is sitting on, if any.
@@ -2357,8 +2481,9 @@ class S3kedApp(App):
                 break
         return seen, f"{kind} {name}"
 
-    def _confirm_load(self, clear_first: bool, renumber: bool,
-                      load_type: int = 1, item: Optional[int] = None) -> None:
+    def _confirm_load(
+        self, clear_first: bool, renumber: bool, load_type: int = 1, item: Optional[int] = None
+    ) -> None:
         """Show what the load costs, then fire it.
 
         The budget depends on the answer to the first question. Adding is
@@ -2375,38 +2500,55 @@ class S3kedApp(App):
         needed = sum(getattr(e, "audio_words", 0) for e in wanted)
         mb = lambda w: f"{w * 2 / 1024 / 1024:.2f} MB"
         budget = self._total_words if clear_first else self._words_free
-        fits = budget is None or needed <= budget
+        # Unknown is neither "fits" nor "does not fit": treating it as fits
+        # suppressed the over-budget warning whenever the status read had
+        # failed, and claiming it does not fit would refuse loads blindly.
+        fits = None if budget is None else needed <= budget
 
         type_name = m.LOAD_TYPES.get(load_type, load_type)
-        headline = (f"{type_name}: {len(wanted)} item(s), {mb(needed)}?"
-                    if fits else
-                    f"{type_name}: {len(wanted)} item(s), {mb(needed)} — "
-                    f"THIS DOES NOT FIT")
+        headline = (
+            f"{type_name}: {len(wanted)} item(s), {mb(needed)}?"
+            if fits is not False
+            else f"{type_name}: {len(wanted)} item(s), {mb(needed)} — THIS DOES NOT FIT"
+        )
         detail = ""
+        if budget is None:
+            detail += (
+                "\n\nMemory size unknown — the machine could not be "
+                "asked, so this load cannot be checked in advance."
+            )
         if clear_first:
             detail += (
                 "\n\nEVERY resident program and sample is deleted first. "
                 "There is no undo, and this is not the panel's CLR — it is "
-                "a delete, so one program will survive it.")
+                "a delete, so one program will survive it."
+            )
             if budget is not None:
                 detail += f"\n\ntotal memory: {mb(budget)}"
         elif budget is not None:
             detail += f"\n\nfree memory: {mb(budget)}"
         if renumber:
-            detail += ("\n\nAfterwards every program is renumbered in list "
-                       "order, so nothing shares a MIDI program number.")
-        if load_type not in (0, 1) and item is None and fits:
-            detail += ("\n\nThe size above is the whole volume; this type "
-                       "loads part of it, so it will use less.")
-        if not fits:
-            detail += ("\n\nThe machine will load what it can and stop with "
-                       "'insufficient waveform memory'. Programs whose samples "
-                       "did not arrive play silence.")
+            detail += (
+                "\n\nAfterwards every program is renumbered in list "
+                "order, so nothing shares a MIDI program number."
+            )
+        if load_type not in (0, 1) and item is None and fits is not False:
+            detail += (
+                "\n\nThe size above is the whole volume; this type "
+                "loads part of it, so it will use less."
+            )
+        if fits is False:
+            detail += (
+                "\n\nThe machine will load what it can and stop with "
+                "'insufficient waveform memory'. Programs whose samples "
+                "did not arrive play silence."
+            )
 
         def go(confirmed) -> None:
             if confirmed:
-                self._load_worker(clear_first=clear_first, renumber=renumber,
-                                  load_type=load_type, item=item)
+                self._load_worker(
+                    clear_first=clear_first, renumber=renumber, load_type=load_type, item=item
+                )
 
         self.push_screen(ConfirmScreen(headline + detail), go)
 
@@ -2431,23 +2573,26 @@ class S3kedApp(App):
     LEFTOVER_TRIES = 60
 
     @work(thread=True)
-    def _load_worker(self, *, clear_first: bool = False,
-                     renumber: bool = False, load_type: int = 1,
-                     item: Optional[int] = None) -> None:
+    def _load_worker(
+        self,
+        *,
+        clear_first: bool = False,
+        renumber: bool = False,
+        load_type: int = 1,
+        item: Optional[int] = None,
+    ) -> None:
         leftover = False
         try:
             with self._bridge_lock:
                 if clear_first:
-                    self.call_from_thread(
-                        self.notify_status, "clearing memory…")
+                    self.call_from_thread(self.notify_status, "clearing memory…")
                     self.bridge.clear_memory()
                     leftover = self._mark_the_leftover()
                 # Snapshot the incumbents BEFORE the load. A load inserts in
                 # program-number order rather than appending (§107), so
                 # afterwards there is no way to tell arrivals from residents
                 # by position -- the two volumes comb together.
-                self._before_load = (
-                    self.bridge.resident_pairs() if renumber else None)
+                self._before_load = self.bridge.resident_pairs() if renumber else None
                 self.bridge.trigger_load(load_type, item=item)
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"load: {exc}")
@@ -2482,8 +2627,7 @@ class S3kedApp(App):
         self.bridge.set_parameter(param, 0, self.CLEARED_MARKER)
         return True
 
-    def _await_load(self, renumber: bool = False,
-                    leftover: bool = False) -> None:
+    def _await_load(self, renumber: bool = False, leftover: bool = False) -> None:
         """Wait for the person to say the load finished, then refresh.
 
         The alternative is polling, and a 58.7 MB load probed every eight
@@ -2495,6 +2639,7 @@ class S3kedApp(App):
         reads the program list, and the program list is not final until the
         load is. This dialog is the only signal that it is.
         """
+
         def done(_result) -> None:
             if leftover:
                 self.notify_status("removing what the clear could not…")
@@ -2524,10 +2669,9 @@ class S3kedApp(App):
             for attempt in range(self.LEFTOVER_TRIES):
                 with self._bridge_lock:
                     names = [n.strip() for n in self.bridge.program_list()]
-                marked = [i for i, n in enumerate(names)
-                          if n == self.CLEARED_MARKER]
+                marked = [i for i, n in enumerate(names) if n == self.CLEARED_MARKER]
                 if not marked:
-                    break               # already gone, or never marked
+                    break  # already gone, or never marked
                 if len(names) == 1:
                     # It is the ONLY program, so the machine will accept the
                     # delete and ignore it -- that is why clear_memory cannot
@@ -2539,7 +2683,8 @@ class S3kedApp(App):
                             self.notify_status,
                             f"waiting for the load before removing "
                             f"{self.CLEARED_MARKER}… "
-                            f"({int(attempt * self.LEFTOVER_RETRY)}s)")
+                            f"({int(attempt * self.LEFTOVER_RETRY)}s)",
+                        )
                     time.sleep(self.LEFTOVER_RETRY)
                     continue
                 with self._bridge_lock:
@@ -2558,15 +2703,13 @@ class S3kedApp(App):
                     left = len(self.bridge.program_list())
         except Exception as exc:
             self.call_from_thread(
-                self.notify_status,
-                f"the cleared program could not be removed: {exc}",
-                refused=True)
+                self.notify_status, f"the cleared program could not be removed: {exc}", refused=True
+            )
             self._load_catalog(announce=False)
             return
         if removed:
             message = f"cleared and loaded; {removed} leftover removed"
-            self.call_from_thread(
-                self.notify_status, f"{message} ({left} program(s))")
+            self.call_from_thread(self.notify_status, f"{message} ({left} program(s))")
         else:
             # Never claim it went when it did not. It is still on the machine,
             # named, and it will collide on program number 1.
@@ -2574,7 +2717,9 @@ class S3kedApp(App):
                 self.notify_status,
                 f"{self.CLEARED_MARKER} is still resident"
                 + (f" — {why}" if why else "")
-                + "; delete it from the Master screen", refused=True)
+                + "; delete it from the Master screen",
+                refused=True,
+            )
         if renumber:
             self._renumber_worker()
         else:
@@ -2604,14 +2749,15 @@ class S3kedApp(App):
             self._before_load = None
         message = f"renumbered {result['renumbered']} program(s)"
         if result.get("arrivals"):
-            message += (f" — {result['arrivals']} newly loaded now "
-                        f"{result['incumbents'] + 1}"
-                        f"–{result['incumbents'] + result['arrivals']}")
+            message += (
+                f" — {result['arrivals']} newly loaded now "
+                f"{result['incumbents'] + 1}"
+                f"–{result['incumbents'] + result['arrivals']}"
+            )
         if result.get("fell_back"):
             message += " (list changed under the snapshot; renumbered all)"
         if result.get("beyond_range"):
-            message += (f", {result['beyond_range']} past program 128 and "
-                        f"left alone")
+            message += f", {result['beyond_range']} past program 128 and left alone"
         self.call_from_thread(self.notify_status, message)
         self._load_catalog(announce=False)
 
@@ -2624,8 +2770,7 @@ class S3kedApp(App):
         rather than the memory it will use.
         """
         if not self.allow_write:
-            self.notify_status(
-                "write gate is locked — press w to arm it", refused=True)
+            self.notify_status("write gate is locked — press w to arm it", refused=True)
             return
         self._open_save_options()
 
@@ -2645,8 +2790,7 @@ class S3kedApp(App):
             if volume is not None and 0 <= volume < count:
                 vol_name = names[volume]
         except Exception as exc:
-            self.call_from_thread(
-                self.notify_status, f"save: cannot read the destination: {exc}")
+            self.call_from_thread(self.notify_status, f"save: cannot read the destination: {exc}")
             return
         self.call_from_thread(self._show_save_options, volume, count, vol_name)
 
@@ -2657,14 +2801,17 @@ class S3kedApp(App):
             self._confirm_save(*options)
 
         self.push_screen(
-            SaveOptionsScreen(volume=volume, volume_count=count,
-                              volume_name=vol_name,
-                              resident_programs=len(self._programs),
-                              resident_samples=len(self._samples)),
-            chosen)
+            SaveOptionsScreen(
+                volume=volume,
+                volume_count=count,
+                volume_name=vol_name,
+                resident_programs=len(self._programs),
+                resident_samples=len(self._samples),
+            ),
+            chosen,
+        )
 
-    def _confirm_save(self, save_type: int, rewrite: bool,
-                      name: Optional[str]) -> None:
+    def _confirm_save(self, save_type: int, rewrite: bool, name: Optional[str]) -> None:
         """Say exactly what is about to be written, and over what."""
         type_name = m.LOAD_TYPES.get(save_type, save_type)
         counted = f"{len(self._programs)} program(s), {len(self._samples)} sample(s)"
@@ -2674,31 +2821,35 @@ class S3kedApp(App):
                 f"\n\n{counted} in memory are written over a volume that "
                 f"already exists. There is no undo.\n\n"
                 "The machine also RESETS that volume's name to VOLUME nnn, "
-                "even though the save may be a subset of what was there.")
+                "even though the save may be a subset of what was there."
+            )
         else:
             headline = f"Create a new volume — {type_name}?"
             detail = f"\n\n{counted} in memory are written to a new volume."
         if save_type == 0:
-            detail += ("\n\nENTIRE VOLUME also writes the effects file, the "
-                       "multi file, the drum-input page and the take list.")
+            detail += (
+                "\n\nENTIRE VOLUME also writes the effects file, the "
+                "multi file, the drum-input page and the take list."
+            )
         elif save_type == 1:
-            detail += ("\n\nALL PROGS+SAMPLES writes no effects file, no "
-                       "multi, no drum inputs and no take list. Only "
-                       "ENTIRE VOLUME does.")
+            detail += (
+                "\n\nALL PROGS+SAMPLES writes no effects file, no "
+                "multi, no drum inputs and no take list. Only "
+                "ENTIRE VOLUME does."
+            )
         if name:
-            detail += (f"\n\nThen renamed to {name!r} — a second operation, "
-                       "which can fail on its own.")
+            detail += (
+                f"\n\nThen renamed to {name!r} — a second operation, which can fail on its own."
+            )
 
         def go(confirmed) -> None:
             if confirmed:
-                self._save_worker(save_type=save_type, rewrite=rewrite,
-                                  name=name)
+                self._save_worker(save_type=save_type, rewrite=rewrite, name=name)
 
         self.push_screen(ConfirmScreen(headline + detail), go)
 
     @work(thread=True)
-    def _save_worker(self, *, save_type: int, rewrite: bool,
-                     name: Optional[str]) -> None:
+    def _save_worker(self, *, save_type: int, rewrite: bool, name: Optional[str]) -> None:
         """Fire the save. **Does not poll while it works.**
 
         The machine stops acknowledging during a save, so a status read here
@@ -2712,37 +2863,59 @@ class S3kedApp(App):
             with self._bridge_lock:
                 if rewrite:
                     where = self.bridge.save_to_selected_volume(save_type)
-                    if name:
-                        time.sleep(getattr(self.bridge, "_SAVE_SETTLE", 3.0))
-                        self.bridge.rename_volume(name)
-                        where["name"] = name
                 else:
                     where = self.bridge.save_to_new_volume(save_type, name=name)
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"save: {exc}")
             return
+        if rewrite and name:
+            # The settle pause stays, but OUTSIDE the lock: the machine needs
+            # the quiet time, and nothing else may use the bridge while it is
+            # saving anyway -- holding the lock across a multi-second sleep
+            # would stall every other worker for no reason.
+            time.sleep(getattr(self.bridge, "_SAVE_SETTLE", 3.0))
+            try:
+                with self._bridge_lock:
+                    self.bridge.rename_volume(name)
+            except Exception as exc:
+                # The save itself already landed: this is a successful save
+                # with a failed rename, not a failed save.
+                self.call_from_thread(
+                    self.notify_status,
+                    f"saved, but the rename to {name!r} failed: {exc}; press d to re-read the disc",
+                )
+                return
+            where["name"] = name
         told = name or where.get("name")
         self.call_from_thread(
             self.notify_status,
             f"saved — {m.LOAD_TYPES.get(save_type, save_type)}"
             + (f", named {told}" if told else "")
-            + "; press d to re-read the disc")
+            + "; press d to re-read the disc",
+        )
 
-    def _show_volumes(self, volumes, entries, source=None,
-                      source_error=None) -> None:
+    def _show_volumes(self, volumes, entries, source=None, source_error=None, status=None) -> None:
         table = self.query_one("#volumes", DataTable)
         # Selecting a volume re-reads the disk, which rebuilds this table --
         # and a rebuilt DataTable puts its cursor back on row 0. So pressing
         # Enter on v4 selected v4 and then jumped the cursor to v0, which
         # reads as the selection having been undone. Remembered by LABEL
         # rather than by row number, because the directory below the divider
-        # changes length with the volume.
-        was_on = None
+        # changes length with the volume -- and by NAME within a label,
+        # because every directory row shares its label with the others
+        # ("prog"/"samp"), so a label alone restores the first entry rather
+        # than the selected one.
+        was = None
         if table.row_count:
             try:
-                was_on = str(table.get_row_at(table.cursor_row)[0])
+                current = table.get_row_at(table.cursor_row)
+                was = (
+                    str(current[0]),
+                    str(current[1]) if len(current) > 1 else "",
+                    table.cursor_row,
+                )
             except Exception:
-                was_on = None
+                was = None
 
         table.clear()
         selected = (source or {}).get("volume")
@@ -2761,25 +2934,49 @@ class S3kedApp(App):
             kind = "prog" if getattr(entry, "is_program", False) else "samp"
             table.add_row(f"{kind}", entry.name)
 
-        if was_on is not None:
-            for row in range(table.row_count):
+        if was is not None:
+            label, name, at = was
+            target = None
+            # The exact position first: labels repeat across directory rows,
+            # and even names need not be unique, so the row we were on is the
+            # best answer when it still describes the same entry.
+            if 0 <= at < table.row_count:
                 try:
-                    if str(table.get_row_at(row)[0]) == was_on:
-                        table.move_cursor(row=row)
-                        break
+                    here = table.get_row_at(at)
+                    if str(here[0]) == label and (len(here) < 2 or str(here[1]) == name):
+                        target = at
                 except Exception:
-                    break
+                    pass
+            if target is None:
+                for row in range(table.row_count):
+                    try:
+                        here = table.get_row_at(row)
+                    except Exception:
+                        break
+                    if str(here[0]) == label and (len(here) < 2 or str(here[1]) == name):
+                        target = row
+                        break
+            if target is None:
+                for row in range(table.row_count):
+                    try:
+                        if str(table.get_row_at(row)[0]) == label:
+                            target = row
+                            break
+                    except Exception:
+                        break
+            if target is not None:
+                table.move_cursor(row=target)
         self._disk_entries = list(entries or [])
         self._disk_read = True
-        try:
-            # DeviceStatus calls it free_words. Asking for words_free got None
-            # and fell through to a hardcoded 16 Mword machine, which is right
-            # only for a fully expanded one -- so a 2 MB S3000XL was told
-            # everything fit.
-            status = self.bridge.status()
+        # DeviceStatus calls it free_words. Asking for words_free got None
+        # and fell through to a hardcoded 16 Mword machine, which is right
+        # only for a fully expanded one -- so a 2 MB S3000XL was told
+        # everything fit. Read in the worker above, under the bridge lock;
+        # calling it here would issue MIDI from the UI thread.
+        if status is not None:
             self._words_free = status.free_words
             self._total_words = status.max_words
-        except Exception:
+        else:
             self._words_free = None
             self._total_words = None
         where = self._describe_source(source)
@@ -2792,7 +2989,8 @@ class S3kedApp(App):
         head = f"Disk — {where}" if where else "Disk"
         self.query_one("#disk-title", Static).update(
             f"{head} — {len(volumes)} vol{loaded}{cost}"
-            if volumes or entries else f"{head} — empty"
+            if volumes or entries
+            else f"{head} — empty"
         )
         note = f"  (load source unavailable: {source_error})" if source_error else ""
         # Neither of these may say a volume is a front-panel job: it stopped
@@ -2841,8 +3039,7 @@ class S3kedApp(App):
             self.notify_status(f"{param.name} is {why}", refused=True)
             return
         if not self.allow_write:
-            self.notify_status(
-                "write gate is locked — press w to arm it", refused=True)
+            self.notify_status("write gate is locked — press w to arm it", refused=True)
             return
         current = self._param_values.get(param.name)
 
@@ -2881,12 +3078,10 @@ class S3kedApp(App):
             self.notify_status(f"{param.name} is {why}", refused=True)
             return
         if not self.allow_write:
-            self.notify_status(
-                "write gate is locked — press w to arm it", refused=True)
+            self.notify_status("write gate is locked — press w to arm it", refused=True)
             return
         if param.kind == "text" or param.is_array:
-            self.notify_status(
-                f"{param.name} is not a number — use e", refused=True)
+            self.notify_status(f"{param.name} is not a number — use e", refused=True)
             return
         current = self._param_values.get(param.name)
         if not isinstance(current, int):
@@ -2904,15 +3099,14 @@ class S3kedApp(App):
             # minimum" when it is far past the maximum.
             #
             # So a step is judged by whether it moves TOWARDS the range.
-            if _distance_to_range(param, value) >= _distance_to_range(
-                    param, current):
+            if _distance_to_range(param, value) >= _distance_to_range(param, current):
                 if outside:
                     why = "outside its range, and this moves it further"
                 else:
                     why = "at its maximum" if delta > 0 else "at its minimum"
                 self.notify_status(
-                    f"{param.name} is {why} "
-                    f"({p.describe_value(param, current)})", refused=True)
+                    f"{param.name} is {why} ({p.describe_value(param, current)})", refused=True
+                )
                 return
             # ...and a step that DOES move towards the range must land inside
             # it, because `encode_field` refuses anything outside on the way
@@ -2925,28 +3119,34 @@ class S3kedApp(App):
             self.notify_status(
                 f"{param.name} was {p.describe_value(param, current)}, "
                 f"outside {param.minimum}..{param.maximum} -- "
-                f"moved to {p.describe_value(param, value)}")
+                f"moved to {p.describe_value(param, value)}"
+            )
 
         region, index, keygroup = self._param_context
-        self._nudging = (region, index, keygroup, param.name)
+        nudges = self._nudging
+        if not isinstance(nudges, dict):
+            nudges = self._nudging = {}
+        nudges[(region, index, keygroup, param.name)] = True
         self._write_param_worker(param, index, value, current, keygroup)
 
     @work(thread=True)
     def _write_param_worker(
-        self, param: p.Parameter, index: int, value, old, keygroup: int = 0,
+        self,
+        param: p.Parameter,
+        index: int,
+        value,
+        old,
+        keygroup: int = 0,
         record: bool = True,
     ) -> None:
         try:
             with self._bridge_lock:
-                self.bridge.set_parameter(param, index, value,
-                                          keygroup=keygroup)
-                header = self.bridge.get_header(param.region, index,
-                                                keygroup=keygroup)
+                self.bridge.set_parameter(param, index, value, keygroup=keygroup)
+                header = self.bridge.get_header(param.region, index, keygroup=keygroup)
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"error: {exc}")
             return
-        self.call_from_thread(self._after_write, param, index, old, value,
-                              header, keygroup, record)
+        self.call_from_thread(self._after_write, param, index, old, value, header, keygroup, record)
 
     def _write_param(self, param: p.Parameter, current, raw: str) -> None:
         # Through the pane's own context, not the selected program. The two
@@ -2958,7 +3158,9 @@ class S3kedApp(App):
         if param.region != region:
             self.notify_status(
                 f"{param.name} is a {param.region} field but the pane is "
-                f"showing {region} — refusing rather than guessing", refused=True)
+                f"showing {region} — refusing rather than guessing",
+                refused=True,
+            )
             return
         if index is None:
             self.notify_status("nothing selected")
@@ -2970,10 +3172,7 @@ class S3kedApp(App):
             # correct but leaves TEMPER uneditable.
             parts = [x for x in raw.replace(" ", ",").split(",") if x]
             if len(parts) != param.elements:
-                self.notify_status(
-                    f"{param.name} needs {param.elements} values, got "
-                    f"{len(parts)}"
-                )
+                self.notify_status(f"{param.name} needs {param.elements} values, got {len(parts)}")
                 return
             try:
                 value = [int(x, 0) for x in parts]
@@ -3010,19 +3209,24 @@ class S3kedApp(App):
         # The KEYGROUP is the one the write actually went to, not 0. This
         # recorded a hardcoded zero until 2026-08-15, so undoing an edit made
         # on keygroup 3 put the old value into keygroup 0.
-        nudge = self._nudging
-        self._nudging = None
-        if record and nudge and self._undo:
+        key = (param.region, index, keygroup, param.name)
+        nudges = self._nudging
+        nudge = nudges.pop(key, None) if isinstance(nudges, dict) else None
+        if record and nudge is not None and self._undo:
             last = self._undo[-1]
             same = (last.region, last.index, last.keygroup, last.name)
-            if same == nudge and last.new == old:
+            if same == key and last.new == old:
                 # Extend the run rather than logging every tap: the entry
                 # keeps the value the run STARTED from, so one undo puts the
                 # whole run back.
                 self._undo[-1] = _Change(
-                    region=last.region, index=last.index,
-                    keygroup=last.keygroup, name=last.name,
-                    old=last.old, new=new)
+                    region=last.region,
+                    index=last.index,
+                    keygroup=last.keygroup,
+                    name=last.name,
+                    old=last.old,
+                    new=new,
+                )
                 record = False
         if record:
             self._undo.append(
@@ -3056,14 +3260,37 @@ class S3kedApp(App):
             self.notify_status("nothing to undo")
             return
         if not self.allow_write:
-            self.notify_status(
-                "write gate is locked — undo is a write", refused=True)
+            self.notify_status("write gate is locked — undo is a write", refused=True)
             return
-        change = self._undo.pop()
+        change = self._undo[-1]
         param = p.lookup((change.region, change.name))
-        self._write_param_worker(param, change.index, change.old,
-                                 change.new, change.keygroup, record=False)
+        self._undo_single_worker(param, change)
+
+    @work(thread=True)
+    def _undo_single_worker(self, param: p.Parameter, change: _Change) -> None:
+        try:
+            with self._bridge_lock:
+                self.bridge.set_parameter(param, change.index, change.old, keygroup=change.keygroup)
+                header = self.bridge.get_header(
+                    param.region, change.index, keygroup=change.keygroup
+                )
+        except Exception as exc:
+            self.call_from_thread(self.notify_status, f"undo {change.name}: {exc}")
+            return
+        self.call_from_thread(self._after_undo_single, param, change, header)
+
+    def _after_undo_single(
+        self, param: p.Parameter, change: _Change, header: Dict[str, object]
+    ) -> None:
+        # Popped only now that the write has landed, like the bulk undo: a
+        # failure leaves the entry in place, retryable, instead of discarding
+        # the old value with the write unconfirmed.
+        if change in self._undo:
+            self._undo.remove(change)
+        self._show_params(param.region, header, change.index, change.keygroup)
         self._refresh_write_badge()
+        self.notify_status(f"{param.name} = {p.describe_value(param, change.old)}")
+        self._load_catalog(announce=False)
 
     def action_undo_all(self) -> None:
         """Put everything back, newest first. **This writes, repeatedly.**
@@ -3076,8 +3303,7 @@ class S3kedApp(App):
             self.notify_status("nothing to undo")
             return
         if not self.allow_write:
-            self.notify_status(
-                "write gate is locked — undo is a write", refused=True)
+            self.notify_status("write gate is locked — undo is a write", refused=True)
             return
         self.notify_status(f"undoing {len(self._undo)} change(s)…")
         self._undo_all_worker()
@@ -3090,8 +3316,9 @@ class S3kedApp(App):
             param = p.lookup((change.region, change.name))
             try:
                 with self._bridge_lock:
-                    self.bridge.set_parameter(param, change.index, change.old,
-                                              keygroup=change.keygroup)
+                    self.bridge.set_parameter(
+                        param, change.index, change.old, keygroup=change.keygroup
+                    )
             except Exception as exc:
                 failed = f"{change.name}: {exc}"
                 break
@@ -3115,13 +3342,18 @@ class S3kedApp(App):
         that is a list of things you cannot tell apart.
         """
         if not self._undo:
-            self.push_screen(ReportScreen(
-                "Change history",
-                "  nothing written this session.",
-                "Edits are logged here with the value they replaced."))
+            self.push_screen(
+                ReportScreen(
+                    "Change history",
+                    "  nothing written this session.",
+                    "Edits are logged here with the value they replaced.",
+                )
+            )
             return
-        lines = [f"  {'#':>3}  {'where':<22}  {'parameter':<10}  "
-                 f"{'old':>12}  {'new':>12}", "  " + "-" * 68]
+        lines = [
+            f"  {'#':>3}  {'where':<22}  {'parameter':<10}  {'old':>12}  {'new':>12}",
+            "  " + "-" * 68,
+        ]
         for number, change in enumerate(self._undo, 1):
             where = f"{change.region} {change.index}"
             if change.region == "keygroup":
@@ -3130,11 +3362,15 @@ class S3kedApp(App):
             lines.append(
                 f"  {number:>3}  {where:<22}  {change.name:<10}  "
                 f"{p.describe_value(param, change.old):>12}  "
-                f"{p.describe_value(param, change.new):>12}")
-        self.push_screen(ReportScreen(
-            "Change history",
-            "\n".join(lines),
-            f"{len(self._undo)} change(s) — z undoes the last, Z undoes all"))
+                f"{p.describe_value(param, change.new):>12}"
+            )
+        self.push_screen(
+            ReportScreen(
+                "Change history",
+                "\n".join(lines),
+                f"{len(self._undo)} change(s) — z undoes the last, Z undoes all",
+            )
+        )
 
     def action_multi(self) -> None:
         """`M`: swap the left column between the programs and the multi.
@@ -3163,8 +3399,14 @@ class S3kedApp(App):
     def _show_multi_pane(self, showing: bool) -> None:
         """Swap the left column between the program panes and the multi."""
         self._multi_showing = showing
-        for widget_id in ("programs-title", "programs", "keygroups-title",
-                          "keygroups", "progsamples-title", "samples"):
+        for widget_id in (
+            "programs-title",
+            "programs",
+            "keygroups-title",
+            "keygroups",
+            "progsamples-title",
+            "samples",
+        ):
             self.query_one(f"#{widget_id}").display = not showing
         for widget_id in ("multi-title", "multi-parts"):
             self.query_one(f"#{widget_id}").display = showing
@@ -3187,13 +3429,11 @@ class S3kedApp(App):
         self._multi_refilling = True
         try:
             table.clear()
-            table.add_row("", "file header", "MULTINAME, FX1-FX4", "",
-                          key="header")
+            table.add_row("", "file header", "MULTINAME, FX1-FX4", "", key="header")
             for part in range(_MULTI_PARTS):
                 # "…" is "not read yet", which a blank would not distinguish
                 # from a part with no program on it.
-                table.add_row(str(part), f"part {part}", "…", "",
-                              key=f"part{part}")
+                table.add_row(str(part), f"part {part}", "…", "", key=f"part{part}")
         finally:
             self._multi_refilling = False
 
@@ -3211,13 +3451,15 @@ class S3kedApp(App):
             table.update_cell(f"part{part}", self._multi_cols[2], name or "—")
             table.update_cell(f"part{part}", self._multi_cols[3], chan)
         except Exception:
-            pass            # the row is gone, which is not worth an error
+            pass  # the row is gone, which is not worth an error
 
     def _load_multi_row(self, row: int) -> None:
         region, index = ("multi", 0) if row <= 0 else ("multipart", row - 1)
         self.notify_status(
-            f"reading {region} {index}…" if region == "multipart"
-            else "reading the multi file header…")
+            f"reading {region} {index}…"
+            if region == "multipart"
+            else "reading the multi file header…"
+        )
         self._load_multi_worker(region, index, self._claim_param_pane())
 
     @work(thread=True)
@@ -3238,8 +3480,7 @@ class S3kedApp(App):
                 self.call_from_thread(self.set_multi_part, part, "?", "")
                 continue
             name = str(header.get("PRNAME", "") or "").strip()
-            self.call_from_thread(self.set_multi_part, part, name,
-                                  str(header.get("PMCHAN", "")))
+            self.call_from_thread(self.set_multi_part, part, name, str(header.get("PMCHAN", "")))
 
     @work(thread=True)
     def _load_multi_worker(self, region: str, index: int, token: int) -> None:
@@ -3247,15 +3488,13 @@ class S3kedApp(App):
             with self._bridge_lock:
                 header = self.bridge.get_header(region, index)
         except Exception as exc:
-            self.call_from_thread(
-                self.notify_status, f"{region}: {exc}", refused=True)
+            self.call_from_thread(self.notify_status, f"{region}: {exc}", refused=True)
             return
         self.call_from_thread(self._apply_multi, region, index, header, token)
 
-    def _apply_multi(self, region: str, index: int, header,
-                     token: Optional[int] = None) -> None:
+    def _apply_multi(self, region: str, index: int, header, token: Optional[int] = None) -> None:
         if token is not None and token != self._param_request:
-            return          # a later request has already claimed the pane
+            return  # a later request has already claimed the pane
         if region == "multi":
             title = "Parameters — multi file header"
         else:
@@ -3291,13 +3530,14 @@ class S3kedApp(App):
         rather than next to the load.
         """
         if not self.allow_write:
-            self.notify_status(
-                "write gate is locked — press w to arm it", refused=True)
+            self.notify_status("write gate is locked — press w to arm it", refused=True)
             return
-        held = (self._total_words - self._words_free
-                if self._total_words and self._words_free is not None else None)
-        detail = (f"\n\n{held * 2 / 1024 / 1024:.2f} MB resident"
-                  if held is not None else "")
+        held = (
+            self._total_words - self._words_free
+            if self._total_words and self._words_free is not None
+            else None
+        )
+        detail = f"\n\n{held * 2 / 1024 / 1024:.2f} MB resident" if held is not None else ""
 
         def go(confirmed: bool) -> None:
             if confirmed:
@@ -3324,7 +3564,8 @@ class S3kedApp(App):
             self.notify_status,
             f"cleared {result['samples']} sample(s) and "
             f"{result['programs']} program(s); "
-            f"{result['programs_left']} program(s) left")
+            f"{result['programs_left']} program(s) left",
+        )
         self.call_from_thread(self.action_refresh)
 
     def _confirm_destructive(self, action: str, index: Optional[int]) -> None:
@@ -3332,8 +3573,7 @@ class S3kedApp(App):
             self.notify_status("nothing selected")
             return
         if not self.allow_write:
-            self.notify_status(
-                "write gate is locked — press w to arm it", refused=True)
+            self.notify_status("write gate is locked — press w to arm it", refused=True)
             return
 
         if action == "delete_keygroup":
@@ -3371,12 +3611,9 @@ class S3kedApp(App):
                 self.notify_status("select a sample first")
                 return
             name = str(table.get_row_at(row)[0]).strip()
-            matches = [i for i, n in enumerate(self._samples)
-                       if n.strip() == name]
+            matches = [i for i, n in enumerate(self._samples) if n.strip() == name]
             if not matches:
-                self.notify_status(
-                    f"{name!r} is not resident — nothing to delete",
-                    refused=True)
+                self.notify_status(f"{name!r} is not resident — nothing to delete", refused=True)
                 return
             if len(matches) > 1:
                 # §80: the machine enforces no name uniqueness. The read-only
@@ -3385,7 +3622,9 @@ class S3kedApp(App):
                 # device does not ask again.
                 self.notify_status(
                     f"{len(matches)} resident samples are named {name!r}"
-                    " — refusing to guess which to delete", refused=True)
+                    " — refusing to guess which to delete",
+                    refused=True,
+                )
                 return
             target = matches[0]
             what = f"sample {target} ({name})"
@@ -3445,11 +3684,11 @@ class S3kedApp(App):
         except Exception:
             return
         if not label.startswith("v"):
-            return          # a directory row, or the divider
+            return  # a directory row, or the divider
         if not self.allow_write:
             self.notify_status(
-                "write gate is locked — press w to arm it before changing "
-                "the volume", refused=True)
+                "write gate is locked — press w to arm it before changing the volume", refused=True
+            )
             return
         try:
             index = int(label[1:])
@@ -3464,8 +3703,7 @@ class S3kedApp(App):
             with self._bridge_lock:
                 self.bridge.select_volume(index)
         except Exception as exc:
-            self.call_from_thread(
-                self.notify_status, f"volume: {exc}", refused=True)
+            self.call_from_thread(self.notify_status, f"volume: {exc}", refused=True)
             return
         # The directory now describes a different volume, so re-read it.
         self.call_from_thread(self._read_disk_worker)
@@ -3513,7 +3751,7 @@ class S3kedApp(App):
                 self._load_multi_row(event.cursor_row)
         elif table.id == "programs":
             if self._refilling or event.cursor_row == self._loaded_program:
-                return          # our own repopulation, not the user moving
+                return  # our own repopulation, not the user moving
             self._load_program(event.cursor_row)
         elif not table.has_focus:
             return
@@ -3541,24 +3779,23 @@ class S3kedApp(App):
         self._load_keygroup_worker(program, keygroup, self._claim_param_pane())
 
     @work(thread=True)
-    def _load_keygroup_worker(self, program: int, keygroup: int,
-                              token: int) -> None:
+    def _load_keygroup_worker(self, program: int, keygroup: int, token: int) -> None:
         try:
             with self._bridge_lock:
-                header = self.bridge.get_header("keygroup", program,
-                                                keygroup=keygroup)
+                header = self.bridge.get_header("keygroup", program, keygroup=keygroup)
         except Exception as exc:
             self.call_from_thread(self.notify_status, f"keygroup: {exc}")
             return
-        self.call_from_thread(self._apply_keygroup, program, keygroup, header,
-                              token)
+        self.call_from_thread(self._apply_keygroup, program, keygroup, header, token)
 
-    def _apply_keygroup(self, program: int, keygroup: int, header,
-                        token: Optional[int] = None) -> None:
+    def _apply_keygroup(
+        self, program: int, keygroup: int, header, token: Optional[int] = None
+    ) -> None:
         if token is not None and token != self._param_request:
-            return          # a later request has already claimed the pane
+            return  # a later request has already claimed the pane
         self.query_one("#param-title", Static).update(
-            f"Parameters — program {program} keygroup {keygroup}")
+            f"Parameters — program {program} keygroup {keygroup}"
+        )
         # Follow the selection. Only a deliberate move lands here -- the
         # row-highlight handler ignores the cursor unless the keygroup table
         # has focus -- so filling the pane after a program load cannot
@@ -3588,8 +3825,8 @@ class S3kedApp(App):
             return
         if len(matches) > 1:
             self.notify_status(
-                f"{len(matches)} resident samples are named {name!r}; "
-                f"showing the first")
+                f"{len(matches)} resident samples are named {name!r}; showing the first"
+            )
         self._load_sample_worker(matches[0], name, self._claim_param_pane())
 
     @work(thread=True)
@@ -3602,12 +3839,10 @@ class S3kedApp(App):
             return
         self.call_from_thread(self._apply_sample, index, name, header, token)
 
-    def _apply_sample(self, index: int, name: str, header,
-                      token: Optional[int] = None) -> None:
+    def _apply_sample(self, index: int, name: str, header, token: Optional[int] = None) -> None:
         if token is not None and token != self._param_request:
-            return          # a later request has already claimed the pane
-        self.query_one("#param-title", Static).update(
-            f"Parameters — sample {index} ({name})")
+            return  # a later request has already claimed the pane
+        self.query_one("#param-title", Static).update(f"Parameters — sample {index} ({name})")
         self._show_params("sample", header, index)
 
     def on_data_table_row_selected(self, event) -> None:
@@ -3630,8 +3865,9 @@ class S3kedApp(App):
         """
         if not self.allow_write:
             self.notify_status(
-                "write gate is locked — press w to arm it before changing "
-                "the active program", refused=True)
+                "write gate is locked — press w to arm it before changing the active program",
+                refused=True,
+            )
             return
         row = event.cursor_row
         if not 0 <= row < len(self._programs):
@@ -3648,41 +3884,46 @@ class S3kedApp(App):
                 self.bridge.select_program_number(number)
                 sharing = self.bridge.program_numbers().count(number)
         except Exception as exc:
-            self.call_from_thread(
-                self.notify_status, f"active program: {exc}", refused=True)
+            self.call_from_thread(self.notify_status, f"active program: {exc}", refused=True)
             return
         # 1-based, because that is what the machine's own display says.
         message = f"active program number {number + 1}"
         if sharing > 1:
-            message += (f" — {sharing} programs share it and will all sound "
-                        f"(press i, or renumber)")
+            message += f" — {sharing} programs share it and will all sound (press i, or renumber)"
         self.call_from_thread(self.notify_status, message)
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="s3ked",
-        description="Terminal editor for the Akai S1000/S3000 sampler family.",
-    )
-    parser.add_argument("--port", help="MIDI port name (default: autodetect)")
-    parser.add_argument(
-        "--demo",
-        action="store_true",
-        help="run against the built-in demo sampler; opens no MIDI ports",
-    )
-    parser.add_argument("--exclusive-channel", type=int, default=None)
-    parser.add_argument("--timeout", type=float, default=None)
-    parser.add_argument("--config", default=None)
-    parser.add_argument(
-        "--allow-write",
-        action="store_true",
-        help="start with the write gate armed (default: locked)",
+    parser = make_parser("s3ked", "Terminal editor for the Akai S1000/S3000 sampler family.")
+    # Every shared option's help text is the family's, from vinsynlib.spec.
+    # --allow-write gained help text here, where it had none: it is the one
+    # flag in this program whose absence arms nothing, and it is the flag a
+    # reader is most likely to be unsure about.
+    #
+    # --channel is deliberately absent: an S1000 is not selected by program
+    # change at all, so there is no channel to send one on. A flag accepted
+    # and then ignored is worse than no flag.
+    add_common_arguments(
+        parser,
+        port=True,
+        channel=False,
+        exclusive_channel=True,
+        demo=True,
+        timeout=True,
+        config=True,
+        allow_write=True,
     )
     return parser
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
+
+    # The family's range check, before any port is opened: an exclusive
+    # channel outside 0-15 is not a channel, and a mistyped one used to reach
+    # SETEX -- which addresses a machine that is not this one, or is this one
+    # as if it were a different sibling.
+    validate_common(args, channel_names=())
 
     # Before any port is opened: SIGTERM otherwise ends the process where it
     # stands, leaving the port open and the sampler composing an answer
@@ -3719,11 +3960,15 @@ def main(argv: Optional[List[str]] = None) -> int:
             sys.exit(f"error: {exc}")
 
     # --demo gets no config path: a demo must never write a user's settings.
-    app = S3kedApp(
-        bridge, allow_write=args.allow_write,
-        config_path=None if args.demo
-        else (args.config or b.DEFAULT_CONFIG_PATH))
+    # The constructor sits INSIDE the try: if it raises after the bridge was
+    # opened, the finally still closes the port rather than leaking it.
+    app = None
     try:
+        app = S3kedApp(
+            bridge,
+            allow_write=args.allow_write,
+            config_path=None if args.demo else (args.config or b.DEFAULT_CONFIG_PATH),
+        )
         app.run()
     finally:
         _close_when_idle(app, bridge)

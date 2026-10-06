@@ -190,12 +190,32 @@ Reports welcome, negative ones most of all.
 git clone https://github.com/lentferj/s3ked
 cd s3ked
 python3 -m venv .venv
+# vinsynlib first — see below. --no-deps because its deps are ours too.
+.venv/bin/pip install --no-deps -e ../vinsynlib
 .venv/bin/pip install -e '.[dev]'      # quote it — zsh globs brackets
 ```
 
-Requires Python 3.11+ and two packages: `textual` and `python-rtmidi`. Both
-come from PyPI as wheels, so nothing needs compiling and no system packages
-are required — tested from a clean checkout into an empty venv.
+Requires Python 3.11+, `textual`, `python-rtmidi`, and **`vinsynlib`** — the
+shared base of this family of terminal instrument browsers, which holds the
+settings cache, the keymap and legend, the command line and the port listing.
+`textual` and `python-rtmidi` come from PyPI as wheels, so nothing needs
+compiling and no system packages are required.
+
+**vinsynlib is not on PyPI.** It is a sibling checkout, so it is installed
+from the working tree and installed *first*, so the second command finds the
+requirement already satisfied. `uv` reads the path from `[tool.uv.sources]`
+in `pyproject.toml` instead of being told. The checkout therefore has to look
+like this:
+
+```
+git-repos/
+  s3ked/           <- this one
+  vinsynlib/       <- the shared base
+  emorphed/  ensqsqed/  eosed/  rxved/  ...
+```
+
+`pip install -e '.[dev]'` on its own fails on a machine set up from an older
+copy of this text, with `No matching distribution found for vinsynlib`.
 
 **No numpy.** The editor does no arithmetic that needs it. The bench tooling
 in `probes/` does — FFTs and curve fits, for calibrating parameters against
@@ -558,24 +578,33 @@ and — on the S2000/S3000XL/S3200XL only — the `multi` file header and its 16
 ## Tests
 
 ```sh
-.venv/bin/python -m pytest                              # 990 tests, ~6m45
-.venv/bin/python -m pytest -m "not tui"                 # 811 tests, 61s
-.venv/bin/python -m pytest -m "not tui and not bench"   # 586 tests, 4.2s
+.venv/bin/python -m pytest                                       # 1019 tests, ~8m30
+.venv/bin/python -m pytest -m "not slow and not tui"            # 837 tests, ~71s
+.venv/bin/python -m pytest -m "not slow and not tui and not bench"  # 599 tests, ~8s
 ```
 
-990 tests, all synthetic — no hardware, no MIDI ports, no ALSA sequencer
+1019 tests, all synthetic — no hardware, no MIDI ports, no ALSA sequencer
 needed. **Every line above is measured on the machine described below, not
 estimated.**
 
 **If you are reviewing this project and want a bounded run, use the second or
-third line.** `-m "not tui"` drops the Textual event loop; `-m "not tui and
-not bench"` also drops the probe-side analysis suites, leaving everything the
-project actually installs. `tests/test_app.py` drives the TUI and is **344 s of the 402 s
+third line.** `-m "not slow and not tui"` drops the Textual event loop;
+`-m "not slow and not tui and not bench"` also drops the probe-side analysis
+suites, leaving everything the project actually installs. `tests/test_app.py`
+drives the TUI and is **~436 s of the ~508 s
 suite — 86 % of the runtime for 18 % of the tests**; everything else together
-is a minute, and dropping the three bench files
-(`test_measure.py`, `test_calibrate.py`, `test_throttle.py`) as well leaves
-576 tests in **2.9 s**. Nothing in any of those touches hardware — the split
+is a minute, and dropping the four bench files
+(`test_measure.py`, `test_calibrate.py`, `test_throttle.py`, `test_jcap.py`)
+as well leaves
+599 tests in **~8 s**. Nothing in any of those touches hardware — the split
 is Textual's event loop, not MIDI.
+
+Every `-m` recipe repeats `not slow` on purpose: a command-line `-m`
+*replaces* the `-m 'not slow'` in `pyproject.toml` rather than combining with
+it, so a recipe without it silently admits the ~1m50 exhaustive Multi test
+into a run that claims to be bounded. CI runs the default selection
+(everything except slow); the slow test is a pre-release gate, run by hand
+before tagging.
 
 That was undocumented until 2026-09-23, when an outside reviewer allowed 240 s
 for the default line, got killed 40 % through twice, and reported the suite as
@@ -624,6 +653,159 @@ pins the twelve offsets where two *separately transcribed* Akai documents
 independently agree (RESOLUTION_NOTES §8) — the only external check on the
 parameter table that exists without hardware.
 
+## Development checks
+
+Static analysis alongside the suite: ruff (lint + format), mypy, pytest-cov,
+pip-audit, vulture, deptry, detect-secrets, wired through pre-commit. One
+command is the gate:
+
+```sh
+make setup    # once: pip install -e ".[dev,checks]" into .venv
+make check    # lint, typecheck, audit, test -- fails on any error
+```
+
+`make setup` assumes vinsynlib is already in the venv, from the Install
+section above; `pip install -e ".[dev,checks]"` will not fetch it.
+
+`make check` runs pip-audit over the dependencies this project *declares*,
+read out of `pyproject.toml`, with `vinsynlib` filtered out of that list: it
+is a sibling checkout rather than a package on an index, so pip cannot
+resolve it and pip-audit would fail *resolving* — reporting nothing about
+anything. Everything else it declares is still audited, and a new dependency
+added later is audited without anyone editing the Makefile.
+
+The individual targets are `lint`, `format`, `typecheck`, `test`, `audit`.
+Configuration lives in `pyproject.toml`; the scope and the arguments that
+tools cannot read from it are in the `Makefile`.
+
+The tools are in a `checks` extra, not `dev`, and every one is pinned exactly
+(`==`). `dev` stays small because CI installs it on seven platform/Python
+combinations where a lint pipeline adds minutes and no signal. A lint result
+that moves because a dependency moved is a result nobody can reason about.
+
+`pre-commit` is installed and runs ruff (check + format), mypy and
+detect-secrets. shellcheck and shfmt are installed system-wide but **not** wired
+as hooks: this repository has no shell scripts.
+
+### What each check will and will not catch
+
+The point of this pipeline is that it passes on the code as it stands **and**
+fails on anything new. That required baselining the existing findings, and a
+baseline that grows quietly is not a baseline — so every suppression below
+carries the count of what it hides and the reason it is hidden.
+
+| Check | Pre-existing findings suppressed | How |
+| --- | --- | --- |
+| ruff | 1855 | per-rule `ignore` in `pyproject.toml`, each entry with its count and reason; plus `per-file-ignores` for `tests/` and `probes/` |
+| mypy | 59 | `[[tool.mypy.overrides]]`, per module **and** per error code |
+| vulture | 2 | `tools/vulture_whitelist.py` |
+| deptry | 12 (10 by construction, 2 `jack`) | `optional_dependencies_dev_groups`, and one CLI suppression |
+| detect-secrets | 0 | the tree is clean; `.secrets.baseline` records that |
+| pip-audit | 0 | the project's 10 declared dependencies have no known advisories |
+| `ruff format` | not enforced | see below |
+
+**ruff.** The largest suppression is `PLC0415` (532 findings): the probes and
+the CLI import lazily, inside `main()`, so that importing a module never opens
+a MIDI port, never needs numpy and never pulls in the editor. That laziness is
+load-bearing — it is why `s3ked --demo` runs with no MIDI stack present — so
+"move it to the top" is 532 ways to break the thing the rule wants. The second
+is `UP006`/`UP007`/`UP035`/`UP045` (427): `typing.Dict` and `Optional[X]` where
+3.11 spells them `dict` and `X | None`. Those are genuinely stale and worth
+fixing, as a commit of their own. `PLR2004` (28) is every one an inline
+protocol constant — `0xF0`, `0x7F`, `0x3FFF` — kept next to the arithmetic
+that uses them so the codec can be checked against the Akai document line by
+line. `I001` (137) and `UP031` (122) are mechanical and `--fix` does them in
+one command whenever that is wanted separately.
+
+**The formatter is configured but not enforced on existing files**, and the
+measurement behind that is worth having: it would rewrite 57 of the 59 tracked
+files, 5561 lines added and 4115 removed, and at `line-length = 100` it emits a
+1170-character line — a string or comment it cannot wrap — out of a file whose
+longest line is *already* 1419. It also de-indents the continuation lines of
+the 3400-line `_p(...)` table in `s3k/params.py`, which changes the shape of
+the transcription this project exists to keep checkable. Two files
+(`s3k/__init__.py`, `s3ked/__init__.py`) already comply, which is the evidence
+this is a style difference and not an unreachable bar.
+
+So `ruff format` applies to the files a commit touches (via pre-commit, and via
+`make format` over `FORMAT_SCOPE`), and `make lint` does not check it. That is
+the one deliberate deviation from "check runs everything": the formatter cannot
+be enforced against a tree that has never been formatted. `make format-check`
+reports it, and CI runs that step with `continue-on-error`.
+
+**`jack` is suppressed, and it is not a packaging gap.** deptry's `DEP003`
+fires on `jack`, imported by `probes/jcap.py` and `probes/calibrate.py` and
+declared in no extra. Checked rather than assumed, it touches nothing an end
+user has:
+
+- Nothing shipped imports it. `git grep jack -- s3k s3ked` is empty, and the
+  wheel is `packages = ["s3k", "s3ked"]` — `probes/` is not in it.
+- The test suite does not need it either. `tests/test_jcap.py` installs a
+  **fake `jack` module before importing the probe** — that is how it provokes
+  the leaked-client failure paths without a server — and
+  `pytest.importorskip("numpy")` so the file skips cleanly without numpy. No
+  CI job and no `make test` run can be broken by jack's absence.
+- It is a rig-local capture backend, not a library dependency. Both call sites
+  are bench probes talking to a live JACK server, and `probes/calibrate.py`
+  documents falling back to `jack_rec` when the binding is unavailable.
+
+So it is deliberately undeclared, and in particular must **not** go into
+`[project] dependencies` — that would put a build-heavy audio binding into
+every end-user install to serve two scripts that are not shipped. Adding it to
+the `bench` extra is defensible for symmetry with numpy and is left as a
+maintainer choice; it would also make `bench` require libjack headers to
+build, which the FFT-only probes do not.
+
+**mypy is non-strict, and the reason is worth stating.** The application code
+carries no annotations at all, and `s3k/bridge.py` is 3000 lines of protocol
+arithmetic where an unchecked `int`/`bytes` mix-up is exactly the class of bug
+that has cost this project days. Retrofitting annotations is a separate piece
+of work from standing up the check, and doing both at once makes the first
+review unreadable. So mypy checks what is annotated and does not require
+annotations. All 59 baseline findings come from that: 36 of them are in
+`s3ked/app.py` and share one root cause, which is that an unannotated Textual
+app makes every `self.` an `Any`. Annotating `app.py` is how most of this
+number goes to zero.
+
+The overrides are per code *and* per module, so a new error of a kind that
+already exists in that file is still reported — verified, not assumed.
+
+Note that the per-module `[tool.mypy-some.module]` table form does **not** work
+in mypy 1.18.2: it is read without complaint and then ignores its
+`disable_error_code`. The baseline uses `[[tool.mypy.overrides]]`, which does.
+A silently-ignored baseline is worse than no baseline, because it looks like
+coverage.
+
+### One known-flaky test
+
+`tests/test_app.py::test_an_empty_partition_clears_the_volume_count_too` failed
+once on 2026-10-02 while `make check` was being stood up, and passed on every
+other run including the two after. It is not a new failure and it is not
+fixed — it is recorded here because it will happen again.
+
+The cause is the wait, not the assertion. The suite bounds its async waits by
+ITERATION COUNT rather than by duration: 221 `for _ in range(N): await
+pilot.pause()` loops in `test_app.py` alone, and not one `asyncio.wait_for` in
+the whole tree. Counting event-loop turns is fine until something else makes
+each turn slower, and `--cov` does exactly that: coverage tracing made this
+suite 9m02 against 7m02 for the same 1018 tests, and on the one run that
+crossed the line the test's 60-turn budget expired one turn early.
+
+Nothing about the code under test changed. The honest fix is to bound those
+waits by time, which is 221 call sites and its own piece of work — so it is
+written down rather than half-done.
+
+### Tooling that does not read its config
+
+Three of these tools accept a configuration block and ignore it. Each was
+verified by experiment, not assumed, and each is why the setting is passed on
+the command line instead:
+
+- **vulture** — `[tool.vulture]` is not a section it knows; it warns and moves on.
+- **deptry** — `per_rule_ignores` in `pyproject.toml` is not read (0.25.1).
+- **detect-secrets** — `[tool.detect_secrets]` is documented but not read
+  (1.5.0): the generated baseline carried the tool's default plugin set.
+
 ## Status
 
 See [TODO.md](TODO.md). The short version: complete as software, and the
@@ -657,8 +839,8 @@ GPL-2.0-or-later. Full text in [COPYING](COPYING); attributions in
 | component | source | license |
 |---|---|---|
 | `s3k/messages.py`, `s3k/params.py` | Frame layout, operation codes, header offsets/ranges transcribed as data from Akai's *S1000 MIDI Exclusive Communication*, *S2800/S3000/S3200 MIDI System Exclusive Extensions* and *S2000/S3000XL/S3200XL MIDI System Exclusive Extensions*. Not redistributed. | protocol facts used as data |
-| `s3k/bridge.py` | Throttled output, `MultiIn`, the ALSA-client leak fix and port enumeration ported from the sibling [eosed](https://github.com/lentferj/eosed), which ports them from [k2kremote](https://github.com/lentferj/k2kremote) and [mpc2emu](https://github.com/lentferj/mpc2emu) | GPL-2.0-or-later |
-| `s3ked/app.py` | `wrap_blocks` and the folding key legend (`KeyHints`) ported from [eosed](https://github.com/lentferj/eosed), which ports `wrap_blocks` from [k2kremote](https://github.com/lentferj/k2kremote) | GPL-2.0-or-later |
+| `s3k/bridge.py` | Throttled output, `MultiIn` and the ALSA-client leak fix ported from the sibling [eosed](https://github.com/lentferj/eosed), which ports them from [k2kremote](https://github.com/lentferj/k2kremote) and [mpc2emu](https://github.com/lentferj/mpc2emu) | GPL-2.0-or-later |
+| `s3k/config.py`, the key legend, the parsers, the port listing | **vinsynlib**, this family's shared base — assembled from the copies emorphed, ensqsqed, eosed, kwsed, nanosyned, p2ked, rxved and x5ded each carried, plus the defect fixes three of those copies had drifted into. `s3k/config.py` and the settings store it wraps were this file's own before that. | GPL-2.0-or-later |
 | everything else | original work | GPL-2.0-or-later |
 
 Akai, S1000, S2000, S3000, S3000XL and related names are trademarks of their

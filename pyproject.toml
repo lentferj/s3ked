@@ -31,7 +31,19 @@ classifiers = [
 dependencies = [
     "textual>=0.80",
     "python-rtmidi>=1.5",
+    # The shared base of this family of terminal instrument browsers: the
+    # settings cache, the keymap and legend, the parser, the port listing.
+    # s3ked is an EDITOR and so has no favourites store -- see docs/UX-SPEC.md
+    # -- but it has everything else, and had its own copy of all of it.
+    "vinsynlib",
 ]
+
+# vinsynlib is not on PyPI. It is the shared base of this family of terminal
+# instrument browsers and lives in a sibling checkout, so it is installed from
+# the working tree rather than from an index. Editable, because a change to
+# the library is a change here and should not need a reinstall to see.
+[tool.uv.sources]
+vinsynlib = { path = "../vinsynlib", editable = true }
 
 [project.urls]
 Homepage = "https://github.com/lentferj/s3ked"
@@ -48,8 +60,29 @@ Issues = "https://github.com/lentferj/s3ked/issues"
 #
 # `dev` therefore gets you the editor's own tests. Add `bench` to run the
 # measurement and calibration suites too, which skip cleanly without it.
+#
+# `checks` is the third group: the static-analysis pipeline added 2026-10-02
+# (ruff, mypy, pytest-cov, pip-audit, vulture, deptry, detect-secrets,
+# pre-commit). It is SEPARATE from `dev` on purpose. `dev` is what you need to
+# run the suite, and it stays small because CI installs `.[dev]` on seven
+# platform/Python combinations where a lint pipeline adds minutes and no
+# signal. `make check` installs `.[checks]` on top, once, on the machine doing
+# the checking. Every tool is PINNED EXACTLY (`==`), not ranged: a lint result
+# that moves because a dependency moved is a lint result nobody can reason
+# about, and the whole point of a baseline is that it only changes when a
+# human changes it. Upgrade deliberately, and re-baseline when you do.
 bench = ["numpy>=1.24"]
 dev = ["pytest>=7", "pytest-asyncio>=0.23"]
+checks = [
+    "ruff==0.14.4",
+    "mypy==1.18.2",
+    "pytest-cov==7.0.0",
+    "pip-audit==2.10.0",
+    "vulture==2.14",
+    "deptry==0.25.1",
+    "detect-secrets==1.5.0",
+    "pre-commit==4.3.0",
+]
 
 [project.scripts]
 s3ked = "s3ked.app:main"
@@ -69,12 +102,617 @@ asyncio_mode = "auto"
 # The exhaustive Multi round trip is ~1m50 of an otherwise ~6m30 suite, and a
 # guarantee you run before a release is worth more than one you skip because
 # the suite got tiresome.
-#     .venv/bin/python -m pytest              everything except slow
-#     .venv/bin/python -m pytest -m slow      only the slow ones
-#     .venv/bin/python -m pytest -m ""        everything
+#     .venv/bin/python -m pytest                              everything except slow
+#     .venv/bin/python -m pytest -m "slow"                    only the slow ones
+#     .venv/bin/python -m pytest -m ""                        everything
+#
+# A command-line `-m` REPLACES this `-m 'not slow'` rather than combining
+# with it, so every bounded `-m` recipe in the README repeats `not slow`
+# explicitly (`-m "not slow and not tui"`, ...). A recipe without it silently
+# admits the exhaustive test into a run that claims to be bounded -- and a
+# future non-TUI slow test would enter that way with no failure marking it.
+# tests/test_conformance.py pins both the recipes and the markers.
+#
+# CI runs the default selection -- everything except slow. The slow test is a
+# pre-release gate, run by hand before tagging, not a CI job: it costs ~1m50
+# on every platform of the matrix for a path the other tests already cover
+# synthetically at small scale.
 markers = [
     "slow: exhaustive; excluded by default, run before a release",
     "tui: drives the Textual event loop; 86% of the runtime for 18% of the tests",
     "bench: probe-side analysis; no hardware, but not the shipped editor",
 ]
 addopts = "-m 'not slow'"
+# Coverage is NOT in addopts. `make test` adds `--cov`; the default `pytest`
+# run deliberately does not, because collecting coverage over a 7-minute suite
+# for a number nothing currently gates on is latency for no signal -- the same
+# reasoning as the `slow` marker above. `--cov` REPLACES this list when given,
+# so `make test` names the packages itself.
+#
+# `term-missing` is on because the total is a number nobody acts on and the
+# per-file missing lines are the part that points at the gap.
+#
+# No `fail_under`. A threshold nobody has agreed to is a threshold that gets
+# raised to whatever the current number happens to be, which measures nothing.
+# The number is reported so it can be watched; when it should be gated is a
+# decision, not a default.
+
+[tool.coverage.run]
+# `probes/` is measured and not part of the wheel: it is where the bench
+# measurement code lives, and excluding it would make the number describe only
+# the editor while the repository's real risk sits half in the probes.
+source = ["s3k", "s3ked", "probes", "tools"]
+branch = true
+# The TUI and probe scripts are imported by path from the tests with
+# sys.path manipulation, which coverage cannot see as a package. Omit rather
+# than guess: a source listed here that cannot be imported produces an error
+# that looks like a coverage failure.
+omit = []
+
+[tool.coverage.report]
+term_missing = true
+skip_covered = false
+show_missing = true
+# The editor's own guard is that no shipped code may raise; every `raise`
+# below is deliberate and named. Showing them costs readability and nothing
+# else.
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "raise AssertionError",
+    "raise ValueError",
+]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+]
+
+# --------------------------------------------------------------------------
+# ruff -- lints AND formats. Replaces flake8/isort/black/pyupgrade.
+# --------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+# The sources are s3k/, s3ked/, probes/, tests/, tools/. Excluding `build/`
+# and `.venv/` matters: both contain copies of this tree, and linting a
+# copy produces findings against code nobody edits.
+extend-exclude = ["build", "dist", ".venv", "s3ked.egg-info",
+                  # DATA, not code. vulture's whitelist format is a file of
+                  # bare names, so it cannot be valid Python by construction:
+                  # F821 and B018 both fire on it and both are the tool being
+                  # right about the file and wrong about it mattering.
+                  "tools/vulture_whitelist.py"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "S",    # bandit
+    "SIM",  # flake8-simplify
+    "UP",   # pyupgrade
+    "C4",   # flake8-comprehensions
+    "PL",   # pylint
+    "RUF",  # ruff-specific
+    "C901", # mccabe complexity
+]
+# max-complexity = 10 under [tool.ruff.lint.mccabe].
+# Each entry below is a rule that EXISTS in this codebase today and is being
+# baselined rather than fixed. The count that was suppressed is on the rule so
+# a later reader can tell "we decided" from "we never looked". `make check`
+# fails on anything NEW in these rules, which is the point: a baseline that
+# grows silently is not a baseline.
+ignore = [
+    # 0 findings. E501 line-too-long is delegated to the formatter, which
+    # wraps code and cannot wrap a long string or a URL in a comment.
+    # Reporting both means every long comment is a finding no fix can clear.
+    "E501",
+    # 0 findings.
+    "PLR0912",
+    # 59 findings. The protocol table in s3k/params.py is 3400 lines of
+    # `_p(...)` calls, each POSITIONAL in the order the Akai document lists
+    # them. Reordering them to satisfy a linter would make the table harder
+    # to check against the document it transcribes, which is the only reason
+    # it exists. This is a deliberate readability-over-lint choice.
+    "PLR0913",
+    # 17 findings. The same table again, at statement level.
+    "PLR0915",
+    # 7 findings. Reads that are written as a chain of `if x: return a` --
+    # the result-selection style the bridge uses everywhere. Readable.
+    "PLR0911",
+    # 15 findings. `zip(a, b)` where the lengths are known equal by
+    # construction (message/data pairs, both built by the same call). Adding
+    # `strict=` to 15 sites adds a word per site to catch a case the types
+    # already rule out.
+    "B905",
+    # 532 findings, by far the largest block. Deliberate lazy imports: the
+    # probes and CLI import inside `main()` and inside functions so that
+    # importing the module never opens a MIDI port, never needs numpy, and
+    # never pulls in the editor. That laziness is load-bearing -- it is why
+    # `s3ked --demo` runs with no MIDI stack present -- so 532 "move it to
+    # the top" findings are 532 ways to break the thing the rule wants.
+    "PLC0415",
+    # 427 findings. `typing.Dict`/`List`/`Optional[...]` instead of
+    # `dict`/`list`/`X | None`. The project targets 3.11+ where the modern
+    # spelling is correct, so these are genuinely stale -- but they are
+    # mechanical and touching them here would mass-edit 24 files in a commit
+    # whose subject is "add a lint pipeline". Fix them as their own change.
+    "UP006", "UP007", "UP035", "UP045",
+    # 122 findings. `%`-formatting in the probes' print tables, where the
+    # output is column-aligned by hand. f-strings cannot express the padding
+    # as clearly.
+    "UP031",
+    # 137 findings. Import order. Same reason as the UP rules: ruff's isort
+    # has an opinion the existing files do not share, and applying it is a
+    # 137-line diff that touches every file in the tree. `--fix` does it in
+    # one command whenever that change is wanted on its own.
+    "I001",
+    # 56+56 findings. `try: ... except: pass` and `except X: pass` written
+    # on one line with a semicolon. Readable at this density; splitting them
+    # is churn.
+    "E702", "S110", "S112",
+    # 75 findings. `contextlib.suppress` in place of try/except/pass. A
+    # stylistic preference, and the try form carries a comment that
+    # `suppress()` cannot.
+    "SIM105",
+    # 10 findings. Functions/closures defined in a loop that capture the loop
+    # variable. In every case here the closure is CALLED INSIDE the same
+    # iteration (the probes build a per-region checker and run it at once),
+    # which is the pattern B023 cannot see. Verified by reading all 10.
+    "B023",
+    # 40 findings. Functions whose cyclomatic complexity exceeds 10. The
+    # codec and the frame parsers are legitimately branch-heavy: each opcode
+    # is a case, and a switch that merges them obscures which byte means
+    # what in a wire protocol. C901 is still ENABLED and still fails on
+    # anything new past 10.
+    "C901",
+    # 28 findings. `# noqa: BLE001` / `# noqa: ARG001` / `# noqa: E402` for
+    # rules this project does not enable. They are kept rather than deleted
+    # so that enabling the rule later finds them already annotated, and so
+    # that a reviewer reading the file sees the intent was deliberate.
+    "RUF100",
+    # 23 findings. Mutable class attributes (Textual reactive fields,
+    # dataclass-style defaults). The Textual ones are the framework's
+    # documented idiom.
+    "RUF012",
+    # 21 findings. Imports never used -- nearly all `__init__.py`-style
+    # re-exports and Textual `import` for type use.
+    "F401",
+    # 9 findings. Variable assigned and never read; the pattern in the
+    # probes' sweep loops where the value is read through a dataclass.
+    "F841",
+    # 11 findings. `x = a + b` where a list/concat would read better.
+    "RUF005",
+    # 11 findings. `v == v` -- the NaN test. This is the CORRECT spelling of
+    # "is this NaN" in numpy, and the rule is wrong here: `math.isnan` is
+    # False for a numpy scalar in some versions and the idiom is standard in
+    # measurement code. All 11 are NaN checks (verified).
+    "PLR0124",
+    # 4 findings. `assert` in a probe. See per-file-ignores below: asserts in
+    # measurement scripts are preconditions, and raising a bare
+    # AssertionError there is correct.
+    "S101",
+    # 4 findings. `int(round(x))` where round already returns an int.
+    "RUF046",
+    # 4 findings. Unicode look-alikes (section signs, em dashes) inside
+    # string literals. These are DOCUMENTATION prose -- the section
+    # references are the citation scheme -- and the "ambiguity" is the
+    # intended character.
+    "RUF001",
+    # 15 findings. `lambda` assigned to a name (E731) -- the `Sweep`
+    # factories. A named lambda is clearer than a def at this density.
+    "E731",
+    # 17+9 findings. One-line `if x: y` and `if x: y; z` forms. Dense but
+    # readable in the probe scripts.
+    "E701", "E401",
+    # 8 findings. `dict()` where a literal is clearer.
+    "C408",
+    # 11 findings. Unused unpacked variables (`_a, x, _b = ...`) -- the
+    # discarded ends are named to document the shape.
+    "RUF059",
+    # 10 findings. Loop control variables unused after the body.
+    "B007",
+    # 2 findings. `global` in module state.
+    "PLW0603",
+    # 2 findings. Ambiguous name `l`. Renaming is churn for no gain.
+    "E741",
+    # 3 findings. `random`/`np.random` without a crypto warning -- these are
+    # jitter generators in measurement probes, not key material.
+    "S311",
+    # 6+6+4+4+2 findings. `subprocess` calls in the probes and tools. These
+    # run git, ruff and the sibling tools with fixed argument lists; the
+    # shell=False flags are already set.
+    "S603", "S607", "S108",
+    # 5 findings. `[x for x in y if ...]` where `filter()` would do -- the
+    # comprehension is clearer and this is measurement code.
+    "C416",
+    # 3 findings. `x == a or x == b` where a tuple reads better.
+    "PLR1714",
+    # 3 findings. `subprocess.run` without `check=`; the callers check the
+    # return code themselves because they handle the failure deliberately.
+    "PLW1510",
+    # 4 findings. `raise` inside `except` without `from`. The exception
+    # message already names the original failure.
+    "B904",
+    # 2 findings. `zip(a, b)` where `itertools.pairwise` would do.
+    "RUF007",
+    # 2 findings. `def f(x = None)` where the default is None -- the None is
+    # the point of the default.
+    "RUF013",
+    # 3 findings. Nested `with` that could be one statement.
+    "SIM117",
+    # 3 findings. `if a: y else: x` where `max()`/`min()` is the idiom.
+    "SIM102", "SIM108",
+    # 1 finding. `if` with identical arms.
+    "SIM114",
+    # 1 finding. `open()` without a context manager -- in the CLI's
+    # `install_clean_exit` the handle is stored and closed on a later branch.
+    "SIM115",
+    # 1 finding. `else` after a `return`.
+    "PLR1711",
+    # 1 finding. `if x > y else x` where `max()` is clearer.
+    "PLR1730",
+    # 2 findings. Yoda conditions.
+    "SIM300",
+    # 2 findings. `open(f, encoding="utf-8")` where the default is UTF-8.
+    "UP012",
+    # 15 findings. Quoted annotations that no longer need quoting.
+    "UP037",
+    # 4 findings. Redundant `import X as X` re-export form; the explicit
+    # alias is used where a module name and a symbol name collide.
+    "PLR0402",
+    # 4 findings. `[x for x in y][0]` where `next(iter(y))` is meant.
+    "RUF015",
+    # 28 findings, ALL in s3k/ and s3ked/ (verified). Every one is a protocol
+    # constant: `0xF0` for F0, `0x7F` for the 7-bit mask, `0x3FFF` for the
+    # 14-bit item-index mask, `0x41`/`0x5A`/`0x61`/`0x7A` for the REPLY
+    # mnemonics. These ARE the specification's bytes, written inline so the
+    # codec can be checked against the Akai document line by line. Hoisting
+    # them into constants would move each byte one screen away from the
+    # arithmetic it participates in, which is the opposite of what a
+    # transcription wants.
+    "PLR2004",
+    # 8 findings. `f"..."` with no placeholder, left over from a print that
+    # once interpolated. F541 is a genuine (if trivial) defect -- it reads as
+    # an f-string that should have a value in it. Cheap to fix properly, but
+    # it is application source and this change is not allowed to touch it;
+    # listed here so the decision is recorded rather than hidden.
+    "F541",
+    # 8 findings. `__all__` not sorted. The order is by module, then by the
+    # pipeline stage the symbol belongs to (transport, then operations, then
+    # helpers), which is the order a reader wants and is not alphabetical.
+    "RUF022",
+    # 1 finding. `from x import y as y` re-export form; the explicit alias
+    # is where a module name and a symbol name collide.
+    "PLR0402",
+    # 1 finding. tests/test_conformance.py binds `m` from the module-level
+    # `import s3k.messages as m` inside a `for m in law.finditer(line)` loop.
+    # The shadow is harmless -- the loop reassigns before any use, and the
+    # module-level `m` is not referenced after line 571 -- but it IS the
+    # kind of thing F402 exists to catch, and renaming it is a test-file
+    # edit this change is not allowed to make.
+    "F402",
+    # 1 finding. probes/calibrate.py:2205 builds `args.port if not args.capture
+    # else args.port` -- both arms are `args.port`. That is a real (harmless)
+    # typo, most likely a placeholder for "the capture device when capturing".
+    # Application source, so not fixed here.
+    "RUF034",
+    # 1 finding. probes/relscan.py rebinds the loop variable `line` inside
+    # the body before appending it. Correct, and clearer than renaming.
+    "PLW2901",
+    # 1 finding. probes/unmodelled_bytes.py `else` then `if` where `elif`
+    # reads the same.
+    "PLR5501",
+    # 1 finding. probes/volume.py `{x!s}` where `str(x)` is meant; explicit
+    # is clearer in a formatted table column.
+    "RUF010",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert; that is what they are for. S101 is the whole point of a test.
+# S105/S106/S107 are the "hardcoded password string" trio, which fires on the
+# fixture values a test deliberately sets. PLR2004 (magic value) is noise in
+# a test that means `0` is the default. B011 is `assert False` in an
+# unreachable branch, which is how a test marks "this must not get here".
+"tests/**" = ["S101", "S105", "S106", "S107", "PLR2004", "B011", "B023"]
+# Bench probes are measurement scripts: they print tables, bind literal
+# sample rates the way the rig was configured, and legitimately hard-code
+# MIDI program numbers. `assert` in a probe is a PRECONDITION -- "the pan
+# amounts are zero before I measure pan" -- and a bare AssertionError is the
+# correct failure there. E402 because every probe does its imports after
+# argument parsing. T201 because they print; that is the output format.
+"probes/**" = ["S105", "S106", "S107", "PLR2004", "E402", "T201", "S101"]
+# The demo bridge deliberately fakes a device, including hard-coded names,
+# and re-exports the bridge's types for the app to import.
+"s3ked/demo.py" = ["S105", "S106", "S107", "F401"]
+# tests/test_app.py puts `pytestmark` ABOVE its imports so the marker applies
+# to the module before anything is collected. That is the documented way to
+# mark a module, and E402 is the price.
+"tests/test_app.py" = ["E402"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.isort]
+# vinsynlib is listed as first-party rather than third-party because it is: a
+# sibling checkout of this same family, developed alongside s3ked rather than
+# vendored from an index. Left out, ruff sorts its imports into a separate
+# third-party block and the family's own code ends up visually separated from
+# s3ked's, which is the opposite of what it is.
+known-first-party = ["s3k", "s3ked", "vinsynlib"]
+# The repo's own imports use a comment-header style: the GPL block, then a
+# blank line, then imports. force-sort-within-sections is left off so the
+# existing grouping survives.
+
+[tool.ruff.format]
+docstring-code-format = false
+
+# --------------------------------------------------------------------------
+# mypy -- non-strict to begin with.
+#
+# NOT strict, and the reason is worth stating rather than leaving as a
+# default: this project has no annotations in its application code at all,
+# and `s3k/bridge.py` alone is 3000 lines of protocol arithmetic where an
+# unchecked `int`/`bytes` mix-up is exactly the class of bug that has cost
+# this project days. Retrofitting annotations is a separate piece of work
+# from standing up the check, and doing both at once makes the first review
+# unreadable. So: check what is annotated, do not require annotations
+# (`disallow_untyped_defs = false`), and do not fail on missing stubs for
+# rtmidi/jack/textual.
+#
+# `warn_unused_ignores` is ON because an ignore comment that has stopped
+# suppressing anything is a lie in the source.
+# --------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+files = ["s3k", "s3ked", "tests", "tools"]
+# tools/vulture_whitelist.py is DATA, not code: vulture reads bare names out
+# of it, which is precisely why it cannot be valid Python. mypy reports them
+# as undefined; F821 in ruff reports the same. Excluded rather than "fixed",
+# because a whitelist entry that is an assignment instead of a name stops
+# matching the thing it is supposed to whitelist.
+exclude = ["^tools/vulture_whitelist\\.py$"]
+ignore_missing_imports = true
+# Untyped third-party libraries (textual, rtmidi) have no stubs; following
+# them untyped is what produces the error cascades.
+follow_imports = "silent"
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true
+# The count that matters: this is a BASELINE, not a target. Whatever mypy
+# reports today is recorded in the report below; the goal is that it does not
+# grow without a human adding to it.
+disable_error_code = []
+
+# TOML keys cannot contain `*`, so the per-module section is quoted. This is
+# the documented spelling for "all modules matching tests.*".
+# --------------------------------------------------------------------------
+# FORMATTER, and why it is not enforced on the existing tree.
+#
+# `ruff format` is configured and wired into pre-commit for NEW and CHANGED
+# code, and `make format` applies it over FORMAT_SCOPE. It is NOT enforced
+# against the 57 files that predate it, and here is the measurement behind
+# that decision rather than a preference:
+#
+#   * 5561 lines added, 4115 removed across 57 files.
+#   * The longest line it would EMIT is 1170 characters -- with
+#     line-length = 100. That is not a line the formatter broke; it is a
+#     single string literal or comment it cannot wrap, and it arrives from a
+#     file whose longest existing line is ALREADY 1419 (s3k/params.py's
+#     KGTUNO note). So this tree's established style is "one long prose line
+#     rather than a wrapped paragraph", and a 100-column rewrap fights it
+#     everywhere while still leaving the lines that matter alone.
+#   * It de-indents the continuation lines of the multi-line string arguments
+#     in s3k/params.py -- the 3400-line `_p(...)` table -- which changes the
+#     shape of the transcription this project exists to keep checkable against
+#     the Akai document.
+#
+# The two files that already satisfy it, and so are the evidence that this is
+# a style difference rather than an unreachable bar: s3k/__init__.py and
+# s3ked/__init__.py.
+#
+# Set FORMAT_BASE to compare against something other than main, e.g.
+#     make format-check FORMAT_BASE=origin/release/1.0
+# --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+# mypy BASELINE: 59 findings, all of them pre-existing on 2026-10-02.
+#
+# Written as `[[tool.mypy.overrides]]`, NOT as per-module `[tool.mypy-foo]`
+# tables. VERIFIED 2026-10-02 on mypy 1.18.2: the per-module table form is
+# read without complaint and then IGNORES ITS `disable_error_code` -- a
+# 2-line scratch project with `[tool.mypy-a]` reporting an `assignment` error
+# still reported it, and the same file under `[[tool.mypy.overrides]]`
+# reported none. Overrides work; per-module tables in pyproject do not. Since
+# a silently-ignored baseline is worse than none -- it looks like coverage and
+# is not -- this is the form that is actually enforced.
+#
+# The suppression is PER CODE AND PER MODULE, so a new error of a kind that
+# already exists in that file is still caught. That is the property that makes
+# this a baseline rather than a switch. Counts are stated per module; if a
+# module goes quiet, delete its override.
+# --------------------------------------------------------------------------
+
+# s3k.messages -- 4 findings, all `call-arg`.
+# Every frame is built through the `_FieldMessage` / `_NoFieldMessage` /
+# `_NameList` mixins as `cls(exclusive_channel=..., **fields)`. mypy resolves
+# the MIXIN's `__init__`, not the concrete class's, so the keyword it reports
+# as unexpected is exactly the one the codec needs. The codec round-trips:
+# tests/test_messages.py covers every message type in both directions, so this
+# is a limitation of the mixin pattern rather than a wire-format bug.
+# THIS IS THE FILE WHERE A NEW TYPE ERROR WOULD COST THE MOST -- first to
+# revisit if the mixins are ever annotated.
+[[tool.mypy.overrides]]
+module = "s3k.messages"
+disable_error_code = ["call-arg"]
+
+# s3k.bridge -- 7 findings: 4 union-attr, 1 assignment, 1 attr-defined,
+# 1 no-redef.
+# The union-attr cluster is `S3kBridge | None` locals in `autodetect`
+# (~1189-1213): the None branch is provably unreachable after the raise, but
+# mypy cannot see that through the loop. The no-redef is a rebound `found` in
+# the same function.
+[[tool.mypy.overrides]]
+module = "s3k.bridge"
+disable_error_code = ["assignment", "attr-defined", "no-redef", "union-attr"]
+
+# s3ked.app -- 36 findings, by far the largest, and all ONE root cause: the
+# file is unannotated. Every `self.`, every `self.query_one(...)` and every
+# Textual reactive field is `Any`, and mypy reports each mismatch between that
+# `Any` and the narrow local it landed in. The 5 `attr-defined` are Textual's
+# `App[Any]` base not knowing this app's own `notify_status`/`apply_*`.
+# None is a known defect; this is what "no annotations" looks like to a
+# checker. The honest fix is annotating app.py, which is its own piece of work.
+[[tool.mypy.overrides]]
+module = "s3ked.app"
+disable_error_code = ["arg-type", "assignment", "attr-defined", "call-overload",
+                      "operator", "union-attr", "unreachable"]
+
+# s3ked.cli -- 2 findings: union-attr on `Scale | None` from
+# `s3k.scales.lookup`, call-overload on `list(object)`. Same unannotated root.
+[[tool.mypy.overrides]]
+module = "s3ked.cli"
+disable_error_code = ["call-overload", "union-attr"]
+
+# s3ked.demo -- 1 finding, `assignment`: a list[int] local reused for an int.
+# Real and harmless (the value is a count), a one-line fix in application
+# source, so recorded rather than made.
+[[tool.mypy.overrides]]
+module = "s3ked.demo"
+disable_error_code = ["assignment"]
+
+# tests -- 9 findings: 4 union-attr, 3 arg-type, 1 assignment, 1
+# var-annotated, spread over five files.
+#
+# ENUMERATED rather than wildcarded, because mypy requires a `*` in an
+# override pattern to be a WHOLE component: `module = "test_*"` is rejected
+# outright ("Patterns must be fully-qualified module names, optionally with
+# '*' in some components"). `tests.*` cannot be used either, because
+# `tests/` has no `__init__.py` and mypy therefore names those files
+# `test_bridge`, not `tests.test_bridge` -- confirmed with `mypy -v`.
+# Adding `tests/__init__.py` would change pytest's collection semantics,
+# which is not a thing a lint baseline is entitled to do.
+#
+# Two modules share one cause. `module_from_spec` returns
+# `ModuleSpec | None` by typeshed's own declaration, and these two tests
+# build a spec from a path they control; the union-attr and arg-type cluster
+# is that call. Tests elsewhere in this tree deliberately construct the
+# malformed objects validation is supposed to reject, so mypy's view of
+# them is wrong in exactly the cases worth testing.
+[[tool.mypy.overrides]]
+module = "test_check_handoff"
+disable_error_code = ["arg-type", "union-attr"]
+
+[[tool.mypy.overrides]]
+module = "test_relscan"
+disable_error_code = ["arg-type", "union-attr"]
+
+# `PORTS = [("name", 1), ...]` -- a heterogeneous list literal that needs an
+# annotation to be typed at all. One line, in a test.
+[[tool.mypy.overrides]]
+module = "test_bridge"
+disable_error_code = ["var-annotated"]
+
+# `sorted(<list of type objects>)` where the key argument is a `type`.
+[[tool.mypy.overrides]]
+module = "test_conformance"
+disable_error_code = ["arg-type"]
+
+# A fake bridge class whose `__call__` is patched to None in one branch.
+[[tool.mypy.overrides]]
+module = "test_jcap"
+disable_error_code = ["assignment"]
+
+# --------------------------------------------------------------------------
+# deptry -- unused / missing / transitive dependencies.
+#
+# SCOPE is set by the Makefile: `deptry s3k s3ked probes tools tests`, the
+# five source directories NAMED. Passing `.` makes deptry walk `.venv/`,
+# which on this machine produced 3537 findings about virtualenv's own bundled
+# wheels -- including `pint` and `whitelist_utils` reported as missing
+# dependencies, both of which are vulture's vendored whiteists. Naming the
+# directories is the difference between checking this project and checking the
+# tools that check it.
+#
+# `tests` is INCLUDED. Excluding it is how a missing test-only dependency
+# hides, and deptry excludes `tests` by default -- so the explicit directory
+# list is what puts it back in scope.
+# --------------------------------------------------------------------------
+[tool.deptry]
+known_first_party = ["s3k", "s3ked"]
+# The dev groups. deptry does not run DEP002 (unused dependency) against a
+# development group, so declaring these exempts the ten tools invoked by the
+# Makefile / pre-commit hooks BY CONSTRUCTION -- not by a hand-kept list of
+# names that a later addition would have to remember to add to.
+#
+# `bench` is deliberately NOT here: numpy is imported by `probes/`, so it is a
+# library they need at runtime, not tooling. Listing it produced 16 DEP004
+# findings, which is the tool correctly noticing exactly that.
+optional_dependencies_dev_groups = ["dev", "checks"]
+
+[tool.deptry.per_rule_ignores]
+# VERIFIED NOT READ FROM pyproject.toml, 2026-10-02, deptry 0.25.1.
+# Reproduced in a clean scratch project: with the table present, `deptry .`
+# still reported the DEP002 it lists, while the same suppression passed as
+# `--per-rule-ignores` on the command line reported nothing. Only the CLI form
+# works, so the Makefile passes it and this table is the record of what is
+# suppressed and why. If a future deptry fixes this, delete the flag from the
+# Makefile and this becomes the single source.
+#
+# DEP003 (imported but declared only transitively), 2 findings: `jack`, from
+# probes/jcap.py:75 and probes/calibrate.py:126.
+#
+# NOT A GAP IN THE PACKAGING, and specifically NOT an end-user concern. Checked
+# rather than assumed:
+#
+#   * Nothing shipped imports it. `git grep jack -- s3k s3ked` is empty, and
+#     the wheel is `[tool.setuptools] packages = ["s3k", "s3ked"]` -- probes/
+#     is not in it. An end user installing s3ked never sees jack.
+#   * The test suite does not need it either. tests/test_jcap.py installs a
+#     FAKE `jack` module before importing the probe (that is how the
+#     leaked-client failure paths are provoked without a server), and
+#     `pytest.importorskip("numpy")` so the whole file skips when numpy is
+#     absent. So neither CI nor `make test` can be broken by it.
+#   * It is a rig-local capture backend, not a library dependency. Both call
+#     sites are bench probes that talk to a live JACK server:
+#     probes/calibrate.py even documents falling back to `jack_rec` when the
+#     binding is unavailable, "so the probe still runs on a host without it".
+#
+# So `jack` is deliberately NOT declared anywhere, and in particular must not
+# be added to `[project] dependencies`: it would put a build-heavy audio
+# binding into every end-user install to serve two scripts that are not
+# shipped. Adding it to the `bench` extra is defensible for symmetry with
+# numpy, and is left as a maintainer choice -- it would also make `bench`
+# require libjack headers to build, which the FFT-only probes do not.
+transitive = [
+    "jack",
+]
+
+# --------------------------------------------------------------------------
+# detect-secrets config: NOT HERE, ON PURPOSE.
+#
+# detect-secrets does document a `[tool.detect_secrets]` section in
+# pyproject.toml, and it did not work: VERIFIED 2026-10-02 with 1.5.0 --
+# `detect-secrets scan` wrote a baseline whose `plugins_used` was the tool's
+# own default set (27 plugins) rather than the configured one, and stored no
+# `exclude_files` key at all.
+#
+# That is the third tool in this project to accept a config block and ignore
+# it (vulture's `[tool.vulture]`, deptry's `per_rule_ignores`, and mypy's
+# per-module `[tool.mypy-x]` tables), so the pattern is worth stating: a
+# config that does not take effect is worse than no config, because it reads
+# as coverage. Everything detect-secrets needs is passed as an explicit
+# `--exclude-files` argument in the Makefile and in the pre-commit hook's
+# `args`, where it demonstrably works.
+#
+# The exclusions are not optional. This repo has ZERO secrets in its tracked
+# source, but a bare `scan --all-files` walks `.venv/`, `.mypy_cache/` and
+# `.ruff_cache/`, and on this machine that was 1500+ high-entropy hits inside
+# virtualenv's bundled SBOMs and mypy's type-metadata JSON. A baseline of
+# 1500 noise entries is a baseline nobody reads.
+#
+# The pattern excludes caches, the venv and build outputs. It excludes NO
+# source directory: probes/ and tools/ are scanned, and they are where a
+# credential would actually land.
+# --------------------------------------------------------------------------

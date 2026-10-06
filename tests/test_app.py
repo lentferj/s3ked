@@ -15,13 +15,14 @@ from textual.widgets import DataTable
 
 from s3ked.app import ConfirmScreen, EditValueScreen, MasterScreen, S3kedApp
 
-# `tui` is 179 of the suite's 980 tests and 344 s of its 402 s -- 86 % of the
-# runtime for 18 % of the tests. Nothing here touches hardware; the cost is
-# Textual's event loop. Marked so a reviewer can bound the run the way the
+# `tui` is 181 of the suite's 1019 tests and ~436 s of its ~508 s -- 86 % of
+# the runtime for 18 % of the tests. Nothing here touches hardware; the cost
+# is Textual's event loop. Marked so a reviewer can bound the run the way the
 # other projects on this bench do, with `-m`, instead of having to find an
-# `--ignore=` path in prose:
-#     pytest -m "not tui"                801 tests, ~60 s
-#     pytest -m "not tui and not bench"  576 tests, ~3 s
+# `--ignore=` path in prose (a bare `-m` replaces the `-m 'not slow'` in
+# addopts, so `not slow` is repeated here rather than inherited):
+#     pytest -m "not slow and not tui"                837 tests, ~71 s
+#     pytest -m "not slow and not tui and not bench"  599 tests, ~8 s
 pytestmark = pytest.mark.tui
 from s3ked.demo import DemoBridge
 
@@ -50,8 +51,8 @@ async def _screen(pilot, app, kind, tries=200):
         if isinstance(app.screen_stack[-1], kind):
             return app.screen_stack[-1]
     raise AssertionError(
-        f"{kind.__name__} never appeared; top is "
-        f"{type(app.screen_stack[-1]).__name__}")
+        f"{kind.__name__} never appeared; top is {type(app.screen_stack[-1]).__name__}"
+    )
 
 
 async def _app(allow_write=False, bridge=None):
@@ -88,7 +89,7 @@ async def test_parameters_pane_shows_the_selected_program():
     app = await _app()
     async with app.run_test() as pilot:
         assert await _settled(pilot, app)
-        assert len(app._param_rows) == 85   # 85 since PRIDENT was added
+        assert len(app._param_rows) == 85  # 85 since PRIDENT was added
         assert app.query_one("#parameters", DataTable).row_count == 85
 
 
@@ -168,9 +169,7 @@ async def test_edit_opens_a_modal_once_armed():
     app = await _app(allow_write=True)
     async with app.run_test() as pilot:
         assert await _settled(pilot, app)
-        row = next(
-            i for i, x in enumerate(app._param_rows) if x.name == "PRIORT"
-        )
+        row = next(i for i, x in enumerate(app._param_rows) if x.name == "PRIORT")
         app.query_one("#parameters", DataTable).move_cursor(row=row)
         await pilot.press("e")
         await pilot.pause()
@@ -339,7 +338,10 @@ async def test_no_single_key_reaches_a_delete():
         before = list(app._programs)
         for binding in S3kedApp.BINDINGS:
             key = binding.key
-            if key in ("q", "tab"):
+            if key in ("q", "tab", "w"):
+                # q quits the app, tab only moves focus, and w is the gate
+                # toggle itself: pressing it mid-test would disarm the gate
+                # and the rest of the walk would prove nothing.
                 continue
             await pilot.press(key)
             await pilot.pause()
@@ -348,6 +350,7 @@ async def test_no_single_key_reaches_a_delete():
                 await pilot.pause()
         for _ in range(10):
             await pilot.pause()
+        assert app.allow_write, "the gate must still be armed at the end"
         assert app.bridge.program_list() == before
 
 
@@ -515,12 +518,16 @@ async def test_every_shown_binding_has_a_description():
 
 # --- the screens render, which nothing checked until there were screenshots --
 
-@pytest.mark.parametrize("name,keys,allow_write,param,must_contain", [
-    ("catalog", (), False, None, "Programs"),
-    ("write-gate", ("w",), False, None, "write ARMED"),
-    ("edit", ("w", "e"), False, "PRIORT", "range:"),
-    ("master", ("m",), True, None, "Destructive operations"),
-])
+
+@pytest.mark.parametrize(
+    "name,keys,allow_write,param,must_contain",
+    [
+        ("catalog", (), False, None, "Programs"),
+        ("write-gate", ("w",), False, None, "write ARMED"),
+        ("edit", ("w", "e"), False, "PRIORT", "range:"),
+        ("master", ("m",), True, None, "Destructive operations"),
+    ],
+)
 async def test_each_documented_screen_actually_renders(
     name, keys, allow_write, param, must_contain, tmp_path
 ):
@@ -579,14 +586,17 @@ async def test_the_editor_refuses_a_block_address():
         assert len(app.screen_stack) == 1, "no modal should have opened"
 
 
-@pytest.mark.parametrize("keys,should_delete", [
-    (("m",), False),
-    (("m", "1"), False),
-    (("m", "1", "enter"), False),
-    (("m", "1", "enter", "n"), False),
-    (("m", "1", "enter", "escape"), False),
-    (("m", "1", "enter", "y"), True),
-])
+@pytest.mark.parametrize(
+    "keys,should_delete",
+    [
+        (("m",), False),
+        (("m", "1"), False),
+        (("m", "1", "enter"), False),
+        (("m", "1", "enter", "n"), False),
+        (("m", "1", "enter", "escape"), False),
+        (("m", "1", "enter", "y"), True),
+    ],
+)
 async def test_every_prefix_of_the_delete_path_is_safe(keys, should_delete):
     """Only the complete four-keypress sequence deletes. Every prefix is inert.
 
@@ -701,7 +711,8 @@ async def test_the_disk_pane_is_empty_until_asked():
         assert any(x.startswith("v") for x in labels)
         assert any(x in ("prog", "samp") for x in labels), (
             "the volume's directory is a second list and must be labelled "
-            "as one, not run on from the volume rows")
+            "as one, not run on from the volume rows"
+        )
 
 
 async def test_the_disk_pane_reports_a_failure_instead_of_crashing():
@@ -759,8 +770,8 @@ async def test_the_disk_pane_shows_the_load_source():
     # not to exist; the count ("34 vol") is a different number and both
     # belong here.
     import re
-    assert re.search(r"vol 0*1\b", title), (
-        f"the selected volume, 1-based: {title!r}")
+
+    assert re.search(r"vol 0*1\b", title), f"the selected volume, 1-based: {title!r}"
     assert re.search(r"\d+ vol\b", title), "the volume count is still wanted"
     assert "SCSI 4" in title
 
@@ -857,6 +868,7 @@ async def test_loading_a_volume_is_gated_and_confirmed():
         await pilot.pause()
         assert len(app.screen_stack) == 2, "armed, so it must ask how to load"
         from s3ked.app import LoadOptionsScreen
+
         assert isinstance(app.screen_stack[-1], LoadOptionsScreen)
 
         # the defaults are add-to-memory and no renumber, so Enter is the
@@ -932,8 +944,9 @@ async def test_l_opens_the_browser_before_it_loads_anything():
             await pilot.pause()
 
         assert app._disk_showing, "the first `l` opens the browser"
-        assert not any(isinstance(s, LoadOptionsScreen)
-                       for s in app.screen_stack), "and confirms nothing"
+        assert not any(isinstance(s, LoadOptionsScreen) for s in app.screen_stack), (
+            "and confirms nothing"
+        )
         assert fired == []
 
         await pilot.press("l")
@@ -949,23 +962,67 @@ async def test_the_app_does_not_poll_a_loading_machine():
     """A 58.7 MB load probed every 8 s ran in bursts and then wedged.
 
     So the worker triggers and stops, and tells the user to refresh by hand.
+    Proved behaviorally: from the moment the load fires until the refresh
+    after the dialog closes, no status/volume/directory read may happen --
+    the pre-load confirmation's own reads come before the fire and do not
+    count.
     """
-    import inspect
-    from s3ked.app import S3kedApp
+    from s3ked.app import LoadingScreen, S3kedApp
+    from s3ked.demo import DemoBridge
 
-    src = inspect.getsource(S3kedApp._load_worker)
-    assert "trigger_load" in src
-    # no READS of the machine afterwards -- notify_status is not a read, so
-    # the check has to name the bridge calls rather than the substring
-    assert "self.bridge.status(" not in src
-    assert "self.bridge.hd_directory(" not in src
-    assert "self.bridge.volume_list(" not in src
-    # It used to end by asking the user to press r. That relied on them
-    # judging when the load had finished with nothing to judge from, and
-    # pressing r too early left the program list stale -- which is how this
-    # was reported. It now hands off to LoadingScreen, which waits.
-    assert "_await_load" in src
-    assert "Press r" not in src
+    class Watch(DemoBridge):
+        def __init__(self):
+            super().__init__()
+            self.polls = []
+            self.polls_at_fire = None
+
+        def trigger_load(self, load_type=1, *, item=None, force=False, timeout=None):
+            self.polls_at_fire = len(self.polls)
+
+        def status(self, *, timeout=None):
+            self.polls.append("status")
+            return super().status(timeout=timeout)
+
+        def volume_list(self, *, limit=512, timeout=None):
+            self.polls.append("volume_list")
+            return super().volume_list(limit=limit, timeout=timeout)
+
+        def hd_directory(self, kind=1, *, limit=512, timeout=None):
+            self.polls.append("hd_directory")
+            return super().hd_directory(kind, limit=limit, timeout=timeout)
+
+    app = S3kedApp(Watch(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("d")
+        for _ in range(20):
+            await pilot.pause()
+        await pilot.press("l")
+        for _ in range(25):
+            await pilot.pause()
+        await pilot.press("l")
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.press("y")
+        for _ in range(40):
+            await pilot.pause()
+            if isinstance(app.screen_stack[-1], LoadingScreen):
+                break
+        assert isinstance(app.screen_stack[-1], LoadingScreen)
+        assert app.bridge.polls_at_fire is not None, "the load never fired"
+        for _ in range(10):
+            await pilot.pause()
+        assert app.bridge.polls[app.bridge.polls_at_fire :] == [], (
+            f"the app polled while loading: {app.bridge.polls}"
+        )
+
+        await pilot.press("escape")
+        for _ in range(40):
+            await pilot.pause()
+        assert app.bridge.polls[app.bridge.polls_at_fire :] == [], (
+            "the refresh after the dialog must not poll either"
+        )
 
 
 async def test_free_memory_comes_from_the_machine_not_a_constant():
@@ -1034,7 +1091,8 @@ async def test_the_source_screen_shows_what_can_and_cannot_be_set():
 
     assert "SCSI drive" in text and "HARD" in text
     assert "Volume" in text and "settable" in text, (
-        "the volume stopped being a front-panel job in §96")
+        "the volume stopped being a front-panel job in §96"
+    )
     assert "panel only" not in text
 
 
@@ -1095,8 +1153,7 @@ async def test_the_menu_screen_offers_every_page_the_register_has():
         for _ in range(20):
             await pilot.pause()
 
-    for name in ("SINGLE", "MULTI", "SAMPLE", "EFFECTS", "GLOBAL", "SAVE",
-                 "LOAD", "EDIT"):
+    for name in ("SINGLE", "MULTI", "SAMPLE", "EFFECTS", "GLOBAL", "SAVE", "LOAD", "EDIT"):
         assert name in text, name
     assert "modifier" in text, "EDIT is a modifier lamp, not a page"
     assert app.bridge.mode() == 2, "key 2 selects MULTI, which is value 2"
@@ -1109,8 +1166,8 @@ async def test_every_mode_the_bridge_names_is_reachable_from_the_menu():
 
     offered = {value for value, _name in MenuScreen._CHOICES.values()}
     assert offered == set(DemoBridge.MODES), (
-        f"menu offers {sorted(offered)}, bridge names "
-        f"{sorted(DemoBridge.MODES)}")
+        f"menu offers {sorted(offered)}, bridge names {sorted(DemoBridge.MODES)}"
+    )
     assert len(offered) == 11, "eight buttons, seven modes, EDIT on four"
 
 
@@ -1125,8 +1182,9 @@ async def test_no_clr_is_offered_because_the_machine_has_none_to_offer():
 
     offered = [a for a, _d in MasterScreen._ACTIONS.values()]
     assert "load_clr" not in offered
-    assert all("load" not in a for a in offered), \
+    assert all("load" not in a for a in offered), (
         "no load belongs in the destructive menu -- clearing is a delete"
+    )
 
 
 async def test_plain_load_stays_at_the_appending_value():
@@ -1271,7 +1329,7 @@ async def test_the_boards_screen_declares_and_does_not_guess():
         assert "IB304F" in text and "EB16" in text
         assert "not fitted" in text, "nothing is assumed fitted"
 
-        await pilot.press("1")            # toggle IB304F on
+        await pilot.press("1")  # toggle IB304F on
         await pilot.press("enter")
         for _ in range(20):
             await pilot.pause()
@@ -1313,10 +1371,9 @@ async def test_the_key_legend_shows_every_binding_at_80_columns():
     problem, ported rather than reinvented. Nothing is hidden; the legend
     grows a line.
     """
-    from s3ked.app import S3kedApp, wrap_blocks
+    from s3ked.app import S3kedApp, legend_blocks, wrap_blocks
 
-    blocks = [f"{b.key} {b.description}" for b in S3kedApp.BINDINGS
-              if b.description and b.show]
+    blocks = legend_blocks(S3kedApp.BINDINGS)
     assert len(blocks) >= 13, "this test would be weak with few bindings"
 
     for width in (80, 100, 120):
@@ -1385,12 +1442,12 @@ async def test_a_keygroup_that_will_not_read_blanks_only_its_own_row():
     from s3ked.demo import DemoBridge
 
     class Flaky(DemoBridge):
-        def get_header_bytes(self, region, index, offset, count, *,
-                             selector=0, timeout=None):
+        def get_header_bytes(self, region, index, offset, count, *, selector=0, timeout=None):
             if region == "keygroup" and selector == 0 and count > 2:
                 raise RuntimeError("no reply")
-            return super().get_header_bytes(region, index, offset, count,
-                                            selector=selector, timeout=timeout)
+            return super().get_header_bytes(
+                region, index, offset, count, selector=selector, timeout=timeout
+            )
 
     app = S3kedApp(Flaky(), allow_write=False)
     async with app.run_test(size=(100, 30)) as pilot:
@@ -1412,16 +1469,18 @@ async def test_an_inverted_key_range_is_labelled_dead():
     from s3ked.demo import DemoBridge
 
     class Inverted(DemoBridge):
-        def get_header_bytes(self, region, index, offset, count, *,
-                             selector=0, timeout=None):
+        def get_header_bytes(self, region, index, offset, count, *, selector=0, timeout=None):
             if region == "keygroup" and count > 2:
-                raw = bytearray(super().get_header_bytes(
-                    region, index, offset, count,
-                    selector=selector, timeout=timeout))
-                raw[3], raw[4] = 72, 48          # inverted: lo > hi
+                raw = bytearray(
+                    super().get_header_bytes(
+                        region, index, offset, count, selector=selector, timeout=timeout
+                    )
+                )
+                raw[3], raw[4] = 72, 48  # inverted: lo > hi
                 return bytes(raw)
-            return super().get_header_bytes(region, index, offset, count,
-                                            selector=selector, timeout=timeout)
+            return super().get_header_bytes(
+                region, index, offset, count, selector=selector, timeout=timeout
+            )
 
     app = S3kedApp(Inverted(), allow_write=False)
     async with app.run_test(size=(100, 30)) as pilot:
@@ -1461,7 +1520,8 @@ async def test_who_uses_reads_the_row_not_the_global_index():
         row_name = str(pane.get_row_at(0)[0]).strip()
         assert row_name != app._samples[0].strip(), (
             "this test needs a program whose first sample differs from the "
-            "machine's, or it cannot tell the two lookups apart")
+            "machine's, or it cannot tell the two lookups apart"
+        )
 
         pane.focus()
         pane.move_cursor(row=0)
@@ -1496,11 +1556,9 @@ async def test_a_write_action_refuses_before_opening_its_dialog():
             await pilot.press(key)
             await pilot.pause()
 
-            assert len(app.screen_stack) == 1, (
-                f"{key} opened a dialog with the gate locked")
+            assert len(app.screen_stack) == 1, f"{key} opened a dialog with the gate locked"
             assert "write gate is locked" in app.last_status
-            assert subject in app.last_status, (
-                "the refusal should say what it refused")
+            assert subject in app.last_status, "the refusal should say what it refused"
 
 
 async def test_a_refusal_is_marked_so_it_cannot_read_as_progress():
@@ -1531,7 +1589,8 @@ async def test_a_refusal_is_marked_so_it_cannot_read_as_progress():
         for _ in range(25):
             await pilot.pause()
         assert "-refused" not in status.classes, (
-            "the marker must clear once something ordinary happens")
+            "the marker must clear once something ordinary happens"
+        )
 
 
 async def test_the_parameter_pane_follows_the_selection():
@@ -1602,6 +1661,7 @@ async def test_an_edit_writes_through_the_pane_context_not_the_program():
     app._param_values = {"FILFRQ": 50}
 
     from s3k import params as p
+
     captured = {}
 
     def fake_worker(param, index, value, old, keygroup=0):
@@ -1641,8 +1701,7 @@ async def test_the_source_dialog_stays_open_and_applies_every_key():
             await pilot.press(key)
             for _ in range(25):
                 await pilot.pause()
-            assert isinstance(app.screen_stack[-1], SourceScreen), (
-                f"{key!r} closed the dialog")
+            assert isinstance(app.screen_stack[-1], SourceScreen), f"{key!r} closed the dialog"
 
         source = app.bridge.load_source()
         assert source["scsi_drive_id"] == 3, "a digit selects the SCSI drive"
@@ -1671,7 +1730,7 @@ async def test_the_dialog_shows_what_the_machine_reports_not_what_was_asked():
     class Stubborn(DemoBridge):
         def select_drive(self, scsi_id, *, timeout=None):
             super().select_drive(scsi_id, timeout=timeout)
-            self._scsi_drive_id = 6          # the machine went elsewhere
+            self._scsi_drive_id = 6  # the machine went elsewhere
             return self.load_source()
 
     app = S3kedApp(Stubborn(), allow_write=True)
@@ -1730,9 +1789,11 @@ async def test_the_source_dialog_lists_the_volumes_on_the_selected_drive():
             await pilot.pause()
         await pilot.press("s")
         screen = await _screen(pilot, app, SourceScreen)
-        for _ in range(20):
-            await pilot.pause()          # let the volume list worker land
-        listing = str(screen.query_one("#source-vols-body", Label).render())
+        for _ in range(60):
+            await pilot.pause()  # let the volume list worker land
+            listing = str(screen.query_one("#source-vols-body", Label).render())
+            if "v0" in listing:
+                break
         assert listing.strip() and "nothing here" not in listing, listing
         assert "v0" in listing, f"no volume rows: {listing!r}"
 
@@ -1795,18 +1856,26 @@ async def test_an_empty_partition_clears_the_volume_count_too():
         for _ in range(25):
             await pilot.pause()
         await pilot.press("s")
-        for _ in range(30):
+        for _ in range(60):
             await pilot.pause()
+            if isinstance(app.screen_stack[-1], SourceScreen):
+                break
         screen = app.screen_stack[-1]
         assert isinstance(screen, SourceScreen)
-        title = str(screen.query_one("#source-vols-title", Label).render())
+        for _ in range(60):
+            await pilot.pause()
+            title = str(screen.query_one("#source-vols-title", Label).render())
+            if "(" in title:
+                break
         assert "(" in title, f"expected a count to begin with: {title!r}"
 
         app.bridge.empty = True
         await pilot.press("]")
-        for _ in range(30):
+        for _ in range(60):
             await pilot.pause()
-        title = str(screen.query_one("#source-vols-title", Label).render())
+            title = str(screen.query_one("#source-vols-title", Label).render())
+            if "none" in title:
+                break
         body = str(screen.query_one("#source-vols-body", Label).render())
 
     assert "none" in title, f"stale count left in the title: {title!r}"
@@ -1852,7 +1921,8 @@ async def test_a_load_holds_a_dialog_until_the_person_says_it_finished():
 
         assert fired == [1], "the load must actually have been triggered"
         assert isinstance(app.screen_stack[-1], LoadingScreen), (
-            "the dialog must hold until the user closes it")
+            "the dialog must hold until the user closes it"
+        )
 
         # a program arrives while the dialog is up, as one would during a load
         app.bridge._programs = list(app.bridge._programs) + ["ARRIVED"]
@@ -1865,17 +1935,77 @@ async def test_a_load_holds_a_dialog_until_the_person_says_it_finished():
 
 
 async def test_the_loading_dialog_sends_nothing_while_it_waits():
-    """Polling a loading machine is the one thing this must not do."""
-    import inspect
+    """Polling a loading machine is the one thing this must not do.
+
+    Proved behaviorally: while the waiting dialog is up, no bridge call of
+    any kind may happen after the fire -- and closing it still refreshes,
+    which is the dialog's whole job.
+    """
     from s3ked.app import LoadingScreen, S3kedApp
+    from s3ked.demo import DemoBridge
 
-    source = inspect.getsource(LoadingScreen)
-    for forbidden in ("bridge", "status(", "program_list", "hd_directory"):
-        assert forbidden not in source, (
-            f"the waiting dialog touches {forbidden!r}")
+    class Watch(DemoBridge):
+        def __init__(self):
+            super().__init__()
+            self.traffic = []
+            self.traffic_at_fire = None
 
-    waiter = inspect.getsource(S3kedApp._await_load)
-    assert "self.bridge" not in waiter, "the waiter must not talk to the device"
+        def trigger_load(self, load_type=1, *, item=None, force=False, timeout=None):
+            self.traffic_at_fire = len(self.traffic)
+
+        def _logged(self, name, func, *args, **kwargs):
+            self.traffic.append(name)
+            return func(*args, **kwargs)
+
+        def status(self, *, timeout=None):
+            return self._logged("status", super().status, timeout=timeout)
+
+        def program_list(self, *, timeout=None):
+            return self._logged("program_list", super().program_list, timeout=timeout)
+
+        def sample_list(self, *, timeout=None):
+            return self._logged("sample_list", super().sample_list, timeout=timeout)
+
+        def hd_directory(self, kind=1, *, limit=512, timeout=None):
+            return self._logged(
+                "hd_directory", super().hd_directory, kind, limit=limit, timeout=timeout
+            )
+
+        def volume_list(self, *, limit=512, timeout=None):
+            return self._logged("volume_list", super().volume_list, limit=limit, timeout=timeout)
+
+    app = S3kedApp(Watch(), allow_write=True)
+    async with app.run_test(size=(130, 44)) as pilot:
+        await pilot.pause()
+        await pilot.press("d")
+        for _ in range(20):
+            await pilot.pause()
+        await pilot.press("l")
+        for _ in range(25):
+            await pilot.pause()
+        await pilot.press("l")
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.press("y")
+        for _ in range(40):
+            await pilot.pause()
+            if isinstance(app.screen_stack[-1], LoadingScreen):
+                break
+        assert isinstance(app.screen_stack[-1], LoadingScreen)
+        assert app.bridge.traffic_at_fire is not None, "the load never fired"
+        for _ in range(10):
+            await pilot.pause()
+        assert app.bridge.traffic[app.bridge.traffic_at_fire :] == [], (
+            f"the waiting dialog talked to the device: {app.bridge.traffic}"
+        )
+
+        await pilot.press("escape")
+        for _ in range(40):
+            await pilot.pause()
+        assert "program_list" in app.bridge.traffic[app.bridge.traffic_at_fire :], (
+            "closing the dialog must still refresh the catalog"
+        )
 
 
 # --- how to load: the two questions that have answers -----------------------
@@ -1918,8 +2048,7 @@ async def test_the_load_screen_cycles_the_type_but_never_offers_the_OS():
             reached.add(screen.load_type)
 
     assert "ALL PROGS+SAMPLES" in what, "opens on the panel's setting, named"
-    assert 6 not in reached, (
-        "Operating System must not be reachable by holding a key down")
+    assert 6 not in reached, "Operating System must not be reachable by holding a key down"
     assert reached == {0, 1, 2, 3, 4, 5, 7}, reached
 
 
@@ -1947,11 +2076,10 @@ async def test_clearing_first_deletes_then_loads_and_says_so():
             await pilot.pause()
         await pilot.press("l")
         await pilot.pause()
-        await pilot.press("c")          # clear first
+        await pilot.press("c")  # clear first
         await pilot.press("enter")
         await pilot.pause()
-        prompt = str(
-            app.screen_stack[-1].query_one("#confirm-prompt", Static).render())
+        prompt = str(app.screen_stack[-1].query_one("#confirm-prompt", Static).render())
         await pilot.press("y")
         for _ in range(30):
             await pilot.pause()
@@ -1976,8 +2104,8 @@ async def test_clearing_first_is_measured_against_the_whole_machine():
     class Full(DemoBridge):
         def status(self, *, timeout=None):
             s = super().status(timeout=timeout)
-            s.max_words = 8 * 1024 * 1024      # 16 MB machine
-            s.free_words = 1024                # almost nothing free
+            s.max_words = 8 * 1024 * 1024  # 16 MB machine
+            s.free_words = 1024  # almost nothing free
             return s
 
     prompts = []
@@ -1991,15 +2119,13 @@ async def test_clearing_first_is_measured_against_the_whole_machine():
             await pilot.press("l")
             for _ in range(25):
                 await pilot.pause()
-            if not any(type(s).__name__ == "LoadOptionsScreen"
-                       for s in app.screen_stack):
+            if not any(type(s).__name__ == "LoadOptionsScreen" for s in app.screen_stack):
                 await pilot.press("l")
                 await pilot.pause()
             for key in keys:
                 await pilot.press(key)
             await pilot.pause()
-            prompts.append(str(app.screen_stack[-1]
-                               .query_one("#confirm-prompt", Static).render()))
+            prompts.append(str(app.screen_stack[-1].query_one("#confirm-prompt", Static).render()))
             await pilot.press("n")
             await pilot.pause()
 
@@ -2040,7 +2166,7 @@ async def test_renumbering_runs_after_the_load_not_before():
             await pilot.pause()
         await pilot.press("l")
         await pilot.pause()
-        await pilot.press("n")          # renumber on
+        await pilot.press("n")  # renumber on
         await pilot.press("enter")
         await pilot.pause()
         await pilot.press("y")
@@ -2057,8 +2183,7 @@ async def test_renumbering_runs_after_the_load_not_before():
         for _ in range(40):
             await pilot.pause()
 
-    assert order == ["load", "renumber:6"], (
-        "the renumber must see the programs the load brought in")
+    assert order == ["load", "renumber:6"], "the renumber must see the programs the load brought in"
     # 0-based: the panel calls these 1..6, the byte holds 0..5 (§91).
     #
     # The ARRIVAL takes the LAST number, not the one its list position would
@@ -2068,8 +2193,9 @@ async def test_renumbering_runs_after_the_load_not_before():
     # three incumbents up one. The cost is that the numbers no longer ascend
     # with list position until the panel sorts them -- §92 measured that a
     # SysEx PRGNUM write does not trigger the sort.
-    numbers = dict(zip((n.strip() for n in app.bridge.program_list()),
-                       app.bridge.program_numbers()))
+    numbers = dict(
+        zip((n.strip() for n in app.bridge.program_list()), app.bridge.program_numbers())
+    )
     assert numbers["ARRIVED"] == 5, numbers
     incumbents = [v for k, v in numbers.items() if k != "ARRIVED"]
     assert incumbents == [0, 1, 2, 3, 4], numbers
@@ -2129,8 +2255,8 @@ async def test_renumber_is_meaningless_when_memory_is_cleared_first():
         await pilot.pause()
         app.push_screen(LoadOptionsScreen(), chosen.append)
         await pilot.pause()
-        await pilot.press("n")      # renumber on...
-        await pilot.press("c")      # ...then clear first
+        await pilot.press("n")  # renumber on...
+        await pilot.press("c")  # ...then clear first
         await pilot.press("enter")
         for _ in range(10):
             await pilot.pause()
@@ -2143,6 +2269,10 @@ async def test_renumber_is_meaningless_when_memory_is_cleared_first():
 
 def test_renumbering_gives_every_program_a_distinct_number():
     """The remote SEQU: list order, so nothing stacks.
+
+    Exercised here through the demo because the app is the subject below;
+    the shipped method is driven against a scripted device in
+    test_bridge.py, which is what guards the real path.
 
     The value written is the list position, NOT position+1. The field is
     0-based and the panel adds one for display -- measured by reading all
@@ -2185,7 +2315,8 @@ def test_renumbering_stops_at_program_128():
     # finishing on the FIRST program leaves a full screen rather than one row
     # and four blanks (§92).
     assert calls == list(reversed(range(128))), (
-        "the first 128, written high to low, and none past them")
+        "the first 128, written high to low, and none past them"
+    )
 
 
 async def test_the_load_screen_shows_the_panels_load_type():
@@ -2202,6 +2333,7 @@ async def test_the_load_screen_shows_the_panels_load_type():
 
     seen = {}
     for panel_type in (1, 3):
+
         class Panel(DemoBridge):
             _load_type = panel_type
 
@@ -2216,15 +2348,12 @@ async def test_the_load_screen_shows_the_panels_load_type():
                 await pilot.pause()
             screen = app.screen_stack[-1]
             assert isinstance(screen, LoadOptionsScreen), panel_type
-            seen[panel_type] = str(
-                screen.query_one("#loadopts-what", Label).render())
+            seen[panel_type] = str(screen.query_one("#loadopts-what", Label).render())
 
     assert "ALL PROGS+SAMPLES" in seen[1]
-    assert "as on the panel" in seen[1], (
-        "opening on the panel's own type needs no warning")
+    assert "as on the panel" in seen[1], "opening on the panel's own type needs no warning"
     assert "all samples" in seen[3], "type 3 must be named, not numbered"
-    assert "as on the panel" in seen[3], (
-        "it opens on the panel's setting whatever that is")
+    assert "as on the panel" in seen[3], "it opens on the panel's setting whatever that is"
 
 
 async def test_an_unreadable_load_type_does_not_block_the_load():
@@ -2269,7 +2398,7 @@ async def test_the_chosen_load_type_reaches_the_bridge():
     fired = []
 
     class Watch(DemoBridge):
-        _load_type = 0                      # panel sits on ENTIRE VOLUME
+        _load_type = 0  # panel sits on ENTIRE VOLUME
 
         def trigger_load(self, load_type=1, *, item=None, force=False, timeout=None):
             fired.append(load_type)
@@ -2284,8 +2413,8 @@ async def test_the_chosen_load_type_reaches_the_bridge():
         for _ in range(20):
             await pilot.pause()
         assert app.screen_stack[-1].load_type == 0, "opens on the panel's type"
-        await pilot.press("t")              # 0 -> 1
-        await pilot.press("t")              # 1 -> 2, "programs only"
+        await pilot.press("t")  # 0 -> 1
+        await pilot.press("t")  # 1 -> 2, "programs only"
         await pilot.pause()
         await pilot.press("enter")
         await pilot.pause()
@@ -2336,12 +2465,10 @@ def test_the_bridge_guards_the_operating_system_load():
 
         exclusive_channel = 0
 
-        # trigger_load now reads the page mode before it writes, because
-        # bytes 6-9 are shared with the SAVE page and the mode decides what
-        # writing them does. The fake has to answer it.
-        def _misc_byte(self, index, value=None, *, timeout=None):
-            return 10          # LOAD
-
+    # No _misc_byte here on purpose: the guard is local validation, and the
+    # fake answering a page read would hide a trigger that started reading
+    # the mode again. A regression that re-adds the read fails loudly with
+    # AttributeError instead of passing quietly.
     with pytest.raises(ValueError, match="guarded"):
         Bare().trigger_load(6)
     assert sent == [], "a guarded type must not reach the wire"
@@ -2371,8 +2498,8 @@ def test_the_load_trigger_does_not_care_which_page_is_showing():
     sent = []
 
     class Fake(b.S3kBridge):
-        def __init__(self, mode):
-            self._mode = mode
+        def __init__(self):
+            pass
 
         def invalidate_structure(self):
             pass
@@ -2383,20 +2510,22 @@ def test_the_load_trigger_does_not_care_which_page_is_showing():
         def _send(self, frame, write=False):
             sent.append(frame)
 
-        def _misc_byte(self, index, value=None, *, timeout=None):
-            return self._mode
-
         exclusive_channel = 0
 
+    # No page-mode read anywhere in this path: `byte[6]` loads from either
+    # page and the fake answers no reads at all, so a regression that
+    # re-adds the guard fails loudly instead of passing quietly. Both modes
+    # are still named because the history matters -- the guard blocked mode 9
+    # until §127 measured it -- but what runs is the same fire-twice loop.
     for mode in (9, 10):
         sent.clear()
-        Fake(mode).trigger_load(1)
+        Fake().trigger_load(1)
         assert len(sent) == 1, f"a load must fire in mode {mode}"
         # byte 5 of the frame is the item index low byte -- the register
         # number. It must be the LOAD register and never a neighbour.
         assert sent[0][5] == b.S3kBridge._MISC_LOAD, (
-            "the load must write byte[6]; byte[7] deletes, byte[8] and "
-            "byte[9] write to a disk")
+            "the load must write byte[6]; byte[7] deletes, byte[8] and byte[9] write to a disk"
+        )
 
 
 def test_the_action_registers_are_four_distinct_operations():
@@ -2415,7 +2544,8 @@ def test_the_action_registers_are_four_distinct_operations():
     assert b.S3kBridge._MISC_SAVE_SELECTED == 9
     assert len(set(b.S3kBridge._MISC_ACTION_REGISTERS)) == 4
     assert not hasattr(b.S3kBridge, "_MISC_LOAD_TYPE"), (
-        "the name implied four mirrors of one field and invited iteration")
+        "the name implied four mirrors of one field and invited iteration"
+    )
 
 
 def test_saving_writes_the_right_register_and_can_name_the_volume():
@@ -2475,11 +2605,13 @@ def test_saving_writes_the_right_register_and_can_name_the_volume():
     sent.clear()
     br.rename_volume("MIXED DEMO")
     assert sent[0][7] == b.S3kBridge._MISC_BANK_NAME, (
-        "renaming is a name-bank write; the byte bank cannot carry a name")
+        "renaming is a name-bank write; the byte bank cannot carry a name"
+    )
     assert sent[0][5] == b.S3kBridge._MISC_NAME_VOLUME
 
     # an unknown save type is an unknown operation, same rule as loading
     import pytest
+
     with pytest.raises(ValueError):
         br.save_to_new_volume(99)
 
@@ -2742,7 +2874,8 @@ async def test_the_main_menu_stays_open_across_changes():
             for _ in range(20):
                 await pilot.pause()
             assert isinstance(app.screen_stack[-1], MenuScreen), (
-                f"pressing {key!r} closed the dialog")
+                f"pressing {key!r} closed the dialog"
+            )
 
         await pilot.press("escape")
         for _ in range(15):
@@ -2764,7 +2897,7 @@ async def test_the_main_menu_repaints_from_the_read_back():
         assert await _settled(pilot, app)
         await pilot.press("g")
         screen = await _screen(pilot, app, MenuScreen)
-        await pilot.press("9")          # SAVE
+        await pilot.press("9")  # SAVE
         for _ in range(25):
             await pilot.pause()
         here = str(screen.query_one("#menu-here", Label).render())
@@ -2796,7 +2929,8 @@ async def test_enter_on_a_program_row_selects_that_program_number():
     # the demo numbers its programs 0..4, so row 3 carries PRGNUM 3
     assert chosen == 3, f"the row's own PRGNUM, not its position: {chosen}"
     assert "number 4" in app.last_status, (
-        f"reported 1-based as the machine shows it: {app.last_status!r}")
+        f"reported 1-based as the machine shows it: {app.last_status!r}"
+    )
 
 
 async def test_activating_a_shared_number_says_how_many_will_sound():
@@ -2870,7 +3004,8 @@ def test_renumbering_writes_high_to_low_so_the_panel_lands_on_program_one():
     assert order == sorted(order, reverse=True), order
     assert order[-1] == 0, "the LAST write must be program 0"
     assert bridge.program_numbers() == list(range(len(order))), (
-        "the assignment is unchanged; only the order of writing differs")
+        "the assignment is unchanged; only the order of writing differs"
+    )
 
 
 async def test_a_toggles_the_samples_pane_between_program_and_everything():
@@ -2891,13 +3026,15 @@ async def test_a_toggles_the_samples_pane_between_program_and_everything():
         program_rows = table.row_count
         assert "Samples used" in title()
         assert program_rows < len(app._samples), (
-            "the demo's first program uses fewer than all nine samples")
+            "the demo's first program uses fewer than all nine samples"
+        )
 
         await pilot.press("a")
         for _ in range(20):
             await pilot.pause()
         assert table.row_count == len(app._samples), (
-            "every resident sample, not just this program's")
+            "every resident sample, not just this program's"
+        )
         assert "All samples" in title()
 
         await pilot.press("a")
@@ -2968,8 +3105,7 @@ def test_shutdown_waits_for_an_exchange_in_flight():
     thread.join()
 
     assert closed, "it must still close"
-    assert closed[0] >= held_until[0], (
-        "the close happened while a worker held the bridge")
+    assert closed[0] >= held_until[0], "the close happened while a worker held the bridge"
 
 
 def test_shutdown_does_not_hang_forever_on_a_stuck_worker():
@@ -2988,7 +3124,7 @@ def test_shutdown_does_not_hang_forever_on_a_stuck_worker():
     class App:
         _bridge_lock = threading.Lock()
 
-    App._bridge_lock.acquire()          # never released
+    App._bridge_lock.acquire()  # never released
     started = time.monotonic()
     _close_when_idle(App(), Bridge(), grace=0.3)
     elapsed = time.monotonic() - started
@@ -3014,8 +3150,7 @@ async def test_undo_puts_a_keygroup_edit_back_on_the_RIGHT_keygroup():
     class Watch(DemoBridge):
         def set_parameter(self, param, index, value, *, keygroup=0, **kw):
             writes.append((param.name, index, keygroup, value))
-            return super().set_parameter(param, index, value,
-                                         keygroup=keygroup, **kw)
+            return super().set_parameter(param, index, value, keygroup=keygroup, **kw)
 
     app = S3kedApp(Watch(), allow_write=True)
     async with app.run_test(size=(130, 44)) as pilot:
@@ -3028,8 +3163,7 @@ async def test_undo_puts_a_keygroup_edit_back_on_the_RIGHT_keygroup():
             await pilot.pause()
 
         assert app._undo, "the edit must be logged"
-        assert app._undo[-1].keygroup == 3, (
-            f"logged keygroup {app._undo[-1].keygroup}, wrote to 3")
+        assert app._undo[-1].keygroup == 3, f"logged keygroup {app._undo[-1].keygroup}, wrote to 3"
 
         await pilot.press("z")
         for _ in range(40):
@@ -3037,8 +3171,7 @@ async def test_undo_puts_a_keygroup_edit_back_on_the_RIGHT_keygroup():
 
     kg_writes = [w for w in writes if w[0] == "LONOTE"]
     assert len(kg_writes) == 2, kg_writes
-    assert kg_writes[1][2] == 3, (
-        f"the undo went to keygroup {kg_writes[1][2]}, not the 3 it edited")
+    assert kg_writes[1][2] == 3, f"the undo went to keygroup {kg_writes[1][2]}, not the 3 it edited"
     assert kg_writes[1][3] == 21, "and it put the old value back"
 
 
@@ -3066,8 +3199,7 @@ async def test_Z_undoes_everything_newest_first():
             await pilot.pause()
         ended_at = app.bridge.get_parameter("PRIORT", 0)
 
-    assert ended_at == started_at, (
-        f"Z must return the field to {started_at}, got {ended_at}")
+    assert ended_at == started_at, f"Z must return the field to {started_at}, got {ended_at}"
     assert not app._undo, "and empty the log"
 
 
@@ -3081,8 +3213,7 @@ async def test_Z_is_gated_and_keeps_the_log_when_a_write_fails():
         def set_parameter(self, param, index, value, *, keygroup=0, **kw):
             if getattr(self, "_armed", False):
                 raise RuntimeError("device said no")
-            return super().set_parameter(param, index, value,
-                                         keygroup=keygroup, **kw)
+            return super().set_parameter(param, index, value, keygroup=keygroup, **kw)
 
     app = S3kedApp(Breaks(), allow_write=False)
     async with app.run_test(size=(130, 44)) as pilot:
@@ -3198,8 +3329,7 @@ async def test_a_write_does_not_reset_the_pane_to_keygroup_zero():
     class Watch(DemoBridge):
         def set_parameter(self, param, index, value, *, keygroup=0, **kw):
             writes.append((param.name, index, keygroup, value))
-            return super().set_parameter(param, index, value,
-                                         keygroup=keygroup, **kw)
+            return super().set_parameter(param, index, value, keygroup=keygroup, **kw)
 
     app = S3kedApp(Watch(), allow_write=True)
     async with app.run_test(size=(130, 44)) as pilot:
@@ -3209,15 +3339,15 @@ async def test_a_write_does_not_reset_the_pane_to_keygroup_zero():
         app._write_param(param, 21, "40")
         for _ in range(40):
             await pilot.pause()
-        assert app._param_context == ("keygroup", 2, 3), (
-            f"the pane moved to {app._param_context}")
+        assert app._param_context == ("keygroup", 2, 3), f"the pane moved to {app._param_context}"
 
         app._write_param(param, 40, "44")
         for _ in range(40):
             await pilot.pause()
 
     assert [w[2] for w in writes] == [3, 3], (
-        f"the second edit went to keygroup {writes[1][2]}, not 3")
+        f"the second edit went to keygroup {writes[1][2]}, not 3"
+    )
 
 
 async def test_nudge_steps_the_selected_parameter_both_ways():
@@ -3287,16 +3417,16 @@ async def test_nudging_a_different_field_starts_a_new_entry():
         assert await _settled(pilot, app)
         table = app.query_one("#parameters", DataTable)
         for name in ("PRIORT", "PLAYLO", "PRIORT"):
-            row = next(i for i, x in enumerate(app._param_rows)
-                       if x.name == name)
+            row = next(i for i, x in enumerate(app._param_rows) if x.name == name)
             table.move_cursor(row=row)
             await pilot.pause()
             await pilot.press("plus")
             for _ in range(60):
                 await pilot.pause()
 
-    assert [c.name for c in app._undo] == ["PRIORT", "PLAYLO", "PRIORT"], (
-        [c.name for c in app._undo])
+    assert [c.name for c in app._undo] == ["PRIORT", "PLAYLO", "PRIORT"], [
+        c.name for c in app._undo
+    ]
 
 
 async def test_nudge_stops_at_the_range_ends_and_says_so():
@@ -3309,8 +3439,7 @@ async def test_nudge_stops_at_the_range_ends_and_says_so():
         assert await _settled(pilot, app)
         param = p.lookup(("program", "PRIORT"))
         app._param_context = ("program", 0, 0)
-        app._write_param(param, app.bridge.get_parameter("PRIORT", 0),
-                         str(param.maximum))
+        app._write_param(param, app.bridge.get_parameter("PRIORT", 0), str(param.maximum))
         for _ in range(40):
             await pilot.pause()
         row = next(i for i, x in enumerate(app._param_rows) if x.name == "PRIORT")
@@ -3407,8 +3536,7 @@ async def test_the_parameter_cursor_survives_a_write():
         still_on = app._param_rows[table.cursor_row].name
 
     assert still_on == "PLAYLO", f"the cursor moved to {still_on}"
-    assert landed == started + 3, (
-        f"three nudges must all land: {started} -> {landed}")
+    assert landed == started + 3, f"three nudges must all land: {started} -> {landed}"
 
 
 async def test_the_disk_status_line_does_not_call_a_volume_a_panel_job():
@@ -3439,13 +3567,19 @@ async def test_the_disk_browser_legend_still_lists_every_key():
     the menu list". Two copies of one list, and the copy with no compiler
     behind it is the one that rots.
     """
-    from s3ked.app import KeyHints, S3kedApp
+    from s3ked.app import KeyHints, S3kedApp, legend_blocks
     from s3ked.demo import DemoBridge
 
     app = S3kedApp(DemoBridge(), allow_write=True)
     async with app.run_test(size=(130, 44)) as pilot:
         assert await _settled(pilot, app)
-        shown = [b for b in app.BINDINGS if b.description and b.show]
+        # legend_blocks, not f"{b.key} {b.description}" -- the legend prints
+        # the key as somebody types it, so `question_mark` reaches the screen
+        # as `?`. Building the expectation here rather than in the test is
+        # also the point: the legend and this assertion are then the same
+        # code path, and cannot disagree about what a key looks like.
+        shown = legend_blocks(S3kedApp.BINDINGS)
+        assert len(shown) >= 19, "this test would be weak with few bindings"
 
         await pilot.press("d")
         for _ in range(40):
@@ -3453,7 +3587,7 @@ async def test_the_disk_browser_legend_still_lists_every_key():
         assert app._disk_showing
         legend = str(app.query_one("#keyhints", KeyHints).render())
 
-    missing = [b.key for b in shown if f"{b.key} {b.description}" not in legend]
+    missing = [block for block in shown if block not in legend]
     assert not missing, f"hidden while the disk browser is open: {missing}"
     assert "enter select volume" in legend, "and the browser's own keys too"
 
@@ -3512,8 +3646,7 @@ async def test_the_armed_line_is_red_at_rest_and_inverted_on_the_flash():
     css = S3kedApp.CSS
     assert "#master-armed {" in css and "$error" in css
     assert "#master-armed.-flash" in css
-    assert "text-style: blink" not in css, (
-        "SGR blink is silently dropped by many terminals")
+    assert "text-style: blink" not in css, "SGR blink is silently dropped by many terminals"
 
 
 async def test_a_slow_volume_list_is_retried_not_abandoned():
@@ -3577,6 +3710,7 @@ async def test_the_scsi_row_says_when_the_id_is_inert():
 
     seen = {}
     for device, name in ((0, "floppy"), (1, "hard")):
+
         class Fixed(DemoBridge):
             _device_type = device
 
@@ -3607,8 +3741,7 @@ async def test_clear_then_load_removes_the_program_the_clear_could_not():
     from s3ked.demo import DemoBridge
 
     class Watch(DemoBridge):
-        def trigger_load(self, load_type=1, *, item=None, force=False,
-                         timeout=None):
+        def trigger_load(self, load_type=1, *, item=None, force=False, timeout=None):
             self.arrive("LOADED ONE", "LOADED TWO", program_number=0)
 
     app = S3kedApp(Watch(), allow_write=True)
@@ -3619,13 +3752,13 @@ async def test_clear_then_load_removes_the_program_the_clear_could_not():
             await pilot.pause()
         await pilot.press("l")
         await pilot.pause()
-        await pilot.press("c")            # clear first
+        await pilot.press("c")  # clear first
         await pilot.press("enter")
         await pilot.pause()
         await pilot.press("y")
         for _ in range(60):
             await pilot.pause()
-        await pilot.press("escape")       # close the loading dialog
+        await pilot.press("escape")  # close the loading dialog
         for _ in range(80):
             await pilot.pause()
         names = [n.strip() for n in app.bridge.program_list()]
@@ -3646,11 +3779,9 @@ async def test_a_plain_load_marks_and_removes_nothing():
         def set_parameter(self, param, index, value, *, keygroup=0, **kw):
             if param.name == "PRNAME":
                 renames.append(value)
-            return super().set_parameter(param, index, value,
-                                         keygroup=keygroup, **kw)
+            return super().set_parameter(param, index, value, keygroup=keygroup, **kw)
 
-        def trigger_load(self, load_type=1, *, item=None, force=False,
-                         timeout=None):
+        def trigger_load(self, load_type=1, *, item=None, force=False, timeout=None):
             self.arrive("ARRIVED", program_number=0)
 
     app = S3kedApp(Watch(), allow_write=True)
@@ -3662,7 +3793,7 @@ async def test_a_plain_load_marks_and_removes_nothing():
             await pilot.pause()
         await pilot.press("l")
         await pilot.pause()
-        await pilot.press("enter")        # add, not clear
+        await pilot.press("enter")  # add, not clear
         await pilot.pause()
         await pilot.press("y")
         for _ in range(60):
@@ -3690,8 +3821,7 @@ async def test_the_leftover_is_not_deleted_while_it_is_the_only_program():
     class Late(DemoBridge):
         """The load lands only after the dialog has been closed."""
 
-        def trigger_load(self, load_type=1, *, item=None, force=False,
-                         timeout=None):
+        def trigger_load(self, load_type=1, *, item=None, force=False, timeout=None):
             self._pending = True
 
         def program_list(self, *, timeout=None):
@@ -3731,12 +3861,11 @@ async def test_a_leftover_that_cannot_be_removed_is_reported_not_claimed():
     from s3ked.demo import DemoBridge
 
     class Stubborn(DemoBridge):
-        def trigger_load(self, load_type=1, *, item=None, force=False,
-                         timeout=None):
+        def trigger_load(self, load_type=1, *, item=None, force=False, timeout=None):
             self.arrive("ARRIVED", program_number=0)
 
         def delete_program(self, program, *, confirm=True):
-            return          # acknowledged and ignored, like the machine
+            return  # acknowledged and ignored, like the machine
 
     app = S3kedApp(Stubborn(), allow_write=True)
     app.LEFTOVER_RETRY = 0.01
@@ -3775,15 +3904,15 @@ async def test_the_leftover_cleanup_outlasts_a_slow_load():
     from s3ked.demo import DemoBridge
 
     assert S3kedApp.LEFTOVER_RETRY * S3kedApp.LEFTOVER_TRIES >= 120, (
-        "the cleanup must outlast a real load, not a demo one")
+        "the cleanup must outlast a real load, not a demo one"
+    )
 
     checks = []
 
     class Slow(DemoBridge):
         """The load lands only on the fifth look."""
 
-        def trigger_load(self, load_type=1, *, item=None, force=False,
-                         timeout=None):
+        def trigger_load(self, load_type=1, *, item=None, force=False, timeout=None):
             self._countdown = 5
 
         def program_list(self, *, timeout=None):
@@ -3837,8 +3966,7 @@ async def test_the_loading_dialog_explains_the_parked_leftover():
         app.push_screen(marked)
         for _ in range(20):
             await pilot.pause()
-        text = " ".join(str(w.render())
-                        for w in app.screen_stack[-1].query(Label))
+        text = " ".join(str(w.render()) for w in app.screen_stack[-1].query(Label))
         await pilot.press("escape")
         for _ in range(10):
             await pilot.pause()
@@ -3846,13 +3974,13 @@ async def test_the_loading_dialog_explains_the_parked_leftover():
         app.push_screen(plain)
         for _ in range(20):
             await pilot.pause()
-        quiet = " ".join(str(w.render())
-                         for w in app.screen_stack[-1].query(Label))
+        quiet = " ".join(str(w.render()) for w in app.screen_stack[-1].query(Label))
 
     assert S3kedApp.CLEARED_MARKER in text, text
     assert "removed when you close" in text
     assert S3kedApp.CLEARED_MARKER not in quiet, (
-        "a plain load parks nothing and must not mention it")
+        "a plain load parks nothing and must not mention it"
+    )
 
 
 async def test_a_stale_pane_answer_cannot_overwrite_a_newer_one():
@@ -3879,11 +4007,11 @@ async def test_a_stale_pane_answer_cannot_overwrite_a_newer_one():
         header = app.bridge.get_header("keygroup", 0, keygroup=0)
         app._apply_keygroup(0, 0, header, stale)
         assert app._param_context[0] != "keygroup", (
-            "an answer older than the pane's claim must be dropped")
+            "an answer older than the pane's claim must be dropped"
+        )
 
         app._apply_keygroup(0, 0, header, newer)
-        assert app._param_context == ("keygroup", 0, 0), (
-            "the current claim must still be applied")
+        assert app._param_context == ("keygroup", 0, 0), "the current claim must still be applied"
 
 
 async def test_tabbing_to_the_keygroup_pane_shows_keygroup_fields():
@@ -3915,18 +4043,18 @@ async def test_the_parameter_table_glosses_the_akai_names():
     app = S3kedApp(DemoBridge())
     async with app.run_test(size=(130, 44)) as pilot:
         assert await _settled(pilot, app)
-        await pilot.press("tab")            # the keygroup pane
+        await pilot.press("tab")  # the keygroup pane
         for _ in range(40):
             await pilot.pause()
         table = app.query_one("#parameters", DataTable)
-        rows = {str(table.get_row_at(r)[1]): str(table.get_row_at(r)[3])
-                for r in range(table.row_count)}
+        rows = {
+            str(table.get_row_at(r)[1]): str(table.get_row_at(r)[3]) for r in range(table.row_count)
+        }
 
     assert rows.get("LOVEL2"), "the velocity fields must be glossed"
     assert "velocity" in rows["LOVEL2"].lower(), rows["LOVEL2"]
     assert rows.get("HINOTE") == "Upper limit of keyrange"
-    assert all(len(v) <= _GLOSS_WIDTH for v in rows.values()), (
-        "nothing may overrun the column")
+    assert all(len(v) <= _GLOSS_WIDTH for v in rows.values()), "nothing may overrun the column"
 
 
 def test_a_long_gloss_is_cut_on_a_word_boundary():
@@ -3934,8 +4062,10 @@ def test_a_long_gloss_is_cut_on_a_word_boundary():
     from s3ked.app import _gloss, _GLOSS_WIDTH
 
     class Fake:
-        desc = ("Velocity zone 1 tuning offset with a great deal more text "
-                "than any column could hope to show")
+        desc = (
+            "Velocity zone 1 tuning offset with a great deal more text "
+            "than any column could hope to show"
+        )
 
     out = _gloss(Fake())
     assert len(out) <= _GLOSS_WIDTH
@@ -3988,11 +4118,11 @@ async def test_right_reaches_the_keygroup_parameters():
         await _pane_settle(pilot)
 
         assert app.focused.id == "parameters", "right must land in the table"
-        assert app._param_context[0] == "keygroup", (
-            f"landed showing {app._param_context[0]} fields")
-        names = {str(app.query_one("#parameters", DataTable).get_row_at(i)[1])
-                 for i in range(app.query_one("#parameters",
-                                              DataTable).row_count)}
+        assert app._param_context[0] == "keygroup", f"landed showing {app._param_context[0]} fields"
+        names = {
+            str(app.query_one("#parameters", DataTable).get_row_at(i)[1])
+            for i in range(app.query_one("#parameters", DataTable).row_count)
+        }
         assert "LONOTE" in names and "SPITCH" not in names, sorted(names)[:6]
 
 
@@ -4070,11 +4200,13 @@ async def test_priority_bindings_do_not_steal_tab_from_a_dialog():
         for _ in range(3):
             await pilot.press("tab")
             await _pane_settle(pilot, 20)
-            assert isinstance(app.screen, MasterScreen), (
-                "tab escaped the dialog")
+            assert isinstance(app.screen, MasterScreen), "tab escaped the dialog"
             assert app.focused is None or app.focused.id not in (
-                "programs", "keygroups", "samples", "parameters"), (
-                f"tab focused {app.focused.id} underneath the dialog")
+                "programs",
+                "keygroups",
+                "samples",
+                "parameters",
+            ), f"tab focused {app.focused.id} underneath the dialog"
 
 
 def test_a_value_outside_its_declared_range_can_be_walked_back():
@@ -4118,8 +4250,7 @@ async def test_nudging_an_out_of_range_value_moves_it_towards_the_range():
 
         param = p.lookup(("keygroup", "K_FREQ"))
         table = app.query_one("#parameters", DataTable)
-        row = next(i for i, x in enumerate(app._param_rows)
-                   if x.name == "K_FREQ")
+        row = next(i for i, x in enumerate(app._param_rows) if x.name == "K_FREQ")
         table.move_cursor(row=row)
         await _pane_settle(pilot, 30)
 
@@ -4135,13 +4266,15 @@ async def test_nudging_an_out_of_range_value_moves_it_towards_the_range():
         await _pane_settle(pilot)
         assert "further" not in (app.last_status or ""), app.last_status
         assert "minimum" not in (app.last_status or ""), (
-            f"stepping down from {over} was refused: {app.last_status}")
+            f"stepping down from {over} was refused: {app.last_status}"
+        )
 
         app._param_values["K_FREQ"] = over
         await pilot.press("plus")
         await _pane_settle(pilot)
         assert "further" in (app.last_status or ""), (
-            f"stepping up from {over} should be refused: {app.last_status}")
+            f"stepping up from {over} should be refused: {app.last_status}"
+        )
 
 
 def test_the_demo_interleaves_a_load_the_way_the_machine_does():
@@ -4167,14 +4300,19 @@ def test_the_demo_interleaves_a_load_the_way_the_machine_does():
     order = [n.strip() for n in d.program_list()]
     assert order != first + ["V2 A", "V2 B", "V2 C"], "the demo APPENDED"
     assert d.program_numbers() == sorted(d.program_numbers()), (
-        "a load leaves the list in program-number order")
+        "a load leaves the list in program-number order"
+    )
     assert order.index("V2 A") < order.index("V1 B"), (
-        f"arrivals must comb into the incumbents: {order}")
+        f"arrivals must comb into the incumbents: {order}"
+    )
 
 
 def test_renumber_after_load_gives_the_new_volume_a_contiguous_range():
     """Jan's report: "I would expect all of Vol2 to become #4 #5 #6 — in the
     same order they are in vol2 — it seems that doesn't work."
+
+    Through the demo because the app drives it below; the shipped method is
+    driven against a scripted device in test_bridge.py.
     """
     from s3ked.demo import DemoBridge
 
@@ -4194,11 +4332,13 @@ def test_renumber_after_load_gives_the_new_volume_a_contiguous_range():
     assert result["incumbents"] == incumbents
     assert result["arrivals"] == 3
 
-    got = {n.strip(): v for n, v in zip(d.program_list(),
-                                        d.program_numbers())}
+    got = {n.strip(): v for n, v in zip(d.program_list(), d.program_numbers())}
     # the arrivals hold a contiguous block at the END, in THEIR order
     assert [got["V2 A"], got["V2 B"], got["V2 C"]] == [
-        incumbents, incumbents + 1, incumbents + 2], got
+        incumbents,
+        incumbents + 1,
+        incumbents + 2,
+    ], got
     # and the incumbents keep the front of the range, undisturbed
     assert [got["V1 A"], got["V1 B"], got["V1 C"]] == [1, 2, 3], got
     assert len(set(got.values())) == len(got), f"numbers collided: {got}"
@@ -4236,12 +4376,14 @@ async def test_opening_the_disk_browser_forces_a_media_re_read():
     async with app.run_test(size=(150, 46)) as pilot:
         assert await _settled(pilot, app)
         assert getattr(app.bridge, "media_refreshes", 0) == 0, (
-            "nothing should touch the disk before it is asked for")
+            "nothing should touch the disk before it is asked for"
+        )
         await pilot.press("d")
         for _ in range(80):
             await pilot.pause()
         assert getattr(app.bridge, "media_refreshes", 0) >= 1, (
-            "the browser listed the disk without re-reading it")
+            "the browser listed the disk without re-reading it"
+        )
 
 
 def test_the_directory_knows_six_file_types_not_two():
@@ -4272,8 +4414,7 @@ def test_the_directory_knows_six_file_types_not_two():
     }
 
     for raw, (expected, generation) in observed.items():
-        entry = b._DirectoryEntry(index=0, name="X",
-                                  raw=bytes(16) + bytes([raw]) + bytes(7))
+        entry = b._DirectoryEntry(index=0, name="X", raw=bytes(16) + bytes([raw]) + bytes(7))
         assert entry.kind == expected, f"item_type {raw:#04x}"
         assert entry.is_known_kind, f"item_type {raw:#04x} must be recognised"
         assert entry.generation == generation, f"item_type {raw:#04x}"
@@ -4281,20 +4422,18 @@ def test_the_directory_knows_six_file_types_not_two():
     # The type byte is a LETTER, so an unlisted one must still be named
     # rather than swallowed -- an enumeration is what hid four types for
     # months. 'q' is a real extension on library discs.
-    qfile = b._DirectoryEntry(index=0, name="X",
-                              raw=bytes(16) + bytes([ord("q") | 0x80]) + bytes(7))
+    qfile = b._DirectoryEntry(
+        index=0, name="X", raw=bytes(16) + bytes([ord("q") | 0x80]) + bytes(7)
+    )
     assert qfile.kind == "type 'q'"
     assert qfile.generation == "S3000"
 
     # the two that were always modelled must keep their flags
-    assert b._DirectoryEntry(index=0, name="X",
-                             raw=bytes(16) + b"\xf0" + bytes(7)).is_program
-    assert b._DirectoryEntry(index=0, name="X",
-                             raw=bytes(16) + b"\xf3" + bytes(7)).is_sample
+    assert b._DirectoryEntry(index=0, name="X", raw=bytes(16) + b"\xf0" + bytes(7)).is_program
+    assert b._DirectoryEntry(index=0, name="X", raw=bytes(16) + b"\xf3" + bytes(7)).is_sample
 
     # and an unseen type must say so rather than pass as something
-    stranger = b._DirectoryEntry(index=0, name="X",
-                                 raw=bytes(16) + b"\x11" + bytes(7))
+    stranger = b._DirectoryEntry(index=0, name="X", raw=bytes(16) + b"\x11" + bytes(7))
     assert not stranger.is_known_kind
     assert "unknown" in stranger.kind
     assert stranger.generation == "?"
@@ -4357,7 +4496,7 @@ async def test_a_rewrite_says_it_destroys_and_that_the_name_is_reset():
         await pilot.press("S")
         for _ in range(20):
             await pilot.pause()
-        await pilot.press("r")          # rewrite the selected volume
+        await pilot.press("r")  # rewrite the selected volume
         await pilot.pause()
         await pilot.press("enter")
         await pilot.pause()
@@ -4385,7 +4524,8 @@ async def test_the_save_screen_cannot_reach_the_operating_system_type():
         seen.add(screen.save_type)
         screen.save_type = SaveOptionsScreen.OFFERED_TYPES[
             (SaveOptionsScreen.OFFERED_TYPES.index(screen.save_type) + 1)
-            % len(SaveOptionsScreen.OFFERED_TYPES)]
+            % len(SaveOptionsScreen.OFFERED_TYPES)
+        ]
     assert 6 not in seen
 
 
@@ -4400,10 +4540,11 @@ async def test_saving_refuses_when_nothing_is_resident():
     class _App:
         def notify_status(self, message, *, refused=False):
             self.said = (message, refused)
+
     screen._app = _App()
     import unittest.mock as mock
-    with mock.patch.object(type(screen), "app",
-                           property(lambda self: self._app)):
+
+    with mock.patch.object(type(screen), "app", property(lambda self: self._app)):
         screen.action_go()
     assert not fired, "nothing resident, so nothing may be written"
     assert screen._app.said[1] is True
@@ -4432,7 +4573,7 @@ async def test_the_save_does_not_poll_the_machine_while_it_works():
             return super().load_source(timeout=timeout)
 
         def save_to_new_volume(self, save_type=1, *, name=None, timeout=None):
-            where = self.load_source(timeout=timeout)   # before
+            where = self.load_source(timeout=timeout)  # before
             self._fire_marker()
             return where
 
@@ -4685,9 +4826,24 @@ async def test_no_key_takes_the_pane_off_the_multi_while_the_multi_is_up():
         for _ in range(30):
             await pilot.pause()
 
-        for key in ("down", "down", "right", "left", "tab", "up", "right",
-                    "tab", "left", "down", "tab", "tab", "right", "up",
-                    "left", "down"):
+        for key in (
+            "down",
+            "down",
+            "right",
+            "left",
+            "tab",
+            "up",
+            "right",
+            "tab",
+            "left",
+            "down",
+            "tab",
+            "tab",
+            "right",
+            "up",
+            "left",
+            "down",
+        ):
             await pilot.press(key)
             for _ in range(25):
                 await pilot.pause()
@@ -4803,8 +4959,12 @@ async def _drive_multi_round_trip(sections):
                     continue
                 exp = written[(section, prm.name)]
                 assert app._param_values.get(prm.name) == exp, (
-                    "after leaving and returning", section, prm.name, exp,
-                    app._param_values.get(prm.name))
+                    "after leaving and returning",
+                    section,
+                    prm.name,
+                    exp,
+                    app._param_values.get(prm.name),
+                )
 
         # and independently of the app's own cache
         for section in sections:
@@ -4816,8 +4976,13 @@ async def _drive_multi_round_trip(sections):
                     continue
                 exp = written[(section, prm.name)]
                 assert header.get(prm.name) == exp, (
-                    "bridge disagrees", region, index, prm.name, exp,
-                    header.get(prm.name))
+                    "bridge disagrees",
+                    region,
+                    index,
+                    prm.name,
+                    exp,
+                    header.get(prm.name),
+                )
     return written
 
 
@@ -4964,16 +5129,14 @@ async def test_delete_sample_resolves_the_row_by_NAME_not_by_position():
         assert shown != resident_at_row, (
             "this fixture no longer diverges, so it cannot catch the bug: "
             f"row {row} shows {shown!r} and resident[{row}] is "
-            f"{resident_at_row!r}")
-        expected = [i for i, n in enumerate(app._samples)
-                    if n.strip() == shown]
+            f"{resident_at_row!r}"
+        )
+        expected = [i for i, n in enumerate(app._samples) if n.strip() == shown]
         assert len(expected) == 1, "fixture needs one unambiguous match"
 
         fired = {}
-        app._destructive_worker = lambda a, p, t: fired.update(
-            action=a, program=p, target=t)
-        app.push_screen = lambda screen, callback=None: (
-            callback(True) if callback else None)
+        app._destructive_worker = lambda a, p, t: fired.update(action=a, program=p, target=t)
+        app.push_screen = lambda screen, callback=None: (callback(True) if callback else None)
 
         samples.focus()
         app._confirm_destructive("delete_sample", 2)
@@ -4982,9 +5145,9 @@ async def test_delete_sample_resolves_the_row_by_NAME_not_by_position():
         assert fired["target"] == expected[0], (
             f"delete_sample was aimed at resident sample {fired['target']} "
             f"while the operator had {shown!r} (resident {expected[0]}) "
-            "highlighted -- the row was used as an index again")
-        assert fired["target"] != row, (
-            "the target equals the ROW number, which is the original bug")
+            "highlighted -- the row was used as an index again"
+        )
+        assert fired["target"] != row, "the target equals the ROW number, which is the original bug"
 
 
 async def test_delete_sample_refuses_a_name_it_cannot_resolve_uniquely():
@@ -5005,8 +5168,7 @@ async def test_delete_sample_refuses_a_name_it_cannot_resolve_uniquely():
 
         fired = {}
         app._destructive_worker = lambda a, p, t: fired.update(target=t)
-        app.push_screen = lambda screen, callback=None: (
-            callback(True) if callback else None)
+        app.push_screen = lambda screen, callback=None: (callback(True) if callback else None)
 
         # A name that is resident TWICE.
         app._samples = ["DUPE", "DUPE", "OTHER"]

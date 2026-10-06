@@ -66,12 +66,28 @@ import sys
 import signal
 import time
 from dataclasses import dataclass
-from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+)
 
 import rtmidi  # noqa: E402
+from vinsynlib import midi
 
+from s3k import config as config_mod
 from s3k import messages as m
 from s3k import params as p
+
+#: The settings cache's default path. Re-exported so `s3ked/app.py` and
+#: `s3ked/cli.py` keep one import site for it.
+from s3k.config import DEFAULT_CONFIG_PATH  # noqa: F401
 
 __all__ = [
     "SEND_GAP",
@@ -134,8 +150,6 @@ AUTODETECT_TIMEOUT = 1.0
 _MAX_PROBE_DRAIN = 64
 _MAX_PROBE_REPLIES = 32
 
-DEFAULT_CONFIG_PATH = "config.toml"
-
 
 class MidiUnavailable(RuntimeError):
     """This host has no MIDI backend at all.
@@ -183,9 +197,7 @@ class AmbiguousDevice(RuntimeError):
         # The version field is carried in `devices` but deliberately not
         # shown: it does not mean what the document says (§10), and channel
         # plus port already identify which machine to choose.
-        listing = "\n".join(
-            f"  exclusive channel {ch} on {port}" for ch, _ver, port in devices
-        )
+        listing = "\n".join(f"  exclusive channel {ch} on {port}" for ch, _ver, port in devices)
         super().__init__(
             f"{len(devices)} samplers answered:\n{listing}\n"
             "Pass --exclusive-channel N to choose one, or pin the ports "
@@ -193,138 +205,42 @@ class AmbiguousDevice(RuntimeError):
         )
 
 
-#: Set by the first save that had to leave an unreadable config alone.
-_warned_unreadable = False
-
-
 # --- config.toml: a flat, local, gitignored key/value store -----------------
-# Read-modify-write, never a blind overwrite, so unrelated keys survive each
-# other's saves -- this file holds more than one independent setting.
-
-
-def _read_config(path: str) -> Tuple[dict, str]:
-    """``(settings, status)`` where status is ok / missing / unreadable.
-
-    The distinction matters because saving is read-modify-write. A file that
-    cannot be parsed and a file that does not exist both yield no settings,
-    and collapsing them turns the next save into a blind overwrite of a file
-    this code never understood -- so one stray bracket costs the user every
-    other setting in it, silently.
-
-    Found in the sibling eosed (its §24) and present here identically: the
-    write used the locale codec, which on Windows is cp1252, and the em dash
-    in the header line below then lands as a byte `tomllib` refuses. That was
-    one cause; the masking is the bug, and it fires for any parse failure.
-    """
-    import os
-    import tomllib
-
-    if not os.path.exists(path):
-        return {}, "missing"
-    try:
-        with open(path, "rb") as handle:
-            raw = handle.read()
-    except OSError:
-        return {}, "unreadable"
-    try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError:
-        # written by a pre-fix build under a non-UTF-8 locale; decode
-        # leniently so hand-edited keys survive, and the next save repairs it
-        text = raw.decode("cp1252", errors="replace")
-    try:
-        return tomllib.loads(text), "ok"
-    except Exception:
-        return {}, "unreadable"
-
-
-def _read_config_dict(path: str) -> dict:
-    """Just the settings, for readers that cannot act on a failure."""
-    return _read_config(path)[0]
-
-
-def _update_config(path: str, **changes) -> None:
-    """Read-modify-write, or leave an unreadable file alone and say so."""
-    global _warned_unreadable
-
-    data, status = _read_config(path)
-    if status == "unreadable":
-        if not _warned_unreadable:
-            _warned_unreadable = True
-            print(f"s3ked: {path} could not be parsed, so settings are not "
-                  f"being saved. Fix or delete it; nothing has been "
-                  f"overwritten.", file=sys.stderr)
-        return
-    data.update(changes)
-    _write_config_dict(data, path)
-
-
-def _write_config_dict(data: dict, path: str) -> None:
-    lines = ["# s3ked local config — gitignored, safe to delete."]
-    for key, value in data.items():
-        if isinstance(value, bool):
-            lines.append(f"{key} = {'true' if value else 'false'}")
-        elif isinstance(value, str):
-            lines.append(f'{key} = "{value}"')
-        else:
-            lines.append(f"{key} = {value}")
-    try:
-        # encoding= is not optional: without it Python uses the locale codec,
-        # cp1252 on Windows, and the em dash above becomes a byte tomllib
-        # cannot read back. Both ends must say UTF-8; TOML is UTF-8 by spec.
-        with open(path, "w", encoding="utf-8") as handle:
-            handle.write("\n".join(lines) + "\n")
-    except OSError:
-        pass  # the cache is a convenience, not required for correctness
+# The store itself was this file's own, and so were five helpers behind it.
+# Both are now :mod:`s3k.config`, which is a binding of
+# vinsynlib.config.Settings: the read-modify-write rule, the refusal to
+# overwrite a file it cannot parse, the TOML escaping and the "only OSError
+# is swallowed" policy are one implementation for the whole family rather
+# than eight. Re-exported here because this module is where every existing
+# call site -- and every existing test -- already looks for them.
 
 
 def load_last_ports(path: str = DEFAULT_CONFIG_PATH) -> Optional[Tuple[str, str]]:
-    """The send/receive pair that answered last time, if any.
-
-    A full sweep tries every output port at up to a second each; on a host
-    with two dozen ports that is tens of seconds. Trying the remembered pair
-    first turns the common case into one round trip.
-    """
-    data = _read_config_dict(path)
-    send_port = data.get("send_port")
-    recv_port = data.get("recv_port")
-    if isinstance(send_port, str) and isinstance(recv_port, str):
-        return send_port, recv_port
-    return None
+    """The send/receive pair that answered last time, if both are known."""
+    return config_mod.load_last_ports(path)
 
 
-def save_last_ports(
-    send_port: str, recv_port: str, path: str = DEFAULT_CONFIG_PATH
-) -> None:
-    _update_config(path, send_port=send_port, recv_port=recv_port)
+def save_last_ports(send_port: str, recv_port: str, path: str = DEFAULT_CONFIG_PATH) -> None:
+    config_mod.save_last_ports(send_port, recv_port, path)
 
 
 def load_exclusive_channel(path: str = DEFAULT_CONFIG_PATH) -> Optional[int]:
-    value = _read_config_dict(path).get("exclusive_channel")
-    return value if isinstance(value, int) else None
-
-
-def load_boards(path: str = DEFAULT_CONFIG_PATH) -> set:
-    """Expansion boards declared fitted in config.toml.
-
-    One boolean per board rather than a list: the flat writer here handles
-    bools and not sequences, and a user editing the file by hand should not
-    have to guess list syntax.
-    """
-    data = _read_config_dict(path)
-    return {name for name, key in (("IB304F", "ib304f_fitted"),
-                                   ("EB16", "eb16_fitted"))
-            if data.get(key) is True}
-
-
-def save_boards(boards, path: str = DEFAULT_CONFIG_PATH) -> None:
-    fitted = {str(b).upper() for b in boards}
-    _update_config(path, ib304f_fitted="IB304F" in fitted,
-                   eb16_fitted="EB16" in fitted)
+    """The exclusive channel last used, 0-15, or None."""
+    return config_mod.load_exclusive_channel(path)
 
 
 def save_exclusive_channel(channel: int, path: str = DEFAULT_CONFIG_PATH) -> None:
-    _update_config(path, exclusive_channel=int(channel))
+    config_mod.save_exclusive_channel(channel, path)
+
+
+def load_boards(path: str = DEFAULT_CONFIG_PATH) -> Set[str]:
+    """Expansion boards declared fitted in the settings cache."""
+    return config_mod.load_boards(path)
+
+
+def save_boards(boards: Any, path: str = DEFAULT_CONFIG_PATH) -> None:
+    """Declare which expansion boards are fitted; see :mod:`s3k.config`."""
+    config_mod.save_boards(boards, path)
 
 
 # --- MIDI port enumeration --------------------------------------------------
@@ -351,9 +267,7 @@ def _probe(factory, what: str):
     try:
         return factory()
     except Exception as exc:  # rtmidi raises SystemError/RuntimeError here
-        raise MidiUnavailable(
-            f"no MIDI backend available on this host ({what}: {exc})"
-        ) from exc
+        raise MidiUnavailable(f"no MIDI backend available on this host ({what}: {exc})") from exc
 
 
 def _enum_in() -> List[str]:
@@ -373,34 +287,86 @@ def _enum_out() -> List[str]:
 
 
 def list_ports() -> Tuple[List[str], List[str]]:
-    """``(input_port_names, output_port_names)`` available on this host."""
-    return _enum_in(), _enum_out()
+    """``(input_port_names, output_port_names)`` available on this host.
+
+    The enumeration itself is the family's (:func:`vinsynlib.midi.list_ports`)
+    and the leak-free client handling with it -- close_port() does not tear
+    down the ALSA sequencer client, only delete() does, and one autodetect
+    sweep on a busy host can otherwise exhaust the sequencer's client slots.
+
+    What stays here is the translation of a *missing backend*. rtmidi raises
+    out of its constructor when there is no `/dev/snd/seq` at all, which is
+    not the same as "no ports plugged in" and needs a different thing said
+    to the user. Every caller in this project -- `s3ked ports`, and both
+    front ends on the live path -- catches :class:`MidiUnavailable` and says
+    so; without the translation they get a traceback instead.
+    """
+    try:
+        return midi.list_ports()
+    except midi.MidiUnavailable:
+        raise
+    except (RuntimeError, SystemError, OSError, ValueError) as exc:
+        raise MidiUnavailable(f"no MIDI backend available on this host: {exc}") from exc
 
 
 def bidirectional_ports() -> List[str]:
     """Names present as both an input and an output."""
-    ins, outs = list_ports()
-    in_set = set(ins)
-    return [name for name in outs if name in in_set]
+    try:
+        return midi.bidirectional_ports()
+    except midi.MidiUnavailable:
+        raise
+    except (RuntimeError, SystemError, OSError, ValueError) as exc:
+        raise MidiUnavailable(f"no MIDI backend available on this host: {exc}") from exc
+
+
+def _close_and_delete(port) -> None:
+    """Close *port* and reclaim its backend client, swallowing both failures.
+
+    ``close_port()`` does not tear down the ALSA sequencer client; only
+    ``delete()`` does (see above). Every failure path that leaves a port
+    open must run both, and the second must still run when the first raises
+    -- otherwise the exception that is already propagating leaks the client.
+    """
+    try:
+        port.close_port()
+    except Exception:
+        pass
+    _delete_quiet(port)
 
 
 def _open_out(port_name: str) -> "rtmidi.MidiOut":
     out = rtmidi.MidiOut()
-    names = out.get_ports()
+    try:
+        names = out.get_ports()
+    except Exception:
+        _delete_quiet(out)
+        raise
     if port_name not in names:
         _delete_quiet(out)
         raise RuntimeError(f"no output port named {port_name!r}; have {names}")
-    out.open_port(names.index(port_name))
+    try:
+        out.open_port(names.index(port_name))
+    except Exception:
+        _delete_quiet(out)
+        raise
     return out
 
 
 def _open_in(port_name: str) -> "rtmidi.MidiIn":
     in_port = rtmidi.MidiIn(queue_size_limit=8192)
-    names = in_port.get_ports()
+    try:
+        names = in_port.get_ports()
+    except Exception:
+        _delete_quiet(in_port)
+        raise
     if port_name not in names:
         _delete_quiet(in_port)
         raise RuntimeError(f"no input port named {port_name!r}; have {names}")
-    in_port.open_port(names.index(port_name))
+    try:
+        in_port.open_port(names.index(port_name))
+    except Exception:
+        _delete_quiet(in_port)
+        raise
     in_port.ignore_types(sysex=False)
     return in_port
 
@@ -471,15 +437,25 @@ class MultiIn:
 
     def __init__(self, name: str, *, exact: bool = False):
         self.ports: List = []
-        for index, port_name in enumerate(_enum_in()):
-            matches = (
-                (port_name == name) if exact else (name.lower() in port_name.lower())
-            )
-            if matches:
-                port = rtmidi.MidiIn(queue_size_limit=8192)
-                port.open_port(index)
-                port.ignore_types(sysex=False)
-                self.ports.append(port)
+        try:
+            for index, port_name in enumerate(_enum_in()):
+                matches = (port_name == name) if exact else (name.lower() in port_name.lower())
+                if matches:
+                    port = rtmidi.MidiIn(queue_size_limit=8192)
+                    try:
+                        port.open_port(index)
+                    except Exception:
+                        _delete_quiet(port)
+                        raise
+                    port.ignore_types(sysex=False)
+                    self.ports.append(port)
+        except Exception:
+            # A failure halfway through the scan must not orphan the ports
+            # that did open: each holds a backend client until delete().
+            for port in self.ports:
+                _close_and_delete(port)
+            self.ports = []
+            raise
         if not self.ports:
             raise RuntimeError(f"no input port matching {name!r}")
 
@@ -513,55 +489,45 @@ _ONLY_REPLY = frozenset({int(m.Command.REPLY)})
 #: test file failed at collection. Found by the CI matrix on the first push
 #: after the signal handling was added; the Linux box it was written on could
 #: never have shown it.
+#:
+#: Kept as a name even though the installing is shared now, because it is the
+#: thing the suite checks for exactly that import-time failure.
 CLEAN_EXIT_SIGNALS = tuple(
     number
-    for number in (getattr(signal, name, None)
-                   for name in ("SIGTERM", "SIGHUP"))
+    for number in (getattr(signal, name, None) for name in ("SIGTERM", "SIGHUP"))
     if number is not None
 )
 
 
-def install_clean_exit(signals=None) -> None:
+def install_clean_exit() -> None:
     """Turn termination signals into :class:`SystemExit`, so ports close.
 
-    Ctrl-C already unwinds: it raises ``KeyboardInterrupt`` and any
-    ``finally`` that closes the bridge runs. **SIGTERM does not** -- the
-    default action ends the process where it stands, leaving the MIDI port
-    open and, worse, a request outstanding on the wire that the sampler is
-    still composing an answer to.
+    The family's :func:`vinsynlib.midi.install_clean_exit`, used here rather
+    than the third copy of it this project carried. See that function for
+    why the handling exists at all: Ctrl-C already unwinds, and SIGTERM does
+    not -- the default action ends the process where it stands, leaving the
+    MIDI port open and, worse, a request outstanding on the wire that the
+    sampler is still composing an answer to. That is not hypothetical here.
+    Running this project under ``timeout`` while diagnosing a display problem
+    killed it mid-exchange several times in a row, and the machine stopped
+    answering RSTAT on any port until it was power cycled.
 
-    That is not hypothetical. Running this project under ``timeout`` while
-    diagnosing a display problem killed it mid-exchange several times in a
-    row, and the machine stopped answering RSTAT on any port until it was
-    power cycled -- a wedge with a cause this project had not recorded: the
-    *client* dying mid-transfer rather than the machine being over-polled.
+    Two properties the copy here had are gone with it, and both were
+    deliberate when they were written:
 
-    Raising from the handler is safe with respect to frame integrity, and
-    that is the point rather than an accident: Python delivers signals
-    between bytecodes, so a ``send_message`` already inside the C call
-    finishes before the handler runs. The frame on the wire is whole; only
-    the conversation is abandoned.
+    * It also handled **SIGHUP**, which is what closing the terminal window
+      sends. The shared one handles SIGINT and SIGTERM.
+    * It left an already-installed handler alone. The shared one installs
+      over it, so "a host application that has its own shutdown is better at
+      this than we are" is no longer true here.
 
-    Idempotent, and it leaves any handler the caller has already installed
-    for a signal alone -- a host application that has its own shutdown is
-    better at this than we are.
+    The second is the one that could bite. s3ked is a whole terminal
+    application rather than a library embedded in a host with its own
+    shutdown path, so in practice there is nothing to tread on; if that ever
+    changes, the argument that justified the local copy is the argument that
+    would justify bringing it back.
     """
-    for number in (CLEAN_EXIT_SIGNALS if signals is None else signals):
-        try:
-            existing = signal.getsignal(number)
-        except (ValueError, OSError):        # not available on this platform
-            continue
-        if existing not in (signal.SIG_DFL, None):
-            continue                          # somebody else owns it
-        try:
-            signal.signal(
-                number,
-                lambda signum, _frame: (_ for _ in ()).throw(
-                    SystemExit(128 + signum)),
-            )
-        except (ValueError, OSError):
-            # signal() only works on the main thread of the main interpreter
-            continue
+    midi.install_clean_exit()
 
 
 # --- the bridge -------------------------------------------------------------
@@ -692,10 +658,10 @@ ITEM_SAMPLE = 0x73
 #: consumer saw them as belonging to no category -- present in the list,
 #: counted in its length, summed into `size_bytes`, and invisible to anything
 #: that filtered on the two flags.
-ITEM_DRUM_INPUTS = 0x64     # 'd'
-ITEM_MULTI = 0x6D           # 'm' -- the machine writes 0xED, the S3000 form
-ITEM_TAKE_LIST = 0x74       # 't'
-ITEM_EFFECTS = 0x78         # 'x'
+ITEM_DRUM_INPUTS = 0x64  # 'd'
+ITEM_MULTI = 0x6D  # 'm' -- the machine writes 0xED, the S3000 form
+ITEM_TAKE_LIST = 0x74  # 't'
+ITEM_EFFECTS = 0x78  # 'x'
 
 #: **The type byte is an ASCII letter naming the file**, with bit 7 marking
 #: the S3000 generation -- which is why program, sample and multi arrive as
@@ -718,8 +684,7 @@ ITEM_TYPE_NAMES = {
 }
 
 #: Generation, by the range the raw byte falls in (mpc2emu's writer's rule).
-ITEM_GENERATIONS = ((0x41, 0x5A, "S900"), (0x61, 0x7A, "S1000"),
-                    (0xE1, 0xFA, "S3000"))
+ITEM_GENERATIONS = ((0x41, 0x5A, "S900"), (0x61, 0x7A, "S1000"), (0xE1, 0xFA, "S3000"))
 
 #: Mask that drops the generation bit, so a type can be compared once.
 ITEM_GENERATION_MASK = 0x7F
@@ -836,8 +801,13 @@ class S3kBridge:
     """Talk to one Akai S1000/S3000-family sampler.
 
     Not thread-safe: nothing may issue two requests on one connection
-    concurrently. Callers with a UI thread should serialise every call
-    through a single lock or worker.
+    concurrently. A request is a send followed by a wait for ITS reply, so
+    two threads interleaved here do not merely go slow -- each can be handed
+    the other's answer, and the reply-identity checks will refuse it with an
+    error naming the wrong cause. Callers with a UI thread must serialise
+    every call through a single lock or worker; no locking is added here
+    because sleeping inside a shared lock would change the pacing the
+    throttle depends on.
     """
 
     def __init__(
@@ -877,8 +847,7 @@ class S3kBridge:
         #: refuses (§86). So it has to be declared, and the safe default is
         #: to assume nothing is fitted.
         self.boards = {b.upper() for b in (boards or ())}
-        self._counts: Dict[str, Optional[int]] = {"program": None,
-                                                  "sample": None}
+        self._counts: Dict[str, Optional[int]] = {"program": None, "sample": None}
         self._groups: Dict[int, int] = {}
 
     # -- bounds -------------------------------------------------------------
@@ -889,8 +858,24 @@ class S3kBridge:
         Called by every operation here that can change them. It cannot know
         about changes made at the front panel, so the cache is a guess about
         a device somebody else may be touching -- which is why being wrong
-        about it must be survivable. It is: a stale count produces a refusal
-        with a message naming the counts it used, not a silent wrong answer.
+        about it must be survivable, in *both* directions:
+
+        * A count that is too LOW would refuse a valid read. That refusal is
+          re-checked against a fresh count before it stands (see
+          :meth:`_check_bounds`), so it heals itself at the cost of one round
+          trip on the refusal path.
+        * A count that is too HIGH admits an out-of-range read, which the
+          device answers with the previous read's buffer rather than an
+          error (§11). The guard cannot see that coming, so the reply itself
+          is checked instead: :meth:`get_header_bytes` refuses a reply whose
+          echoed index/selector/offset is not what was asked for, and whose
+          block identifier is not the region's.
+
+        Neither backstop can catch a stale buffer the device labels with the
+        requested header. A caller that needs certainty after somebody else
+        may have touched the machine -- a panel session, another host --
+        should warm the counts first with :meth:`program_list` /
+        :meth:`sample_list` rather than trust them.
         """
         self._counts = {"program": None, "sample": None}
         self._groups = {}
@@ -908,16 +893,25 @@ class S3kBridge:
                 self._counts[region] = len(self.sample_list(timeout=timeout))
         return self._counts.get(region) or 0
 
-    def _keygroup_count(self, program: int, *,
-                        timeout: Optional[float] = None) -> int:
+    def _keygroup_count(self, program: int, *, timeout: Optional[float] = None) -> int:
         if program not in self._groups:
             self._groups[program] = int(
-                self.get_parameter(p.lookup(("program", "GROUPS")), program,
-                                   timeout=timeout, _bounds=False))
+                self.get_parameter(
+                    p.lookup(("program", "GROUPS")), program, timeout=timeout, _bounds=False
+                )
+            )
         return self._groups[program]
 
-    def _check_bounds(self, region: str, index: int, offset: int, count: int,
-                      selector: int, *, timeout: Optional[float] = None) -> None:
+    def _check_bounds(
+        self,
+        region: str,
+        index: int,
+        offset: int,
+        count: int,
+        selector: int,
+        *,
+        timeout: Optional[float] = None,
+    ) -> None:
         """Refuse what the device would answer with somebody else's data.
 
         The extended layer does not bounds-check and does not error. An
@@ -939,16 +933,41 @@ class S3kBridge:
         So the refusal has to happen here, before the frame is sent. The
         size check is free. The index checks cost a round trip once per
         region and are cached.
+
+        A stale cache is wrong in two directions and only one of them heals
+        here. A count that is too LOW refuses a valid read, so the refusal
+        is re-checked against a FRESH count before it stands (see below). A
+        count that is too HIGH -- programs or samples deleted at the panel,
+        or by another session -- admits an out-of-range read the guard
+        cannot see coming. That case is NOT re-read here: checking freshness
+        on every valid read would cost a round trip per read, which is the
+        wrong way round (refusing is rare, reading is everything). The
+        backstop is the reply itself -- :meth:`get_header_bytes` refuses a
+        reply whose echoed index/selector/offset is not what was asked for.
+        What remains -- a stale buffer the device labels with the requested
+        header -- is indistinguishable on the wire; see
+        :meth:`invalidate_structure`.
         """
         size = p.REGION_SIZES.get(region)
-        if size is not None and (offset < 0 or count < 0
-                                 or offset + count > size):
+        if size is not None and (offset < 0 or count < 0 or offset + count > size):
             raise ValueError(
                 f"{region} header is {size} bytes; asked for {count} at "
                 f"offset {offset}. The device answers this with data from "
-                f"past the header rather than an error (§11).")
+                f"past the header rather than an error (§11)."
+            )
         if not self.bounds_check:
             return
+        # A fixed selector is part of the address, not a caller choice: the
+        # multi file's two sections share one opcode pair and are told apart
+        # by the selector alone, so a wrong one reads the wrong section with
+        # a well-formed reply. Refuse it here rather than misdeliver.
+        fixed = _REGION_SELECTOR.get(region)
+        if fixed is not None and selector != fixed:
+            raise ValueError(
+                f"{region} reads use selector {fixed}; asked for selector "
+                f"{selector}. The multi file's sections share an opcode pair, "
+                f"so this would read the other section, not fail (§11)."
+            )
         # A refusal is re-checked against a FRESH count before it stands. The
         # cache cannot see the front panel, so a stale entry would otherwise
         # refuse a read that is perfectly valid -- a program or keygroup added
@@ -968,15 +987,14 @@ class S3kBridge:
                 raise ValueError(
                     f"{region} {index} does not exist; the machine holds "
                     f"{held}. Reading it would return the previous read's "
-                    f"buffer, not an error (§11).")
+                    f"buffer, not an error (§11)."
+                )
         elif region == "keygroup":
             held = self._count("program", timeout=timeout)
             if not 0 <= index < held:
                 held = self._recount("program", timeout=timeout)
             if not 0 <= index < held:
-                raise ValueError(
-                    f"program {index} does not exist; the machine holds "
-                    f"{held} (§11).")
+                raise ValueError(f"program {index} does not exist; the machine holds {held} (§11).")
             groups = self._keygroup_count(index, timeout=timeout)
             if not 0 <= selector < groups:
                 self._groups.pop(index, None)
@@ -985,7 +1003,25 @@ class S3kBridge:
                 raise ValueError(
                     f"program {index} has {groups} keygroup(s); asked for "
                     f"keygroup {selector}. Reading it would return the "
-                    f"previous read's buffer, not an error (§11).")
+                    f"previous read's buffer, not an error (§11)."
+                )
+        elif region == "multipart":
+            # No resident count exists for the multi file, so the index
+            # cannot be checked against one -- but the part number's range is
+            # fixed by the format: sixteen parts, 0-15. Anything else is an
+            # out-of-range read with a plausible-looking answer.
+            if not 0 <= index < 16:
+                raise ValueError(
+                    f"multi part {index} is outside 0-15; the machine holds sixteen parts (§11)."
+                )
+        elif region == "multi":
+            # The file header's item index is documented as reserved: there
+            # is exactly one of it, addressed as 0. Anything else is not a
+            # second header, it is an out-of-range read.
+            if index != 0:
+                raise ValueError(
+                    f"multi file header index is reserved and sent as 0; asked for {index} (§11)."
+                )
 
     # -- construction -------------------------------------------------------
 
@@ -1000,10 +1036,16 @@ class S3kBridge:
         timeout: float = DEFAULT_TIMEOUT,
     ) -> "S3kBridge":
         """Connect to one bidirectional port by name."""
-        out = ThrottledOut(_open_out(port_name), gap, write_gap=write_gap)
-        inp = MultiIn(port_name, exact=True)
+        raw_out = _open_out(port_name)
+        try:
+            inp = MultiIn(port_name, exact=True)
+        except Exception:
+            # MultiIn found nothing to open after the output was already
+            # claimed: give the backend client back before propagating.
+            _close_and_delete(raw_out)
+            raise
         return cls(
-            out,
+            ThrottledOut(raw_out, gap, write_gap=write_gap),
             inp,
             port_name,
             exclusive_channel=exclusive_channel,
@@ -1030,7 +1072,13 @@ class S3kBridge:
         cached = load_last_ports(config_path) if config_path else None
         if cached:
             found = cls._try_pair(
-                cached[0], cached[1], channels, timeout, gap, write_gap
+                cached[0],
+                cached[1],
+                channels,
+                timeout,
+                gap,
+                write_gap,
+                boards=load_boards(config_path) if config_path else (),
             )
             if found is not None:
                 return found
@@ -1039,8 +1087,7 @@ class S3kBridge:
         ins = _enum_in()
         if not outs or not ins:
             raise RuntimeError(
-                f"need at least one MIDI input and output; "
-                f"have {len(ins)} in, {len(outs)} out"
+                f"need at least one MIDI input and output; have {len(ins)} in, {len(outs)} out"
             )
 
         # Open every input up front, then sweep the outputs. A device's reply
@@ -1066,16 +1113,13 @@ class S3kBridge:
                     for channel in channels:
                         for name, port in listeners:
                             _drain_port(port)
-                        out.send_message(
-                            list(m.RequestStatus(exclusive_channel=channel).encode())
-                        )
+                        out.send_message(list(m.RequestStatus(exclusive_channel=channel).encode()))
                         found.extend(
                             (ch, ver, send_name, recv)
                             for ch, ver, recv in _collect_status(listeners, timeout)
                         )
                 finally:
-                    out.close_port()
-                    _delete_quiet(out)
+                    _close_and_delete(out)
 
             # One machine heard on several input ports is one machine.
             by_channel: Dict[int, Tuple[int, str, str, str]] = {}
@@ -1102,15 +1146,20 @@ class S3kBridge:
             channel, _version, send_name, recv_name = next(iter(by_channel.values()))
         finally:
             for _name, port in listeners:
-                port.close_port()
-                _delete_quiet(port)
+                _close_and_delete(port)
 
         # Reopen the winning pair now that every probe port is closed --
         # holding one open across the teardown above would leak the very ALSA
         # client _delete_quiet exists to reclaim.
+        raw_out = _open_out(send_name)
+        try:
+            inp = MultiIn(recv_name, exact=True)
+        except Exception:
+            _close_and_delete(raw_out)
+            raise
         bridge = cls(
-            ThrottledOut(_open_out(send_name), gap, write_gap=write_gap),
-            MultiIn(recv_name, exact=True),
+            ThrottledOut(raw_out, gap, write_gap=write_gap),
+            inp,
             f"{send_name} -> {recv_name}",
             exclusive_channel=channel,
             timeout=max(timeout, DEFAULT_TIMEOUT),
@@ -1132,8 +1181,15 @@ class S3kBridge:
         timeout: float,
         gap: float,
         write_gap: Optional[float],
+        *,
+        boards: Iterable[str] = (),
     ) -> Optional["S3kBridge"]:
-        """Try one remembered send/receive pair; None if it does not answer."""
+        """Try one remembered send/receive pair; None if it does not answer.
+
+        ``boards`` is honoured exactly as on the full-sweep path: the fence
+        around board-gated fields must not depend on which route found the
+        device.
+        """
         try:
             out = _open_out(send_name)
         except Exception:
@@ -1141,14 +1197,12 @@ class S3kBridge:
         try:
             port = _open_in(recv_name)
         except Exception:
-            _delete_quiet(out)
+            _close_and_delete(out)
             return None
         try:
             for channel in channels:
                 _drain_port(port)
-                out.send_message(
-                    list(m.RequestStatus(exclusive_channel=channel).encode())
-                )
+                out.send_message(list(m.RequestStatus(exclusive_channel=channel).encode()))
                 answers = _collect_status([(recv_name, port)], timeout)
                 if answers:
                     found_channel = answers[0][0]
@@ -1156,17 +1210,22 @@ class S3kBridge:
             else:
                 return None
         finally:
-            port.close_port()
-            _delete_quiet(port)
-            out.close_port()
-            _delete_quiet(out)
+            _close_and_delete(port)
+            _close_and_delete(out)
 
+        raw_out = _open_out(send_name)
+        try:
+            inp = MultiIn(recv_name, exact=True)
+        except Exception:
+            _close_and_delete(raw_out)
+            raise
         return cls(
-            ThrottledOut(_open_out(send_name), gap, write_gap=write_gap),
-            MultiIn(recv_name, exact=True),
+            ThrottledOut(raw_out, gap, write_gap=write_gap),
+            inp,
             f"{send_name} -> {recv_name}",
             exclusive_channel=found_channel,
             timeout=max(timeout, DEFAULT_TIMEOUT),
+            boards=boards,
         )
 
     # -- low-level I/O ------------------------------------------------------
@@ -1183,8 +1242,9 @@ class S3kBridge:
     #: request outstanding; see :meth:`_receive`.
     stale_replies: int = 0
 
-    def _receive(self, timeout: Optional[float] = None,
-                 accept: Optional[frozenset] = None) -> bytes:
+    def _receive(
+        self, timeout: Optional[float] = None, accept: Optional[frozenset] = None
+    ) -> bytes:
         """Wait for the next SysEx frame addressed to us.
 
         ``accept`` is the set of operation codes that could legitimately
@@ -1240,9 +1300,7 @@ class S3kBridge:
             return frozenset({int(m.Command.REPLY)})
         return frozenset({int(m.Command.REPLY), command + 1})
 
-    def send_and_receive(
-        self, frame: bytes, *, timeout: Optional[float] = None
-    ) -> bytes:
+    def send_and_receive(self, frame: bytes, *, timeout: Optional[float] = None) -> bytes:
         self._drain()
         self._send(frame)
         return self._receive(timeout, accept=self._answers_to(frame))
@@ -1295,8 +1353,7 @@ class S3kBridge:
     #: every volume on the machine measured so far reports 3.
     Volume = _Volume
 
-    def volume_list(self, *, limit: int = 512,
-                    timeout: Optional[float] = None) -> List["_Volume"]:
+    def volume_list(self, *, limit: int = 512, timeout: Optional[float] = None) -> List["_Volume"]:
         """RVOLLIST -> VOLLIST. The volumes on the attached SCSI disk.
 
         The reply is a run of **16-byte records**: a 12-character name in the
@@ -1330,18 +1387,26 @@ class S3kBridge:
             _channel, command, _payload = m.parse_frame(reply)
             if command == m.Command.REPLY:
                 self._raise_for_reply(reply, "reading the volume list")
-            data = m.HeaderData.decode(reply).data
+            decoded = m.HeaderData.decode(reply)
+            # No byte-count check: the device pages, and a page need not be
+            # full -- a short page is a legitimate answer, not a truncation.
+            self._check_reply_identity(
+                decoded, index=start, selector=0, offset=0, what="reading the volume list"
+            )
+            data = decoded.data
             if not data:
                 break
             for at in range(0, len(data) - _VOLUME_RECORD + 1, _VOLUME_RECORD):
-                record = data[at:at + _VOLUME_RECORD]
+                record = data[at : at + _VOLUME_RECORD]
                 if record[12] == 0:
                     return out
-                out.append(_Volume(
-                    index=start + at // _VOLUME_RECORD,
-                    name=m.decode_name(record[:12]).rstrip(),
-                    kind=record[12],
-                ))
+                out.append(
+                    _Volume(
+                        index=start + at // _VOLUME_RECORD,
+                        name=m.decode_name(record[:12]).rstrip(),
+                        kind=record[12],
+                    )
+                )
             start += len(data) // _VOLUME_RECORD
         return out
 
@@ -1352,8 +1417,8 @@ class S3kBridge:
     # Miscellaneous BYTE-bank indices, found by changing each on the front
     # panel and seeing which moved (§70). The spec documents the addressing
     # and not the meanings, so every one of these is measured.
-    _MISC_DEVICE_TYPE = 0        # floppy / hard / flash
-    _MISC_PARTITION = 2          # 0 = A. Writable, and the machine re-reads.
+    _MISC_DEVICE_TYPE = 0  # floppy / hard / flash
+    _MISC_PARTITION = 2  # 0 = A. Writable, and the machine re-reads.
     _MISC_SCSI_DRIVE_ID = 11
     _MISC_SCSI_LOCAL_ID = 12
     #: NOT the volume, despite reading as one. It is the value of whichever
@@ -1440,8 +1505,7 @@ class S3kBridge:
 
     #: Kept only so a caller that reads the block sees all four; **never
     #: iterate this to write.** See above.
-    _MISC_ACTION_REGISTERS = (_MISC_LOAD, _MISC_DELETE,
-                              _MISC_SAVE_NEW, _MISC_SAVE_SELECTED)
+    _MISC_ACTION_REGISTERS = (_MISC_LOAD, _MISC_DELETE, _MISC_SAVE_NEW, _MISC_SAVE_SELECTED)
 
     #: Miscellaneous-data banks, by selector byte: the spec lists 1 byte,
     #: 2 word, 3 dword, 4 smpte, 5 signed smpte, 6 name, 7 16-byte flag (§5).
@@ -1451,32 +1515,48 @@ class S3kBridge:
     _MISC_BANK_BYTE = 1
     _MISC_BANK_WORD = 2
 
-    def _misc_word(self, index: int, value: Optional[int] = None, *,
-                   timeout: Optional[float] = None) -> int:
+    def _misc_word(
+        self, index: int, value: Optional[int] = None, *, timeout: Optional[float] = None
+    ) -> int:
         """Read or write one entry of the miscellaneous WORD bank."""
         if value is None:
             frame = m.HeaderRequest(
-                command=m.Command.RMISCDATA, index=index,
-                selector=self._MISC_BANK_WORD, offset=0, count=2,
+                command=m.Command.RMISCDATA,
+                index=index,
+                selector=self._MISC_BANK_WORD,
+                offset=0,
+                count=2,
                 exclusive_channel=self.exclusive_channel,
             ).encode()
             reply = self.send_and_receive(frame, timeout=timeout)
             _c, command, _p = m.parse_frame(reply)
             if command == m.Command.REPLY:
                 self._raise_for_reply(reply, f"reading misc word {index}")
-            return int.from_bytes(bytes(m.HeaderData.decode(reply).data)[:2],
-                                  "little")
+            data = m.HeaderData.decode(reply)
+            self._check_reply_identity(
+                data,
+                index=index,
+                offset=0,
+                expect=2,
+                what=f"reading misc word {index}",
+                # The bank selector is NOT checked here: it is the request's
+                # own addressing, and nothing establishes that the device
+                # echoes it on this path. Index, offset and length are.
+            )
+            return int.from_bytes(bytes(data.data), "little")
         frame = m.HeaderData(
-            command=m.Command.MISCDATA, index=index,
-            selector=self._MISC_BANK_WORD, offset=0,
+            command=m.Command.MISCDATA,
+            index=index,
+            selector=self._MISC_BANK_WORD,
+            offset=0,
             data=int(value).to_bytes(2, "little"),
             exclusive_channel=self.exclusive_channel,
         ).encode()
         self._drain()
         self._send(frame, write=True)
         self._raise_for_reply(
-            self._receive(timeout, accept=_ONLY_REPLY),
-            f"writing misc word {index}")
+            self._receive(timeout, accept=_ONLY_REPLY), f"writing misc word {index}"
+        )
         return self._misc_word(index, timeout=timeout)
 
     #: The **selected MIDI program number**, 0-based; the panel shows it
@@ -1514,8 +1594,7 @@ class S3kBridge:
         """
         return self._misc_byte(self._MISC_PROGRAM_NUMBER, timeout=timeout)
 
-    def select_program_number(self, number: int, *,
-                              timeout: Optional[float] = None) -> int:
+    def select_program_number(self, number: int, *, timeout: Optional[float] = None) -> int:
         """Choose the active MIDI program number. **This writes.**
 
         0-based, matching :meth:`program_number` and each program's `PRGNUM`;
@@ -1534,18 +1613,16 @@ class S3kBridge:
         `0 now active` to `6 now active` (§101).
         """
         if not 0 <= number <= self._PRGNUM_MAX:
-            raise ValueError(
-                f"program number {number} is outside 0-{self._PRGNUM_MAX}")
+            raise ValueError(f"program number {number} is outside 0-{self._PRGNUM_MAX}")
         return self._misc_write_verify(
-            self._MISC_PROGRAM_NUMBER, number,
-            "selecting the program number", timeout=timeout)
+            self._MISC_PROGRAM_NUMBER, number, "selecting the program number", timeout=timeout
+        )
 
     def item_cursor(self, *, timeout: Optional[float] = None) -> int:
         """Which directory entry the panel is highlighting, 0-based."""
         return self._misc_word(self._MISC_ITEM_CURSOR, timeout=timeout)
 
-    def select_item(self, index: int, *,
-                    timeout: Optional[float] = None) -> int:
+    def select_item(self, index: int, *, timeout: Optional[float] = None) -> int:
         """Move the panel's highlight to a directory entry. **This writes.**
 
         Nothing is loaded by this. It is the selection the two cursor load
@@ -1560,28 +1637,47 @@ class S3kBridge:
             raise ValueError(f"item index {index} is negative")
         return self._misc_word(self._MISC_ITEM_CURSOR, index, timeout=timeout)
 
-    def _misc_byte(self, index: int, value: Optional[int] = None, *,
-                   timeout: Optional[float] = None) -> int:
+    def _misc_byte(
+        self, index: int, value: Optional[int] = None, *, timeout: Optional[float] = None
+    ) -> int:
         """Read or write one byte of the miscellaneous byte bank."""
         if value is None:
             frame = m.HeaderRequest(
-                command=m.Command.RMISCDATA, index=index, selector=1,
-                offset=0, count=1, exclusive_channel=self.exclusive_channel,
+                command=m.Command.RMISCDATA,
+                index=index,
+                selector=1,
+                offset=0,
+                count=1,
+                exclusive_channel=self.exclusive_channel,
             ).encode()
             reply = self.send_and_receive(frame, timeout=timeout)
             _c, command, _p = m.parse_frame(reply)
             if command == m.Command.REPLY:
                 self._raise_for_reply(reply, f"reading misc byte {index}")
-            return m.HeaderData.decode(reply).data[0]
+            data = m.HeaderData.decode(reply)
+            self._check_reply_identity(
+                data,
+                index=index,
+                offset=0,
+                expect=1,
+                what=f"reading misc byte {index}",
+                # The bank selector is NOT checked here, as in _misc_word:
+                # the device is not established to echo it on this path.
+            )
+            return data.data[0]
         frame = m.HeaderData(
-            command=m.Command.MISCDATA, index=index, selector=1, offset=0,
-            data=bytes([value]), exclusive_channel=self.exclusive_channel,
+            command=m.Command.MISCDATA,
+            index=index,
+            selector=1,
+            offset=0,
+            data=bytes([value]),
+            exclusive_channel=self.exclusive_channel,
         ).encode()
         self._drain()
         self._send(frame, write=True)
         self._raise_for_reply(
-            self._receive(timeout, accept=_ONLY_REPLY),
-            f"writing misc byte {index}")
+            self._receive(timeout, accept=_ONLY_REPLY), f"writing misc byte {index}"
+        )
         return self._misc_byte(index, timeout=timeout)
 
     #: Main-menu pages, by the value :attr:`_MISC_MODE` takes. All eleven
@@ -1596,10 +1692,14 @@ class S3kBridge:
     #: of them, so 7 + 4 = 11. The enumeration is base/edit pairs in order,
     #: then the three disk-and-system pages.
     MODES = {
-        0: "SINGLE",       1: "SINGLE EDIT",
-        2: "MULTI",        3: "MULTI EDIT",
-        4: "SAMPLE",       5: "SAMPLE EDIT",
-        6: "EFFECTS",      7: "EFFECTS EDIT",
+        0: "SINGLE",
+        1: "SINGLE EDIT",
+        2: "MULTI",
+        3: "MULTI EDIT",
+        4: "SAMPLE",
+        5: "SAMPLE EDIT",
+        6: "EFFECTS",
+        7: "EFFECTS EDIT",
         8: "GLOBAL",
         9: "SAVE",
         10: "LOAD",
@@ -1654,7 +1754,7 @@ class S3kBridge:
         try:
             self._misc_byte(self._MISC_MODE, mode, timeout=timeout)
         except DeviceError:
-            pass          # the write may well have taken; the read decides
+            pass  # the write may well have taken; the read decides
         return self._misc_byte(self._MISC_MODE, timeout=timeout)
 
     #: The LOAD page's "type of load" list. See :data:`s3k.messages.LOAD_TYPES`.
@@ -1690,9 +1790,14 @@ class S3kBridge:
     #: that highlight for you.
     CURSOR_LOAD_TYPES = frozenset({4, 5})
 
-    def trigger_load(self, load_type: int = 1, *, item: Optional[int] = None,
-                     force: bool = False,
-                     timeout: Optional[float] = None) -> None:
+    def trigger_load(
+        self,
+        load_type: int = 1,
+        *,
+        item: Optional[int] = None,
+        force: bool = False,
+        timeout: Optional[float] = None,
+    ) -> None:
         """Load the selected volume. **This writes and it loads.**
 
         ``load_type`` is one of :data:`s3k.messages.LOAD_TYPES`, and the
@@ -1766,10 +1871,13 @@ class S3kBridge:
         # is busy with a previous load gets a short REPLY that the extended
         # decoder cannot parse. That is how a 23 MB load turned into a
         # ValueError instead of a load.
-        self.invalidate_structure()      # a load replaces the whole bank
+        self.invalidate_structure()  # a load replaces the whole bank
         frame = m.HeaderData(
-            command=m.Command.MISCDATA, index=self._MISC_LOAD, selector=1,
-            offset=0, data=bytes([load_type]),
+            command=m.Command.MISCDATA,
+            index=self._MISC_LOAD,
+            selector=1,
+            offset=0,
+            data=bytes([load_type]),
             exclusive_channel=self.exclusive_channel,
         ).encode()
         self._drain()
@@ -1785,7 +1893,11 @@ class S3kBridge:
     # Selecting a volume slot one past the last used one is how a NEW volume
     # is made: the panel shows INACTIVE and the machine creates it on save.
     # select_volume() refuses that slot, correctly for a load and wrongly for
-    # a save, so the save methods write the register directly.
+    # a save, so save_to_new_volume() with an explicit ``volume`` writes the
+    # register directly instead -- allowing exactly one past the end, and
+    # refusing anything further out as well as an occupied slot without a
+    # name. Without ``volume`` the destination is whatever is selected, set
+    # beforehand the same way a load's is.
 
     def page_mode(self, *, timeout: Optional[float] = None) -> int:
         """Which main-menu page the machine is showing (§84).
@@ -1795,15 +1907,17 @@ class S3kBridge:
         """
         return self._misc_byte(self._MISC_MODE, timeout=timeout)
 
-    def select_page(self, mode: int, *,
-                    timeout: Optional[float] = None) -> int:
+    def select_page(self, mode: int, *, timeout: Optional[float] = None) -> int:
         """Put the machine on a main-menu page. Returns what it reads back.
 
-        **Mode 0 is not writable.** Writing 9 or 10 succeeds; writing 0
-        (SINGLE) answers with device error code 1, so a caller cannot put
-        the panel back where it found it. Anything that changes the page
-        should expect to leave it changed -- a probe that assumed otherwise
-        failed in its own `finally` and lost two complete measurements
+        Same contract as :meth:`select_mode`: **the device's acknowledgement
+        cannot be trusted here.** Writing 0 (SINGLE) answers with device
+        error code 1 and may still switch the page -- the error is swallowed
+        and the read-back decides, exactly as `select_mode` does. Compare
+        the returned value against what was asked for rather than trusting
+        either the ack or this method's success, and expect to leave the
+        page changed: a probe that assumed it could always put the panel
+        back failed in its own `finally` and lost two complete measurements
         before they were written out.
 
         Out-of-range values are refused here rather than sent: an unknown
@@ -1815,7 +1929,10 @@ class S3kBridge:
                 f"{sorted(m.MAIN_MENU_PAGES)}; an unknown value in this "
                 f"register has frozen this machine twice (§85, §90)"
             )
-        self._misc_byte(self._MISC_MODE, mode, timeout=timeout)
+        try:
+            self._misc_byte(self._MISC_MODE, mode, timeout=timeout)
+        except DeviceError:
+            pass  # the write may well have taken; the read decides
         return self._misc_byte(self._MISC_MODE, timeout=timeout)
 
     def save_source(self, *, timeout: Optional[float] = None) -> Dict[str, int]:
@@ -1832,8 +1949,7 @@ class S3kBridge:
         not established** and it is reported raw rather than named.
         """
         out = self.load_source(timeout=timeout)
-        out["page_state"] = self._misc_byte(self._MISC_PAGE_STATE,
-                                            timeout=timeout)
+        out["page_state"] = self._misc_byte(self._MISC_PAGE_STATE, timeout=timeout)
         out["on_save_page"] = out["mode"] == self._MODE_SAVE
         return out
 
@@ -1845,15 +1961,42 @@ class S3kBridge:
     _MISC_BANK_NAME = 6
     _MISC_NAME_VOLUME = 6
 
-    def save_to_new_volume(self, save_type: int = 1, *,
-                           name: Optional[str] = None,
-                           timeout: Optional[float] = None) -> Dict[str, int]:
+    def save_to_new_volume(
+        self,
+        save_type: int = 1,
+        *,
+        name: Optional[str] = None,
+        volume: Optional[int] = None,
+        force: bool = False,
+        timeout: Optional[float] = None,
+    ) -> Dict[str, int]:
         """Create a volume from what is in memory. **This writes to a disk.**
 
         Writes `byte[8]`, which saves into the selected slot and creates the
-        volume if nothing is there. Select the slot one past the last used
-        volume to make a new one -- the panel shows `INACTIVE` and the
-        machine creates it.
+        volume if nothing is there.
+
+        ``volume`` selects the destination slot, 0-based like
+        :meth:`volume_list`'s ``index``: pass one past the last used volume
+        to make a new one -- the panel shows `INACTIVE` and the machine
+        creates it. The register is written BEFORE firing, so the save lands
+        where this says and not wherever the panel happened to be pointing.
+        Without ``volume`` the destination is whatever is currently selected,
+        set beforehand the same way a load's is, and nothing is written
+        first.
+
+        The register write goes direct rather than through
+        :meth:`select_volume`, which validates against the visible volume
+        count. That check is right for a load, where an inactive volume holds
+        nothing to load, and wrong here, where an inactive slot is precisely
+        the target -- so exactly one past the end is allowed, and anything
+        further out is refused rather than sent.
+
+        An OCCUPIED slot without ``name`` is refused rather than saved into:
+        the machine would take the save and leave a volume whose identity
+        nobody stated. Pass ``name`` to claim the overwrite explicitly -- it
+        is applied immediately afterwards -- or use
+        :meth:`save_to_selected_volume`, which is the rewrite operation and
+        says what it costs.
 
         ``save_type`` uses :data:`s3k.messages.LOAD_TYPES`, the same table
         the load side uses. The types are different KINDS of save, not more
@@ -1868,17 +2011,15 @@ class S3kBridge:
           multi.
         * 5 `Cursor Item only` — the single highlighted directory entry.
 
+        Type 6 (`Operating System`) overwrites the running OS off the disc
+        and is guarded exactly as on :meth:`trigger_load`: it needs
+        ``force=True`` to mean it.
+
         **The machine names the volume itself**, `VOLUME nnn`, and nothing
         the host sends at save time changes that. Pass ``name`` to have it
         renamed immediately afterwards -- two operations, not one, and that
         is a property of the machine rather than of this method
         (:meth:`rename_volume`).
-
-        The volume register is written directly rather than through
-        :meth:`select_volume`, which validates against the visible volume
-        count. That check is right for a load, where an inactive volume holds
-        nothing to load, and wrong here, where an inactive slot is precisely
-        the target.
 
         **Do not poll while it works** -- see :meth:`trigger_load`.
         """
@@ -1888,12 +2029,40 @@ class S3kBridge:
                 f"the register performs what it is given, so an unknown value "
                 f"is an unknown operation"
             )
-        # Read the destination BEFORE firing, not after. The machine stops
-        # answering while it saves, so the read that used to sit at the end of
-        # this method polled a busy device and raised on a SUCCESSFUL save --
-        # three lines below a docstring saying not to. Same shape as the
-        # vestigial mode read removed from trigger_load.
-        where = self.load_source(timeout=timeout)
+        if save_type in self._GUARDED_LOAD_TYPES and not force:
+            raise ValueError(
+                f"save type {save_type} ({m.LOAD_TYPES[save_type]}) is "
+                f"guarded, as on load; pass force=True to mean it"
+            )
+        if volume is None:
+            # Read the destination BEFORE firing, not after. The machine
+            # stops answering while it saves, so the read that used to sit
+            # at the end of this method polled a busy device and raised on a
+            # SUCCESSFUL save -- three lines below a docstring saying not
+            # to. Same shape as the vestigial mode read removed from
+            # trigger_load.
+            where = self.load_source(timeout=timeout)
+        else:
+            if volume < 0:
+                raise ValueError(f"volume {volume} is negative")
+            available = len(self.volume_list(timeout=timeout))
+            if volume > available:
+                raise ValueError(
+                    f"volume {volume} is past the new slot {available} on "
+                    f"this partition; the machine would show INACTIVE rather "
+                    f"than refuse"
+                )
+            if volume < available and name is None:
+                raise ValueError(
+                    f"volume {volume} already exists; saving a new volume "
+                    f"into it without a name leaves an overwrite nobody "
+                    f"stated. Pass name= to claim it, or rewrite it openly "
+                    f"with save_to_selected_volume"
+                )
+            self._misc_write_verify(
+                self._MISC_VOLUME, volume, "selecting volume for save", timeout=timeout
+            )
+            where = self.load_source(timeout=timeout)
         self._fire(self._MISC_SAVE_NEW, save_type)
         if name is not None:
             time.sleep(self._SAVE_SETTLE)
@@ -1901,8 +2070,9 @@ class S3kBridge:
             where["name"] = name
         return where
 
-    def save_to_selected_volume(self, save_type: int = 1, *,
-                                timeout: Optional[float] = None) -> Dict[str, int]:
+    def save_to_selected_volume(
+        self, save_type: int = 1, *, force: bool = False, timeout: Optional[float] = None
+    ) -> Dict[str, int]:
         """Write memory into the volume already selected. **DESTRUCTIVE.**
 
         `byte[9]`. Unlike :meth:`save_to_new_volume` this rewrites a volume
@@ -1914,11 +2084,18 @@ class S3kBridge:
 
         So a rewrite costs the volume's name. Re-apply it with
         :meth:`rename_volume` if it mattered.
+
+        Type 6 (`Operating System`) needs ``force=True``, as on
+        :meth:`trigger_load` and :meth:`save_to_new_volume`.
         """
         if save_type not in m.LOAD_TYPES:
+            raise ValueError(f"save type {save_type} is not one of {sorted(m.LOAD_TYPES)}")
+        if save_type in self._GUARDED_LOAD_TYPES and not force:
             raise ValueError(
-                f"save type {save_type} is not one of {sorted(m.LOAD_TYPES)}")
-        where = self.load_source(timeout=timeout)      # before, not after
+                f"save type {save_type} ({m.LOAD_TYPES[save_type]}) is "
+                f"guarded, as on load; pass force=True to mean it"
+            )
+        where = self.load_source(timeout=timeout)  # before, not after
         self._fire(self._MISC_SAVE_SELECTED, save_type)
         return where
 
@@ -1927,8 +2104,7 @@ class S3kBridge:
     #: races the volume's creation.
     _SAVE_SETTLE = 3.0
 
-    def rename_volume(self, name: str, *,
-                      timeout: Optional[float] = None) -> str:
+    def rename_volume(self, name: str, *, timeout: Optional[float] = None) -> str:
         """Rename the selected volume. **This writes to a disk.**
 
         Writes a 12-character Akai-encoded name to index 6 of the
@@ -1943,15 +2119,18 @@ class S3kBridge:
         """
         payload = bytes(m.encode_name(name, m.NAME_LENGTH))
         frame = m.HeaderData(
-            command=m.Command.MISCDATA, index=self._MISC_NAME_VOLUME,
-            selector=self._MISC_BANK_NAME, offset=0, data=payload,
+            command=m.Command.MISCDATA,
+            index=self._MISC_NAME_VOLUME,
+            selector=self._MISC_BANK_NAME,
+            offset=0,
+            data=payload,
             exclusive_channel=self.exclusive_channel,
         ).encode()
         self._drain()
         self._send(frame, write=True)
         self._raise_for_reply(
-            self._receive(timeout, accept=_ONLY_REPLY),
-            f"renaming the selected volume to {name!r}")
+            self._receive(timeout, accept=_ONLY_REPLY), f"renaming the selected volume to {name!r}"
+        )
         return name
 
     def _fire(self, index: int, value: int) -> None:
@@ -1964,50 +2143,53 @@ class S3kBridge:
         """
         self.invalidate_structure()
         frame = m.HeaderData(
-            command=m.Command.MISCDATA, index=index, selector=1, offset=0,
-            data=bytes([value]), exclusive_channel=self.exclusive_channel,
+            command=m.Command.MISCDATA,
+            index=index,
+            selector=1,
+            offset=0,
+            data=bytes([value]),
+            exclusive_channel=self.exclusive_channel,
         ).encode()
         self._drain()
         self._send(frame, write=True)
 
-    def trigger_save(self, save_type: int = 1, *,
-                     timeout: Optional[float] = None) -> Dict[str, int]:
+    def trigger_save(
+        self, save_type: int = 1, *, force: bool = False, timeout: Optional[float] = None
+    ) -> Dict[str, int]:
         """Deprecated spelling of :meth:`save_to_new_volume`.
 
         Kept because this name carried, for several commits, a docstring
         asserting that remote save did not exist. Anything that imported it
         on that basis should get the working call rather than an error.
         """
-        return self.save_to_new_volume(save_type, timeout=timeout)
+        return self.save_to_new_volume(save_type, force=force, timeout=timeout)
 
     def load_source(self, *, timeout: Optional[float] = None) -> Dict[str, int]:
         """What the front panel's LOAD page currently shows.
 
-        ``partition`` is 0-based (0 = A) and ``volume`` is 1-based, matching
-        the panel's "HARD-:C". **The volume is not in here** -- there is no
-        volume register (§72), and ``cursor_value`` is not one: it holds
-        whatever field the panel's cursor sits on (§70). ``device_type`` selects
+        ``partition`` is 0-based (0 = A) and ``volume`` is 0-based too,
+        matching :meth:`volume_list`'s ``index`` and :meth:`select_volume`'s
+        argument; the panel shows the volume one higher ("HARD-:C").
+        ``cursor_value`` is NOT the volume: it holds whatever field the
+        panel's cursor sits on (§70). ``device_type`` selects
         floppy, hard disk or flash -- the volume list's ``BOOT SYSTEM#`` and
         ``FLASH VOLnn`` names belong to the flash device.
         """
         return {
-            "scsi_drive_id": self._misc_byte(self._MISC_SCSI_DRIVE_ID,
-                                             timeout=timeout),
-            "scsi_local_id": self._misc_byte(self._MISC_SCSI_LOCAL_ID,
-                                             timeout=timeout),
-            "device_type": self._misc_byte(self._MISC_DEVICE_TYPE,
-                                           timeout=timeout),
+            "scsi_drive_id": self._misc_byte(self._MISC_SCSI_DRIVE_ID, timeout=timeout),
+            "scsi_local_id": self._misc_byte(self._MISC_SCSI_LOCAL_ID, timeout=timeout),
+            "device_type": self._misc_byte(self._MISC_DEVICE_TYPE, timeout=timeout),
             "partition": self._misc_byte(self._MISC_PARTITION, timeout=timeout),
             # 0-based, as the register holds it. The panel displays it 1-based
             # and so does anything user-facing; see select_volume (§96).
             "volume": self._misc_byte(self._MISC_VOLUME, timeout=timeout),
-            "cursor_value": self._misc_byte(self._MISC_CURSOR_VALUE,
-                                            timeout=timeout),
+            "cursor_value": self._misc_byte(self._MISC_CURSOR_VALUE, timeout=timeout),
             "mode": self._misc_byte(self._MISC_MODE, timeout=timeout),
         }
 
-    def select_partition(self, partition: int, *,
-                         timeout: Optional[float] = None) -> Dict[str, int]:
+    def select_partition(
+        self, partition: int, *, timeout: Optional[float] = None
+    ) -> Dict[str, int]:
         """Move the LOAD selection to a partition. **This writes.**
 
         ``partition`` is 0-based, so 0 is the panel's "A". The machine
@@ -2036,12 +2218,14 @@ class S3kBridge:
         exists, is what fixes it.
         """
         self._force_reread(timeout=timeout)
-        self._misc_write_verify(self._MISC_PARTITION, partition,
-                                "selecting partition", timeout=timeout)
+        self._misc_write_verify(
+            self._MISC_PARTITION, partition, "selecting partition", timeout=timeout
+        )
         return self.load_source(timeout=timeout)
 
-    def _misc_write_verify(self, index: int, value: int, what: str, *,
-                           timeout: Optional[float] = None) -> int:
+    def _misc_write_verify(
+        self, index: int, value: int, what: str, *, timeout: Optional[float] = None
+    ) -> int:
         """Write a miscellaneous byte and believe the READ, not the reply.
 
         Three of these registers now answer with error code 1 and perform the
@@ -2062,12 +2246,10 @@ class S3kBridge:
             pass
         got = self._misc_byte(index, timeout=timeout)
         if got != value:
-            raise DeviceError(
-                f"{what}: asked for {value}, register reads {got}")
+            raise DeviceError(f"{what}: asked for {value}, register reads {got}")
         return got
 
-    def select_volume(self, volume: int, *,
-                      timeout: Optional[float] = None) -> Dict[str, int]:
+    def select_volume(self, volume: int, *, timeout: Optional[float] = None) -> Dict[str, int]:
         """Choose which volume the LOAD page is pointing at. **This writes.**
 
         ``volume`` is 0-based, matching :meth:`volume_list`'s ``index``; the
@@ -2090,8 +2272,7 @@ class S3kBridge:
                 f"partition; the machine would show INACTIVE rather than "
                 f"refuse"
             )
-        self._misc_write_verify(self._MISC_VOLUME, volume,
-                                "selecting volume", timeout=timeout)
+        self._misc_write_verify(self._MISC_VOLUME, volume, "selecting volume", timeout=timeout)
         return self.load_source(timeout=timeout)
 
     def refresh_media(self, *, timeout: Optional[float] = None) -> Dict[str, int]:
@@ -2182,8 +2363,7 @@ class S3kBridge:
     #: on it either way.
     DEVICE_TYPES = {0: "FLOPPY", 1: "HARD", 2: "FLASH"}
 
-    def select_device(self, kind: int, *,
-                      timeout: Optional[float] = None) -> Dict[str, int]:
+    def select_device(self, kind: int, *, timeout: Optional[float] = None) -> Dict[str, int]:
         """Choose floppy / hard / flash. **This writes.**
 
         Changing the device changes what the directory describes, and if
@@ -2192,13 +2372,11 @@ class S3kBridge:
         once, when an empty listing was read as a broken partition write
         rather than as a switch to a device with no media (§70).
         """
-        self._misc_write_verify(self._MISC_DEVICE_TYPE, kind,
-                                "selecting device", timeout=timeout)
+        self._misc_write_verify(self._MISC_DEVICE_TYPE, kind, "selecting device", timeout=timeout)
         self._force_reread(timeout=timeout)
         return self.load_source(timeout=timeout)
 
-    def select_drive(self, scsi_id: int, *,
-                     timeout: Optional[float] = None) -> Dict[str, int]:
+    def select_drive(self, scsi_id: int, *, timeout: Optional[float] = None) -> Dict[str, int]:
         """Point the LOAD page at another SCSI device. **This writes.**
 
         Takes effect immediately -- no reboot. §71 concluded the opposite,
@@ -2213,13 +2391,15 @@ class S3kBridge:
         sampler answers to, over the bus it is answering on, is not something
         this offers.
         """
-        self._misc_write_verify(self._MISC_SCSI_DRIVE_ID, scsi_id,
-                                "selecting SCSI drive", timeout=timeout)
+        self._misc_write_verify(
+            self._MISC_SCSI_DRIVE_ID, scsi_id, "selecting SCSI drive", timeout=timeout
+        )
         self._force_reread(timeout=timeout)
         return self.load_source(timeout=timeout)
 
-    def hd_directory(self, kind: int = 1, *, limit: int = 512,
-                     timeout: Optional[float] = None) -> List["_DirectoryEntry"]:
+    def hd_directory(
+        self, kind: int = 1, *, limit: int = 512, timeout: Optional[float] = None
+    ) -> List["_DirectoryEntry"]:
         """RHDDIR -> HDDIR. The directory of the volume the machine has LOADED.
 
         ``kind`` is the spec's selector -- 0 volume data, 1 program, 2 sample,
@@ -2282,8 +2462,7 @@ class S3kBridge:
         # catch a short directory, and they are all there is if the register
         # cannot be read.
         try:
-            counted = self._misc_word(self._MISC_DIRECTORY_ENTRIES,
-                                      timeout=timeout)
+            counted = self._misc_word(self._MISC_DIRECTORY_ENTRIES, timeout=timeout)
         except Exception:
             counted = None
         if counted is not None and 0 <= counted < limit:
@@ -2304,7 +2483,16 @@ class S3kBridge:
             _channel, command, _payload = m.parse_frame(reply)
             if command == m.Command.REPLY:
                 self._raise_for_reply(reply, "reading the disk directory")
-            data = m.HeaderData.decode(reply).data
+            decoded = m.HeaderData.decode(reply)
+            self._check_reply_identity(
+                decoded,
+                index=entry,
+                selector=kind,
+                offset=0,
+                expect=_DIRECTORY_RECORD,
+                what="reading the disk directory",
+            )
+            data = decoded.data
             if len(data) < _DIRECTORY_RECORD:
                 break
             # Only heuristics, and only where the machine could not give a
@@ -2314,18 +2502,20 @@ class S3kBridge:
             # bounded the walk, trust that instead.
             if counted is None:
                 if not any(data):
-                    break       # an all-zero record: the end, on any format
+                    break  # an all-zero record: the end, on any format
                 if bytes(data[12:16]) not in _DIRECTORY_EXTENSIONS:
                     break
             record = bytes(data)
             if record in seen:
                 break
             seen.add(record)
-            out.append(_DirectoryEntry(
-                index=entry,
-                name=m.decode_name(data[:12]).rstrip(),
-                raw=bytes(data),
-            ))
+            out.append(
+                _DirectoryEntry(
+                    index=entry,
+                    name=m.decode_name(data[:12]).rstrip(),
+                    raw=bytes(data),
+                )
+            )
         return out
 
     def sample_list(self, *, timeout: Optional[float] = None) -> List[str]:
@@ -2364,9 +2554,15 @@ class S3kBridge:
     #: place the multi header carries its name. Reads ``EFFECTS FILE``.
     FX_NAME_OFFSET = 3
 
-    def fx_bytes(self, selector: "m.FxSelector", index: int = 0,
-                 offset: int = 0, count: int = 12, *,
-                 timeout: Optional[float] = None) -> bytes:
+    def fx_bytes(
+        self,
+        selector: "m.FxSelector",
+        index: int = 0,
+        offset: int = 0,
+        count: int = 12,
+        *,
+        timeout: Optional[float] = None,
+    ) -> bytes:
         """Read *count* bytes from one effects structure. ``RFXDATA``.
 
         ``selector`` picks which structure (:class:`s3k.messages.FxSelector`)
@@ -2386,10 +2582,14 @@ class S3kBridge:
                 "declared fitted. The data is readable and writable without "
                 "it (§88) and the panel refuses the page entirely (§86), so "
                 "it is fenced by default -- declare boards=['EB16'] to author "
-                "effects for a machine that has one.")
+                "effects for a machine that has one."
+            )
         frame = m.HeaderRequest(
-            command=m.Command.RFXDATA, index=index, selector=int(selector),
-            offset=offset, count=count,
+            command=m.Command.RFXDATA,
+            index=index,
+            selector=int(selector),
+            offset=offset,
+            count=count,
             exclusive_channel=self.exclusive_channel,
         ).encode()
         reply = self.send_and_receive(frame, timeout=timeout)
@@ -2397,18 +2597,28 @@ class S3kBridge:
         if command == m.Command.REPLY:
             self._raise_for_reply(reply, f"reading fx {selector!r} {index}")
         if command != m.Command.FXDATA:
-            raise DeviceError(
-                f"expected FXDATA reading fx {selector!r}, got {command:#04x}")
-        data = m.HeaderData.decode(reply).data
-        if len(data) != count:
-            raise DeviceError(
-                f"asked for {count} bytes at offset {offset}, got {len(data)}")
-        return bytes(data)
+            raise DeviceError(f"expected FXDATA reading fx {selector!r}, got {command:#04x}")
+        data = m.HeaderData.decode(reply)
+        self._check_reply_identity(
+            data,
+            index=index,
+            selector=int(selector),
+            offset=offset,
+            expect=count,
+            what=f"reading fx {selector!r} {index}",
+        )
+        return bytes(data.data)
 
-    def set_fx_bytes(self, selector: "m.FxSelector", data: bytes,
-                     index: int = 0, offset: int = 0, *,
-                     confirm: bool = True,
-                     timeout: Optional[float] = None) -> None:
+    def set_fx_bytes(
+        self,
+        selector: "m.FxSelector",
+        data: bytes,
+        index: int = 0,
+        offset: int = 0,
+        *,
+        confirm: bool = True,
+        timeout: Optional[float] = None,
+    ) -> None:
         """Write bytes into one effects structure. ``FXDATA``. **This writes.**
 
         Same shape as :meth:`set_header_bytes`, and the same warning applies
@@ -2421,10 +2631,14 @@ class S3kBridge:
                 "declared fitted. The data is readable and writable without "
                 "it (§88) and the panel refuses the page entirely (§86), so "
                 "it is fenced by default -- declare boards=['EB16'] to author "
-                "effects for a machine that has one.")
+                "effects for a machine that has one."
+            )
         frame = m.HeaderData(
-            command=m.Command.FXDATA, index=index, selector=int(selector),
-            offset=offset, data=bytes(data),
+            command=m.Command.FXDATA,
+            index=index,
+            selector=int(selector),
+            offset=offset,
+            data=bytes(data),
             exclusive_channel=self.exclusive_channel,
         ).encode()
         if not confirm:
@@ -2432,11 +2646,13 @@ class S3kBridge:
             return
         self._drain()
         self._send(frame, write=True)
-        self._raise_for_reply(self._receive(timeout),
-                              f"writing fx {selector!r} {index}")
+        self._raise_for_reply(
+            self._receive(timeout, accept=_ONLY_REPLY), f"writing fx {selector!r} {index}"
+        )
 
-    def fx_names(self, selector: "m.FxSelector", *, limit: int = 128,
-                 timeout: Optional[float] = None) -> List[str]:
+    def fx_names(
+        self, selector: "m.FxSelector", *, limit: int = 128, timeout: Optional[float] = None
+    ) -> List[str]:
         """Enumerate a preset list by name. ``FX_ENTRY`` or ``RVB_ENTRY``.
 
         **The end of the list is not discoverable from the device, and this
@@ -2460,11 +2676,10 @@ class S3kBridge:
         """
         names: List[str] = []
         for index in range(limit):
-            raw = self.fx_bytes(selector, index, 0, m.NAME_LENGTH,
-                                timeout=timeout)
+            raw = self.fx_bytes(selector, index, 0, m.NAME_LENGTH, timeout=timeout)
             name = m.decode_name(list(raw))
             if "?" in name:
-                break                 # past the end; see the docstring
+                break  # past the end; see the docstring
             names.append(name)
         return names
 
@@ -2491,8 +2706,7 @@ class S3kBridge:
                 f"unknown region {region!r}; expected one of {tuple(_REGION_OPS)}"
             ) from None
         if _bounds:
-            self._check_bounds(region, index, offset, count, selector,
-                               timeout=timeout)
+            self._check_bounds(region, index, offset, count, selector, timeout=timeout)
         frame = m.HeaderRequest(
             command=request_op,
             index=index,
@@ -2507,14 +2721,17 @@ class S3kBridge:
             self._raise_for_reply(reply, f"reading {region} {index}")
         if command != reply_op:
             raise DeviceError(
-                f"expected {reply_op:#04x} reading {region} header, "
-                f"got {command:#04x}"
+                f"expected {reply_op:#04x} reading {region} header, got {command:#04x}"
             )
         data = m.HeaderData.decode(reply)
-        if len(data.data) != count:
-            raise DeviceError(
-                f"asked for {count} bytes at offset {offset}, got {len(data.data)}"
-            )
+        self._check_reply_identity(
+            data,
+            index=index,
+            selector=selector,
+            offset=offset,
+            expect=count,
+            what=f"reading {region} {index}",
+        )
         expect = BLOCK_IDENT.get(region)
         if expect is not None and offset == 0 and data.data:
             got = data.data[0]
@@ -2523,9 +2740,7 @@ class S3kBridge:
                 # with whatever the last valid read left behind, so a wrong
                 # index or selector comes back as a plausible-looking header
                 # belonging to something else entirely.
-                belongs = next(
-                    (r for r, v in BLOCK_IDENT.items() if v == got), None
-                )
+                belongs = next((r for r, v in BLOCK_IDENT.items() if v == got), None)
                 raise DeviceError(
                     f"reading {region} {index}: block identifier is "
                     f"{got:#04x}, expected {expect:#04x}"
@@ -2567,8 +2782,7 @@ class S3kBridge:
                 f"unknown region {region!r}; expected one of {tuple(_REGION_OPS)}"
             ) from None
         if _bounds:
-            self._check_bounds(region, index, offset, len(data), selector,
-                               timeout=timeout)
+            self._check_bounds(region, index, offset, len(data), selector, timeout=timeout)
         frame = m.HeaderData(
             command=write_op,
             index=index,
@@ -2585,18 +2799,64 @@ class S3kBridge:
         self._send(frame, write=True)
         self._raise_for_reply(
             self._receive(timeout, accept=_ONLY_REPLY),
-            f"writing {region} {index} at offset {offset}"
+            f"writing {region} {index} at offset {offset}",
         )
 
     def _raise_for_reply(self, frame: bytes, what: str) -> None:
         _channel, command, _payload = m.parse_frame(frame)
         if command != m.Command.REPLY:
-            raise DeviceError(
-                f"expected REPLY after {what}, got command {command:#04x}"
-            )
+            raise DeviceError(f"expected REPLY after {what}, got command {command:#04x}")
         reply = m.Reply.decode(frame)
         if not reply.ok:
             raise DeviceError(f"device reported an error {what} (code {reply.code})")
+
+    @staticmethod
+    def _check_reply_identity(
+        data: "m.HeaderData",
+        *,
+        index: int,
+        offset: int,
+        what: str,
+        expect: Optional[int] = None,
+        selector: Optional[int] = None,
+    ) -> None:
+        """Refuse a data reply that is not an answer to what was just asked.
+
+        The extended layer answers an out-of-range read with the previous
+        valid read's buffer rather than an error (§11), so a reply can be
+        well-formed, plausible, and from an entirely different request. The
+        header the device echoes back -- item index, selector, byte offset --
+        is what tells its answer from somebody else's: when any enforced
+        field is not what was asked for, this raises rather than delivering
+        the wrong bytes.
+
+        ``selector`` is optional because not every path is established to
+        echo it: the miscellaneous-data bank selector is the request's own
+        addressing, and no measurement shows it coming back. Callers pass it
+        only where the echo is established (header, FX, volume and directory
+        reads). ``expect`` is the byte count asked for; where the device may
+        legitimately answer short -- the volume list pages, and a page need
+        not be full -- it is left out and only the echoed address is
+        checked. Everywhere else a short or empty reply raises here with a
+        clear error instead of truncating silently or indexing into nothing
+        further down.
+        """
+        problems = []
+        if data.index != index:
+            problems.append(f"index {data.index}, asked for {index}")
+        if selector is not None and data.selector != selector:
+            problems.append(f"selector {data.selector}, asked for {selector}")
+        if data.offset != offset:
+            problems.append(f"offset {data.offset}, asked for {offset}")
+        if expect is not None and len(data.data) != expect:
+            problems.append(f"asked for {expect} bytes at offset {offset}, got {len(data.data)}")
+        if problems:
+            raise DeviceError(
+                f"reply to {what} does not match the request "
+                f"({'; '.join(problems)}). The device answers an out-of-range "
+                f"read with the previous read's buffer instead of an error, "
+                f"so check the index and selector exist (§11)."
+            )
 
     # -- parameter access, in terms of s3k.params ---------------------------
 
@@ -2609,7 +2869,8 @@ class S3kBridge:
                 f"declared fitted. The panel gates these pages on a machine "
                 f"without it and this area has crashed an S3000XL (§85, §90), "
                 f"so {what} is refused. If the board IS fitted, say so: "
-                f"S3kBridge(..., boards=['{need}']), or set it in config.toml.")
+                f"S3kBridge(..., boards=['{need}']), or set it in config.toml."
+            )
 
     def get_parameter(
         self,
@@ -2695,30 +2956,60 @@ class S3kBridge:
             selector=_selector_for(region, keygroup),
             timeout=timeout,
         )
-        return {
-            x.name: p.decode_field(x, raw[x.offset : x.end])
-            for x in params
-        }
+        return {x.name: p.decode_field(x, raw[x.offset : x.end]) for x in params}
 
     # -- destructive operations --------------------------------------------
     # The specification defines no confirmation step for any of these. Callers
     # must never key-bind them -- always an explicit arm-then-fire flow.
 
+    def _delete_bounds(
+        self,
+        region: str,
+        index: int,
+        selector: Optional[int] = None,
+        *,
+        timeout: Optional[float] = None,
+    ) -> None:
+        """Refuse a delete aimed at an index that is known not to exist.
+
+        Only enforced against counts ALREADY held here -- warming them costs
+        round trips, and a delete that paid a listing read first would still
+        race a panel session anyway. A negative index is always refused: it
+        is never a program, keygroup or sample. Callers that need the check
+        to mean something on a cold bridge should read
+        :meth:`program_list` / :meth:`sample_list` first.
+        """
+        if index < 0:
+            raise ValueError(f"cannot delete {region} {index}: negative indices do not exist")
+        held = self._counts.get(region)
+        if held is not None and not 0 <= index < held:
+            raise ValueError(f"cannot delete {region} {index}: the machine holds {held}")
+        if selector is not None:
+            if selector < 0:
+                raise ValueError(
+                    f"cannot delete keygroup {selector} of program {index}: "
+                    f"negative indices do not exist"
+                )
+            groups = self._groups.get(index)
+            if groups is not None and not 0 <= selector < groups:
+                raise ValueError(
+                    f"cannot delete keygroup {selector} of program {index}: "
+                    f"it has {groups} keygroup(s)"
+                )
+
     def delete_program(self, program: int, *, confirm: bool = True) -> None:
         """DELP. DESTRUCTIVE, one-shot, no device-side confirmation."""
+        self._delete_bounds("program", program)
         self.invalidate_structure()
         self._destructive(
-            m.DeleteProgram(
-                program=program, exclusive_channel=self.exclusive_channel
-            ).encode(),
+            m.DeleteProgram(program=program, exclusive_channel=self.exclusive_channel).encode(),
             f"deleting program {program}",
             confirm,
         )
 
-    def delete_keygroup(
-        self, program: int, keygroup: int, *, confirm: bool = True
-    ) -> None:
+    def delete_keygroup(self, program: int, keygroup: int, *, confirm: bool = True) -> None:
         """DELK. DESTRUCTIVE, one-shot, no device-side confirmation."""
+        self._delete_bounds("program", program, selector=keygroup)
         self.invalidate_structure()
         self._destructive(
             m.DeleteKeygroup(
@@ -2732,11 +3023,10 @@ class S3kBridge:
 
     def delete_sample(self, sample: int, *, confirm: bool = True) -> None:
         """DELS. DESTRUCTIVE, one-shot, no device-side confirmation."""
+        self._delete_bounds("sample", sample)
         self.invalidate_structure()
         self._destructive(
-            m.DeleteSample(
-                sample=sample, exclusive_channel=self.exclusive_channel
-            ).encode(),
+            m.DeleteSample(sample=sample, exclusive_channel=self.exclusive_channel).encode(),
             f"deleting sample {sample}",
             confirm,
         )
@@ -2860,14 +3150,18 @@ class S3kBridge:
                 result["beyond_range"] += 1
                 continue
             self.set_header_bytes(
-                "program", index, self._PRGNUM_OFFSET, bytes([index]),
+                "program",
+                index,
+                self._PRGNUM_OFFSET,
+                bytes([index]),
                 timeout=timeout,
             )
             result["renumbered"] += 1
         return result
 
-    def renumber_after_load(self, before: Sequence[Tuple[str, int]], *,
-                            timeout: Optional[float] = None) -> Dict[str, int]:
+    def renumber_after_load(
+        self, before: Sequence[Tuple[str, int]], *, timeout: Optional[float] = None
+    ) -> Dict[str, int]:
         """Renumber so newly loaded programs get a CONTIGUOUS range at the end.
 
         `before` is what :meth:`resident_pairs` returned *before* the load.
@@ -2922,10 +3216,14 @@ class S3kBridge:
             else:
                 arrivals.append(position)
 
-        result = {"programs": len(pairs), "incumbents": len(incumbents),
-                  "arrivals": len(arrivals), "renumbered": 0,
-                  "beyond_range": 0,
-                  "unmatched": len(wanted) - cursor}
+        result = {
+            "programs": len(pairs),
+            "incumbents": len(incumbents),
+            "arrivals": len(arrivals),
+            "renumbered": 0,
+            "beyond_range": 0,
+            "unmatched": len(wanted) - cursor,
+        }
         # An incumbent that could not be matched means the assumption above is
         # wrong for this load -- a program was removed, or the order changed.
         # Numbering would then be guesswork, so refuse rather than scramble
@@ -2942,14 +3240,16 @@ class S3kBridge:
                 result["beyond_range"] += 1
                 continue
             self.set_header_bytes(
-                "program", index, self._PRGNUM_OFFSET, bytes([number]),
+                "program",
+                index,
+                self._PRGNUM_OFFSET,
+                bytes([number]),
                 timeout=timeout,
             )
             result["renumbered"] += 1
         return result
 
-    def resident_pairs(self, *, timeout: Optional[float] = None
-                       ) -> List[Tuple[str, int]]:
+    def resident_pairs(self, *, timeout: Optional[float] = None) -> List[Tuple[str, int]]:
         """(name, PRGNUM) for each resident program, in `RPLIST` order.
 
         The snapshot :meth:`renumber_after_load` matches against. The number
@@ -2972,7 +3272,11 @@ class S3kBridge:
         count = len(self.program_list(timeout=timeout))
         return [
             self.get_header_bytes(
-                "program", index, self._PRGNUM_OFFSET, 1, timeout=timeout,
+                "program",
+                index,
+                self._PRGNUM_OFFSET,
+                1,
+                timeout=timeout,
             )[0]
             for index in range(count)
         ]
@@ -2985,21 +3289,40 @@ class S3kBridge:
         self._send(frame, write=True)
         self._raise_for_reply(self._receive(accept=_ONLY_REPLY), what)
 
-    def set_exclusive_channel(self, channel: int) -> None:
+    def set_exclusive_channel(
+        self, channel: int, *, confirm: bool = False, timeout: Optional[float] = None
+    ) -> None:
         """SETEX -- move the device to another exclusive channel.
 
         Updates our own idea of the address too, since otherwise the very next
         message would go to a channel nobody is listening on.
+
+        SETEX itself is unacknowledged, so by default this is fire-and-forget
+        and a drop on the wire leaves every later message addressed nowhere
+        -- with failures that blame everything but the lost SETEX. Pass
+        ``confirm=True`` to have the move verified: the device is asked for
+        its status on the NEW channel, and if it does not answer there our
+        address is put back and the change is reported rather than kept.
         """
         if not 0 <= channel <= 0x7F:
             raise ValueError(f"exclusive channel {channel} out of range")
+        previous = self.exclusive_channel
         self._send(
-            m.SetExclusiveChannel(
-                new_channel=channel, exclusive_channel=self.exclusive_channel
-            ).encode(),
+            m.SetExclusiveChannel(new_channel=channel, exclusive_channel=previous).encode(),
             write=True,
         )
         self.exclusive_channel = channel
+        if not confirm:
+            return
+        try:
+            self.status(timeout=timeout)
+        except Exception as exc:
+            self.exclusive_channel = previous
+            raise DeviceError(
+                f"exclusive channel change to {channel} is unconfirmed: "
+                f"the device does not answer there ({exc}); address restored "
+                f"to {previous}"
+            ) from exc
 
 
 # --- autodetect helpers -----------------------------------------------------

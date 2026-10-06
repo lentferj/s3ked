@@ -30,6 +30,8 @@ import argparse
 import sys
 from typing import Callable, Dict, List, Optional
 
+from vinsynlib.cli import add_common_arguments, make_parser, validate_common
+
 from s3k import params as p
 from s3k import scales
 
@@ -56,6 +58,7 @@ def _cmd_ports(_bridge, _args) -> None:
     # module scope and the import above is deliberately lazy: `params` and
     # `groups` have to work on a host with no MIDI stack at all.
     from s3k.bridge import MidiUnavailable, list_ports
+    from vinsynlib import midi
 
     try:
         ins, outs = list_ports()
@@ -69,13 +72,14 @@ def _cmd_ports(_bridge, _args) -> None:
             f"error: {exc}\n"
             f"       s3ked needs a MIDI backend: on Linux an ALSA sequencer "
             f"(try `modprobe snd-seq`); in a container it must be passed "
-            f"through.") from exc
-    for label, names in (("inputs", ins), ("outputs", outs)):
-        print(f"{label}:")
-        for name in names:
-            print(f"  {name}")
-        if not names:
-            print("  (none)")
+            f"through."
+        ) from exc
+    # The listing itself is the family's, so it reads the same as the other
+    # eight tools: inputs, then outputs, two spaces of indent, and a
+    # bracketed mark on a port that can answer. No `likely` hints are passed:
+    # the name of a port behind a DIN cable says nothing about what is on the
+    # other end, and this tool has never claimed it did.
+    print(midi.render_ports(ins, outs))
 
 
 def _cmd_status(bridge, _args) -> None:
@@ -128,43 +132,54 @@ def _cmd_audit(bridge, args) -> None:
         where = audit.usage(args.sample)
         if not where:
             held = args.sample.strip() in {s.strip() for s in audit.resident}
-            print(f"nothing uses {args.sample!r}"
-                  + ("" if held else " (and no resident sample has that name)"))
+            print(
+                f"nothing uses {args.sample!r}"
+                + ("" if held else " (and no resident sample has that name)")
+            )
             return
-        print(_fmt_table(
-            [[str(r.program), r.program_name, str(r.keygroup), str(r.zone)]
-             for r in where],
-            ["prog", "program", "kg", "zone"]))
+        print(
+            _fmt_table(
+                [[str(r.program), r.program_name, str(r.keygroup), str(r.zone)] for r in where],
+                ["prog", "program", "kg", "zone"],
+            )
+        )
         print(f"\n{len(where)} zone(s) use {args.sample!r}")
         return
 
     dangling = audit.dangling()
     if dangling:
-        print("DANGLING -- these zones name a sample the machine does not "
-              "hold, and play silence:\n")
-        print(_fmt_table(
-            [[str(r.program), r.program_name, str(r.keygroup), str(r.zone),
-              r.sample] for r in dangling],
-            ["prog", "program", "kg", "zone", "names"]))
+        print(
+            "DANGLING -- these zones name a sample the machine does not hold, and play silence:\n"
+        )
+        print(
+            _fmt_table(
+                [
+                    [str(r.program), r.program_name, str(r.keygroup), str(r.zone), r.sample]
+                    for r in dangling
+                ],
+                ["prog", "program", "kg", "zone", "names"],
+            )
+        )
         print()
     if audit.orphans() and args.verbose:
-        print(f"unused samples (memory nothing plays): "
-              f"{', '.join(audit.orphans())}\n")
+        print(f"unused samples (memory nothing plays): {', '.join(audit.orphans())}\n")
     if audit.ambiguous():
         for name, count in audit.ambiguous().items():
-            print(f"AMBIGUOUS: {count} resident samples are named {name!r}; "
-                  f"a zone naming it cannot be resolved to one of them")
+            print(
+                f"AMBIGUOUS: {count} resident samples are named {name!r}; "
+                f"a zone naming it cannot be resolved to one of them"
+            )
         print()
     for index, name in audit.unread:
-        print(f"NOT READ: program {index} ({name}) -- keygroup count "
-              f"unreadable, so its zones were not walked")
+        print(
+            f"NOT READ: program {index} ({name}) -- keygroup count "
+            f"unreadable, so its zones were not walked"
+        )
     print(audit.summary())
 
 
 def _cmd_header(bridge, args) -> None:
-    values = bridge.get_header(
-        args.region, args.index, keygroup=args.keygroup
-    )
+    values = bridge.get_header(args.region, args.index, keygroup=args.keygroup)
     rows = []
     for param in p.region_params(args.region):
         if args.group and not (
@@ -211,9 +226,7 @@ def _value_from_quantity(param, text: str) -> int:
     try:
         value, exact = scales.value_from_quantity(param.region, param.name, text)
     except ValueError as exc:
-        raise ValueError(
-            f"{param.name} is numeric; {text!r} is not a number ({exc})"
-        ) from None
+        raise ValueError(f"{param.name} is numeric; {text!r} is not a number ({exc})") from None
 
     clamped = max(param.minimum, min(param.maximum, value))
     if clamped != value:
@@ -266,7 +279,20 @@ def _cmd_set(bridge, args) -> None:
             value = _value_from_quantity(param, args.value)
     bridge.set_parameter(param, args.index, value, keygroup=args.keygroup)
     read_back = bridge.get_parameter(param, args.index, keygroup=args.keygroup)
-    print(f"{param.name} = {p.describe_value(param, read_back)}")
+    # The device may ignore or clamp a write rather than taking it -- and the
+    # old code printed whatever came back as a success either way. Compare
+    # against what was asked for and say so when they differ.
+    if param.is_array:
+        taken = list(read_back) == list(value)
+    else:
+        taken = read_back == value
+    if taken:
+        print(f"{param.name} = {p.describe_value(param, read_back)}")
+    else:
+        print(
+            f"{param.name} = {p.describe_value(param, read_back)} "
+            f"(asked for {value!r} — the device did not take it)"
+        )
 
 
 def _cmd_params(_bridge, args) -> None:
@@ -325,31 +351,34 @@ _COMMANDS: Dict[str, Callable] = {
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="s3kcli",
-        description="Explore an Akai S1000/S3000-family sampler over MIDI SysEx.",
+    parser = make_parser(
+        "s3kcli",
+        "Explore an Akai S1000/S3000-family sampler over MIDI SysEx.",
         epilog="Destructive operations are intentionally not available here; "
         "use the s3ked TUI, which requires an explicit arm-then-fire step.",
     )
-    parser.add_argument("--port", help="MIDI port name (default: autodetect)")
-    parser.add_argument(
-        "--demo",
-        action="store_true",
-        help="run against the built-in demo sampler; opens no MIDI ports",
+    # Every shared option's help text is the family's, from vinsynlib.spec.
+    # This tool used to word five of them its own way, and "MIDI port name
+    # (default: autodetect)" is not what the other eight say for the same
+    # flag -- they all promise the remembered port, and autodetect is what
+    # happens when there is nothing remembered.
+    #
+    # --channel is deliberately absent: an S1000 is not selected by program
+    # change at all, so there is no channel to send one on. A flag accepted
+    # and then ignored is worse than no flag.
+    add_common_arguments(
+        parser,
+        port=True,
+        channel=False,
+        exclusive_channel=True,
+        demo=True,
+        timeout=True,
+        config=True,
+        allow_write=True,
     )
-    parser.add_argument(
-        "--exclusive-channel",
-        type=int,
-        default=None,
-        help="the device's SysEx exclusive channel (default: 0, the factory value)",
-    )
-    parser.add_argument("--timeout", type=float, default=None, help="reply timeout, seconds")
-    parser.add_argument("--config", default=None, help="path to config.toml")
-    parser.add_argument(
-        "--allow-write",
-        action="store_true",
-        help="permit `set` to write to the device",
-    )
+    # --exclusive-channel's help is the family's now, so the factory default
+    # this project documented is stated where it applies: below, on the
+    # value it falls back to.
 
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -360,19 +389,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     def _add_target(sp, *, with_group: bool = False) -> None:
         sp.add_argument("index", type=int, help="program or sample number")
-        sp.add_argument(
-            "--keygroup", type=int, default=0, help="keygroup number (keygroup region)"
-        )
+        sp.add_argument("--keygroup", type=int, default=0, help="keygroup number (keygroup region)")
         if with_group:
             sp.add_argument("--group", default=None, help="limit to a dotted group")
 
-    sp = sub.add_parser(
-        "audit",
-        help="cross-reference programs and samples: what plays silence")
-    sp.add_argument("--sample", metavar="NAME",
-                    help="instead, list every zone that uses this sample")
-    sp.add_argument("-v", "--verbose", action="store_true",
-                    help="also list samples no program uses")
+    sp = sub.add_parser("audit", help="cross-reference programs and samples: what plays silence")
+    sp.add_argument(
+        "--sample", metavar="NAME", help="instead, list every zone that uses this sample"
+    )
+    sp.add_argument(
+        "-v", "--verbose", action="store_true", help="also list samples no program uses"
+    )
 
     sp = sub.add_parser("header", help="dump one whole header, decoded")
     sp.add_argument("region", choices=p.REGIONS)
@@ -401,12 +428,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _build_bridge(args):
-    from s3k import bridge as b
-
     if args.demo:
         from s3ked.demo import DemoBridge
 
         return DemoBridge()
+
+    from s3k import bridge as b
 
     kwargs = {}
     if args.timeout is not None:
@@ -416,9 +443,7 @@ def _build_bridge(args):
     if args.port:
         return b.S3kBridge.standard(
             args.port,
-            exclusive_channel=(
-                channel if channel is not None else 0
-            ),
+            exclusive_channel=(channel if channel is not None else 0),
             **kwargs,
         )
 
@@ -434,6 +459,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
     handler = _COMMANDS[args.command]
 
+    # The family's range check, before any port is opened: an exclusive
+    # channel outside 0-15 is not a channel, and a mistyped one used to reach
+    # SETEX -- which addresses a machine that is not this one, or is this one
+    # as if it were a different sibling.
+    validate_common(args, channel_names=())
+
     if args.command in _OFFLINE:
         try:
             handler(None, args)
@@ -444,9 +475,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Before any port is opened. SIGTERM otherwise ends the process where it
     # stands and leaves the sampler composing an answer nobody will read,
     # which wedges it until a power cycle. See s3k.bridge.install_clean_exit.
-    from s3k import bridge as _b
+    # Demo mode opens no ports, so it needs neither the MIDI stack nor the
+    # handler -- same rule as the TUI's main().
+    if not args.demo:
+        from s3k import bridge as _b
 
-    _b.install_clean_exit()
+        _b.install_clean_exit()
 
     try:
         bridge = _build_bridge(args)
