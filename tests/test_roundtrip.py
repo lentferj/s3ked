@@ -19,10 +19,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "probes"))
 
-import roundtrip as rt                                     # noqa: E402
+import roundtrip as rt  # noqa: E402
 
-from s3k import messages as m                              # noqa: E402
-from s3k import params as p                                # noqa: E402
+from s3k import messages as m  # noqa: E402
+from s3k import params as p  # noqa: E402
 
 
 class FakeBridge:
@@ -41,25 +41,25 @@ class FakeBridge:
         return (param.region, index, keygroup, param.name)
 
     def get_parameter(self, param, index, *, keygroup=0, timeout=None):
-        return self.store.get(self._key(param, index, keygroup), param.minimum
-                              + param.display_offset)
+        return self.store.get(
+            self._key(param, index, keygroup), param.minimum + param.display_offset
+        )
 
-    def set_parameter(self, param, index, value, *, keygroup=0, postpone=None,
-                      confirm=True, timeout=None):
+    def set_parameter(
+        self, param, index, value, *, keygroup=0, postpone=None, confirm=True, timeout=None
+    ):
         key = self._key(param, index, keygroup)
         self.writes.append((param.name, value))
         if self.fail_on and param.name == self.fail_on:
             # Land a value other than the one asked for.
             self.store[key] = value + 1 if isinstance(value, int) else "WRONG"
             return
-        if self.refuse_restore and key in self._originals and \
-                value == self._originals[key]:
+        if self.refuse_restore and key in self._originals and value == self._originals[key]:
             return  # silently drop the restore
         self._originals.setdefault(key, self.store.get(key))
         self.store[key] = value
 
-    def get_header_bytes(self, region, index, offset, count, *, selector=0,
-                         timeout=None):
+    def get_header_bytes(self, region, index, offset, count, *, selector=0, timeout=None):
         return bytes(count)
 
     def close(self):
@@ -109,8 +109,7 @@ def test_wide_fields_are_never_swept():
             allowed, _why = rt.sweepable(param, include_names=True)
             assert not allowed, f"{param.name} ({param.size} bytes)"
 
-    swept = [x.name for x in p.region_params("sample")
-             if rt.sweepable(x, include_names=False)[0]]
+    swept = [x.name for x in p.region_params("sample") if rt.sweepable(x, include_names=False)[0]]
     for pointer in ("SLNGTH", "SSTART", "SMPEND", "LOOPAT1", "SLOCAT"):
         assert pointer not in swept
 
@@ -128,8 +127,14 @@ class StrictBridge(FakeBridge):
     source, which would only find the docstring explaining the exclusion.
     """
 
-    ALLOWED = {"get_parameter", "set_parameter", "get_header_bytes",
-               "description", "exclusive_channel", "close"}
+    ALLOWED = {
+        "get_parameter",
+        "set_parameter",
+        "get_header_bytes",
+        "description",
+        "exclusive_channel",
+        "close",
+    }
 
     def __getattr__(self, name):
         if name.startswith("_") or name in self.ALLOWED:
@@ -140,8 +145,7 @@ class StrictBridge(FakeBridge):
 def test_the_sweep_only_ever_uses_the_byte_offset_read_and_write():
     bridge = StrictBridge()
     sweeper = _sweeper(bridge)
-    report = sweeper.run([("program", 0, 0), ("sample", 0, 0)],
-                         include_names=True, stop_after=0)
+    report = sweeper.run([("program", 0, 0), ("sample", 0, 0)], include_names=True, stop_after=0)
 
     assert report.writes > 0, "the sweep must actually have written"
     # Reaching here means no delete_*, set_exclusive_channel or whole-header
@@ -160,7 +164,9 @@ def test_two_values_are_distinct_in_range_and_not_the_original():
         high = param.maximum + param.display_offset
         chosen = rt.two_values(param, low)
         if chosen is None:
-            assert low >= high or True
+            assert high - low < 2, (
+                f"{param.name}: no values chosen for a range {low}..{high} with room to spare"
+            )
             continue
         a, b = chosen
         assert a != b
@@ -285,6 +291,5 @@ def test_snapshot_reads_whole_headers():
     bridge = FakeBridge()
     snap = rt.snapshot(bridge, [("program", 0, 0), ("sample", 1, 0)], timeout=0.1)
     assert set(snap) == {"program:0:0", "sample:1:0"}
-    for region, raw in (("program", snap["program:0:0"]),
-                        ("sample", snap["sample:1:0"])):
+    for region, raw in (("program", snap["program:0:0"]), ("sample", snap["sample:1:0"])):
         assert len(raw) == max(x.end for x in p.region_params(region))

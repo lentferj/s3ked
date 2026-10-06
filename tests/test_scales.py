@@ -32,38 +32,36 @@ ANCHORS = [
     # -- 591 and 2568 Hz -- were spectral centroids, which sit ABOVE the
     # corner by an amount that depends on the source, so they were readings
     # of the old ruler rather than of the machine.
-    ("keygroup", "FILFRQ",     62,     531.0,      15.0, "Hz"),
-    ("keygroup", "FILFRQ",     80,    1887.0,      55.0, "Hz"),
-    ("keygroup", "FILFRQ",     92,    4491.0,     140.0, "Hz"),
-    ("program",  "LFORAT",     30,     3.52,      0.20, "Hz"),
-    ("program",  "LFORAT",     99,    11.71,      0.40, "Hz"),
-    ("keygroup", "ATTAK1",     70,    0.387,     0.030, "s"),
-    ("keygroup", "ATTAK1",     90,    3.506,     0.200, "s"),
-    ("keygroup", "DECAY1",     70,    24.84,      1.00, "dB/s"),
-    ("keygroup", "DECAY1",     50,   177.39,      8.00, "dB/s"),
-    ("keygroup", "RELSE1",     60,    66.76,      3.00, "dB/s"),
-    ("keygroup", "KGTUNO",     50,     19.6,       0.5, "cents"),
-    ("keygroup", "SUSTN1",     50,    -29.7,       1.0, "dB"),
-    ("program",  "PRLOUD",     50,    -31.5,       2.0, "dB"),
-    ("program",  "PANPOS",    -25,     -9.8,       0.6, "dB"),
-    ("program",  "LFODEP",    50,     974.7,      15.0, "cents"),
-    ("program",  "LFODEP",    10,     194.9,       6.0, "cents"),
+    ("keygroup", "FILFRQ", 62, 531.0, 15.0, "Hz"),
+    ("keygroup", "FILFRQ", 80, 1887.0, 55.0, "Hz"),
+    ("keygroup", "FILFRQ", 92, 4491.0, 140.0, "Hz"),
+    ("program", "LFORAT", 30, 3.52, 0.20, "Hz"),
+    ("program", "LFORAT", 99, 11.71, 0.40, "Hz"),
+    ("keygroup", "ATTAK1", 70, 0.387, 0.030, "s"),
+    ("keygroup", "ATTAK1", 90, 3.506, 0.200, "s"),
+    ("keygroup", "DECAY1", 70, 24.84, 1.00, "dB/s"),
+    ("keygroup", "DECAY1", 50, 177.39, 8.00, "dB/s"),
+    ("keygroup", "RELSE1", 60, 66.76, 3.00, "dB/s"),
+    ("keygroup", "KGTUNO", 50, 19.6, 0.5, "cents"),
+    ("keygroup", "SUSTN1", 50, -29.7, 1.0, "dB"),
+    ("program", "PRLOUD", 50, -31.5, 2.0, "dB"),
+    ("program", "PANPOS", -25, -9.8, 0.6, "dB"),
+    ("program", "LFODEP", 50, 974.7, 15.0, "cents"),
+    ("program", "LFODEP", 10, 194.9, 6.0, "cents"),
     # the filter envelope, measured through the FILFRQ ruler (§28)
     # ATTAK2 is anchored at MODVFILT1 18, the depth it was measured at.
     # The same value read 0.38 s at depth 25 -- a 3x disagreement that is
     # the depth-dependence itself, and the reason it stays provisional.
-    ("keygroup", "ATTAK2",     55,    0.289,     0.030, "s"),
-    ("keygroup", "ATTAK2",     80,    3.190,     0.200, "s"),
-    ("keygroup", "DECAY2",     70,    2.450,     0.150, "s"),
-    ("keygroup", "RELSE2",     70,    1.220,     0.080, "s"),
-    ("keygroup", "SUSTN2",     50,     50.5,       2.0, "%"),
+    ("keygroup", "ATTAK2", 55, 0.289, 0.030, "s"),
+    ("keygroup", "ATTAK2", 80, 3.190, 0.200, "s"),
+    ("keygroup", "DECAY2", 70, 2.450, 0.150, "s"),
+    ("keygroup", "RELSE2", 70, 1.220, 0.080, "s"),
+    ("keygroup", "SUSTN2", 50, 50.5, 2.0, "%"),
 ]
 
 
 @pytest.mark.parametrize("region,param,value,expected,tol,unit", ANCHORS)
-def test_the_law_reproduces_the_hardware_reading(
-    region, param, value, expected, tol, unit
-):
+def test_the_law_reproduces_the_hardware_reading(region, param, value, expected, tol, unit):
     physical, got_unit, exact = scales.to_physical(region, param, value)
     assert got_unit == unit
     assert exact, "every anchor is inside its own measured range"
@@ -106,8 +104,7 @@ def test_a_bigger_value_means_a_slower_rate(name):
     """These are RATES, so slower means a smaller number."""
     scale = scales.SCALES[("keygroup", name)]
     lo, hi = scale.fitted
-    assert (scales.to_physical("keygroup", name, hi)[0]
-            < scales.to_physical("keygroup", name, lo)[0])
+    assert scales.to_physical("keygroup", name, hi)[0] < scales.to_physical("keygroup", name, lo)[0]
 
 
 @pytest.mark.parametrize("name", ["ATTAK2", "DECAY2", "RELSE2", "ENV3R1", "ENV3R3"])
@@ -121,8 +118,7 @@ def test_a_bigger_value_means_a_slower_stage_in_seconds(name):
     """
     scale = scales.SCALES[("keygroup", name)]
     lo, hi = scale.fitted
-    assert (scales.to_physical("keygroup", name, hi)[0]
-            > scales.to_physical("keygroup", name, lo)[0])
+    assert scales.to_physical("keygroup", name, hi)[0] > scales.to_physical("keygroup", name, lo)[0]
 
 
 # --- honesty about what was and was not measured ---------------------------
@@ -160,7 +156,7 @@ def test_a_parameter_with_no_measured_law_says_nothing():
     assert scales.describe("keygroup", "VFREQ1", 5) == ""
 
 
-def test_every_scale_names_a_parameter_that_exists():
+def test_every_scale_names_a_parameter_that_exists_by_name():
     for region, name in scales.SCALES:
         param = p.lookup(name, region)
         assert param.region == region
@@ -170,8 +166,7 @@ def test_every_fitted_range_lies_inside_the_parameter_range():
     for (region, name), scale in scales.SCALES.items():
         param = p.lookup(name, region)
         assert param.minimum <= scale.fitted[0] <= scale.fitted[1] <= param.maximum, (
-            f"{name} was fitted over {scale.fitted}, outside "
-            f"{param.minimum}..{param.maximum}"
+            f"{name} was fitted over {scale.fitted}, outside {param.minimum}..{param.maximum}"
         )
 
 
@@ -355,14 +350,12 @@ def test_pan_is_symmetrical_about_the_centre():
 
 
 def test_a_longer_suffix_is_never_swallowed_by_a_shorter_one():
-    """"cents" ends in "s"; seconds must not claim it. Checked for every pair."""
+    """ "cents" ends in "s"; seconds must not claim it. Checked for every pair."""
     for suffix, (unit, _factor) in scales._SUFFIXES:
         for other, (other_unit, _f) in scales._SUFFIXES:
             if suffix != other and suffix.endswith(other):
                 got = scales.parse_quantity("50" + suffix)
-                assert got == (50.0 * _factor, unit), (
-                    f"{suffix!r} was misread as {other!r}"
-                )
+                assert got == (50.0 * _factor, unit), f"{suffix!r} was misread as {other!r}"
 
 
 # --- the shared exponent ---------------------------------------------------
@@ -389,8 +382,7 @@ def test_the_decay_rates_share_an_exponent():
     stage scales with the value, which is unchanged by which way the quantity
     is expressed.
     """
-    exponents = [abs(scales.SCALES[("keygroup", n)].b)
-                 for n in ("DECAY1", "RELSE1", "DECAY2")]
+    exponents = [abs(scales.SCALES[("keygroup", n)].b) for n in ("DECAY1", "RELSE1", "DECAY2")]
 
     assert max(exponents) - min(exponents) < 0.002, exponents
 
@@ -437,8 +429,7 @@ def test_every_narrowed_range_says_why_it_is_narrow():
     missing = []
     for (region, name), scale in scales.SCALES.items():
         param = p.lookup(name, region)
-        narrowed = (scale.fitted[0] > param.minimum
-                    or scale.fitted[1] < param.maximum)
+        narrowed = scale.fitted[0] > param.minimum or scale.fitted[1] < param.maximum
         if narrowed and not scale.bounds.strip():
             missing.append(name)
 
@@ -456,9 +447,18 @@ def test_the_tuning_scale_is_the_exact_constant_not_the_fit():
 
 
 def test_the_tuning_fit_and_the_exact_constant_agree():
-    """If they ever disagree by much, one of the two premises is wrong."""
-    measured_slope = 0.391667
-    assert abs(measured_slope - 100.0 / 256.0) / (100.0 / 256.0) < 0.005
+    """If they ever disagree by much, one of the two premises is wrong.
+
+    The measured slope is re-derived here from the bench reading the table
+    records -- 5120 raw units reading +1999.9 cents (§56) -- rather than
+    quoted as a second literal beside the constant.
+    """
+    note = scales.SCALES[("keygroup", "KGTUNO")].note
+    assert "5120 -> +1999.9" in note, "the bench reading moved; re-derive below"
+    measured_slope = 1999.9 / 5120.0
+    exact = scales.SCALES[("keygroup", "KGTUNO")].a
+    assert exact == 100.0 / 256.0
+    assert abs(measured_slope - exact) / exact < 0.005
 
 
 # --- provisional laws ------------------------------------------------------
@@ -487,8 +487,7 @@ def test_what_is_still_provisional():
     The list growing is fine and expected. What must not happen is a law being
     un-marked because the number looked good enough.
     """
-    provisional = sorted(n for (_r, n), s in scales.SCALES.items()
-                         if s.provisional)
+    provisional = sorted(n for (_r, n), s in scales.SCALES.items() if s.provisional)
     assert provisional == []
 
 
@@ -513,7 +512,14 @@ def unsettled(monkeypatch):
     whichever law happened to be unfinished on the day.
     """
     scale = scales.Scale(
-        "keygroup", "TESTONLY", "Hz", "exp", 1.0, 0.05, (40, 80), 0.5,
+        "keygroup",
+        "TESTONLY",
+        "Hz",
+        "exp",
+        1.0,
+        0.05,
+        (40, 80),
+        0.5,
         provisional="measured, but its meaning is not settled",
     )
     patched = dict(scales.SCALES)
@@ -531,15 +537,20 @@ def test_a_provisional_value_is_marked_in_the_display(unsettled):
 
 
 def test_the_settled_laws_are_not_marked_provisional():
-    for region, name in (("keygroup", "FILFRQ"), ("keygroup", "SUSTN1"),
-                         ("keygroup", "KGTUNO"), ("program", "PANPOS"),
-                         ("program", "LFORAT"), ("program", "PRLOUD")):
+    for region, name in (
+        ("keygroup", "FILFRQ"),
+        ("keygroup", "SUSTN1"),
+        ("keygroup", "KGTUNO"),
+        ("program", "PANPOS"),
+        ("program", "LFORAT"),
+        ("program", "PRLOUD"),
+    ):
         assert not scales.SCALES[(region, name)].provisional
 
 
 def test_provisional_and_extrapolated_marks_stack(unsettled):
     """Two different doubts, two different marks; neither hides the other."""
-    text = scales.describe("keygroup", "TESTONLY", 20)    # outside 40..80
+    text = scales.describe("keygroup", "TESTONLY", 20)  # outside 40..80
     assert text.startswith("!?")
 
 
@@ -634,8 +645,7 @@ def test_the_release_rate_law_predicts_the_independent_run():
 
 def test_the_sustain_law_predicts_the_level_at_note_off():
     """Within 0.33 dB across a 36 dB range, in a run it was not fitted to."""
-    for sustain, measured_below_90 in ((30, -36.51), (45, -27.05),
-                                       (60, -17.99), (75, -8.99)):
+    for sustain, measured_below_90 in ((30, -36.51), (45, -27.05), (60, -17.99), (75, -8.99)):
         at_sus, _u, _e = scales.to_physical("keygroup", "SUSTN1", sustain)
         at_90, _u2, _e2 = scales.to_physical("keygroup", "SUSTN1", 90)
         assert abs((at_sus - at_90) - measured_below_90) < 0.4
@@ -648,9 +658,11 @@ def test_the_log_domain_pattern_holds_across_three_level_fields():
     domain. Worth pinning: it is now reasonable to EXPECT this of the
     unmeasured level fields, which changes what a surprising result would be.
     """
-    for region, name, unit in (("keygroup", "SUSTN1", "dB"),
-                               ("keygroup", "SUSTN2", "%"),
-                               ("program", "LFODEP", "cents")):
+    for region, name, unit in (
+        ("keygroup", "SUSTN1", "dB"),
+        ("keygroup", "SUSTN2", "%"),
+        ("program", "LFODEP", "cents"),
+    ):
         assert scales.SCALES[(region, name)].kind == "linear", name
         assert scales.SCALES[(region, name)].unit == unit
 
@@ -744,8 +756,12 @@ def test_modulation_is_referenced_to_the_middle_of_the_midi_range():
 
 def test_every_lfo1_depth_source_reaches_the_same_full_scale():
     """LFODEP, MWLDEP, PRSDEP and VELDEP all top out near 1930 cents."""
-    for region, name in (("program", "LFODEP"), ("program", "MWLDEP"),
-                         ("program", "PRSDEP"), ("program", "VELDEP")):
+    for region, name in (
+        ("program", "LFODEP"),
+        ("program", "MWLDEP"),
+        ("program", "PRSDEP"),
+        ("program", "VELDEP"),
+    ):
         cents, unit, _e = scales.to_physical(region, name, 99)
         assert unit == "cents"
         assert abs(cents - 1930) < 40, f"{name} tops out at {cents:.0f}"
@@ -849,10 +865,12 @@ def test_zero_lfo2_rate_at_zero():
 # without a sampler, and they would have failed on the tuning fields the day
 # the law was measured.
 
-def test_every_scale_names_a_parameter_that_exists():
+
+def test_every_scale_names_a_parameter_that_exists_tuple_form():
     """A renamed or retyped field must not leave a law pointing at nothing."""
     for region, name in scales.SCALES:
-        p.lookup((region, name))
+        param = p.lookup((region, name))
+        assert param.region == region
 
 
 def test_no_law_is_fitted_outside_its_parameters_declared_range():
@@ -867,11 +885,11 @@ def test_no_law_is_fitted_outside_its_parameters_declared_range():
         param = p.lookup((region, name))
         lo, hi = scale.fitted
         assert param.minimum <= lo <= param.maximum, (
-            f"{name} fitted from {lo}, outside the declared "
-            f"{param.minimum}..{param.maximum}")
+            f"{name} fitted from {lo}, outside the declared {param.minimum}..{param.maximum}"
+        )
         assert param.minimum <= hi <= param.maximum, (
-            f"{name} fitted to {hi}, outside the declared "
-            f"{param.minimum}..{param.maximum}")
+            f"{name} fitted to {hi}, outside the declared {param.minimum}..{param.maximum}"
+        )
 
 
 def test_every_named_endpoint_is_a_value_the_field_can_hold():
@@ -879,8 +897,8 @@ def test_every_named_endpoint_is_a_value_the_field_can_hold():
         param = p.lookup((region, name))
         for value in scale.endpoints or {}:
             assert param.minimum <= value <= param.maximum, (
-                f"{name} names an endpoint at {value}, outside "
-                f"{param.minimum}..{param.maximum}")
+                f"{name} names an endpoint at {value}, outside {param.minimum}..{param.maximum}"
+            )
 
 
 def test_describe_survives_every_value_of_every_law():
@@ -905,8 +923,7 @@ def test_the_attack_and_the_release_are_one_law_across_both_envelopes():
     kind of structure a converter can rely on, and because it was found by
     measuring three fields the same way rather than by assuming a family.
     """
-    at, re_, e3 = (scales.SCALES[("keygroup", n)]
-                   for n in ("ATTAK2", "RELSE2", "ENV3R1"))
+    at, re_, e3 = (scales.SCALES[("keygroup", n)] for n in ("ATTAK2", "RELSE2", "ENV3R1"))
     at70, re70, e370 = (s.value_to_physical(70) for s in (at, re_, e3))
     assert max(at70, re70, e370) / min(at70, re70, e370) < 1.05
 

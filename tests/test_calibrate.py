@@ -34,9 +34,9 @@ np = pytest.importorskip("numpy", reason="calibration is bench tooling")
 # smallest run that still covers everything s3ked installs.
 pytestmark = pytest.mark.bench
 
-import calibrate as cal                                    # noqa: E402
+import calibrate as cal  # noqa: E402
 
-from s3k import params as p                                # noqa: E402
+from s3k import params as p  # noqa: E402
 
 
 ALL = sorted(cal.SWEEPS)
@@ -57,8 +57,7 @@ def test_every_swept_value_is_inside_the_parameter_range(name):
     param = p.lookup(sweep.param, sweep.region)
     for value in sweep.values:
         assert param.minimum <= value <= param.maximum, (
-            f"{sweep.name}: {sweep.param}={value} is outside "
-            f"[{param.minimum}..{param.maximum}]"
+            f"{sweep.name}: {sweep.param}={value} is outside [{param.minimum}..{param.maximum}]"
         )
 
 
@@ -153,8 +152,7 @@ def test_dry_run_applies_every_neutraliser_before_the_first_note():
     cal.run_sweep(bridge, rig, sweep, verbose=False)
 
     prepared = {(r, n) for r, n, _v in sweep.prepare}
-    first_swept = next(i for i, (_r, name, _v) in enumerate(bridge.writes)
-                       if name == sweep.param)
+    first_swept = next(i for i, (_r, name, _v) in enumerate(bridge.writes) if name == sweep.param)
     written_before = {(r, n) for r, n, _v in bridge.writes[:first_swept]}
     assert prepared <= written_before
 
@@ -256,9 +254,10 @@ def test_an_ambiguous_port_name_raises_rather_than_guessing():
 
     class _FakeOut:
         def get_ports(self):
-            return [f"ESI M4U XT:ESI M4U XT MIDI {i} 64:{i-1}" for i in (1, 2, 3, 4)]
+            return [f"ESI M4U XT:ESI M4U XT MIDI {i} 64:{i - 1}" for i in (1, 2, 3, 4)]
 
     import types
+
     fake = types.SimpleNamespace(MidiOut=lambda: _FakeOut())
     sys.modules["rtmidi"], real = fake, sys.modules.get("rtmidi")
     try:
@@ -286,7 +285,7 @@ def test_a_terminating_signal_still_runs_the_restore():
 
     class _Rig:
         def play_and_record(self, *a, **kw):
-            os.kill(os.getpid(), _signal.SIGTERM)   # mid-sweep termination
+            os.kill(os.getpid(), _signal.SIGTERM)  # mid-sweep termination
             raise AssertionError("unreachable")
 
     with pytest.raises(KeyboardInterrupt):
@@ -317,12 +316,18 @@ def test_the_recorder_is_bounded_and_reaped():
 
     hung = _Hung()
     rig = cal.Rig(midi_port="x")
-    object.__setattr__(rig, "_cached_out", type("O", (), {
-        "send_message": lambda *a, **k: None, "close_port": lambda *a: None})())
+    object.__setattr__(
+        rig,
+        "_cached_out",
+        type("O", (), {"send_message": lambda *a, **k: None, "close_port": lambda *a: None})(),
+    )
 
     import unittest.mock as mock
-    with mock.patch.object(cal.subprocess, "Popen", return_value=hung), \
-         mock.patch.object(cal.time, "sleep", lambda *_a: None):
+
+    with (
+        mock.patch.object(cal.subprocess, "Popen", return_value=hung),
+        mock.patch.object(cal.time, "sleep", lambda *_a: None),
+    ):
         with pytest.raises(RuntimeError, match="did not exit"):
             rig.play_and_record(60, 0.1, out_wav="/tmp/never-written.wav")
 
@@ -332,8 +337,7 @@ def test_the_recorder_is_bounded_and_reaped():
 def test_the_midi_port_is_opened_once_not_per_note():
     opened = []
     rig = cal.Rig(midi_port="x")
-    rig._midi_out = lambda: (opened.append(1),
-                             type("O", (), {"close_port": lambda *a: None})())[1]
+    rig._midi_out = lambda: (opened.append(1), type("O", (), {"close_port": lambda *a: None})())[1]
 
     for _ in range(5):
         rig._port()
@@ -350,20 +354,18 @@ class _LevelRig:
 
     def __init__(self, bridge, leak_db=None):
         self.bridge = bridge
-        self.leak_db = leak_db      # level heard when the keygroup is silenced
+        self.leak_db = leak_db  # level heard when the keygroup is silenced
 
     def play_and_record(self, note, hold, **_kw):
         lo = self.bridge.state.get("LONOTE", 0)
         hi = self.bridge.state.get("HINOTE", 127)
         audible = lo <= note <= hi
-        self._level = -20.0 if audible else (self.leak_db if self.leak_db
-                                             is not None else -80.0)
+        self._level = -20.0 if audible else (self.leak_db if self.leak_db is not None else -80.0)
         return "/nonexistent.wav", 0.0, hold
 
 
 def _patch_measure(monkeypatch, rig):
-    monkeypatch.setattr(cal, "_measure",
-                        lambda kind, wav, a, b, ref, **kw: (rig._level, ref))
+    monkeypatch.setattr(cal, "_measure", lambda kind, wav, a, b, ref, **kw: (rig._level, ref))
 
 
 def test_isolation_passes_when_silencing_the_keygroup_silences_the_sound(monkeypatch):
@@ -381,7 +383,7 @@ def test_isolation_passes_when_silencing_the_keygroup_silences_the_sound(monkeyp
 def test_isolation_fails_when_something_else_is_sounding(monkeypatch):
     """The §18 case: another program answers the same note."""
     bridge = _RecordingBridge({"LONOTE": 0, "HINOTE": 127})
-    rig = _LevelRig(bridge, leak_db=-20.3)      # silencing barely changes it
+    rig = _LevelRig(bridge, leak_db=-20.3)  # silencing barely changes it
     _patch_measure(monkeypatch, rig)
 
     with pytest.raises(RuntimeError, match="isolation check FAILED"):
@@ -394,12 +396,14 @@ def test_isolation_error_names_the_fix():
     bridge = _RecordingBridge({"LONOTE": 0, "HINOTE": 127})
     rig = _LevelRig(bridge, leak_db=-20.0)
     import unittest.mock as mock
-    with mock.patch.object(cal, "_measure",
-                           side_effect=lambda *a, **k: (rig._level, None)):
+
+    with mock.patch.object(cal, "_measure", side_effect=lambda *a, **k: (rig._level, None)):
         with pytest.raises(RuntimeError) as excinfo:
             cal.verify_isolation(bridge, rig, 0, 0, note=60)
     assert "PMCHAN" in str(excinfo.value)
-    assert "§18" in str(excinfo.value) or "18" in str(excinfo.value)
+    assert "§18" in str(excinfo.value), (
+        "the citation marker, not a bare substring: '18' matches any number"
+    )
 
 
 def test_the_filter_sweep_note_and_reference_band_agree():
@@ -420,7 +424,8 @@ def test_the_filter_sweep_note_and_reference_band_agree():
     )
     # At least one harmonic of f0 must land inside the band.
     assert any(lo <= f0 * k <= hi for k in range(1, 12)), (
-        f"no harmonic of {f0:.1f} Hz falls inside {lo}-{hi} Hz")
+        f"no harmonic of {f0:.1f} Hz falls inside {lo}-{hi} Hz"
+    )
 
 
 # --- the fit model belongs to the sweep, not to the harness ------------------
@@ -434,8 +439,7 @@ def test_a_linear_relationship_is_reported_as_linear():
     """Forcing an exponential onto a straight line produced a plausible,
     wrong equation for KGTUNO. RESOLUTION_NOTES §21."""
     sweep = cal.SWEEPS["tuning"]
-    pairs = [(1, -0.021), (2, 0.468), (4, 1.245), (8, 3.027),
-             (16, 5.922), (32, 12.18), (50, 19.29)]
+    pairs = [(1, -0.021), (2, 0.468), (4, 1.245), (8, 3.027), (16, 5.922), (32, 12.18), (50, 19.29)]
 
     out = cal.summarise(sweep, _rows(sweep, pairs))
 
@@ -447,8 +451,16 @@ def test_a_linear_relationship_is_reported_as_linear():
 
 def test_an_exponential_relationship_is_reported_as_exponential():
     sweep = cal.SWEEPS["filter"]
-    pairs = [(50, 281.2), (55, 404.3), (60, 606.4), (65, 852.5),
-             (70, 1187.0), (75, 1755.0), (80, 2566.0), (85, 3700.0)]
+    pairs = [
+        (50, 281.2),
+        (55, 404.3),
+        (60, 606.4),
+        (65, 852.5),
+        (70, 1187.0),
+        (75, 1755.0),
+        (80, 2566.0),
+        (85, 3700.0),
+    ]
 
     out = cal.summarise(sweep, _rows(sweep, pairs))
 
@@ -460,15 +472,14 @@ def test_an_exponential_relationship_is_reported_as_exponential():
 def test_both_shapes_are_always_reported():
     """The alternative is shown so a reader can see what was rejected."""
     sweep = cal.SWEEPS["filter"]
-    out = cal.summarise(sweep, _rows(sweep, [(50, 281.2), (60, 606.4),
-                                             (70, 1187.0), (80, 2566.0)]))
+    out = cal.summarise(sweep, _rows(sweep, [(50, 281.2), (60, 606.4), (70, 1187.0), (80, 2566.0)]))
     assert set(out["fits"]) == {"exp", "linear"}
     assert all("r2" in v for v in out["fits"].values())
 
 
 def test_a_declared_model_the_data_rejects_is_flagged_not_silently_swapped():
     """Declaring exp for a straight line must produce a complaint."""
-    sweep = cal.SWEEPS["filter"]          # declares exp
+    sweep = cal.SWEEPS["filter"]  # declares exp
     straight = [(10, 10.0), (20, 20.0), (30, 30.0), (40, 40.0), (50, 50.0)]
 
     out = cal.summarise(sweep, _rows(sweep, straight))
@@ -500,7 +511,7 @@ def test_the_recorder_fires_note_off_inside_the_capture():
     events = []
 
     class _Rec(cal._InProcessRecorder):
-        def __init__(self):                      # no JACK server needed
+        def __init__(self):  # no JACK server needed
             self._frames, self._armed = [], False
 
         def record(self, seconds, during=None, then=None, after=0.0):
@@ -514,12 +525,15 @@ def test_the_recorder_fires_note_off_inside_the_capture():
             return None
 
     rec = _Rec()
-    rec.record(5.0, during=lambda: events.append(("on", 0.0)),
-               then=lambda: events.append(("off", 3.0)), after=3.0)
+    rec.record(
+        5.0,
+        during=lambda: events.append(("on", 0.0)),
+        then=lambda: events.append(("off", 3.0)),
+        after=3.0,
+    )
 
     names = [e[0] for e in events]
-    assert names.index("off") < names.index("end"), \
-        "note-off must be sent before the capture ends"
+    assert names.index("off") < names.index("end"), "note-off must be sent before the capture ends"
     assert names.index("on") < names.index("off")
 
 
@@ -545,9 +559,12 @@ def test_a_killed_recorder_does_not_leave_its_temp_file_behind():
             self.killed = True
 
     rig = cal.Rig(midi_port="x")
-    object.__setattr__(rig, "_rec_failed", True)      # force the jack_rec path
-    object.__setattr__(rig, "_cached_out", type("O", (), {
-        "send_message": lambda *a, **k: None, "close_port": lambda *a: None})())
+    object.__setattr__(rig, "_rec_failed", True)  # force the jack_rec path
+    object.__setattr__(
+        rig,
+        "_cached_out",
+        type("O", (), {"send_message": lambda *a, **k: None, "close_port": lambda *a: None})(),
+    )
 
     real_mkstemp = cal.tempfile.mkstemp
 
@@ -556,9 +573,11 @@ def test_a_killed_recorder_does_not_leave_its_temp_file_behind():
         created.append(path)
         return handle, path
 
-    with mock.patch.object(cal.subprocess, "Popen", return_value=_Hung()), \
-         mock.patch.object(cal.time, "sleep", lambda *_a: None), \
-         mock.patch.object(cal.tempfile, "mkstemp", _spy):
+    with (
+        mock.patch.object(cal.subprocess, "Popen", return_value=_Hung()),
+        mock.patch.object(cal.time, "sleep", lambda *_a: None),
+        mock.patch.object(cal.tempfile, "mkstemp", _spy),
+    ):
         with pytest.raises(RuntimeError, match="did not exit"):
             rig.play_and_record(60, 0.1)
 
@@ -623,7 +642,10 @@ def test_no_blocks_at_all_is_an_empty_capture_not_a_crash():
 def test_a_connected_parameter_passes_and_reports_its_swing():
     seen = {}
     change = cal.verify_responds(
-        lambda: seen["v"] * 10.0, 0, 99, lambda v: seen.__setitem__("v", v),
+        lambda: seen["v"] * 10.0,
+        0,
+        99,
+        lambda v: seen.__setitem__("v", v),
         min_change=100.0,
     )
     assert change == 990.0
@@ -631,34 +653,33 @@ def test_a_connected_parameter_passes_and_reports_its_swing():
 
 def test_a_parameter_that_does_not_move_the_measurement_is_refused():
     with pytest.raises(RuntimeError, match="response check FAILED"):
-        cal.verify_responds(lambda: 1141.0, 0, 99, lambda _v: None,
-                            label="SUSTN2", min_change=100.0)
+        cal.verify_responds(
+            lambda: 1141.0, 0, 99, lambda _v: None, label="SUSTN2", min_change=100.0
+        )
 
 
 def test_the_refusal_names_the_routing_as_the_thing_to_check():
     """The failure is almost never the depth; it is the unrouted source."""
     with pytest.raises(RuntimeError, match="modulation SOURCE is routed"):
-        cal.verify_responds(lambda: 0.0, 0, 99, lambda _v: None,
-                            min_change=1.0)
+        cal.verify_responds(lambda: 0.0, 0, 99, lambda _v: None, min_change=1.0)
 
 
 def test_a_change_exactly_at_the_threshold_passes():
     vals = iter([0.0, 5.0])
-    assert cal.verify_responds(lambda: next(vals), 0, 99, lambda _v: None,
-                               min_change=5.0) == 5.0
+    assert cal.verify_responds(lambda: next(vals), 0, 99, lambda _v: None, min_change=5.0) == 5.0
 
 
 def test_a_nan_measurement_is_a_failure_not_a_pass():
     """`not (nan >= x)` is True; that is deliberate, and worth pinning."""
     with pytest.raises(RuntimeError):
-        cal.verify_responds(lambda: float("nan"), 0, 99, lambda _v: None,
-                            min_change=1.0)
+        cal.verify_responds(lambda: float("nan"), 0, 99, lambda _v: None, min_change=1.0)
 
 
 def test_the_direction_of_the_change_does_not_matter():
     vals = iter([900.0, 100.0])
-    assert cal.verify_responds(lambda: next(vals), 0, 99, lambda _v: None,
-                               min_change=500.0) == 800.0
+    assert (
+        cal.verify_responds(lambda: next(vals), 0, 99, lambda _v: None, min_change=500.0) == 800.0
+    )
 
 
 # --- the snapshot on disk --------------------------------------------------
@@ -672,15 +693,15 @@ def test_the_direction_of_the_change_does_not_matter():
 
 def test_a_snapshot_survives_the_process(tmp_path):
     saved = {("keygroup", "FILFRQ"): 63, ("program", "PMCHAN"): 0}
-    path = cal.write_snapshot(str(tmp_path / "snap.json"), saved,
-                              note="before the filter sweep")
+    path = cal.write_snapshot(str(tmp_path / "snap.json"), saved, note="before the filter sweep")
 
     assert cal.read_snapshot(path) == saved
 
 
 def test_a_snapshot_records_when_and_why(tmp_path):
-    path = cal.write_snapshot(str(tmp_path / "s.json"), {("program", "X"): 1},
-                              note="before the filter sweep")
+    path = cal.write_snapshot(
+        str(tmp_path / "s.json"), {("program", "X"): 1}, note="before the filter sweep"
+    )
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
 
     assert payload["note"] == "before the filter sweep"
@@ -763,9 +784,7 @@ def _group(*values):
 
 
 def test_a_real_difference_is_called_a_difference():
-    groups = [_group(10.0, 10.1, 9.9),
-              _group(20.0, 20.1, 19.9),
-              _group(30.0, 30.1, 29.9)]
+    groups = [_group(10.0, 10.1, 9.9), _group(20.0, 20.1, 19.9), _group(30.0, 30.1, 29.9)]
 
     _between, _pooled, ratio, verdict = cal.beyond_noise(groups)
 
@@ -784,9 +803,7 @@ def test_the_attak2_depth_residual_is_marginal_not_established():
     to check it: the rejection of constant-RATE is overwhelming (ratio ~30),
     but the small residual that survives is not itself established.
     """
-    groups = [_group(2.215, 2.210, 2.230),
-              _group(2.280, 2.245, 2.240),
-              _group(2.305, 2.290, 2.295)]
+    groups = [_group(2.215, 2.210, 2.230), _group(2.280, 2.245, 2.240), _group(2.305, 2.290, 2.295)]
 
     _between, _pooled, ratio, verdict = cal.beyond_noise(groups)
 
@@ -795,9 +812,7 @@ def test_the_attak2_depth_residual_is_marginal_not_established():
 
 
 def test_scatter_smaller_than_the_noise_is_called_noise():
-    groups = [_group(1.00, 1.30, 0.70),
-              _group(1.02, 0.72, 1.28),
-              _group(0.98, 1.31, 0.69)]
+    groups = [_group(1.00, 1.30, 0.70), _group(1.02, 0.72, 1.28), _group(0.98, 1.31, 0.69)]
 
     _b, _p, _r, verdict = cal.beyond_noise(groups)
 
@@ -810,9 +825,7 @@ def test_the_middle_ground_is_undecidable_rather_than_decided():
     An earlier version picked whichever spread was smaller and announced it,
     so 72.2% against 71.9% was reported as a finding.
     """
-    groups = [_group(1.00, 1.10, 0.90),
-              _group(1.15, 1.25, 1.05),
-              _group(1.30, 1.40, 1.20)]
+    groups = [_group(1.00, 1.10, 0.90), _group(1.15, 1.25, 1.05), _group(1.30, 1.40, 1.20)]
 
     _b, _p, ratio, verdict = cal.beyond_noise(groups)
 
@@ -857,8 +870,7 @@ def test_identical_repeats_are_now_refused_rather_than_believed():
     assert r.sd == 0.0
 
     with pytest.raises(ValueError, match="identical replicates"):
-        cal.beyond_noise([cal.Replicated([1.0, 1.0, 1.0]),
-                          cal.Replicated([1.1, 1.1, 1.1])])
+        cal.beyond_noise([cal.Replicated([1.0, 1.0, 1.0]), cal.Replicated([1.1, 1.1, 1.1])])
 
 
 def test_one_frozen_condition_is_refused_even_when_the_pool_is_healthy():
@@ -878,8 +890,7 @@ def test_one_frozen_condition_is_refused_even_when_the_pool_is_healthy():
 
 def test_the_refusal_says_to_re_capture_not_to_re_analyse():
     with pytest.raises(ValueError, match="RE-CAPTURE"):
-        cal.beyond_noise([cal.Replicated([1.0, 1.0, 1.0]),
-                          cal.Replicated([2.0, 2.1, 1.9])])
+        cal.beyond_noise([cal.Replicated([1.0, 1.0, 1.0]), cal.Replicated([2.0, 2.1, 1.9])])
 
 
 def test_genuine_replicates_still_pass():
@@ -901,9 +912,10 @@ def test_the_bar_is_documented_as_an_effect_size():
 # instrument produced against hardware before it worked, rebuilt synthetically
 # so it cannot come back quietly.
 
+
 def _two_pole_db(np, freqs, fc, zeta):
     x = np.asarray(freqs) / float(fc)
-    return -10 * np.log10((1 - x ** 2) ** 2 + (2 * zeta * x) ** 2)
+    return -10 * np.log10((1 - x**2) ** 2 + (2 * zeta * x) ** 2)
 
 
 def _sawtooth_source_db(np, freqs):
@@ -989,7 +1001,7 @@ def test_running_median_keeps_an_excursion_a_percentile_span_would_lose():
     """
     np = pytest.importorskip("numpy")
     trace = np.concatenate([np.linspace(0.0, 2.0, 20), np.full(180, 2.0)])
-    trace[57] = 9.0                                   # one stray frame
+    trace[57] = 9.0  # one stray frame
     smoothed = cal.running_median(trace, 5)
 
     assert smoothed.max() - smoothed.min() == pytest.approx(2.0, abs=0.15)
@@ -1013,17 +1025,21 @@ def test_frame_spectra_drops_silence_and_returns_matching_shapes():
 
 # --- refusing a frozen series -----------------------------------------------
 
+
 def test_verify_varies_accepts_a_real_law():
     np = pytest.importorskip("numpy")
     ok, msg = cal.verify_varies([0.2, 0.29, 0.55, 1.25, 3.01], label="t90")
     assert ok and "5 distinct" in msg
 
 
-@pytest.mark.parametrize("series,label", [
-    ([-0.150, -0.150, -0.150, -0.150, -0.150], "PANDEL onset"),
-    ([23.19, 23.19, 23.19, 23.19, 23.19], "resonance peak"),
-    ([200, 200, 200, 200, 200, 200, 200, 200], "frames after note-off"),
-])
+@pytest.mark.parametrize(
+    "series,label",
+    [
+        ([-0.150, -0.150, -0.150, -0.150, -0.150], "PANDEL onset"),
+        ([23.19, 23.19, 23.19, 23.19, 23.19], "resonance peak"),
+        ([200, 200, 200, 200, 200, 200, 200, 200], "frames after note-off"),
+    ],
+)
 def test_verify_varies_refuses_each_frozen_series_this_project_produced(series, label):
     """All three were reported as findings before being caught by hand."""
     np = pytest.importorskip("numpy")
@@ -1069,6 +1085,7 @@ def test_release_velocity_is_accepted_and_range_checked():
     kind -- the modified quantity never allowed to happen.
     """
     import inspect
+
     sig = inspect.signature(cal.Rig.play_and_record)
     assert "release_velocity" in sig.parameters
     assert sig.parameters["release_velocity"].default == 0
@@ -1086,6 +1103,7 @@ def test_release_velocity_is_accepted_and_range_checked():
 def test_the_synthetic_rig_takes_the_same_argument():
     """A fake that cannot accept the parameter cannot exercise the path."""
     import inspect
+
     sig = inspect.signature(cal._SyntheticRig.play_and_record)
     assert "release_velocity" in sig.parameters
 
@@ -1120,8 +1138,8 @@ def test_lift_over_preroll_separates_a_note_from_a_dropped_take(tmp_path):
 
     played = tmp_path / "played.wav"
     dropped = tmp_path / "dropped.wav"
-    _write(played, 3000.0)      # a real note
-    _write(dropped, 3.0)        # the note-on never reached the machine
+    _write(played, 3000.0)  # a real note
+    _write(dropped, 3.0)  # the note-on never reached the machine
 
     assert cal.lift_over_preroll(str(played), t_on) > 50
     assert abs(cal.lift_over_preroll(str(dropped), t_on)) < 3
@@ -1171,7 +1189,7 @@ def test_a_decaying_neighbour_in_the_preroll_depresses_the_lift(tmp_path):
     def _write(path, tail_amplitude):
         n_pre = int(t_on * rate)
         pre = rng.normal(0, 2, n_pre)
-        if tail_amplitude:                       # previous note still decaying
+        if tail_amplitude:  # previous note still decaying
             decay = np.exp(-np.linspace(0, 4, n_pre))
             pre = pre + rng.normal(0, tail_amplitude, n_pre) * decay
         note = rng.normal(0, 3000.0, int(1.5 * rate))
@@ -1184,8 +1202,8 @@ def test_a_decaying_neighbour_in_the_preroll_depresses_the_lift(tmp_path):
         return path
 
     clean = _write(tmp_path / "clean.wav", 0.0)
-    dirty = _write(tmp_path / "dirty.wav", 60.0)   # floor ~ -63 dBFS,
-                                                   # as measured on hardware
+    dirty = _write(tmp_path / "dirty.wav", 60.0)  # floor ~ -63 dBFS,
+    # as measured on hardware
 
     lift_clean = cal.lift_over_preroll(str(clean), t_on)
     lift_dirty = cal.lift_over_preroll(str(dirty), t_on)
@@ -1222,16 +1240,14 @@ def test_contamination_is_measured_against_the_rigs_own_floor():
     assert cal.contaminated_takes(quiet_rig) == []
 
     # the same rig with two decaying tails: exactly those two
-    assert cal.contaminated_takes(
-        [-88.2, -62.8, -88.1, -40.0, -88.4, -87.5]) == [1, 3]
+    assert cal.contaminated_takes([-88.2, -62.8, -88.1, -40.0, -88.4, -87.5]) == [1, 3]
 
     # a rig running ~35 dB louder in noise, with ONE real tail. This is the
     # case the absolute constant gets wrong.
     loud_rig = [-53.0, -53.2, -52.8, -31.0]
     assert cal.contaminated_takes(loud_rig) == [3]
-    absolute = [i for i, f in enumerate(loud_rig)
-                if f > cal.PREROLL_FLOOR_MAX_DBFS]
-    assert absolute == [0, 1, 2, 3]        # the wrong answer, for the record
+    absolute = [i for i, f in enumerate(loud_rig) if f > cal.PREROLL_FLOOR_MAX_DBFS]
+    assert absolute == [0, 1, 2, 3]  # the wrong answer, for the record
 
     # median not mean: contamination is one-sided, and a mean would be dragged
     # toward the tails, raising the threshold and hiding them

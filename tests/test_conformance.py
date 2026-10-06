@@ -23,11 +23,11 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "probes"))
 
-import conformance as cf                                   # noqa: E402
+import conformance as cf  # noqa: E402
 
-from s3k import messages as m                              # noqa: E402
-from s3k import params as p                                # noqa: E402
-from s3k.bridge import DeviceError                         # noqa: E402
+from s3k import messages as m  # noqa: E402
+from s3k import params as p  # noqa: E402
+from s3k.bridge import DeviceError  # noqa: E402
 
 C = m.Command
 
@@ -100,7 +100,13 @@ def test_the_guard_refuses_something_that_is_not_sysex():
 def test_the_allowlist_is_requests_only():
     """Every allowed opcode reads; none of them is a data-carrying reply."""
     replies = set(m.EXTENDED_REPLY_FOR.values()) | {
-        C.STAT, C.PLIST, C.SLIST, C.PDATA, C.KDATA, C.SDATA, C.REPLY,
+        C.STAT,
+        C.PLIST,
+        C.SLIST,
+        C.PDATA,
+        C.KDATA,
+        C.SDATA,
+        C.REPLY,
     }
     assert not (cf.READ_ONLY_OPS & replies)
 
@@ -113,8 +119,8 @@ def test_the_allowlist_is_requests_only():
     [
         (0, 1, 0, 0),
         (127, 1, 0, 127),
-        (255, 1, 0, 255),        # unsigned field stays unsigned
-        (255, 1, -50, -1),       # signed field re-read as two's complement
+        (255, 1, 0, 255),  # unsigned field stays unsigned
+        (255, 1, -50, -1),  # signed field re-read as two's complement
         (206, 1, -50, -50),
         (50, 1, -50, 50),
         (65535, 2, -100, -1),
@@ -157,8 +163,7 @@ class _FakeBridge:
         self.description = "fake"
         self.exclusive_channel = 0
 
-    def get_header_bytes(self, region, index, offset, count, *, selector=0,
-                         timeout=None):
+    def get_header_bytes(self, region, index, offset, count, *, selector=0, timeout=None):
         raw = self.headers[region]
         if offset + count > len(raw):
             raise DeviceError(f"{region} has no offset {offset + count}")
@@ -172,11 +177,10 @@ def _blank(region):
 def test_range_check_flags_a_value_the_field_cannot_hold():
     raw = _blank("sample")
     spitch = p.lookup(("sample", "SPITCH"))
-    raw[spitch.offset] = 200                    # documented range is 21..127
+    raw[spitch.offset] = 200  # documented range is 21..127
 
     report = cf.Report()
-    cf.check_ranges(_FakeBridge({"sample": bytes(raw)}), report,
-                    [("sample", 0, 0)], timeout=0.1)
+    cf.check_ranges(_FakeBridge({"sample": bytes(raw)}), report, [("sample", 0, 0)], timeout=0.1)
 
     hits = [f for f in report.by_severity("contradiction") if "SPITCH" in f.what]
     assert len(hits) == 1
@@ -189,14 +193,13 @@ def test_range_check_accepts_an_in_range_value():
     raw[spitch.offset] = 60
 
     report = cf.Report()
-    cf.check_ranges(_FakeBridge({"sample": bytes(raw)}), report,
-                    [("sample", 0, 0)], timeout=0.1)
+    cf.check_ranges(_FakeBridge({"sample": bytes(raw)}), report, [("sample", 0, 0)], timeout=0.1)
 
     assert not [f for f in report.findings if "SPITCH" in f.what]
 
 
 def test_address_fields_are_not_range_checked():
-    """"Internal use" spans have no meaningful range to violate."""
+    """ "Internal use" spans have no meaningful range to violate."""
     raw = _blank("sample")
     slocat = p.lookup(("sample", "SLOCAT"))
     assert slocat.kind == "address"
@@ -204,8 +207,7 @@ def test_address_fields_are_not_range_checked():
         raw[slocat.offset + i] = 0xFF
 
     report = cf.Report()
-    cf.check_ranges(_FakeBridge({"sample": bytes(raw)}), report,
-                    [("sample", 0, 0)], timeout=0.1)
+    cf.check_ranges(_FakeBridge({"sample": bytes(raw)}), report, [("sample", 0, 0)], timeout=0.1)
 
     assert not [f for f in report.findings if "SLOCAT" in f.what]
 
@@ -214,8 +216,7 @@ def test_extent_finds_the_edge_of_a_short_structure():
     """A machine whose headers stop early must be reported, not assumed."""
     short = bytes(100)
     report = cf.Report()
-    cf.check_extent(_FakeBridge({"program": short}), report, ("program",),
-                    timeout=0.1)
+    cf.check_extent(_FakeBridge({"program": short}), report, ("program",), timeout=0.1)
 
     row = report.sections["extent"][0]
     assert row["measured"] == 100
@@ -242,22 +243,20 @@ def test_the_version_and_the_development_status_agree():
     root = pathlib.Path(__file__).resolve().parent.parent
     meta = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
     version = meta["project"]["version"]
-    statuses = [c for c in meta["project"]["classifiers"]
-                if c.startswith("Development Status")]
+    statuses = [c for c in meta["project"]["classifiers"] if c.startswith("Development Status")]
 
     assert statuses == ["Development Status :: 4 - Beta"], statuses
     assert version.startswith("0.1."), version
 
     changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
     marker = f"## [{version}]"
-    assert marker in changelog, \
-        f"CHANGELOG has no entry for the version in pyproject ({version})"
+    assert marker in changelog, f"CHANGELOG has no entry for the version in pyproject ({version})"
 
     # Find THIS version's section, not the first one in the file. main carries
     # an [Unreleased] section above it, so indexing the first heading tested
     # whichever section happened to come first -- a test coupled to file
     # order rather than to what it was checking.
-    section = changelog[changelog.index(marker):]
+    section = changelog[changelog.index(marker) :]
     section = section.split("\n## [")[0]
     assert "beta" in section.lower(), section[:200]
 
@@ -288,16 +287,15 @@ def test_the_resolution_notes_index_matches_the_sections():
     import re
     from collections import Counter
 
-    notes = (pathlib.Path(__file__).resolve().parent.parent
-             / "docs" / "RESOLUTION_NOTES.md").read_text(encoding="utf-8")
+    notes = (
+        pathlib.Path(__file__).resolve().parent.parent / "docs" / "RESOLUTION_NOTES.md"
+    ).read_text(encoding="utf-8")
 
-    headings = [m.group(1) for m in
-                re.finditer(r"^## (§\d+[a-z]? — .+)$", notes, re.M)]
+    headings = [m.group(1) for m in re.finditer(r"^## (§\d+[a-z]? — .+)$", notes, re.M)]
     linked = re.findall(r"^- \[§[\da-z]+\]\(#([^)]+)\)", notes, re.M)
 
     assert headings, "no numbered sections found at all"
-    assert len(linked) == len(headings), (
-        f"{len(headings)} sections but {len(linked)} index entries")
+    assert len(linked) == len(headings), f"{len(headings)} sections but {len(linked)} index entries"
 
     anchors = [_notes_anchor(h) for h in headings]
     dupes = [a for a, n in Counter(anchors).items() if n > 1]
@@ -309,8 +307,8 @@ def test_the_resolution_notes_index_matches_the_sections():
     numbers = [re.match(r"§(\d+[a-z]?)", h).group(1) for h in headings]
     clashes = [n for n, k in Counter(numbers).items() if k > 1]
     assert not clashes, (
-        f"two sections share a number, so every citation to it is "
-        f"ambiguous: {clashes}")
+        f"two sections share a number, so every citation to it is ambiguous: {clashes}"
+    )
 
     # THE LABEL, not just the anchor. Until 2026-09-25 this test compared
     # anchors only, so four consecutive sections shipped index lines reading
@@ -327,7 +325,8 @@ def test_the_resolution_notes_index_matches_the_sections():
                 label = line.split(") — ", 1)[1] if ") — " in line else ""
                 assert label == title, (
                     f"{num}'s index label does not match its heading:\n"
-                    f"  index:   {label!r}\n  heading: {title!r}")
+                    f"  index:   {label!r}\n  heading: {title!r}"
+                )
                 break
 
     # ORDER, which the checks above cannot see: every anchor can be correct,
@@ -348,13 +347,16 @@ def test_the_resolution_notes_index_matches_the_sections():
     # earlier -- a true finding whose obvious application is a regression
     # (§266 rule 3). The index is what a reader scans, so ascending number is
     # the property that matters and physical placement is not.
-    index_nums = [int(re.match(r"^- \[§(\d+)", ln).group(1))
-                  for ln in notes.splitlines()
-                  if re.match(r"^- \[§\d+[a-z]?\]\(#", ln)]
+    index_nums = [
+        int(re.match(r"^- \[§(\d+)", ln).group(1))
+        for ln in notes.splitlines()
+        if re.match(r"^- \[§\d+[a-z]?\]\(#", ln)
+    ]
     out_of_order = [(a, b) for a, b in zip(index_nums, index_nums[1:]) if b < a]
     assert not out_of_order, (
         "index is not in ascending order; a reader scanning between two "
-        f"neighbours will miss what is there: {out_of_order[:5]}")
+        f"neighbours will miss what is there: {out_of_order[:5]}"
+    )
 
     absent = [h for h, a in zip(headings, anchors) if a not in set(linked)]
     assert not absent, f"sections missing from the index: {absent[:3]}"
@@ -372,7 +374,8 @@ def test_the_resolution_notes_index_matches_the_sections():
 #: bug is invisible -- see test_the_single_factor_lookahead_actually_rejects.
 LINEAR_LAW = re.compile(
     r"=\s*([0-9]*\.?[0-9]+(?:e-?\d+)?)\s*[*x]\s*"
-    r"\b([A-Z][A-Z0-9_]{3,9})\b(?!\s*[*x(])")
+    r"\b([A-Z][A-Z0-9_]{3,9})\b(?!\s*[*x(])"
+)
 
 
 def test_the_single_factor_lookahead_actually_rejects():
@@ -388,12 +391,14 @@ def test_the_single_factor_lookahead_actually_rejects():
     """
     buggy = re.compile(
         r"=\s*([0-9]*\.?[0-9]+(?:e-?\d+)?)\s*[*x]\s*"
-        r"\b([A-Z][A-Z0-9_]{3,9})\b\s*(?![*x(])")
-    single = ["rate = 0.11840 * PANRAT + 0.0108 Hz",
-              "dB = 0.642719 * PRLOUD - 87.63"]
-    double = ["attenuation = 0.009474 * V_LOUD * (knee - velocity)",
-              "octaves = 0.002075 * SUSTN2 * MODVFILT1",
-              "shift = 0.06386 * K_FREQ * (note - 64)"]
+        r"\b([A-Z][A-Z0-9_]{3,9})\b\s*(?![*x(])"
+    )
+    single = ["rate = 0.11840 * PANRAT + 0.0108 Hz", "dB = 0.642719 * PRLOUD - 87.63"]
+    double = [
+        "attenuation = 0.009474 * V_LOUD * (knee - velocity)",
+        "octaves = 0.002075 * SUSTN2 * MODVFILT1",
+        "shift = 0.06386 * K_FREQ * (note - 64)",
+    ]
     for t in single:
         assert LINEAR_LAW.search(t), f"must match a single-factor law: {t}"
     for t in double:
@@ -401,8 +406,8 @@ def test_the_single_factor_lookahead_actually_rejects():
     # and the trap is real: the buggy form rejects none of them
     assert all(buggy.search(t) for t in double), (
         "the known-bad pattern no longer accepts the two-factor cases, so "
-        "this test no longer demonstrates the difference it exists to pin")
-
+        "this test no longer demonstrates the difference it exists to pin"
+    )
 
 
 def _names_current(window: str, line: str, current, scales) -> bool:
@@ -413,6 +418,7 @@ def _names_current(window: str, line: str, current, scales) -> bool:
     the line counts; a marker with no replacement value does not.
     """
     import re as _re
+
     names = set(_re.findall(r"\b([A-Z][A-Z0-9_]{3,9})\b", line))
     wanted = []
     for nm in names:
@@ -429,6 +435,7 @@ def _names_current(window: str, line: str, current, scales) -> bool:
             if text in window:
                 return True
     return False
+
 
 def test_a_section_whose_law_was_refitted_says_so_in_its_heading():
     """Refinement is invisible where retraction is visible.
@@ -452,24 +459,32 @@ def test_a_section_whose_law_was_refitted_says_so_in_its_heading():
 
     from s3k import scales
 
-    notes = (pathlib.Path(__file__).resolve().parent.parent
-             / "docs" / "RESOLUTION_NOTES.md").read_text(encoding="utf-8")
+    notes = (
+        pathlib.Path(__file__).resolve().parent.parent / "docs" / "RESOLUTION_NOTES.md"
+    ).read_text(encoding="utf-8")
     current = {key[1]: (sc.a, sc.b) for key, sc in scales.SCALES.items()}
 
-    heads = [(m.start(), m.group(0)) for m in
-             re.finditer(r"^## §\d+[a-z]? — .+$", notes, re.M)]
+    heads = [(m.start(), m.group(0)) for m in re.finditer(r"^## §\d+[a-z]? — .+$", notes, re.M)]
     law = re.compile(
         r"\b([A-Z][A-Z0-9_]{3,9})\b[^\n]{0,60}?=\s*"
-        r"([0-9]*\.?[0-9]+(?:e-?\d+)?)\s*\*\s*exp\(\s*(-?[0-9]*\.?[0-9]+)")
+        r"([0-9]*\.?[0-9]+(?:e-?\d+)?)\s*\*\s*exp\(\s*(-?[0-9]*\.?[0-9]+)"
+    )
     # LINEAR laws were invisible to the exponential pattern above until
     # 2026-09-23, and that is exactly how PANRAT shipped at 2.002x the truth
     # for seventeen days (§260): §257 stated `rate = 0.11840 * PANRAT` while
     # scales.py held 0.23708, and this test could not see either number.
     # Matches "0.11840 * PANRAT" and "rate = 0.11840 * PANRAT + 0.0108 Hz".
     linear = LINEAR_LAW
+    assert heads, "no numbered sections found at all"
+    assert current, "no scales to compare against"
+    assert sum(1 for _ in law.finditer(notes)), (
+        "the exponential pattern matches nothing; the guard is blind"
+    )
+    assert sum(1 for _ in linear.finditer(notes)), (
+        "the linear pattern matches nothing; the guard is blind"
+    )
     # a newer section may quote the law it supersedes; those lines say so
-    quoting = re.compile(r"previous|earlier|withdraw|supersed|retract|was\b",
-                         re.I)
+    quoting = re.compile(r"previous|earlier|withdraw|supersed|retract|was\b", re.I)
 
     # A REVIEWED BASELINE, not a mute button. Each entry means someone read
     # the section and confirmed it states a DIFFERENT QUANTITY, not a stale
@@ -557,9 +572,10 @@ def test_a_section_whose_law_was_refitted_says_so_in_its_heading():
             #
             # Requiring the replacement value in the window separates them: a
             # real strike says what superseded it, an adjacent one does not.
-            window = " ".join(body[max(0, n - 3):n + 4])
-            struck = ((any(k in window for k in MARK) or quoting.search(window))
-                      and _names_current(window, line, current, scales))
+            window = " ".join(body[max(0, n - 3) : n + 4])
+            struck = (any(k in window for k in MARK) or quoting.search(window)) and _names_current(
+                window, line, current, scales
+            )
             if struck:
                 continue
             for m in law.finditer(line):
@@ -578,27 +594,33 @@ def test_a_section_whose_law_was_refitted_says_so_in_its_heading():
                 if (sec_x, param) in reviewed:
                     continue
                 ta, tb = current[param]
-                moved = (abs(a - ta) / max(abs(ta), 1e-12) > 0.02
-                         or abs(b - tb) / max(abs(tb), 1e-12) > 0.02)
+                moved = (
+                    abs(a - ta) / max(abs(ta), 1e-12) > 0.02
+                    or abs(b - tb) / max(abs(tb), 1e-12) > 0.02
+                )
                 if moved:
-                    stale.append(f"{head.split(' — ')[0]} states {param} = "
-                                 f"{a:g}*exp({b:g}) but scales.py holds "
-                                 f"{ta:g}*exp({tb:g})")
+                    stale.append(
+                        f"{head.split(' — ')[0]} states {param} = "
+                        f"{a:g}*exp({b:g}) but scales.py holds "
+                        f"{ta:g}*exp({tb:g})"
+                    )
             for m in linear.finditer(line):
                 a, param = float(m.group(1)), m.group(2)
-                sc = scales.SCALES.get(("program", param)) or \
-                    scales.SCALES.get(("keygroup", param))
+                sc = scales.SCALES.get(("program", param)) or scales.SCALES.get(("keygroup", param))
                 if sc is None or sc.kind != "linear":
                     continue
-                sec = head.split(' — ')[0].replace('## ', '')
+                sec = head.split(" — ")[0].replace("## ", "")
                 if (sec, param) in reviewed:
                     continue
                 if abs(a - sc.a) / max(abs(sc.a), 1e-12) > 0.02:
-                    stale.append(f"{head.split(' — ')[0]} states {param} "
-                                 f"slope {a:g} but scales.py holds {sc.a:g}")
+                    stale.append(
+                        f"{head.split(' — ')[0]} states {param} "
+                        f"slope {a:g} but scales.py holds {sc.a:g}"
+                    )
     assert not stale, (
         "section states a superseded law without a marker in its heading:\n  "
-        + "\n  ".join(stale[:6]))
+        + "\n  ".join(stale[:6])
+    )
 
 
 def test_the_bounded_runs_the_readme_documents_actually_select_something():
@@ -623,19 +645,31 @@ def test_the_bounded_runs_the_readme_documents_actually_select_something():
     root = pathlib.Path(__file__).resolve().parent
     # The expensive suite must carry the marker that excludes it, at module
     # scope -- a per-test mark would leave new tests in the file unmarked.
-    for name, marker in (("test_app.py", "tui"),
-                         ("test_measure.py", "bench"),
-                         ("test_calibrate.py", "bench"),
-                         ("test_throttle.py", "bench")):
+    for name, marker in (
+        ("test_app.py", "tui"),
+        ("test_measure.py", "bench"),
+        ("test_calibrate.py", "bench"),
+        ("test_throttle.py", "bench"),
+        ("test_jcap.py", "bench"),
+    ):
         src = (root / name).read_text(encoding="utf-8")
         assert re.search(rf"^pytestmark = pytest\.mark\.{marker}$", src, re.M), (
             f"{name} must carry module-scope `pytestmark = pytest.mark.{marker}`; "
-            "without it the README's bounded run silently stops being bounded")
+            "without it the README's bounded run silently stops being bounded"
+        )
 
     # And the README must still show the reader how to use them.
     readme = (root.parent / "README.md").read_text(encoding="utf-8")
-    for recipe in ('-m "not tui"', '-m "not tui and not bench"'):
+    for recipe in ('-m "not slow and not tui"', '-m "not slow and not tui and not bench"'):
         assert recipe in readme, f"README no longer documents {recipe}"
+    # A command-line `-m` REPLACES the `-m 'not slow'` in addopts rather than
+    # combining with it, so a recipe without `not slow` silently admits the
+    # exhaustive test into a bounded run. Every `-m` recipe here must repeat it.
+    for recipe in re.findall(r'-m "([^"]+)"', readme):
+        assert "not slow" in recipe, (
+            f"README recipe -m {recipe!r} drops the slow exclusion, which a "
+            "command-line -m does not inherit from addopts"
+        )
 
     # Markers must be declared, or `--strict-markers` users get an error and
     # everyone else gets a silent typo that deselects nothing.

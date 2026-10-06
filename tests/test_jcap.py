@@ -22,9 +22,14 @@ rig stops answering.
 Synthetic throughout -- a fake `jack` module is installed before import, so no
 server is needed and the failure paths can be provoked on demand.
 """
+
 import importlib, sys, types, warnings
 
 import pytest
+
+# Bench-side, like the other probe suites: no hardware, but not the shipped
+# editor either -- so the README's bounded runs deselect it with the rest.
+pytestmark = pytest.mark.bench
 
 # `probes/` is bench tooling and is not in the wheel; `dev` deliberately does
 # not pull numpy in, so this suite must SKIP without it rather than fail at
@@ -43,19 +48,29 @@ class _FakePort:
     catch resolve_sources doing exactly that. A fake that is wrong about the
     API it stands in for tests the fake.
     """
+
     __hash__ = None
 
-    def __init__(self, n): self.name = n
-    def get_array(self): return np.ones(4, dtype=np.float32)
-    def __eq__(self, other): return self.name == getattr(other, "name", other)
+    def __init__(self, n):
+        self.name = n
+
+    def get_array(self):
+        return np.ones(4, dtype=np.float32)
+
+    def __eq__(self, other):
+        return self.name == getattr(other, "name", other)
 
 
 class _FakeInports:
-    def __init__(self, owner): self._owner = owner
+    def __init__(self, owner):
+        self._owner = owner
+
     def register(self, name):
         if self._owner.fail_register:
             raise RuntimeError("register refused")
-        p = _FakePort(name); self._owner.registered.append(p); return p
+        p = _FakePort(name)
+        self._owner.registered.append(p)
+        return p
 
 
 class _FakeClient:
@@ -80,6 +95,7 @@ class _FakeClient:
         self.wiring = {}
         self.silent_substitute = False
         _FakeClient.last = self
+
     # get_ports returns Port OBJECTS in the real API, not strings. The first
     # version of this fake returned strings, so it could not catch
     # resolve_sources using them as a set and dying on "unhashable type:
@@ -87,12 +103,21 @@ class _FakeClient:
     # stands in for tests the fake.
     def get_ports(self, *a, **k):
         return [_FakePort(n) for n in self.ports_present]
+
     def get_all_connections(self, port):
-        return [_FakePort(n)
-                for n in self.wiring.get(getattr(port, "name", port), [])]
-    def set_process_callback(self, fn): self.process_cb = fn; return fn
-    def set_xrun_callback(self, fn): self.xrun_cb = fn; return fn
-    def activate(self): self.activated = True
+        return [_FakePort(n) for n in self.wiring.get(getattr(port, "name", port), [])]
+
+    def set_process_callback(self, fn):
+        self.process_cb = fn
+        return fn
+
+    def set_xrun_callback(self, fn):
+        self.xrun_cb = fn
+        return fn
+
+    def activate(self):
+        self.activated = True
+
     def connect(self, a, b):
         if self.fail_connect:
             raise RuntimeError("no such port")
@@ -100,8 +125,13 @@ class _FakeClient:
         # succeeds and the client ends up wired to something else entirely.
         wired = "Somewhere Else:capture_AUX0" if self.silent_substitute else a
         self.wiring.setdefault(getattr(b, "name", b), []).append(wired)
-    def deactivate(self): self.deactivated = True; self.activated = False
-    def close(self): self.closed = True
+
+    def deactivate(self):
+        self.deactivated = True
+        self.activated = False
+
+    def close(self):
+        self.closed = True
 
 
 def _load(monkeypatch, **flags):
@@ -152,7 +182,10 @@ def test_a_keyboardinterrupt_during_construction_tears_down(monkeypatch):
     an Exception -- an `except Exception` here would have caught nothing."""
     jcap = _load(monkeypatch)
     orig = _FakeClient.connect
-    def boom(self, a, b): raise KeyboardInterrupt
+
+    def boom(self, a, b):
+        raise KeyboardInterrupt
+
     monkeypatch.setattr(_FakeClient, "connect", boom)
     with pytest.raises(KeyboardInterrupt):
         jcap.Capture()
@@ -163,7 +196,8 @@ def test_a_keyboardinterrupt_during_construction_tears_down(monkeypatch):
 def test_close_is_idempotent_and_safe_twice(monkeypatch):
     jcap = _load(monkeypatch)
     cap = jcap.Capture()
-    cap.close(); cap.close()
+    cap.close()
+    cap.close()
     assert _FakeClient.last.closed
 
 
@@ -203,7 +237,7 @@ def test_a_clean_capture_warns_about_nothing(monkeypatch):
 def test_the_queue_is_bounded_and_overflow_is_counted_not_silent(monkeypatch):
     """Unbounded, a capture nobody drains grew until the box ran out."""
     jcap = _load(monkeypatch)
-    with jcap.Capture(max_seconds=0.02) as cap:   # ~1 block at 48k/512
+    with jcap.Capture(max_seconds=0.02) as cap:  # ~1 block at 48k/512
         cap.start()
         for _ in range(50):
             _FakeClient.last.process_cb(4)
@@ -215,9 +249,11 @@ def test_the_queue_is_bounded_and_overflow_is_counted_not_silent(monkeypatch):
 def test_start_resets_the_counters(monkeypatch):
     jcap = _load(monkeypatch)
     with jcap.Capture() as cap:
-        cap.xruns = 7; cap.overflows = 3
+        cap.xruns = 7
+        cap.overflows = 3
         cap.start()
         assert cap.xruns == 0 and cap.overflows == 0
+
 
 def test_the_earliest_failure_of_all_tears_down_without_masking_itself(monkeypatch):
     """`jack.Client()` itself raising -- the server is not running.
@@ -279,6 +315,7 @@ def test_the_pipewire_names_resolve_by_the_documented_mapping(monkeypatch):
         c = _FakeClient(name, no_start_server)
         c.ports_present = aux
         return c
+
     monkeypatch.setattr(jc.jack, "Client", _ctor)
     with jc.Capture(sources=("system:capture_13", "system:capture_14")) as cap:
         assert cap.sources == [jc._SCARLETT % 12, jc._SCARLETT % 13], cap.sources

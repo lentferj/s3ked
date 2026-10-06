@@ -103,9 +103,7 @@ def test_groups_needs_no_device(capsys):
 
 
 def test_ports_needs_no_device(capsys, monkeypatch):
-    monkeypatch.setattr(
-        "s3k.bridge.list_ports", lambda: (["In A"], ["Out B"]), raising=True
-    )
+    monkeypatch.setattr("s3k.bridge.list_ports", lambda: (["In A"], ["Out B"]), raising=True)
     out = run(capsys, "ports")
     assert "In A" in out and "Out B" in out
 
@@ -140,8 +138,9 @@ def test_set_writes_a_whole_temperament(capsys):
     """
     # `set` prints its own read-back, which is the round trip. A separate
     # `get` would start a fresh demo machine and see the defaults.
-    out = run(capsys, "--demo", "--allow-write", "set", "TEMPER",
-              "0,-14,0,-2,16,0,-12,2,-10,0,-6,14", "0")
+    out = run(
+        capsys, "--demo", "--allow-write", "set", "TEMPER", "0,-14,0,-2,16,0,-12,2,-10,0,-6,14", "0"
+    )
     assert "C# -14" in out and "B +14" in out and "cents" in out
     assert "E +16" in out and "G# -10" in out
 
@@ -220,3 +219,36 @@ def test_offline_commands_still_work_without_any_midi(monkeypatch, capsys):
 
     assert cli.main(["params", "--region", "program"]) == 0
     assert capsys.readouterr().out.strip(), "params printed nothing"
+
+
+def test_audit_names_the_demo_dangling_reference(capsys):
+    """The reason the command exists: a zone that plays silence."""
+    out = run(capsys, "--demo", "audit")
+    assert "DANGLING" in out
+    assert "TINE HARD C3" in out
+    assert "STRINGS LO" in out
+
+
+def test_audit_sample_lists_the_zones_that_use_it(capsys):
+    out = run(capsys, "--demo", "audit", "--sample", "BASS C1")
+    assert "BASS ROUND" in out
+    assert "1 zone(s) use 'BASS C1'" in out
+
+
+def test_audit_sample_names_a_resident_sample_nothing_uses(capsys):
+    """Held but unplayed is a different answer from unknown."""
+    out = run(capsys, "--demo", "audit", "--sample", "HAT CLOSED")
+    assert "nothing uses 'HAT CLOSED'" in out
+    assert "no resident sample" not in out
+
+
+def test_audit_sample_names_a_sample_that_is_not_there(capsys):
+    out = run(capsys, "--demo", "audit", "--sample", "NO SUCH SAMPLE")
+    assert "nothing uses 'NO SUCH SAMPLE'" in out
+    assert "no resident sample has that name" in out
+
+
+def test_audit_verbose_lists_unused_samples(capsys):
+    out = run(capsys, "--demo", "audit", "-v")
+    assert "unused samples" in out
+    assert "HAT CLOSED" in out
