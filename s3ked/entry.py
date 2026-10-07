@@ -61,11 +61,7 @@ def _diagnose() -> str | None:
     version = getattr(vinsynlib, "__version__", None)
     if not isinstance(version, str):
         return _missing()
-    try:
-        current = tuple(int(part) for part in version.split(".")[:3])
-    except ValueError:
-        return None
-    if current < MINIMUM:
+    if not vinsynlib.is_compatible_version(version, MINIMUM):
         return _too_old(version)
     return None
 
