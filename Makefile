@@ -9,14 +9,22 @@
 # explicitly (vulture, deptry, detect-secrets). Nothing in this file fixes
 # source. If a check fails, the fix is a decision, and the decision is yours.
 
-PY      := .venv/bin/python
-RUFF    := .venv/bin/ruff
-MYPY    := .venv/bin/mypy
-PYTEST  := .venv/bin/python -m pytest
-VULTURE := .venv/bin/vulture
-DEPTRY  := .venv/bin/deptry
-PIP_AUDIT := .venv/bin/pip-audit
-DSECRETS := .venv/bin/detect-secrets-hook
+# Prefer the project venv when present, otherwise the active interpreter, so the
+# same targets work locally and on CI -- which has no `.venv`, and where a
+# hardcoded `.venv/bin/ruff` fails at the first target with "No such file or
+# directory" rather than saying anything about the code. This is the family's
+# pattern (k2kremote, eosed) and the reason it is `-m <module>` throughout: the
+# console script and the module can be installed differently on a runner.
+PYTHON ?= $(shell if [ -x .venv/bin/python ]; then echo .venv/bin/python; else echo python; fi)
+
+PY      := $(PYTHON)
+RUFF    := $(PYTHON) -m ruff
+MYPY    := $(PYTHON) -m mypy
+PYTEST  := $(PYTHON) -m pytest
+VULTURE := $(PYTHON) -m vulture
+DEPTRY  := $(PYTHON) -m deptry
+PIP_AUDIT := $(PYTHON) -m pip_audit
+DSECRETS := $(PYTHON) -m detect_secrets.pre_commit_hook
 
 # Source trees, named. `deptry .` would walk .venv/ and report on virtualenv's
 # own bundled wheels; vulture and deptry take the same list for the same
