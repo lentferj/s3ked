@@ -1355,7 +1355,7 @@ def test_an_unparseable_config_is_left_alone_rather_than_overwritten(tmp_path, c
     # every save in the process -- which is closer to the intent and behaves
     # the same for one application. Reset it so an earlier test's warning
     # cannot suppress this one.
-    config.settings._warned = False
+    config.settings._warned.clear()
     path = tmp_path / "config.toml"
     original = "exclusive_channel = 3\nthis line is [broken\n"
     path.write_text(original, encoding="utf-8")

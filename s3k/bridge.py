@@ -151,14 +151,22 @@ _MAX_PROBE_DRAIN = 64
 _MAX_PROBE_REPLIES = 32
 
 
-class MidiUnavailable(RuntimeError):
-    """This host has no MIDI backend at all.
-
-    Deliberately distinct from "no ports": a machine with an ALSA sequencer
-    and nothing plugged in enumerates cleanly and returns empty lists. This
-    is the harder failure -- no sequencer whatsoever -- and a caller wants to
-    tell the user something different in each case.
-    """
+#: This host has no MIDI backend at all.
+#:
+#: Deliberately distinct from "no ports": a machine with an ALSA sequencer
+#: and nothing plugged in enumerates cleanly and returns empty lists. This is
+#: the harder failure -- no sequencer whatsoever -- and a caller wants to tell
+#: the user something different in each case.
+#:
+#: An ALIAS of the family's exception, not a class of its own. It was a local
+#: ``RuntimeError`` subclass and the enumeration below translated vinsynlib's
+#: into it -- except that the missing-backend path re-`raise`d vinsynlib's
+#: class through untranslated, so `s3ked ports` raised a type its own handler
+#: did not catch, on exactly the host that path exists for. Two classes for
+#: one condition was the bug; one name for it is the fix. Keeping it declared
+#: here rather than imported at each call site is deliberate: it stays part of
+#: this module's public surface, which callers and tests already import.
+MidiUnavailable = midi.MidiUnavailable
 
 
 class BoardNotFitted(RuntimeError):
@@ -294,12 +302,19 @@ def list_ports() -> Tuple[List[str], List[str]]:
     down the ALSA sequencer client, only delete() does, and one autodetect
     sweep on a busy host can otherwise exhaust the sequencer's client slots.
 
-    What stays here is the translation of a *missing backend*. rtmidi raises
-    out of its constructor when there is no `/dev/snd/seq` at all, which is
-    not the same as "no ports plugged in" and needs a different thing said
-    to the user. Every caller in this project -- `s3ked ports`, and both
-    front ends on the live path -- catches :class:`MidiUnavailable` and says
-    so; without the translation they get a traceback instead.
+    A *missing backend* is no longer translated here, and that is the point of
+    the alias above: the family already raises :class:`MidiUnavailable` for it,
+    and this module re-exports that same class under the same name, so a caller
+    catching what this module advertises catches what the family raises. It used
+    to be two classes with one name, and the missing-backend path slipped
+    between them -- `s3ked ports` raised a type its own handler did not catch,
+    on exactly the host the handler exists for.
+
+    What the wrap below still does is give a backend's *other* failures -- a
+    RuntimeError out of a driver, an OSError from `/dev/snd/seq` -- the same
+    name, so a caller has one exception to catch whether the host has no
+    sequencer at all or a sequencer that is broken. That is not the same as
+    "no ports plugged in", which enumerates cleanly and returns empty lists.
     """
     try:
         return midi.list_ports()
