@@ -137,17 +137,13 @@ audit: pip-audit vulture deptry secrets-scan
 # s3ked. Passing `.` makes pip-audit resolve the project's own declared
 # dependencies: 10 packages, the two runtime deps plus the `checks` extra.
 #
-# vinsynlib is filtered out of the list handed to pip-audit. It is a sibling
-# checkout rather than a package on an index (see [tool.uv.sources] in
-# pyproject.toml), so pip cannot resolve it and pip-audit would fail
-# *resolving* -- reporting nothing about anything, and failing the gate for a
-# reason that is not a vulnerability. What it is instead is this family's own
-# source, already reviewed in the repository it lives in, and at this layer it
-# declares no third-party dependencies of its own.
+# vinsynlib is a normal index dependency now -- it is on PyPI -- so it is
+# audited like the rest. It used to be filtered out, because as a sibling
+# checkout pip could not resolve it and pip-audit would fail *resolving*
+# rather than reporting anything.
 #
 # Auditing what is declared rather than what happens to be installed is the
-# point of passing `.` in the first place, so the filter keeps that property:
-# every other declared dependency is still audited, and a NEW dependency
+# point of passing `.`: every declared dependency is audited, and a NEW one
 # added later is audited without anyone editing this file.
 AUDIT_REQS := .audit-runtime-req.txt
 pip-audit:
@@ -155,8 +151,7 @@ pip-audit:
 	@$(PY) -c "import pathlib, tomllib; \
 	    data = tomllib.load(open('pyproject.toml', 'rb')); \
 	    pathlib.Path('$(AUDIT_REQS)').write_text(\
-	        ''.join(r + chr(10) for r in data['project']['dependencies'] \
-	        if not r.startswith('vinsynlib')))"
+	        ''.join(r + chr(10) for r in data['project']['dependencies']))"
 	@$(PIP_AUDIT) --progress-spinner off -r $(AUDIT_REQS) || \
 	    (rm -f $(AUDIT_REQS); exit 1)
 	@rm -f $(AUDIT_REQS)

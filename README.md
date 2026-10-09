@@ -247,34 +247,23 @@ Reports welcome, negative ones most of all.
 ```sh
 git clone https://github.com/lentferj/s3ked
 cd s3ked
-git clone https://github.com/lentferj/vinsynlib.git ../vinsynlib
 python3 -m venv .venv
-# vinsynlib first — see below. --no-deps because its deps are ours too.
-.venv/bin/pip install --no-deps -e ../vinsynlib
 .venv/bin/pip install -e '.[dev]'      # quote it — zsh globs brackets
 ```
 
 Requires Python 3.11+, `textual`, `python-rtmidi`, and **`vinsynlib`** — the
 shared base of this family of terminal instrument browsers, which holds the
 settings cache, the keymap and legend, the command line and the port listing.
-`textual` and `python-rtmidi` come from PyPI as wheels, so nothing needs
-compiling and no system packages are required.
+All three come from PyPI as wheels, so nothing needs compiling and no system
+packages are required.
 
-**vinsynlib is not on PyPI.** It is a sibling checkout, so it is installed
-from the working tree and installed *first*, so the second command finds the
-requirement already satisfied. `uv` reads the path from `[tool.uv.sources]`
-in `pyproject.toml` instead of being told. The checkout therefore has to look
-like this:
+To develop against a *working copy* of `vinsynlib` rather than the published
+one, install that alongside — it shadows the published version in this
+environment only, and nothing here assumes a sibling directory exists:
 
+```sh
+.venv/bin/pip install --no-deps -e ../vinsynlib
 ```
-git-repos/
-  s3ked/           <- this one
-  vinsynlib/       <- the shared base
-  emorphed/  ensqsqed/  eosed/  rxved/  ...
-```
-
-`pip install -e '.[dev]'` on its own fails on a machine set up from an older
-copy of this text, with `No matching distribution found for vinsynlib`.
 
 **No numpy.** The editor does no arithmetic that needs it. The bench tooling
 in `probes/` does — FFTs and curve fits, for calibrating parameters against
@@ -722,15 +711,13 @@ make setup    # once: pip install -e ".[dev,checks]" into .venv
 make check    # lint, typecheck, audit, test -- fails on any error
 ```
 
-`make setup` assumes vinsynlib is already in the venv, from the Install
-section above; `pip install -e ".[dev,checks]"` will not fetch it.
+`make setup` installs `.[dev,checks]`, which fetches `vinsynlib` from PyPI
+along with the other dependencies.
 
 `make check` runs pip-audit over the dependencies this project *declares*,
-read out of `pyproject.toml`, with `vinsynlib` filtered out of that list: it
-is a sibling checkout rather than a package on an index, so pip cannot
-resolve it and pip-audit would fail *resolving* — reporting nothing about
-anything. Everything else it declares is still audited, and a new dependency
-added later is audited without anyone editing the Makefile.
+read out of `pyproject.toml`. That includes `vinsynlib` now that it is on
+PyPI, and a new dependency added later is audited without anyone editing the
+Makefile.
 
 The individual targets are `lint`, `format`, `typecheck`, `test`, `audit`.
 Configuration lives in `pyproject.toml`; the scope and the arguments that
