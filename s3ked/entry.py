@@ -40,9 +40,9 @@ import sys
 #: The minimum that has the API this project was written against.
 MINIMUM = (0, 1, 0)
 
-#: Where to get it while it is not on an index. Kept in one place because it
+#: Where to get it; on PyPI since 0.2.0. Kept in one place because it
 #: appears in the message twice and must not drift.
-SOURCE = "vinsynlib @ git+https://github.com/lentferj/vinsynlib"
+SOURCE = "vinsynlib>=0.2.0"
 
 
 def _diagnose() -> str | None:
@@ -68,7 +68,7 @@ def _diagnose() -> str | None:
 
 def _how_to_install() -> str:
     return (
-        "Install it from source (it is not on PyPI yet):\n"
+        "Install it:\n"
         "\n"
         f'    pip install "{SOURCE}"\n'
         "\n"

@@ -43,8 +43,7 @@ REQUIRED_BITS = (
     "error:",
     "vinsynlib",
     "pip install",
-    # The one instruction that works today, before the library is published.
-    "git+https://github.com/lentferj/vinsynlib",
+    "vinsynlib>=0.2.0",
 )
 
 
