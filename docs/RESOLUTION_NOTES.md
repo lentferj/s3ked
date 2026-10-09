@@ -465,6 +465,7 @@ silently wrong one.
 - [§272](#272--lfo2--loudness-is-a-product-and-a-sine-cannot-measure-a-filter-2026-09-27) — LFO2 → loudness is a product; and a sine cannot measure a filter (2026-09-27)
 - [§273](#273--the-release-scanner-died-on-a-codepage-wearing-the-exit-code-of-a-result-2026-09-27) — The release scanner died on a codepage, wearing the exit code of a result (2026-09-27)
 - [§274](#274--relse1-below-45-is-measurable-after-all-and-158s-reason-for-stopping-was-wrong-2026-10-02) — `RELSE1` below 45 is measurable after all, and §158's reason for stopping was wrong (2026-10-02)
+- [§275](#275--a-looped-sample-plays-its-predecessor-and-sdzero-bounded-the-rule-2026-08-18) — A looped sample plays its predecessor, and SDZERO bounded the rule (2026-08-18)
 
 ---
 ## §1 — Protocol survey: what this family has, and what it does not (resolved, 2026-08-08)
@@ -12983,6 +12984,14 @@ already exists is cheaper and was skipped every time.
 The confirming capture plays the correct region and shows **no periodicity** —
 self-similarity 0.0407 across 0.3–9 s where a 1.000 s loop should peak at 1.000.
 Region right, repetition unproven. Left open rather than explained.
+
+The full record of the investigation that produced this section is **§275**:
+the slot-0 silence rule, the SDZERO disc that bounded it, and every refuted
+reading along the way. This section is its conclusion; §275 is the evidence.
+It was recorded on a single working branch until 2026-10-09 and brought in
+whole rather than summarised, because most of its value is in the
+refutations. Several of its subsections were written when the rule
+overreached, and the amendment is part of the record.
 
 ## §137 — The rate snap confirmed by ear, and a detune discriminator (2026-08-19)
 
@@ -28783,3 +28792,689 @@ the line should be settled first.
    seconds.** `RELSE2` explained the tail's duration, its level and its
    independence of `RELSE1`, and it was wrong. Writing the prediction down
    first is what made it cheap to refuse.
+
+## §275 — A looped sample plays its predecessor, and SDZERO bounded the rule (2026-08-18)
+
+> **Provenance, 2026-10-09.** This is the whole record of an investigation
+> carried out on 2026-08-18 whose *conclusion* is already §136 above:
+> `LOOPAT1` is the loop END, not the loop start. Everything below is the
+> trail that got there, and until this morning it existed on one branch
+> and nothing else — a working branch, hours from being tidied away, and
+> this section is the salvage of it.
+>
+> It is brought in **whole rather than summarised**, because the value is
+> mostly in the refutations: every subsection rules something out, and each
+> one is a question nobody has to ask twice. §274's warning applies to it
+> exactly — the first draft of that section dismissed a tail on the strength
+> of a summary row, and the summary rows are all that survive when the
+> captures go. These captures are the raw ones.
+>
+> It was **§136 in its own record and is §275 here**, and every "§136"
+> inside this section below has been renumbered to "§275" with it: main's
+> §136 is a different finding, and a reader following an unchanged "§136"
+> out of here would land on it and be reading about loop END markers
+> instead of slot-0 silence. The one *genuine* §135 reference points on to
+> the section that precedes this one in the original record, and is left
+> as it was.
+>
+> Appended out of date order on purpose. The § numbers are a reference
+> sequence, not a chronology, and this is the evidence for a section that
+> already stands above it.
+
+> **AMENDED the same evening, by a disc built to test it.** The rule below
+> was stated as general and it is not. A four-sample volume whose loops
+> have DISTINCT PERIODS reproduced only the silence — see "What SDZERO
+> showed" at the end. The original text is kept because the amendment is
+> about what its evidence could support, not about its measurements.
+
+Found while running mpc2emu's calibration discs. **The rule:**
+
+> A program whose zone names a **looped** sample plays the sample loaded
+> immediately **before** it in the sample pool. One-shots are correct.
+
+Seven observations, all predicted, including two silences:
+
+```
+load order W1S,P1S,WLP,PLP   122 names WLP slot 2 -> slot 1 = P1S    PINK    seen PINK
+                             123 names PLP slot 3 -> slot 2 = WLP    WHITE   seen WHITE
+load order PLP,WLP,P1S,W1S   122 names WLP slot 1 -> slot 0 = PLP    PINK    seen PINK
+                             123 names PLP slot 0 -> slot -1         SILENT  seen SILENT
+                             120 names W1S slot 3 -> one-shot        WHITE   seen WHITE
+                             121 names P1S slot 2 -> one-shot        PINK    seen PINK
+WLP alone                    122 names WLP slot 0 -> slot -1         SILENT  seen SILENT
+load order WLP,PLP           122 names WLP slot 0 -> slot -1         SILENT  seen SILENT
+                             123 names PLP slot 1 -> slot 0 = WLP    WHITE   seen WHITE
+```
+
+The last pair was run as a **falsifiable prediction written before the
+capture** — the exact reverse of the same two programs earlier the same
+evening, produced by nothing but a swapped load order.
+
+**The silence is not a special case.** It is the off-by-one reaching past the
+start of the pool, and it appears whenever the named looped sample is the
+first one loaded. That is why it moved between programs when the order
+changed: it follows the *slot*, not the program.
+
+### What it is not
+
+* **Not the sample name.** Names resolve correctly in every case.
+* **Not `SBADD1`.** The zone's calculated sample-header address
+  (keygroup offset 56, "Calculated sample header block address (internal)")
+  resolves to the slot of the *named* sample every time, order-independent:
+  `36888 + 12 × slot`, exactly. `0xFFFF` in that field means **unresolved** —
+  a program naming an absent sample keeps it.
+* **Not the medium.** The machine's own type-0 saves of both the crossed and
+  the silent states contain correct audio under correct names.
+* **Not load order alone.** One-shots are correct at every position.
+
+The distinguishing property is the sample's own `SPTYPE`: affected samples
+have `SPTYPE 0` with `SLOOPS 1`; the correct ones are `SPTYPE 2` with
+`SLOOPS 0`.
+
+### Provenance and a caveat
+
+The discs were generated by the sibling mpc2emu's writer, and that writer is
+known to leave the sample-data address at `0x16`–`0x18` as **zero** in every
+sample it has ever written, where 12965 factory sample headers are non-zero
+100% of the time. That is a real deviation and it is **not** demonstrated to
+be the cause: if the machine simply trusted a stored zero, every looped
+sample would play from the pool base, which predicts white where pink was
+heard and pink where silence was heard. It fails both.
+
+**So this rule is established on this material and its cause is not.** It has
+not been reproduced on a factory disc, and until it is, "the S3000XL does
+this" is a claim about discs written by one generator. Recorded as a
+behaviour with a precise predictive rule, not as a diagnosis.
+
+### What SDZERO showed, and why §275 overreached
+
+mpc2emu built a volume of four **looped** samples with **distinct loop
+periods** — 3, 4, 5 and 7 s, pairwise non-multiples — so autocorrelating a
+capture names the sounding object as a number rather than as a judgement
+about noise. Loaded in directory order, slots 0..3:
+
+```
+prg  names      SBADD   period   sounding
+ 94  LOOP 3S    36888     --     SILENT
+ 95  LOOP 4S    36900   4.000    its OWN
+ 96  LOOP 5S    36912   5.000    its OWN
+ 97  LOOP 7S    36924   7.001    its OWN
+```
+
+**The rule above predicted 3 s, 4 s and 5 s for those three. All wrong.** Only
+the slot-0 silence reproduced.
+
+**Why the earlier evidence could not have caught this.** On the CALNOISE
+volume every one-shot and its matching loop *contain the same PCM* — mpc2emu
+built them that way deliberately. So every CALNOISE capture was a **two-valued
+observable**: white or pink. It could never separate "plays its own loop" from
+"plays the other loop" from "plays the matching one-shot", because two of
+those three are the same audio.
+
+§275 read a four-way question off a two-way instrument. The nine observations
+are real and each is consistent with the rule; they are also consistent with
+other rules, and the experiment could not tell them apart. **A prediction
+confirmed on an instrument that cannot express the alternatives is not
+confirmation** — which is §WRONGLAYER again, in the one place tonight I
+thought I had been careful, because I did write the prediction down first.
+
+Writing the prediction before the capture protects against fitting the answer
+to the data. It does nothing about an observable too coarse to hold the
+question.
+
+### What is still established
+
+* **The first looped sample loaded into an empty pool is silent.** Seen on
+  both volumes, in every load order tried, and it follows the slot rather than
+  the program.
+* Names resolve correctly, and `SBADD1` lands on the slot of the named sample
+  every time — `36888 + 12 × slot`, order-independent, on both discs.
+
+### The remaining structural difference
+
+CALNOISE's loops span the **whole sample**; SDZERO's loop a **part** of one.
+That is the candidate for the boundary, and it matters for real material:
+sampled instruments normally loop a sustain portion, not the entire file. If
+the fault is confined to whole-file loops, its reach is much smaller than a
+converted library.
+
+### SDADDR against SDZERO: the sample-data address is exonerated
+
+The same four looped samples, on the same disc, differing **only** in header
+`0x16`–`0x18` — written with a plausible address in one volume and left at
+zero in the other, which is what mpc2emu's writer ships and where 12965
+factory sample headers are non-zero 100% of the time.
+
+```
+           prg  names      SBADD   period   sounding
+SDZERO      94  LOOP 3S    36888     --     SILENT
+            95  LOOP 4S    36900   4.000    its OWN
+            96  LOOP 5S    36912   5.000    its OWN
+            97  LOOP 7S    36924   7.001    its OWN
+
+SDADDR      90  LOOP 3S    36888     --     SILENT
+            91  LOOP 4S    36900   4.000    its OWN
+            92  LOOP 5S    36912   5.000    its OWN
+            93  LOOP 7S    36924   7.001    its OWN
+```
+
+**Identical program-for-program, to three decimals**, with the control taken
+minutes earlier on the same disc in the same session. The field is a real
+deviation from factory material and it has no effect on playback.
+
+### The direction was never established either
+
+mpc2emu's own point, and it is sharper than my amendment was. Because CALNOISE's
+one-shot and loop share PCM, "122 sounded pink" could not distinguish slot 1
+from slot 3 — so **"plays the sample loaded before" and "plays the one after"
+fit that data equally well.** The rule was under-determined in its central
+claim, not merely over-generalised.
+
+SDZERO does rule out the `+1` reading: if it were "plays slot+1", the program at
+slot 0 would have played `LOOP 4S` rather than falling silent.
+
+**The two-valued observable was a property of the disc, not of the method.**
+mpc2emu built the shared PCM deliberately and then proposed the
+cross-correlation test that rested on it. Neither of us noticed the constraint
+until it was load-bearing — which is the part worth carrying, because the
+instrument silently bounded what any amount of careful analysis on top of it
+could conclude.
+
+### The rule, bounded: a LOOPED sample at slot 0 is silent
+
+Two volumes built to separate the readings — identical but for loop extent,
+five distinct seeds, no shared PCM, and a **one-shot at slot 0** in both,
+which no earlier disc had.
+
+```
+WHOLELOOP                          PARTLOOP
+prg  names    lasts  period        prg  names    lasts  period
+ 80  SHOT 2S   1.90    --  SOUNDS   85  SHOT 2S   1.90    --  SOUNDS
+ 81  LOOP 3S  20.40  2.999  own     86  LOOP 3S  20.45  2.500  own
+ 82  LOOP 4S  20.40  4.000  own     87  LOOP 4S  20.40  3.500  own
+ 83  LOOP 5S  20.40  5.000  own     88  LOOP 5S  20.40  4.500  own
+ 84  LOOP 7S  20.40  7.001  own     89  LOOP 7S  20.40  6.501  own
+```
+
+**The one-shot at slot 0 sounds.** So the silence belongs to *looping*, not to
+the slot. And the two volumes are indistinguishable, so **loop extent is
+excluded** as well.
+
+Everything trustworthy now fits one statement:
+
+> A **looped** sample at **slot 0** is silent. A loop at any other slot plays
+> its own sample. A one-shot at slot 0 sounds.
+
+**THIS DID NOT SURVIVE THE NEXT TEST — see "the loader may be the variable"
+below.** It is left here because everything under it is still what those runs
+measured; the sentence above is what they were read to mean, and that reading
+is now in doubt.
+
+```
+SDZERO / SDADDR      loop at slot 0 -> silent; loops 1,2,3 -> own    fits
+WHOLELOOP/PARTLOOP   one-shot at slot 0 -> sounds; loops 1-4 -> own  fits
+CALNOISE             shared PCM, cannot distinguish the cases        excluded
+```
+
+That is far smaller than what §275 originally claimed: **one silent instrument
+per volume, and only when the first object loaded is a looped sample.**
+
+### Disjoint period sets are not disjoint under harmonics
+
+The two period sets were chosen disjoint so that a cross-volume leak would
+appear as an impossible number. **Their harmonics are not disjoint:**
+`2 × 2.5 = 5.0` and `2 × 3.5 = 7.0` are both in the other volume's set.
+
+Taking the **argmax** of the autocorrelation over a range containing harmonics
+picked the 2× peak on three of ten captures, and the leak check — the thing
+built to make a leak unmissable — fired **two false alarms** on it.
+
+**The fix is to take the FIRST peak above threshold, not the largest.** A
+fundamental is always the earliest peak; harmonics come later by construction.
+Re-analysed that way every capture reports its own period and there are no
+leaks.
+
+Worth carrying past this disc: a discriminator designed to be unmissable was
+defeated by the standard way of reading it. Disjointness has to hold under
+whatever transform the detector applies, not only between the values chosen.
+
+### The loader may be the variable, not the slot
+
+Loading the same volume with **individually chosen item loads** rather than a
+bulk load, with the sample order deliberately opposite to the program order:
+
+```
+samples loaded : LOOP 3S, SHOT 2S, LOOP 4S    -> a LOOP at slot 0
+programs loaded: LOOP 4S, SHOT 2S, LOOP 3S    -> reverse
+
+prg  names     slot   peak    lasts   reading
+ 85  SHOT 2S      1   -8.5     1.90   one-shot, correct
+ 86  LOOP 3S      0   -0.0    12.70   SOUNDED
+ 87  LOOP 4S      2   -8.2    12.40   3.500 s = its own, correct
+```
+
+**A loop at slot 0 sounded.** That is the arrangement the rule above says must
+be silent, and it was not.
+
+The visible difference between this and every run that *did* show the silence
+is **how the volume was loaded**:
+
+```
+SDZERO / SDADDR   trigger_load(3) all samples, then (2) all programs   SILENT
+this run          trigger_load(5) per item, order chosen               SOUNDS
+```
+
+Every trustworthy observation of the silence so far came from a **bulk** load.
+
+**A first draft of this section said that made the fault unfixable from the
+writer's side. That does not follow, and mpc2emu corrected it:**
+
+> under a bulk load the machine takes **directory** order, and directory order
+> is the writer's — so directory order decides which object is loaded first.
+
+So *if* the bulk-load fault turns out to be "the first object loaded, if looped,
+is silent", then emitting a one-shot first still fixes it — and the bulk load is
+exactly the path a user takes from the front panel, so it is the case that
+matters. The workaround would be unnecessary for item loads and effective for
+the ones that count.
+
+What is genuinely not established is the antecedent. The fault may be about the
+bulk loader in a way that has nothing to do with order at all, in which case
+nothing about file layout helps. **Recorded as a conditional, not a plan.**
+
+**Not resolved, and deliberately not rewritten into a second rule.** One test
+settles it and needs no new disc: load a volume in bulk, then `CLR` and load the
+same five items individually in the same directory order. Same slots, different
+loader.
+
+One number from that run is not trustworthy either: `PRGNUM 86` sounded but its
+autocorrelation peaked weakly and slightly off — 2.542 s at 0.29, where every
+other capture gave its own period to three decimals at 0.77–0.99. It is also the
+capture that read −0.00 dBFS. mpc2emu has since confirmed **every sample on both
+discs peaks at exactly 0.350 in the written bytes**, so that 8 dB step between
+files that are identical on disc is in playback or capture and is itself worth
+chasing.
+
+### Asking the machine instead of a speaker
+
+mpc2emu's observation, and it is the useful one: every round today compared
+**files on a disc** against **captures from a speaker** and inferred what
+happened between. That is where the ambiguity lived, and it is why each round
+needed a crossing and why four rules died. The machine will simply say what it
+loaded, and nobody had asked it.
+
+**Reading the resident sample header cost one command and excluded a whole
+class.** In a silent bulk-loaded volume every sample reads:
+
+```
+SPTYPE 0  SLOOPS 1  SALOOP 0  SHLOOP 0  LOOPAT1 0  SSTART 0
+SLOCAT 131072 / 483872 / 836672 / 1189472        (base, then +SLNGTH each)
+```
+
+The silent one's loop record is **identical** to the sounding ones'. No cleared
+loop end, no changed `SPTYPE`. So a corrupted resident loop record — the most
+natural mechanism, and the one a disc could only have reached by inference —
+was ruled out without building anything.
+
+### Looping is the property; the loader is not
+
+A lone sample, same seed, same audio, same 8 s, same `SLOCAT 131072`, differing
+only in `SPTYPE` and the loop record:
+
+```
+SOLOLOOP  SPTYPE 0  loop record populated   peak -72.8 dBFS   SILENT
+SOLOSHOT  SPTYPE 2  loop record all zeros   peak  -8.4 dBFS   SOUNDS 8.05 s
+```
+
+**A lone one-shot sounds; a lone loop of the same audio does not.** So the
+silence is not about being alone.
+
+And loading `SOLOLOOP` by **item** rather than in bulk gives −73.4 dBFS with a
+**byte-identical** readback. **The loader hypothesis is dead** — same
+configuration, both loaders, both silent.
+
+### The one counter-example was never playing correctly
+
+That left PARTLOOP's item-loaded loop at slot 0, which "sounded". It was also
+the only anomalous capture of the day — correlation 0.29, period 2.542 against
+its own 2.5, −0.00 dBFS. Asked what it was actually playing:
+
+```
+vs the other resident one-shot   +0.0401     noise floor
+vs the other resident loop       +0.0355     noise floor
+its own self-similarity          0.205-0.324, smeared across 2.522 / 2.622 s
+control, a correct capture       +1.0000
+```
+
+It was playing neither of its neighbours, and not its own cleanly either. **Not
+a counter-example — the same fault presenting as degraded audio rather than
+silence.**
+
+### Standing hypothesis, and it is labelled one on purpose
+
+> A **looped** sample at the **pool base** (`SLOCAT 131072`) does not play
+> correctly. Sometimes that is silence; sometimes degraded, non-periodic audio.
+
+**CONFIRMED.** The discriminating test — position against load order, which had
+been identical in every prior observation — was to load a one-shot first so it
+takes the base:
+
+```
+[0] SOLO SHOT  SLOCAT 131072  SPTYPE 2  loop_length      0  loop_times    0
+[1] SOLO LOOP  SLOCAT 483872  SPTYPE 0  loop_length 220500  loop_times 9999
+
+capture: peak -8.2 dBFS, sounded 12.40 s
+first peak > 0.5: 5.000 s at 0.967   -- its own period, exactly
+```
+
+**The same sample that is silent at 131072 plays perfectly at 483872.** Same
+volume, same file, same lone-loop arrangement, same loader, byte-identical loop
+record.
+
+**"Only its address moved" is what this section first said, and it is wrong.**
+Its *load position* moved too, and the two cannot be separated:
+
+```
+SOLOLOOP alone           1st loaded  AND at the base       silent
+SOLOSHOT then SOLOLOOP   2nd loaded  AND above the base    plays
+```
+
+**The machine assigns addresses in load order**, so a sample cannot be first
+without landing at the base. The test that was built to discriminate position
+from order moved both together and discriminated neither — the evidence for
+"positional" is the same evidence as for "ordinal", which is what a confound
+looks like when both readings sound mechanistic. Separating them would need
+something no ordinary load does: load two samples, free the first, and load a
+loop into the vacated space.
+
+**Supported version:**
+
+> A **looped** sample that is the **first one loaded** — and therefore the one
+> at the pool base — does not play correctly. Which of those two properties is
+> operative is open, and so is the mechanism: a wrap in the loop-pointer
+> arithmetic, a reserved region below `0x20000`, an off-by-one at the boundary
+> all remain possible and none is evidenced.
+
+**The fix is untouched by this.** Emitting a one-shot first makes the loop
+neither first-loaded nor at the base, so it holds under either reading. The
+correction narrows what is *known*, not what *works*.
+
+**Caveat carried into that fix:** it rests on directory order controlling which
+object reaches the base. Every volume built so far has programs before samples
+in directory order, so "first directory entry" and "first sample entry" have
+never differed. A volume where they do would settle which one the loader
+actually uses — it changes which object to emit first, not whether the approach
+works.
+
+### The loop record layout, corrected
+
+`params.py` has `LOOPAT1` as a bare 4-byte field at `0x26` with nothing named
+after it. The real record, from mpc2emu's writer and confirmed byte-for-byte
+against the machine's readback:
+
+```
+0x26  u32  loop_start
+0x2a  u16  fraction
+0x2c  u32  loop_length     220500 = 5.000 s at 44100
+0x30  u16  loop_times      9999
+```
+
+Reading a `u32` at `0x2a` — which this project's first pass did — straddles the
+fraction and the low half of the length and yields `1565786112`, a number that
+looks like data and is an artefact of the offset.
+
+### The corpus refutes the rule, and `loop_start` is the axis
+
+Jan asked whether the factory corpus represents our discs. **It does not, and
+that refutes the rule outright.**
+
+```
+768 factory volumes with samples
+the FIRST sample in directory order is LOOPED in 700 of them   91.1%
+```
+
+If "a looped sample first-loaded / at the base does not play" were a property of
+the machine, **nine in ten commercial library discs would have a silent first
+instrument.** That would be famous, not a discovery. Neither session checked it
+until Jan asked.
+
+What is actually unusual about our material:
+
+```
+factory looped samples with loop_start == 0 :   1.2%   (204 of 16493)
+every loop this project's sibling has written : 100%
+```
+
+Factory loops start *inside* the sample, at a sustain point.
+
+### Measured: `loop_start` is the axis, and the response is continuous
+
+Written to the **resident** sample over SysEx — same object, everything else
+identical, reversible, and no disc. Every value read back before playing, with
+`loop_length` and `SPTYPE` read alongside per Jan's instruction:
+
+```
+wrote    reads   length  SPTYPE    peak   lasts   result
+    0        0   220500       0   -72.2    0.15   SILENT
+    1        1   220500       0   -73.4    0.15   SILENT
+   64       64   220500       0   -73.4    0.15   SILENT
+  512      512   220500       0   -73.4    0.15   SILENT
+ 4410     4410   220500       0   -67.7    0.45   SILENT
+22050    22050   220500       0    -4.3    0.90   short
+44100    44100   220500       0    -3.5    1.15   short
+132300   132300   220500       0    -0.0    7.95   SUSTAINS
+```
+
+**Every write stuck exactly and neither neighbour ever moved** — so this field
+is not validated either, and nothing was testing two changes at once.
+
+Three readings:
+
+* **"`loop_start == 0` is the trigger" is not supported.** 1, 64 and 512 are
+  equally silent — not an equals-zero test and not a single-frame boundary. The
+  right axis with the wrong predicate, which is the same error as "positional,
+  not ordinal" one level along.
+* **It is a continuum, not a switch.** Duration grows monotonically with
+  `loop_start`. That is something being *computed* from it and coming out
+  progressively less wrong, not a condition failing.
+* **CORRECTED — it did not sustain.** mpc2emu measured `lth_132300.wav`
+  directly: 8.00 s active, exactly the sample length, and **no autocorrelation
+  peak above 0.35 anywhere**. It played once through and stopped. **In none of
+  the eight probes did the sample ever loop.** Reading 7.95 s of activity in a
+  9 s capture as "sustains" without asking for the period — with the instrument
+  built for that question in hand and used all evening — is the same omission
+  as §135's, one level along.
+* So the `132300 + 220500 = SLNGTH` arithmetic is a coincidence of the numbers,
+  not a case that worked.
+
+That last is the most striking number here and **is deliberately not made into a
+rule**: SDZERO's 8 s samples had 3/4/5/7 s loops against the same 8 s length, so
+they fell short of the end too, and three of those four played their own periods
+perfectly. It cannot be the whole story.
+
+**Standing position:** the axis is `loop_start`, the response is continuous, and
+the mechanism is open. The sibling's writer emits `loop_start 0` on every sample
+it has ever produced, where factory material does so 1.2% of the time — so this
+is very likely ours rather than the machine's, which is also why it has never
+been common knowledge.
+
+### No loop has ever been made to work by writing header fields
+
+Testing mpc2emu's corpus reading — that `LOOPAT` is the point a loop returns
+*from* and `LLNGTH` measures backwards, which fits 98.6% of 16493 factory
+samples against 11.2% for this project's forward reading — requires `LLNGTH`
+smaller than `LOOPAT` so the backwards arrangement is satisfiable at all:
+
+```
+LOOPAT 132300 (3.0 s)  LLNGTH 44100 (1.0 s)   peak -8.5  lasted 9.95 s  no period
+LOOPAT 264600 (6.0 s)  LLNGTH 88200 (2.0 s)   peak -8.2  lasted 9.95 s  no period
+```
+
+Both writes verified, both neighbours verified. Periodicity checked against the
+raw correlation curve rather than a thresholded detector: `r` at the expected
+periods is −0.008 and +0.017, **global maximum 0.043** across the range. No
+repetition at any lag.
+
+**And both lasted 9.95 s from an 8.0 s sample, at −8 dBFS.** A one-shot stops at
+the sample end; a working loop repeats. This does neither — it is **reading past
+the end of the sample**. Same signature as the one degraded capture earlier: loud,
+aperiodic, not matching its own content.
+
+**The semantics are neither confirmed nor refuted, because there is no positive
+control.** Nothing looped in any of the ten header-written probes, under either
+reading. Every loop that *has* played its own period correctly came off a disc,
+never from a header written over SysEx — so there is no known-good written loop
+record to compare a failing one against.
+
+**The cheap thing that closes that gap, and it needs no writes:** read `LOOPAT`
+and `LLNGTH` off a sample that loops correctly from disc — SDZERO's `LOOP 4S`
+played 4.000 s at correlation 0.97 at a non-base slot. A known-good loop record,
+measured from this machine, would say what the correct arrangement looks like and
+settle the corpus reading outright.
+
+### The positive control existed already, and it refutes the backwards reading
+
+The control was not on the machine. It was in the sibling's own build output,
+and had been all evening: the loops that **demonstrably played their own
+periods** on this hardware — SDZERO's and PARTLOOP's, 4.000 / 5.000 / 7.001 s at
+correlation 0.97+ — carry
+
+```
+LOOPAT 0   LLNGTH 176400   SLNGTH 352800
+    LLNGTH <= LOOPAT            False
+    LOOPAT + LLNGTH <= SLNGTH   True     <- the forward reading, and it WORKS
+```
+
+**So the backwards reading is refuted.** `SLNGTH` at `0x1a` was validated against
+18293 factory samples matching `(filesize-192)/2` exactly, so none of this rests
+on an unchecked offset.
+
+What the corpus statistic was actually describing, stated properly:
+
+```
+LOOPAT within 1% of SLNGTH   82.9%
+LOOPAT at 90-99% of SLNGTH    9.6%
+```
+
+In factory material `LOOPAT` sits at the **end** of the sample with `LLNGTH`
+running back from it — the loop is the tail, which is what a sustain loop is.
+This project's sibling writes `LOOPAT 0` with the length running forward. **Both
+play.** Ours is shared by about 1% of factory samples: unusual, not invalid.
+
+It does **not** explain the silence — those very loops work at non-base
+positions with this convention. Recorded as a compatibility finding.
+
+### The lesson, arriving a third time from a third direction
+
+Three times today the answer was already held and the next move was to go and
+get it again:
+
+* the **corpus** refuted a rule about the machine, and neither session checked
+  it until Jan asked;
+* the **readback** closed in ten minutes what three discs could not, and the
+  machinery had been in hand since the enum probe;
+* the **positive control** for the loop semantics was in a build artefact on
+  this disk, while two probes were spent on hardware that could not have
+  interpreted either way without it.
+
+**Before asking the hardware, ask whether the answer is already held.** Building
+and measuring are the available actions, so they become the method; checking what
+already exists is cheaper, and it is the step that was skipped every time.
+
+### The first working written loop — and why it settles less than it looks
+
+Writing the loop record on the **resident** sample finally produced a loop:
+
+```
+LOOPAT 220500  LLNGTH 220500  SLNGTH 352800
+  -> sustained 13.95 s, first autocorrelation peak 5.000 s, corr 0.927
+LOOPAT 352800  LLNGTH 220500
+  -> 13.00 s of aperiodic audio, global correlation max 0.048
+```
+
+That is the first loop anyone produced here by writing header fields, after ten
+probes that produced none — and it was read as confirming that `LOOPAT` is the
+loop **end**, since the forward reading would put the loop at `[220500, 441000]`,
+past the sample.
+
+**It confirms nothing of the sort.** Reading the loop records off the
+**from-disc** loops that demonstrably worked — the positive control neither
+session had taken from the machine:
+
+```
+sample     LOOPAT   LLNGTH   SLNGTH   period played
+LOOP 3S         0   132300   352800   silent (it sat at slot 0)
+LOOP 4S         0   176400   352800   4.000 s
+LOOP 5S         0   220500   352800   5.000 s
+LOOP 7S         0   308700   352800   7.001 s
+```
+
+**The period is `LLNGTH`, under either reading, and `LOOPAT` is 0 in all of
+them.** So the probe's 5.000 s was predicted by both models. The only thing that
+made it look decisive was the assumption that the forward arrangement would be
+*rejected* as out of range — and **this machine has never validated a field**:
+`byte 0x01` took 255, `loop_start` took 512, `LOOPAT` took 352800. Acceptance is
+not validation, established hours earlier and then leaned on backwards.
+
+**Genuinely established:**
+
+* the loop period is `LLNGTH`;
+* `LOOPAT 0` loops correctly with `LLNGTH` from 132300 to 308700;
+* `LOOPAT` = `SLNGTH` exactly does **not** loop — one past the last valid frame
+  index, which looks like an off-by-one at the top end and is the one new fact
+  the writes produced.
+
+**What would discriminate:** period cannot, because it is `LLNGTH` either way —
+only *content* can. With `LOOPAT 220500, LLNGTH 44100` the forward reading loops
+`[220500, 264600]` and the end reading loops `[176400, 220500]`, two different
+seconds of the same sample, both at a 1.000 s period. It needs the capture
+correlated against those regions of the generated source array, which lives with
+the sibling project.
+
+The four documentary sources for the end reading — the S3000XL manual, the
+corpus, and ConvertWithMoss's `getEndMarker()` with `setStart(marker - length)` —
+are untouched by any of this. No evidence was produced against them, and none for
+them either.
+
+### CONFIRMED on hardware: `LOOPAT` is the loop END
+
+Period could not discriminate the two readings — it is `LLNGTH` under both.
+**Content can**, and mpc2emu supplied references regenerated from the sample's
+seed and verified against the disc at correlation 1.000000 over all 352800
+frames:
+
+```
+LOOPAT 220500  LLNGTH 44100  SLNGTH 352800     (both read back before playing)
+
+vs forward reading  [220500, 264600]  the 5-6 s slice   +0.0412   noise floor
+vs end     reading  [176400, 220500]  the 4-5 s slice   +0.7998   MATCH
+
+the two references, orthogonal after resampling:          0.0032
+```
+
+**The machine played `[LOOPAT - LLNGTH, LOOPAT]`.** `LOOPAT` is the point the
+loop returns *from*, and `LLNGTH` measures backwards from it — which is what the
+S3000XL manual says, what 82.9% of 16493 factory samples do, and what
+ConvertWithMoss implements as `setStart(marker - length)`.
+
+**A resampling trap worth recording:** the references are 44100 Hz and captures
+here are 48000. The sampler plays in real time, so a 1.000 s loop is 48000
+samples in a capture and 44100 in a reference — correlating them raw compares
+different time scales and returns noise for *both*, which would have read as
+"matches neither". The references were resampled first and their orthogonality
+re-checked afterwards (0.0032), so the resampling could not have manufactured
+the discrimination.
+
+**What it explains.** The sibling's writer puts the intended loop *start* into
+`LOOPAT`. Under the confirmed semantics the real loop is then
+`[start - length, start]` — for `LOOPAT 0`, `[-length, 0]`: negative and
+invalid. That is very likely the whole of tonight — the silence, the degraded
+audio and the apparent position-dependence all being one invalid loop record
+behaving differently according to where the sample sat in memory.
+
+**Left open, deliberately.** The confirming capture sustained 13.95 s and has
+**no periodicity** — self-similarity max 0.0407 across 0.3–9 s, where a 1.000 s
+loop should peak at 1.000. It plays the right *region* and cannot be shown to
+repeat it. Recorded as an open oddity rather than explained: it was 23:15, this
+was the eleventh claim in play, and the previous four anomalies explained at that
+hour were all wrong.
