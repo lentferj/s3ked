@@ -35,7 +35,7 @@ dependencies = [
     # settings cache, the keymap and legend, the parser, the port listing.
     # s3ked is an EDITOR and so has no favourites store -- see docs/UX-SPEC.md
     # -- but it has everything else, and had its own copy of all of it.
-    "vinsynlib>=0.2.0",
+    "vinsynlib>=0.3.1",
 ]
 
 # NO committed `[tool.uv.sources]` override, deliberately.
